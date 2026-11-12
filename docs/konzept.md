@@ -1,6 +1,22 @@
 # PMS Hotel & Restaurant Schützenhaus – Konzept
 
-Stand: 12.11.2026 · Status: **Entwurf zur Abstimmung, noch keine Implementierung**
+Stand: 12.11.2026 · Status: **Phase 1 umgesetzt**, Phase 2 in Vorbereitung
+
+### Getroffene Entscheidungen (12.11.2026)
+
+| Thema | Entscheidung |
+|---|---|
+| Rollen | nur Administrator und Benutzer |
+| Betrieb | Rechner im Haus (kein gemieteter Server) |
+| Neubau | ja, in sparsamer Ausführung: ein Node-Prozess + PostgreSQL, Docker nur optional |
+| Steuern | 7 % und 19 % vorbelegt, in den Einstellungen änderbar |
+| Zahlungen | Bar und Karte werden im PMS dokumentiert (Phase 3); TSE bleibt offen, Schnittstelle wird vorgesehen |
+| Rechnungen | PDF genügt zunächst; E-Rechnung später |
+
+Wegen „Rechner im Haus“ und „wenig Leistung“ weicht die Umsetzung in drei Punkten vom ersten Entwurf ab:
+Fastify + React/Vite statt Next.js (ein schlanker Prozess, ca. 120 MB), Drizzle statt Prisma (keine zusätzliche
+Laufzeitkomponente), eigenes CSS statt Tailwind/Radix. Sprache, Datenbank, Modulaufbau und alle Zusicherungen
+in der Datenbank bleiben wie geplant.
 
 Inhalt: 1 Ausgangslage · 2 Architektur · 3 Datenmodell · 4 Rollen · 5 MVP-Umfang · 6 Entwicklungsplan · 7 Recht · 8 Offene Fragen
 
@@ -34,20 +50,20 @@ Der Prototyp bleibt bis zur Ablösung im Repository.
 | Baustein | Wahl | Begründung |
 |---|---|---|
 | Sprache | TypeScript (strict) | Typen von der Datenbank bis zur Oberfläche, weniger Laufzeitfehler |
-| Anwendung | Next.js (App Router) + React | ein Projekt für Oberfläche und Server, serverseitiges Rendern für schnelle Seiten, großer Fachkräftemarkt |
+| Anwendung | Fastify (Server) + React mit Vite (Oberfläche) | ein schlanker Prozess liefert API und Oberfläche; geringer Speicherbedarf auf dem Hausrechner |
 | Datenbank | PostgreSQL 16 | Ausschluss-Constraints auf Zeiträumen (Doppelbuchungsschutz), Transaktionen, Trigger für Unveränderlichkeit |
-| ORM | Prisma | lesbares Schema, versionierte Migrationen; Constraints und Trigger als handgeschriebene SQL-Migrationen |
+| ORM | Drizzle | typisiertes Schema, versionierte SQL-Migrationen; Constraints und Trigger als handgeschriebene Migration |
 | Validierung | Zod | dieselben Schemas für Formular und Server; der Server validiert immer |
-| Anmeldung | eigene Sitzungen in der Datenbank, Argon2id, HttpOnly/Secure/SameSite-Cookies | keine Abhängigkeit von Drittanbietern, Sitzungen serverseitig widerrufbar; optional TOTP als zweiter Faktor |
+| Anmeldung | eigene Sitzungen in der Datenbank, scrypt (in Node enthalten, keine Zusatzbibliothek), HttpOnly/Secure/SameSite-Cookies | keine Abhängigkeit von Drittanbietern, Sitzungen serverseitig widerrufbar; optional TOTP als zweiter Faktor |
 | Schnittstelle | REST unter `/api/v1` (JSON) | von der Oberfläche und später von Website-Buchung, Channel-Manager, Kasse nutzbar |
-| Oberfläche | Tailwind CSS + Radix-Komponenten, dnd-kit für Drag-and-drop | zugängliche Bausteine, heller und dunkler Modus über Design-Tokens |
+| Oberfläche | eigenes CSS mit Design-Tokens, native Dialoge; dnd-kit für Drag-and-drop (Phase 2) | wenige Abhängigkeiten, heller und dunkler Modus |
 | PDF | serverseitig aus React-Vorlage (`@react-pdf/renderer`) | kein Browser auf dem Server nötig; PDF wird einmal erzeugt und archiviert |
 | E-Mail | SMTP/IMAP (GMX) über eine Warteschlange in der Datenbank | Versand überlebt Neustarts, Fehlversuche sind sichtbar |
 | Hintergrundjobs | `pg-boss` (Jobs in PostgreSQL) | kein zusätzlicher Dienst (kein Redis) |
 | Tests | Vitest (Fachlogik, API gegen echte Test-Datenbank), Playwright (Abläufe im Browser) | kritische Prozesse automatisiert prüfbar |
-| Betrieb | Docker Compose: `app`, `db`, `proxy` (Caddy, automatisches TLS), `backup` | ein Server genügt; geringe laufende Kosten |
+| Betrieb | direkt auf dem Hausrechner (Node.js + PostgreSQL); Docker Compose optional | keine Mietkosten; Sicherung per Skript auf zweiten Datenträger |
 
-Bewusst **nicht** gewählt: getrennte Frontend-/Backend-Projekte und Microservices – für 10–30 Zimmer
+Bewusst **nicht** gewählt: Microservices und getrennte Repositories – für 10–30 Zimmer
 unnötiger Betriebsaufwand. Die Modularität entsteht im Code, nicht durch getrennte Dienste.
 
 ### 2.2 Aufbau (modularer Monolith)
@@ -92,10 +108,10 @@ Abschnitt 13 des Auftrags docken über `integrations/` und interne Ereignisse an
 
 ### 2.4 Betrieb, Sicherung, Wiederherstellung
 
-- Ein kleiner Server in einem deutschen Rechenzentrum (Größenordnung 5–15 €/Monat) oder ein Rechner im Haus
-  – siehe Frage 2. Zugriff ausschließlich über HTTPS.
-- Tägliche verschlüsselte Datenbanksicherung (`pg_dump`) plus Rechnungs-PDFs an einen zweiten Ort,
-  Aufbewahrung gestaffelt (täglich/wöchentlich/monatlich).
+- Rechner im Haus. Zugriff im Hausnetz; für verschlüsselten Zugriff ein Reverse-Proxy mit Zertifikat, von außen nur per VPN.
+  Offen: Betriebssystem des Rechners, und ob er durchgehend läuft (Frage 2).
+- Tägliche Datenbanksicherung (`npm run backup`, die letzten 30 Stände) auf einen zweiten Datenträger; ab Phase 3 inklusive Rechnungs-PDFs.
+  Verschlüsselung der Sicherungen ist noch nicht umgesetzt.
 - Wiederherstellung als dokumentiertes Skript; in Phase 4 wird eine Sicherung tatsächlich in eine leere
   Umgebung zurückgespielt und geprüft.
 - Statusseite/Health-Check und E-Mail-Benachrichtigung bei fehlgeschlagener Sicherung.
@@ -257,15 +273,15 @@ sollten mit Steuerberatung bzw. Datenschutzberatung abgestimmt werden; Angaben n
 
 ## 8. Offene Fragen
 
-**Vor Phase 1 nötig**
+**Geklärt bzw. Rest aus der ersten Runde**
 
-1. **Neubau:** Einverstanden, das PMS auf dem neuen Stack neu aufzubauen und aus dem Prototyp nur die Fachlogik zu übernehmen?
-2. **Betrieb:** Gemieteter Server in Deutschland (Zugriff von überall, Empfehlung) oder Rechner im Haus (keine Mietkosten, aber eigene Verantwortung für Strom, Netz, Hardware)? Gibt es eine Domain?
-3. **Steuern und Preise:** Regelbesteuerung mit 7 % auf Übernachtung und 19 % auf Frühstück/Zusatzleistungen? Preise als Bruttopreise? Erhebt die Gemeinde eine Kur- oder Übernachtungsabgabe?
-4. **Bargeld/Kasse:** Soll das PMS Zahlungen nur dokumentieren (kassiert wird über die vorhandene Restaurantkasse/das Kartenterminal), oder soll es selbst Kasse sein? Davon hängt die TSE-Frage ab.
-5. **Firmenrechnungen:** Wird die E-Rechnung (ZUGFeRD) bereits zum Start benötigt, oder genügt zunächst PDF?
+1. ~~Neubau~~ – entschieden: ja, sparsam.
+2. **Hausrechner:** Welches Betriebssystem (Windows, macOS, Linux)? Läuft er durchgehend? Gibt es einen zweiten Datenträger oder ein NAS für Sicherungen? Soll von außerhalb zugegriffen werden?
+3. **Preise:** Steuersätze sind entschieden (7 %/19 %, einstellbar). Offen: Preise als Bruttopreise? Erhebt die Gemeinde eine Kur- oder Übernachtungsabgabe?
+4. ~~Bargeld/Kasse~~ – entschieden: Bar und Karte werden im PMS erfasst, TSE bleibt offen. Bitte mit der Steuerberatung klären, ob für die Barzahlungserfassung eine TSE nötig ist.
+5. ~~E-Rechnung~~ – entschieden: PDF genügt zunächst.
 
-**Vor Phase 2/3 nötig**
+**Vor Phase 2 nötig: 6 und 2 · vor Phase 3: 7, 9, 11, 15**
 
 6. **Zimmer:** Nummern, Kategorien und Preise der 10 Zimmer; Frühstückspreis; übliche Zusatzleistungen.
 7. **Rechnungsnummern:** Gewünschtes Format, Fortsetzung eines bestehenden Nummernkreises, Startwert?

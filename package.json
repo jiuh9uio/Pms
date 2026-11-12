@@ -1,21 +1,42 @@
 {
-  "name": "hotel-pms",
-  "version": "1.0.0",
-  "description": "Hotel-PMS mit GMX-Anbindung, einstellbarer Kundenkartei und smarten Funktionen",
+  "name": "schuetzenhaus-pms",
+  "version": "0.1.0",
   "private": true,
-  "main": "server/index.js",
-  "scripts": {
-    "start": "node --disable-warning=ExperimentalWarning server/index.js",
-    "demo": "node --disable-warning=ExperimentalWarning server/demo.js",
-    "test": "node --disable-warning=ExperimentalWarning --test"
-  },
+  "type": "module",
   "engines": {
-    "node": ">=22.13"
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,web \"tsx watch src/server/index.ts\" \"vite\"",
+    "build": "tsc -p tsconfig.server.json && vite build",
+    "start": "node dist/server/index.js",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "backup": "node scripts/backup.mjs",
+    "restore": "node scripts/restore.mjs"
   },
   "dependencies": {
-    "express": "^5.3.0",
-    "imapflow": "^2.11.0",
-    "mailparser": "^3.14.3",
-    "nodemailer": "^10.5.0"
+    "@fastify/cookie": "^11.1.5",
+    "@fastify/static": "^10.1.10",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.12.8",
+    "postgres": "^4.1.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.5",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "concurrently": "^10.0.7",
+    "drizzle-kit": "^0.31.11",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
   }
 }

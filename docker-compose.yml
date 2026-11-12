@@ -1,0 +1,33 @@
+# Start: POSTGRES_PASSWORD in .env setzen, dann "docker compose up -d --build"
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pms
+      POSTGRES_DB: pms
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Bitte POSTGRES_PASSWORD in .env setzen}
+    volumes:
+      - pms-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pms -d pms"]
+      interval: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://pms:${POSTGRES_PASSWORD}@db:5432/pms
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      BACKUP_DIR: /backups
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - ./backups:/backups
+
+volumes:
+  pms-db:
