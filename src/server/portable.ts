@@ -13,9 +13,9 @@
  *           pms.exe --backup             Datensicherung schreiben
  *           pms.exe --restore DATEI --ja Sicherung zurückspielen (PMS muss beendet sein)
  */
-import { execFile, execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import postgres from 'postgres';
 import { buildApp } from './app.js';
@@ -39,8 +39,23 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-const run = (name: string, a: string[], env: NodeJS.ProcessEnv = {}) =>
-  new Promise<void>((ok, bad) => execFile(exe(name), a, { env: { ...process.env, ...env }, windowsHide: true }, (err, _out, stderr) => (err ? bad(new Error(stderr || err.message)) : ok())));
+/**
+ * Führt ein PostgreSQL-Programm aus. Die Ausgabe wird bewusst nicht per Pipe eingelesen, sondern in eine Datei
+ * geschrieben: Unter Windows erbt der gestartete Datenbankserver sonst die Pipe, und "pg_ctl start" kehrt nie zurück.
+ */
+function run(name: string, a: string[]) {
+  return new Promise<void>((ok, bad) => {
+    const log = join(dataDir, 'tools.log');
+    const fd = openSync(log, 'a');
+    const child = spawn(exe(name), a, { stdio: ['ignore', fd, fd], windowsHide: true });
+    child.on('error', (e) => { closeSync(fd); bad(e); });
+    child.on('exit', (code) => {
+      closeSync(fd);
+      if (code === 0) ok();
+      else bad(new Error(`${name} endete mit Fehler ${code}. Einzelheiten: ${log}`));
+    });
+  });
+}
 
 /** Startet die mitgelieferte Datenbank (beim ersten Mal wird sie eingerichtet) und liefert die Verbindungsadresse. */
 async function startDatabase() {

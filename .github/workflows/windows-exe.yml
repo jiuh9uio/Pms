@@ -9,10 +9,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: windows-exe-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,7 +40,8 @@ jobs:
           $dir = "release\SchuetzenhausPMS"
           $base = "http://127.0.0.1:3000/api/v1"
           function Start-Pms { Start-Process -FilePath "$dir\pms.exe" -ArgumentList '--no-browser' -WorkingDirectory $dir -RedirectStandardOutput "$dir\run.log" -RedirectStandardError "$dir\err.log" -PassThru }
-          function Wait-Pms { foreach ($i in 1..90) { try { Invoke-RestMethod "$base/health" | Out-Null; return } catch { Start-Sleep 1 } }; Get-Content "$dir\run.log", "$dir\err.log"; throw 'PMS ist nicht gestartet' }
+          function Show-Logs { Get-ChildItem "$dir\*.log", "$dir\data\*.log" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "===== $($_.Name)"; Get-Content $_.FullName -Tail 60 } }
+          function Wait-Pms { foreach ($i in 1..45) { try { Invoke-RestMethod "$base/health" -TimeoutSec 2 | Out-Null; return } catch { Start-Sleep 1 } }; Show-Logs; throw 'PMS ist nicht gestartet' }
           function Stop-Pms($p) { Stop-Process -Id $p.Id -Force; & "$dir\pgsql\bin\pg_ctl.exe" stop -D "$dir\data\postgres" -m fast -w }
           function Post($path, $body, $s) { Invoke-RestMethod -Method Post -Uri "$base$path" -ContentType 'application/json' -Body ($body | ConvertTo-Json -Depth 6) -WebSession $s }
 
