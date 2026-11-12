@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
-  bigserial, boolean, customType, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uuid,
+  bigserial, boolean, customType, date, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, uuid,
 } from 'drizzle-orm/pg-core';
 
 const id = () => uuid('id').primaryKey().default(sql`gen_random_uuid()`);
@@ -81,6 +81,8 @@ export const roomCategories = pgTable('room_categories', {
   description: text('description').notNull().default(''),
   stdOccupancy: integer('std_occupancy').notNull().default(2),
   maxPersons: integer('max_persons').notNull().default(2),
+  /** Grundpreis je Nacht in Cent (brutto) */
+  basePriceCents: integer('base_price_cents').notNull().default(0),
   sort: integer('sort').notNull().default(0),
   ...stamps,
 });
@@ -90,6 +92,8 @@ export const rooms = pgTable('rooms', {
   number: text('number').notNull().unique(),
   categoryId: uuid('category_id').notNull().references(() => roomCategories.id),
   floor: text('floor').notNull().default(''),
+  /** Abweichender Preis nur für dieses Zimmer; leer = Preis der Kategorie */
+  priceOverrideCents: integer('price_override_cents'),
   active: boolean('active').notNull().default(true),
   note: text('note').notNull().default(''),
   ...stamps,
@@ -107,3 +111,129 @@ export const roomAllocations = pgTable('room_allocations', {
   active: boolean('active').notNull().default(true),
   ...stamps,
 });
+
+// =====================================================================================
+// Phase 2: Preise, Gäste, Reservierungen
+// =====================================================================================
+
+const day = (name: string) => date(name, { mode: 'string' });
+
+export const roomBlocks = pgTable('room_blocks', {
+  id: id(),
+  allocationId: uuid('allocation_id').notNull().unique().references(() => roomAllocations.id, { onDelete: 'cascade' }),
+  reason: text('reason').notNull().default(''),
+  ...stamps,
+});
+
+// ---------- Preise ----------
+export const rateRuleMode = pgEnum('rate_rule_mode', ['percent', 'amount', 'fixed']);
+
+/** Preisregel: Saison, Wochenende, Aktion. Wird in Reihenfolge der Priorität auf den Grundpreis angewendet. */
+export const rateRules = pgTable('rate_rules', {
+  id: id(),
+  name: text('name').notNull(),
+  startDate: day('start_date').notNull(),
+  endDate: day('end_date').notNull(),
+  /** 0 = Sonntag … 6 = Samstag; leer = alle Tage */
+  weekdays: integer('weekdays').array().notNull().default(sql`'{}'`),
+  categoryId: uuid('category_id').references(() => roomCategories.id, { onDelete: 'cascade' }),
+  mode: rateRuleMode('mode').notNull(),
+  /** Prozent bzw. Betrag in Euro */
+  value: numeric('value', { precision: 10, scale: 2, mode: 'number' }).notNull(),
+  priority: integer('priority').notNull().default(10),
+  active: boolean('active').notNull().default(true),
+  ...stamps,
+});
+
+export const servicePer = pgEnum('service_per', ['stay', 'night', 'person', 'person_night']);
+
+/** Frühstück und Zusatzleistungen */
+export const services = pgTable('services', {
+  id: id(),
+  name: text('name').notNull(),
+  priceCents: integer('price_cents').notNull(),
+  per: servicePer('per').notNull().default('stay'),
+  taxRateId: uuid('tax_rate_id').notNull().references(() => taxRates.id),
+  isBreakfast: boolean('is_breakfast').notNull().default(false),
+  active: boolean('active').notNull().default(true),
+  ...stamps,
+});
+
+// ---------- Gäste ----------
+export const guests = pgTable('guests', {
+  id: id(),
+  salutation: text('salutation').notNull().default(''),
+  firstName: text('first_name').notNull().default(''),
+  lastName: text('last_name').notNull(),
+  company: text('company').notNull().default(''),
+  email: text('email').notNull().default(''),
+  phone: text('phone').notNull().default(''),
+  street: text('street').notNull().default(''),
+  zip: text('zip').notNull().default(''),
+  city: text('city').notNull().default(''),
+  country: text('country').notNull().default(''),
+  birthdate: day('birthdate'),
+  nationality: text('nationality').notNull().default(''),
+  idNumber: text('id_number').notNull().default(''),
+  notes: text('notes').notNull().default(''),
+  ...stamps,
+}, (t) => [index('guests_name_idx').on(t.lastName, t.firstName)]);
+
+// ---------- Reservierungen ----------
+export const numberSequences = pgTable('number_sequences', {
+  key: text('key').notNull(),
+  year: integer('year').notNull(),
+  last: integer('last').notNull().default(0),
+}, (t) => [primaryKey({ columns: [t.key, t.year] })]);
+
+export const bookings = pgTable('bookings', {
+  id: id(),
+  number: text('number').notNull().unique(),
+  guestId: uuid('guest_id').notNull().references(() => guests.id),
+  groupName: text('group_name').notNull().default(''),
+  source: text('source').notNull().default(''),
+  paymentMethod: text('payment_method').notNull().default(''),
+  notes: text('notes').notNull().default(''),
+  ...stamps,
+}, (t) => [index('bookings_guest_idx').on(t.guestId)]);
+
+export const bookingRoomStatus = pgEnum('booking_room_status', ['tentative', 'confirmed', 'checked_in', 'checked_out', 'cancelled', 'no_show']);
+
+/** Ein Zimmer innerhalb einer Buchung. Zimmer und Zeitraum stehen in der zugehörigen Belegung (room_allocations). */
+export const bookingRooms = pgTable('booking_rooms', {
+  id: id(),
+  bookingId: uuid('booking_id').notNull().references(() => bookings.id, { onDelete: 'cascade' }),
+  allocationId: uuid('allocation_id').notNull().unique().references(() => roomAllocations.id),
+  /** Preiskategorie zum Zeitpunkt der Buchung */
+  categoryId: uuid('category_id').notNull().references(() => roomCategories.id),
+  status: bookingRoomStatus('status').notNull().default('confirmed'),
+  adults: integer('adults').notNull().default(1),
+  children: integer('children').notNull().default(0),
+  priceManual: boolean('price_manual').notNull().default(false),
+  checkedInAt: ts('checked_in_at'),
+  checkedOutAt: ts('checked_out_at'),
+  ...stamps,
+}, (t) => [index('booking_rooms_booking_idx').on(t.bookingId)]);
+
+/** Preis je Nacht als Kopie zum Buchungszeitpunkt – spätere Preisänderungen wirken hier nicht. */
+export const bookingRoomNights = pgTable('booking_room_nights', {
+  bookingRoomId: uuid('booking_room_id').notNull().references(() => bookingRooms.id, { onDelete: 'cascade' }),
+  date: day('date').notNull(),
+  priceCents: integer('price_cents').notNull(),
+  taxRatePercent: numeric('tax_rate_percent', { precision: 5, scale: 2, mode: 'number' }).notNull(),
+  /** Herkunft des Preises, z. B. „Grundpreis“, „Wochenende“, „manuell“ */
+  source: text('source').notNull().default(''),
+}, (t) => [primaryKey({ columns: [t.bookingRoomId, t.date] })]);
+
+/** Gebuchte Zusatzleistung (Frühstück, Parkplatz …) mit Preis- und Steuersatz-Kopie */
+export const charges = pgTable('charges', {
+  id: id(),
+  bookingId: uuid('booking_id').notNull().references(() => bookings.id, { onDelete: 'cascade' }),
+  bookingRoomId: uuid('booking_room_id').references(() => bookingRooms.id, { onDelete: 'set null' }),
+  serviceId: uuid('service_id').references(() => services.id, { onDelete: 'set null' }),
+  name: text('name').notNull(),
+  quantity: numeric('quantity', { precision: 10, scale: 2, mode: 'number' }).notNull().default(1),
+  unitPriceCents: integer('unit_price_cents').notNull(),
+  taxRatePercent: numeric('tax_rate_percent', { precision: 5, scale: 2, mode: 'number' }).notNull(),
+  ...stamps,
+}, (t) => [index('charges_booking_idx').on(t.bookingId)]);

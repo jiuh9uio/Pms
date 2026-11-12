@@ -1,80 +1,79 @@
-import { Link } from 'react-router-dom';
-import type { AuditDto, HotelSettings, TaxRateDto, UserDto } from '../../../src/shared/schemas.js';
+import { useEffect, useState } from 'react';
+import { formatMoney, type BookingListRow, type DashboardDto } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
 import { useAuth } from '../App.tsx';
-import { Badge, LoadState, PageHeader, fmtDateTime, useLoad } from '../ui.tsx';
-import { describeAudit } from './Audit.tsx';
+import { useData } from '../data.tsx';
+import { Button, LoadState, PageHeader, useLoad, useToast } from '../ui.tsx';
+import { BookingTable } from './Reservations.tsx';
 
-const USE: Record<string, string> = { lodging: 'Standard für Übernachtung', services: 'Standard für Frühstück und Zusatzleistungen' };
+const TASK_TONE: Record<string, string> = { overdue_arrival: 'warn', overdue_departure: 'warn', arrival: 'in', departure: 'out', tentative: 'info' };
 
-/**
- * Übersicht in Phase 1: zeigt ausschließlich echte Daten aus der Datenbank.
- * Die Betriebskennzahlen (Anreisen, Belegung, Umsatz) kommen mit Phase 2 und 3.
- */
 export function Dashboard() {
   const { user } = useAuth();
-  const isAdmin = user.role === 'admin';
-  const base = useLoad(async () => {
-    const [hotel, rates] = await Promise.all([api<HotelSettings>('GET', '/settings/hotel'), api<TaxRateDto[]>('GET', '/tax-rates')]);
-    return { hotel, rates };
-  });
-  const adminData = useLoad(async () => {
-    if (!isAdmin) return null;
-    const [users, audit] = await Promise.all([api<UserDto[]>('GET', '/users'), api<{ items: AuditDto[] }>('GET', '/audit?limit=6')]);
-    return { users, audit: audit.items };
-  }, [isAdmin]);
+  const { rev, bump, openBooking, newBooking } = useData();
+  const toast = useToast();
+  const { data, error, reload } = useLoad(() => api<DashboardDto>('GET', '/dashboard'), [rev]);
+  const [busy, setBusy] = useState<string | null>(null);
+  // Kennzahlen aktualisieren sich von selbst
+  useEffect(() => {
+    const t = setInterval(reload, 60_000);
+    return () => clearInterval(t);
+  }, [reload]);
 
   const today = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  const h = base.data?.hotel;
-  const incomplete = h && (!h.street || !h.city || !h.taxNumber);
+  const checkout = async (r: BookingListRow) => {
+    setBusy(r.id);
+    try {
+      await api('POST', `/booking-rooms/${r.id}/status`, { status: 'checked_out', version: r.version });
+      toast(`Zimmer ${r.roomNumber} ausgecheckt`);
+      bump();
+    } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+    setBusy(null);
+  };
+  const kpi = (label: string, value: string | number, sub?: string) => <div className="card kpicard"><span>{label}</span><b>{value}</b>{sub && <small>{sub}</small>}</div>;
 
   return (
     <>
-      <PageHeader title={`Guten Tag, ${user.name}`} sub={today} />
-      <LoadState error={base.error} loading={!base.data} />
-      {base.data && h && (
-        <div className="cards">
+      <PageHeader title={`Guten Tag, ${user.name}`} sub={today} actions={<Button variant="primary" onClick={() => newBooking()}>Neue Reservierung</Button>} />
+      <LoadState error={error} loading={!data} />
+      {data && data.rooms.total === 0 && <p className="notice warn">Es sind noch keine Zimmer angelegt. {user.role === 'admin' ? 'Bitte unter „Zimmer & Preise“ Kategorien und Zimmer einrichten.' : 'Bitte den Administrator bitten, Zimmer einzurichten.'}</p>}
+      {data && (
+        <>
+          <div className="kpis">
+            {kpi('Anreisen heute', data.arrivals.length, 'noch nicht eingecheckt')}
+            {kpi('Abreisen heute', data.departures.length, 'noch nicht ausgecheckt')}
+            {kpi('Belegte Zimmer', data.rooms.occupied, 'Gäste im Haus')}
+            {kpi('Freie Zimmer', data.rooms.free, `von ${data.rooms.total}`)}
+            {kpi('Gesperrte Zimmer', data.rooms.blocked)}
+            {kpi('Auslastung heute', `${data.rooms.occupancyPercent} %`, 'gebuchte Zimmer heute Nacht')}
+            {kpi('Logisumsatz heute', formatMoney(data.revenueTodayCents), 'gebuchte Übernachtungen')}
+            {kpi('Logisumsatz Monat', formatMoney(data.revenueMonthCents), 'laufender Monat, gebucht')}
+          </div>
+          <p className="muted small">Umsatz = gebuchte Übernachtungspreise (brutto, ohne Zusatzleistungen). Offene Rechnungen erscheinen hier mit der Abrechnung (Phase 3).</p>
+
           <section className="card">
-            <h2>Hotel</h2>
-            <p className="strong">{h.name}</p>
-            <p className="muted">{[h.street, [h.zip, h.city].filter(Boolean).join(' ')].filter(Boolean).join(', ') || 'Noch keine Anschrift hinterlegt'}</p>
-            <p className="muted">Check-in ab {h.checkinTime} Uhr · Check-out bis {h.checkoutTime} Uhr</p>
-            {incomplete && isAdmin && <p className="notice warn">Stammdaten sind unvollständig (Anschrift, Steuernummer). Sie werden später für Rechnungen benötigt. <Link to="/einstellungen">Jetzt ergänzen</Link></p>}
+            <h2>Aufgaben heute</h2>
+            {data.tasks.length === 0 ? <p className="muted">Alles erledigt.</p> : (
+              <ul className="tasks">
+                {data.tasks.map((t) => (
+                  <li key={t.kind + t.bookingRoomId} className={`task ${TASK_TONE[t.kind]}`}>
+                    <button type="button" onClick={() => openBooking(t.bookingId)}>{t.text}</button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
-          <section className="card">
-            <h2>Steuersätze</h2>
-            <ul className="plain">
-              {base.data.rates.filter((r) => r.active).map((r) => (
-                <li key={r.id}><span><b>{r.ratePercent.toLocaleString('de-DE')} %</b> {r.name}</span>{r.defaultFor && <Badge tone="accent">{USE[r.defaultFor]}</Badge>}</li>
-              ))}
-            </ul>
-            {isAdmin && <p><Link to="/einstellungen">Steuersätze verwalten</Link></p>}
-          </section>
-          {adminData.data && (
-            <>
-              <section className="card">
-                <h2>Benutzer</h2>
-                <p className="kpi">{adminData.data.users.filter((u) => u.active).length}<small>aktive Konten</small></p>
-                <p className="muted">{adminData.data.users.filter((u) => u.role === 'admin' && u.active).length} Administrator(en)</p>
-                <p><Link to="/benutzer">Benutzer verwalten</Link></p>
-              </section>
-              <section className="card span2">
-                <h2>Letzte Änderungen</h2>
-                <ul className="plain">
-                  {adminData.data.audit.map((e) => (
-                    <li key={e.id}><span>{describeAudit(e)} <span className="muted">· {e.userName}</span></span><span className="muted nowrap">{fmtDateTime(e.at)}</span></li>
-                  ))}
-                </ul>
-                <p><Link to="/protokoll">Gesamtes Protokoll</Link></p>
-              </section>
-            </>
-          )}
-          <section className="card span2">
-            <h2>Stand des Systems</h2>
-            <p className="muted">Fertig ist das technische Fundament (Phase 1): Anmeldung, Benutzer und Rollen, Änderungsprotokoll, Stammdaten und Steuersätze.</p>
-            <p className="muted">Noch nicht enthalten und deshalb hier nicht sichtbar: Belegungsplan, Reservierungen, Check-in/Check-out, Gäste (Phase 2) sowie Rechnungen, Zahlungen und Firmen (Phase 3).</p>
-          </section>
-        </div>
+          <div className="cards two">
+            <section className="card flush">
+              <h2 className="pad">Anreisen heute</h2>
+              {data.arrivals.length ? <BookingTable compact rows={data.arrivals} action={(r) => <Button variant="primary" onClick={() => openBooking(r.bookingId)}>Check-in</Button>} /> : <p className="muted pad">Keine offenen Anreisen.</p>}
+            </section>
+            <section className="card flush">
+              <h2 className="pad">Abreisen heute</h2>
+              {data.departures.length ? <BookingTable compact rows={data.departures} action={(r) => <Button variant="primary" busy={busy === r.id} onClick={() => void checkout(r)}>Check-out</Button>} /> : <p className="muted pad">Keine offenen Abreisen.</p>}
+            </section>
+          </div>
+        </>
       )}
     </>
   );

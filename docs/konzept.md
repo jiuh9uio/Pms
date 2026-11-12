@@ -1,13 +1,13 @@
 # PMS Hotel & Restaurant Schützenhaus – Konzept
 
-Stand: 12.11.2026 · Status: **Phase 1 umgesetzt**, Phase 2 in Vorbereitung
+Stand: 12.11.2026 · Status: **Phase 1 und 2 umgesetzt**, Phase 3 (Abrechnung) als Nächstes
 
 ### Getroffene Entscheidungen (12.11.2026)
 
 | Thema | Entscheidung |
 |---|---|
 | Rollen | nur Administrator und Benutzer |
-| Betrieb | Rechner im Haus (kein gemieteter Server) |
+| Betrieb | Windows-Rechner im Haus (kein gemieteter Server) |
 | Neubau | ja, in sparsamer Ausführung: ein Node-Prozess + PostgreSQL, Docker nur optional |
 | Steuern | 7 % und 19 % vorbelegt, in den Einstellungen änderbar |
 | Zahlungen | Bar und Karte werden im PMS dokumentiert (Phase 3); TSE bleibt offen, Schnittstelle wird vorgesehen |

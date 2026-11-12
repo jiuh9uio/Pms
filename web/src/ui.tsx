@@ -60,7 +60,7 @@ export function PageHeader({ title, sub, actions }: { title: string; sub?: strin
   );
 }
 
-export function Dialog({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
+export function Dialog({ title, onClose, children, footer, size = 'md' }: { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; size?: 'md' | 'lg' | 'xl' }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current!;
@@ -68,7 +68,7 @@ export function Dialog({ title, onClose, children, footer }: { title: string; on
     return () => d.close();
   }, []);
   return (
-    <dialog ref={ref} className="dialog" onCancel={(e) => { e.preventDefault(); onClose(); }}
+    <dialog ref={ref} className={`dialog ${size}`} onCancel={(e) => { e.preventDefault(); onClose(); }}
       onMouseDown={(e) => { if (e.target === ref.current) onClose(); }}>
       <div className="dialog-head"><h2>{title}</h2><button type="button" className="iconbtn" onClick={onClose} aria-label="Schließen">✕</button></div>
       <div className="dialog-body">{children}</div>

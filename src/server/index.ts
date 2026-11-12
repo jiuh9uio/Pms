@@ -11,6 +11,7 @@ await runMigrations(db);
 
 const app = await buildApp({ db, cookieSecure: config.cookieSecure, webDir: config.webDir, logger: true });
 await app.listen({ host: config.host, port: config.port });
+console.log(`Schützenhaus PMS läuft auf http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${config.port}`);
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, async () => {

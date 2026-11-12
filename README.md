@@ -8,13 +8,31 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
 | Phase | Inhalt | Status |
 |---|---|---|
 | 1 Fundament | Anmeldung, Benutzer und Rollen, Änderungsprotokoll, Stammdaten, Steuersätze, Grundlayout (hell/dunkel, mobil), Datensicherung | **fertig** |
-| 2 Hotelbetrieb | Zimmer, Belegungsplan, Reservierungen, Check-in/-out, Gäste, Dashboard-Kennzahlen | offen |
+| 2 Hotelbetrieb | Zimmer, Kategorien, Preisregeln, Leistungen, Belegungsplan (Tag/Woche/Monat, Drag-and-drop, Sperren), Reservierungen (auch mehrere Zimmer), Check-in/-out, Gäste, Übersicht mit Kennzahlen und Aufgaben | **fertig** |
 | 3 Abrechnung | Rechnungen, PDF, Zahlungen (bar/Karte), Firmen, E-Mail | offen |
 | 4 Qualität | Browser-Tests, Sicherheitsprüfung, Bedienung mobil, Anwenderdokumentation | offen |
 
-Nicht enthalten: alles aus Phase 2–4, außerdem TSE/Kassenfunktion, E-Rechnung, Channel-Manager, Onlinebuchung.
-Die Tabellen für Zimmer und Belegungen (inkl. Doppelbuchungsschutz) existieren bereits, haben aber noch keine Oberfläche.
-Der frühere Prototyp liegt unverändert unter `prototype/` und wird mit Phase 2/3 abgelöst.
+**Noch nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
+
+- Rechnungen, PDF, Zahlungserfassung (bar/Karte), offene Posten, Buchhaltungsexport – Phase 3
+- Firmenprofile mit vereinbarten Preisen und Zahlungsbedingungen – Phase 3 (bis dahin: Firmenname am Gast, Sonderpreis je Buchung)
+- E-Mail-Versand (GMX) im Neubau – Phase 3; der Prototyp unter `prototype/` kann es weiterhin
+- Aufpreise für Zusatzpersonen und Kinderpreise (derzeit über Sonderpreis je Nacht)
+- Meldeschein-Druck, Löschen/Anonymisieren von Gästen nach Fristen, Housekeeping
+- TSE/Kassenfunktion, E-Rechnung, Channel-Manager, Onlinebuchung
+
+Der frühere Prototyp liegt unverändert unter `prototype/` und wird mit Phase 3 abgelöst.
+
+### So ist der Hotelbetrieb umgesetzt
+
+- **Doppelbuchungen** verhindert die Datenbank selbst (Ausschluss-Constraint), auch bei gleichzeitigem Buchen an zwei Arbeitsplätzen.
+  Sperren nutzen denselben Mechanismus.
+- **Preise** werden je Nacht bei der Buchung gespeichert. Spätere Preisänderungen wirken nur auf neue Buchungen und auf
+  Nächte, die bei einer Verlängerung neu hinzukommen.
+- **Vorzeitige Abreise:** Beim Check-out vor dem geplanten Abreisetag endet der Aufenthalt am selben Tag, spätere Nächte entfallen, das Zimmer ist wieder buchbar.
+- **Storno / nicht angereist** gibt das Zimmer frei; die Buchung bleibt mit Verlauf erhalten und kann reaktiviert werden, solange das Zimmer frei ist.
+- **Umsatz in der Übersicht** = gebuchte Übernachtungspreise (brutto) der bestätigten, laufenden und abgeschlossenen Aufenthalte, ohne Zusatzleistungen.
+- Der Belegungsplan aktualisiert sich jede Minute; wer auf veraltetem Stand speichert, erhält einen Hinweis statt fremde Änderungen zu überschreiben.
 
 ## Technik
 
@@ -23,18 +41,26 @@ Drizzle ORM mit SQL-Migrationen · Zod (gemeinsame Eingabeprüfung) · Vitest.
 Ein Node-Prozess liefert API und Oberfläche aus. Gemessen im Leerlauf: ca. 120 MB (Node) + ca. 100 MB (PostgreSQL).
 
 ```
-src/server/   app.ts (Routen, Zugriffsschutz)  modules/ (auth, users, settings, audit)  db/ (Schema, Verbindung)
+src/server/   app.ts, routes-hotel.ts (Routen, Zugriffsschutz)  modules/ (auth, users, settings, audit, rooms, guests, bookings)  db/
 src/shared/   Eingabeschemas und Typen für Server und Oberfläche
 web/          Oberfläche
-migrations/   Datenbankschema; 0001 enthält Doppelbuchungsschutz und Protokollschutz
+migrations/   Datenbankschema; 0001 enthält Doppelbuchungsschutz und Protokollschutz, 0002 den Hotelbetrieb
 tests/        Tests gegen eine echte PostgreSQL-Datenbank
 scripts/      Datensicherung und Wiederherstellung
 ```
 
-## Installation auf dem Rechner im Haus
+## Installation auf dem Windows-Rechner im Haus
 
-Voraussetzungen: [Node.js 22](https://nodejs.org) und [PostgreSQL 16](https://www.postgresql.org/download/)
-(Windows, macOS oder Linux). `pg_dump`/`pg_restore` müssen für die Datensicherung im Suchpfad liegen.
+Die folgenden Schritte sind für Windows 10/11 geschrieben. **Sie sind auf Windows noch nicht praktisch erprobt** –
+entwickelt und getestet wurde unter Linux; Anwendung und Skripte verwenden aber nur plattformunabhängige Mittel.
+
+Voraussetzungen:
+
+- [Node.js 22 LTS](https://nodejs.org) (Windows-Installer, Standardeinstellungen)
+- [PostgreSQL 16](https://www.postgresql.org/download/windows/) (Installer; das dabei vergebene Passwort für `postgres` notieren)
+- Den Ordner `C:\Program Files\PostgreSQL\16\bin` zur Umgebungsvariable `Path` hinzufügen, damit `pg_dump` und
+  `pg_restore` für die Datensicherung gefunden werden (Systemsteuerung → System → Erweiterte Systemeinstellungen → Umgebungsvariablen)
+- Den Projektordner z. B. nach `C:\pms` legen
 
 1. Datenbank und Datenbankbenutzer anlegen (einmalig, als PostgreSQL-Administrator):
    ```sql
@@ -51,8 +77,29 @@ Voraussetzungen: [Node.js 22](https://nodejs.org) und [PostgreSQL 16](https://ww
 4. Im Browser `http://<Rechnername-oder-IP>:3000` öffnen und das Administrator-Konto anlegen.
 
 Das Datenbankschema wird beim Start automatisch eingerichtet und aktualisiert.
-Damit das PMS nach einem Neustart des Rechners von selbst läuft, `npm start` als Dienst einrichten
-(Windows: Aufgabenplanung oder NSSM; Linux: systemd).
+
+Schritt 1 geht am einfachsten in „SQL Shell (psql)“ aus dem Startmenü (Anmeldung als `postgres`).
+
+### Automatisch starten und täglich sichern (Windows)
+
+In einer Eingabeaufforderung **als Administrator** (Pfad `C:\pms` ggf. anpassen):
+
+```bat
+rem PMS beim Hochfahren starten
+schtasks /Create /TN "PMS Start" /SC ONSTART /RU SYSTEM /TR "C:\pms\scripts\windows\start-pms.bat"
+rem Datensicherung jede Nacht um 02:00 Uhr
+schtasks /Create /TN "PMS Sicherung" /SC DAILY /ST 02:00 /RU SYSTEM /TR "C:\pms\scripts\windows\backup-pms.bat"
+rem Zugriff aus dem Hausnetz erlauben (nur privates Netzwerkprofil)
+netsh advfirewall firewall add rule name="PMS" dir=in action=allow protocol=TCP localport=3000 profile=private
+```
+
+- Ausgaben stehen in `logs\pms.log` und `logs\backup.log`.
+- Der Rechner muss laufen, damit das PMS erreichbar ist: Energiesparmodus/Ruhezustand abschalten und Windows-Updates
+  mit Neustart auf die Nacht legen. Läuft der Rechner um 02:00 Uhr nicht, eine andere Uhrzeit für die Sicherung wählen.
+- Andere Geräte erreichen das PMS unter `http://<Name-des-Rechners>:3000` (Name: Einstellungen → System → Info).
+- Nach einem Update des PMS: `npm ci`, `npm run build`, dann den Rechner oder die Aufgabe „PMS Start“ neu starten.
+
+Unter Linux/macOS stattdessen `npm start` als systemd-Dienst und `npm run backup` per cron einrichten.
 
 **Alternative mit Docker** (`docker compose up -d --build`, vorher `POSTGRES_PASSWORD` in `.env` setzen):
 Die Docker-Dateien liegen bei, sind aber **noch nicht getestet**. Auf Windows braucht Docker Desktop
@@ -72,7 +119,7 @@ npm run backup                                           # schreibt backups/pms-
 npm run restore -- backups/pms-20270101-020000.dump --ja  # ersetzt ALLE Daten durch diesen Stand
 ```
 
-- Täglich automatisch ausführen (Windows: Aufgabenplanung, Linux: cron). Es bleiben die letzten 30 Stände (`BACKUP_KEEP`).
+- Täglich automatisch ausführen (siehe oben). Es bleiben die letzten 30 Stände (`BACKUP_KEEP`).
 - Den Ordner `backups/` zusätzlich auf einen zweiten Datenträger oder ein NAS kopieren (`BACKUP_DIR`) –
   eine Sicherung auf derselben Festplatte schützt nicht vor deren Ausfall.
 - Vor einer Wiederherstellung das PMS beenden, danach wieder starten.

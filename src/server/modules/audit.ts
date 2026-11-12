@@ -16,9 +16,10 @@ export async function record(db: Exec, actor: Actor, e: AuditEntry) {
   });
 }
 
-export async function listAudit(db: Exec, f: { entity?: string; userId?: string; before?: number; limit: number }) {
+export async function listAudit(db: Exec, f: { entity?: string; entityId?: string; userId?: string; before?: number; limit: number }) {
   const where = and(
     f.entity ? eq(auditLog.entity, f.entity) : undefined,
+    f.entityId ? eq(auditLog.entityId, f.entityId) : undefined,
     f.userId ? eq(auditLog.userId, f.userId) : undefined,
     f.before ? lt(auditLog.id, f.before) : undefined,
   );

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ROLE_LABEL, changePasswordInput } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { useAuth } from '../App.tsx';
@@ -23,14 +23,20 @@ export function Account() {
   const logout = async () => {
     setOut(true);
     try { await api('POST', '/auth/logout'); } catch { /* Sitzung war bereits beendet */ }
-    navigate('/', { replace: true });
     await refresh();
+    navigate('/', { replace: true });
   };
 
   return (
     <>
       <PageHeader title="Mein Konto" sub={`${user.name} · ${user.username} · ${ROLE_LABEL[user.role]}`}
         actions={<Button busy={out} onClick={() => void logout()}>Abmelden</Button>} />
+      {user.role === 'admin' && (
+        <nav className="card adminlinks" aria-label="Verwaltung">
+          <h2>Verwaltung</h2>
+          <Link to="/zimmer">Zimmer &amp; Preise</Link><Link to="/benutzer">Benutzer</Link><Link to="/protokoll">Protokoll</Link><Link to="/einstellungen">Einstellungen</Link>
+        </nav>
+      )}
       <section className="card">
         <h2>Darstellung</h2>
         <div className="segmented" role="radiogroup" aria-label="Farbschema">

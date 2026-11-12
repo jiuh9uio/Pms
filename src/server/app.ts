@@ -8,11 +8,12 @@ import { z, ZodError } from 'zod';
 import * as S from '../shared/schemas.js';
 import type { Db } from './db/client.js';
 import type { users } from './db/schema.js';
-import { AppError, forbidden } from './lib/errors.js';
+import { AppError, forbidden, pgCode } from './lib/errors.js';
 import { listAudit, type Actor } from './modules/audit.js';
 import * as auth from './modules/auth.js';
 import * as settings from './modules/settings.js';
 import * as usersMod from './modules/users.js';
+import { registerHotelRoutes } from './routes-hotel.js';
 
 const COOKIE = 'pms_session';
 
@@ -27,7 +28,7 @@ export interface AppOptions { db: Db; cookieSecure?: boolean; webDir?: string | 
 
 export async function buildApp({ db, cookieSecure = false, webDir, logger = false }: AppOptions) {
   // trustProxy nur für lokale Proxys (z. B. Caddy auf demselben Rechner)
-  const app = Fastify({ logger, disableRequestLogging: true, trustProxy: 'loopback', bodyLimit: 1024 * 1024 });
+  const app = Fastify({ logger: logger ? { level: 'warn' } : false, trustProxy: 'loopback', bodyLimit: 1024 * 1024 });
   await app.register(cookie);
   app.decorateRequest('user', null);
   app.decorateRequest('sessionId', null);
@@ -74,7 +75,10 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     }
     if (err instanceof AppError) return reply.status(err.status).send({ error: { code: err.code, message: err.message, fields: err.fields } });
     const e = err as { statusCode?: number; code?: string; message?: string };
-    if (e.code === '23505') return reply.status(409).send({ error: { code: 'duplicate', message: 'Dieser Eintrag existiert bereits' } });
+    const pg = pgCode(err);
+    if (pg === '23P01') return reply.status(409).send({ error: { code: 'room_taken', message: 'Das Zimmer ist in diesem Zeitraum bereits belegt oder gesperrt' } });
+    if (pg === '23505') return reply.status(409).send({ error: { code: 'duplicate', message: 'Dieser Eintrag existiert bereits' } });
+    if (pg === '23503') return reply.status(409).send({ error: { code: 'in_use', message: 'Der Eintrag wird noch verwendet oder verweist auf etwas, das es nicht gibt' } });
     if (e.statusCode && e.statusCode < 500) return reply.status(e.statusCode).send({ error: { code: 'bad_request', message: 'Ungültige Anfrage' } });
     req.log.error(err);
     if (!logger) console.error(err);
@@ -136,6 +140,8 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.get('/tax-rates', { preHandler: requireUser }, () => settings.listTaxRates(db));
     api.post('/tax-rates', { preHandler: requireAdmin }, (req) => settings.createTaxRate(db, actor(req), S.taxRateCreateInput.parse(req.body)));
     api.patch('/tax-rates/:id', { preHandler: requireAdmin }, (req) => settings.updateTaxRate(db, actor(req), idParam(req), S.taxRateUpdateInput.parse(req.body)));
+
+    registerHotelRoutes(api, { db, requireUser, requireAdmin, actor });
 
     api.setNotFoundHandler(() => { throw new AppError(404, 'not_found', 'Unbekannte Adresse'); });
   }, { prefix: '/api/v1' });

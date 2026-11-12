@@ -8,3 +8,10 @@ export const forbidden = () => new AppError(403, 'forbidden', 'Dafür fehlt die 
 export const conflict = (message: string, code = 'conflict') => new AppError(409, code, message);
 export const stale = () =>
   new AppError(409, 'stale', 'Der Eintrag wurde zwischenzeitlich von jemand anderem geändert. Bitte neu laden und erneut versuchen.');
+
+/** PostgreSQL-Fehlercode, auch wenn der Fehler vom ORM verpackt wurde. */
+export function pgCode(err: unknown): string | undefined {
+  for (let e = err as { code?: unknown; cause?: unknown } | undefined, i = 0; e && i < 5; e = e.cause as typeof e, i++)
+    if (typeof e.code === 'string' && /^[0-9A-Z]{5}$/.test(e.code)) return e.code;
+  return undefined;
+}
