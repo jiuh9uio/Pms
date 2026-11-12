@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hotel-PMS</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="auth" hidden>
+  <form class="authbox" id="authform">
+    <h1>Hotel-PMS</h1>
+    <p id="authmsg"></p>
+    <label class="f"><span>Passwort</span><input type="password" name="password" required minlength="8" autocomplete="current-password"></label>
+    <button class="btn primary" id="authbtn">Anmelden</button>
+  </form>
+</div>
+<div id="app" hidden>
+  <nav id="nav">
+    <div class="brand" id="brand">Hotel-PMS</div>
+    <a href="#dashboard" data-view="dashboard">Übersicht</a>
+    <a href="#plan" data-view="plan">Belegungsplan</a>
+    <a href="#reservations" data-view="reservations">Reservierungen</a>
+    <a href="#guests" data-view="guests">Kundenkartei</a>
+    <a href="#mail" data-view="mail">Postfach <span class="badge" id="mailbadge" hidden></span></a>
+    <a href="#rooms" data-view="rooms">Zimmer</a>
+    <a href="#prices" data-view="prices">Preise</a>
+    <a href="#reports" data-view="reports">Auswertung</a>
+    <a href="#settings" data-view="settings">Einstellungen</a>
+    <button class="logout" data-act="logout">Abmelden</button>
+  </nav>
+  <main id="view"></main>
+</div>
+<div id="toasts" aria-live="polite"></div>
+<script src="/app.js"></script>
+</body>
+</html>
