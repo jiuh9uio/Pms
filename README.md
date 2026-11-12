@@ -51,7 +51,25 @@ tests/        Tests gegen eine echte PostgreSQL-Datenbank
 scripts/      Datensicherung und Wiederherstellung
 ```
 
-## Installation auf dem Windows-Rechner im Haus
+## Windows-Version zum Doppelklicken (empfohlen)
+
+Für den Hausrechner gibt es ein fertiges Paket: einen Ordner `SchuetzenhausPMS` mit `pms.exe`.
+Es bringt die Datenbank mit – weder Node.js noch PostgreSQL müssen installiert werden.
+
+1. Paket herunterladen: auf GitHub unter **Actions → „Windows-Version (pms.exe)“ → neuester erfolgreicher Lauf → Artifacts → SchuetzenhausPMS-Windows**.
+2. ZIP vollständig entpacken, z. B. nach `C:\SchuetzenhausPMS` (nicht in einen OneDrive- oder Netzwerkordner).
+3. `pms.exe` doppelt anklicken. Beim ersten Start wird die Datenbank eingerichtet, dann öffnet sich der Browser.
+4. Administrator-Konto anlegen, danach unter „Zimmer & Preise“ das Haus einrichten.
+
+Sicherung, Autostart, Update und Wiederherstellung sind in der beiliegenden `LIES MICH.txt` beschrieben.
+Die exe ist nicht signiert; Windows SmartScreen zeigt deshalb beim ersten Start eine Warnung
+(„Weitere Informationen“ → „Trotzdem ausführen“).
+
+Das Paket wird bei jeder Änderung automatisch auf einem Windows-Rechner von GitHub gebaut und dort geprüft:
+erster Start, Zimmer und Buchung anlegen, Doppelbuchung wird abgelehnt, Sicherung, Neustart mit erhaltenen Daten,
+Wiederherstellung. Selbst bauen: `npm run build:exe` (auf Windows, mit installiertem PostgreSQL und gesetztem `PGROOT`).
+
+## Installation aus dem Quelltext (Alternative)
 
 Die folgenden Schritte sind für Windows 10/11 geschrieben. **Sie sind auf Windows noch nicht praktisch erprobt** –
 entwickelt und getestet wurde unter Linux; Anwendung und Skripte verwenden aber nur plattformunabhängige Mittel.
