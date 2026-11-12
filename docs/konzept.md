@@ -110,7 +110,7 @@ Alle Tabellen: `id` (UUID), `created_at`, `updated_at`, `version`. Geldbeträge 
 ### Benutzer und Protokoll
 | Tabelle | Wesentliche Felder |
 |---|---|
-| `users` | name, email (eindeutig), password_hash, role (`admin`/`reception`/`accounting`), active, totp_secret?, last_login_at |
+| `users` | name, email (eindeutig), password_hash, role (`admin`/`user`), active, totp_secret?, last_login_at |
 | `sessions` | user_id, token_hash, expires_at, ip, user_agent |
 | `audit_log` | at, user_id, action, entity, entity_id, before (JSON), after (JSON), ip |
 
@@ -175,18 +175,22 @@ ausgestellte Rechnungen abzüglich zugeordneter Zahlungen.
 
 ## 4. Rollen und Rechte
 
-| Bereich | Administrator | Rezeption | Buchhaltung |
-|---|---|---|---|
-| Dashboard, Belegungsplan ansehen | ✓ | ✓ | ✓ |
-| Reservierungen, Check-in/-out, Gäste | ✓ | ✓ | lesen |
-| Zimmer sperren, Housekeeping-Status | ✓ | ✓ | – |
-| Rechnung ausstellen, Zahlung erfassen | ✓ | ✓ | ✓ |
-| Rechnung stornieren, Erstattung | ✓ | Frage 10 | ✓ |
-| Offene Posten, Buchhaltungsexport, Finanzberichte | ✓ | – | ✓ |
-| Firmen und Firmenkonditionen | ✓ | lesen | ✓ |
-| Zimmer, Kategorien, Preise, Vorlagen, Einstellungen | ✓ | – | – |
-| Benutzer, Audit-Log, Datensicherung | ✓ | – | Audit-Log lesen |
+Entscheidung vom 12.11.2026: Es gibt nur zwei Rollen. Rezeption und Buchhaltung sind zu **Benutzer** verschmolzen.
 
+| Bereich | Administrator | Benutzer |
+|---|---|---|
+| Dashboard, Belegungsplan | ✓ | ✓ |
+| Reservierungen, Check-in/-out, Gäste | ✓ | ✓ |
+| Zimmer sperren, Housekeeping-Status | ✓ | ✓ |
+| Rechnung ausstellen, Zahlung erfassen, Rechnung per E-Mail senden | ✓ | ✓ |
+| Rechnung stornieren, Erstattung | ✓ | ✓ |
+| Offene Posten, Buchhaltungsexport, Finanzberichte | ✓ | ✓ |
+| Firmen und Firmenkonditionen | ✓ | ✓ |
+| Zimmer, Kategorien, Preise, Vorlagen, Einstellungen | ✓ | – |
+| Benutzer, Audit-Log, Datensicherung | ✓ | – |
+
+Der Benutzer darf also den gesamten Tagesbetrieb einschließlich Abrechnung; dem Administrator vorbehalten
+sind Stammdaten, Preise, Einstellungen, Benutzerverwaltung, Audit-Log und Datensicherung.
 Rechte werden ausschließlich serverseitig geprüft; die Oberfläche blendet nur aus.
 
 ---
@@ -267,7 +271,7 @@ sollten mit Steuerberatung bzw. Datenschutzberatung abgestimmt werden; Angaben n
 7. **Rechnungsnummern:** Gewünschtes Format, Fortsetzung eines bestehenden Nummernkreises, Startwert?
 8. **Meldeschein:** Bisheriges Verfahren (Papier/digital)? Sollen Meldedaten im PMS erfasst werden?
 9. **Buchhaltung:** Welches Exportformat erwartet die Steuerberatung (DATEV, Kontenrahmen, Erlöskonten)?
-10. **Benutzer:** Wie viele Personen, geteilte Geräte an der Rezeption? Darf die Rezeption Rechnungen stornieren? Zwei-Faktor-Anmeldung gewünscht?
+10. **Benutzer:** Wie viele Personen, geteilte Geräte an der Rezeption? Zwei-Faktor-Anmeldung gewünscht? (Rollen sind entschieden: Administrator und Benutzer.)
 11. **Stornobedingungen und Anzahlungen:** Feste Regeln (Fristen, Gebühren, Anzahlung in %)?
 12. **E-Mail:** Bleibt GMX der Versandweg, mit welcher Adresse? Sollen eingehende E-Mails weiterhin im PMS erscheinen?
 13. **Altdaten:** Gibt es Gäste-, Firmen- oder Buchungsdaten, die übernommen werden sollen (Quelle, Format)?
