@@ -25,6 +25,8 @@ Der frühere Prototyp liegt unverändert unter `prototype/` und wird mit Phase 3
 
 ### So ist der Hotelbetrieb umgesetzt
 
+- **Selbst einrichten:** Unter „Zimmer & Preise“ legt der Administrator Kategorien (Art des Zimmers, Preis je Nacht) an und erzeugt mit
+  „Mehrere anlegen“ beliebig viele Zimmer je Kategorie auf einmal; einzelne Zimmer können einen eigenen Preis bekommen oder deaktiviert werden.
 - **Doppelbuchungen** verhindert die Datenbank selbst (Ausschluss-Constraint), auch bei gleichzeitigem Buchen an zwei Arbeitsplätzen.
   Sperren nutzen denselben Mechanismus.
 - **Preise** werden je Nacht bei der Buchung gespeichert. Spätere Preisänderungen wirken nur auf neue Buchungen und auf

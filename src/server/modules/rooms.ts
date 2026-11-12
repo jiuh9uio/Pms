@@ -52,6 +52,20 @@ export async function listRooms(db: Exec, onlyActive = false): Promise<RoomDto[]
 export const saveRoom = (db: Db, actor: Actor, id: string | null, v: { number: string; categoryId: string; floor: string; note: string; active: boolean; priceOverrideCents: number | null }, version?: number) =>
   save(db, actor, rooms, 'room', id, v, version);
 
+/** Legt mehrere Zimmer mit fortlaufenden Nummern an – alle oder keines. */
+export async function createRoomsBulk(db: Db, actor: Actor, v: { categoryId: string; count: number; firstNumber: number; floor: string }) {
+  const numbers = Array.from({ length: v.count }, (_, i) => String(v.firstNumber + i));
+  return db.transaction(async (tx) => {
+    const [cat] = await tx.select().from(roomCategories).where(eq(roomCategories.id, v.categoryId));
+    if (!cat) throw notFound('Kategorie');
+    const taken = (await tx.select({ number: rooms.number }).from(rooms)).map((r) => r.number).filter((n) => numbers.includes(n));
+    if (taken.length) throw conflict(`Diese Zimmernummern gibt es bereits: ${taken.join(', ')}`, 'number_taken');
+    const rows = await tx.insert(rooms).values(numbers.map((number) => ({ number, categoryId: v.categoryId, floor: v.floor }))).returning();
+    await record(tx, actor, { action: 'create_many', entity: 'room', after: { category: cat.name, numbers, floor: v.floor } });
+    return { created: rows.length, numbers };
+  });
+}
+
 // ---------- Preisregeln und Leistungen ----------
 export const listRateRules = async (db: Exec): Promise<RateRuleDto[]> =>
   db.select().from(rateRules).orderBy(asc(rateRules.priority), asc(rateRules.startDate));

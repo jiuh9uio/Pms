@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import type { ZodType } from 'zod';
 import type { TaxRateDto } from '../../../src/shared/schemas.js';
 import {
-  MODE_LABEL, PER_LABEL, RULE_MODES, SERVICE_PER, categoryInput, formatMoney, moneyInput, parseMoney, rateRuleInput, roomInput, serviceInput, todayBerlin,
+  MODE_LABEL, PER_LABEL, RULE_MODES, SERVICE_PER, categoryInput, roomBulkInput, formatMoney, moneyInput, parseMoney, rateRuleInput, roomInput, serviceInput, todayBerlin,
   type CategoryDto, type RateRuleDto, type RoomDto, type ServiceDto,
 } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
@@ -82,10 +82,10 @@ function MasterDialog({ title, fields, initial, schema, path, id, version, onClo
   );
 }
 
-function Section({ title, hint, add, children }: { title: string; hint?: string; add: () => void; children: ReactNode }) {
+function Section({ title, hint, add, extra, children }: { title: string; hint?: string; add: () => void; extra?: ReactNode; children: ReactNode }) {
   return (
     <section className="card">
-      <div className="cardhead"><div><h2>{title}</h2>{hint && <p className="muted">{hint}</p>}</div><Button onClick={add}>Anlegen</Button></div>
+      <div className="cardhead"><div><h2>{title}</h2>{hint && <p className="muted">{hint}</p>}</div><div className="actions">{extra}<Button onClick={add}>Anlegen</Button></div></div>
       {children}
     </section>
   );
@@ -126,6 +126,16 @@ export function RoomsPrices() {
     ]}
     initial={{ number: r?.number ?? '', categoryId: r?.categoryId ?? cats[0]?.id ?? '', floor: r?.floor ?? '', priceOverrideCents: moneyInput(r?.priceOverrideCents), note: r?.note ?? '', active: r?.active ?? true }} />);
 
+  // nächste freie Nummer als Vorschlag: höchste vorhandene Zahl + 1
+  const nextNumber = Math.max(0, ...rooms.map((r) => Number(r.number)).filter((n) => Number.isInteger(n))) + 1;
+  const addMany = () => setDlg(<MasterDialog title="Mehrere Zimmer anlegen" path="/rooms/bulk" id={null} schema={roomBulkInput} onClose={close}
+    fields={[
+      { key: 'categoryId', label: 'Kategorie', type: 'select', options: [['', 'Bitte wählen'], ...catOpts], wide: true },
+      { key: 'count', label: 'Anzahl Zimmer', type: 'int' }, { key: 'firstNumber', label: 'Erste Zimmernummer', type: 'int', hint: 'Die weiteren Zimmer werden fortlaufend nummeriert.' },
+      { key: 'floor', label: 'Etage', type: 'text', hint: 'optional' },
+    ]}
+    initial={{ categoryId: cats[0]?.id ?? '', count: '5', firstNumber: String(nextNumber), floor: '' }} />);
+
   const editRule = (r?: RateRuleDto) => setDlg(<MasterDialog title={r ? 'Preisregel bearbeiten' : 'Preisregel anlegen'} path="/rate-rules" id={r?.id ?? null} version={r?.version} schema={rateRuleInput} onClose={close}
     fields={[
       { key: 'name', label: 'Name', type: 'text', wide: true },
@@ -153,6 +163,9 @@ export function RoomsPrices() {
   return (
     <>
       <PageHeader title="Zimmer & Preise" sub="Kategorien, Zimmer, Preisregeln und Zusatzleistungen. Alle Preise sind Bruttopreise." />
+      {rooms.length === 0 && (
+        <p className="notice">So richten Sie das Haus ein: <b>1.</b> Kategorien anlegen (Art des Zimmers und Preis je Nacht), <b>2.</b> unter „Zimmer“ mit „Mehrere anlegen“ die Anzahl je Kategorie eintragen, <b>3.</b> bei Bedarf Preisregeln und Frühstück ergänzen. Alles lässt sich später ändern.</p>
+      )}
       <Section title="Kategorien" add={() => editCat()}>
         {cats.length === 0 ? <p className="muted">Zuerst eine Kategorie anlegen (z. B. Einzelzimmer, Doppelzimmer), danach die Zimmer.</p> : (
           <div className="tablewrap"><table>
@@ -164,7 +177,8 @@ export function RoomsPrices() {
           </table></div>
         )}
       </Section>
-      <Section title="Zimmer" add={() => (cats.length ? editRoom() : editCat())}>
+      <Section title="Zimmer" hint={`${rooms.filter((r) => r.active).length} buchbare Zimmer`} add={() => (cats.length ? editRoom() : editCat())}
+        extra={cats.length > 0 && <Button onClick={addMany}>Mehrere anlegen</Button>}>
         {rooms.length === 0 ? <p className="muted">Noch keine Zimmer angelegt.</p> : (
           <div className="tablewrap"><table>
             <thead><tr><th>Nr.</th><th>Kategorie</th><th className="hide-sm">Etage</th><th className="num">Preis je Nacht</th><th>Status</th></tr></thead>

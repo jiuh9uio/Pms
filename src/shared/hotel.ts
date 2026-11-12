@@ -64,6 +64,10 @@ export const categoryInput = z.object({
 export const roomInput = z.object({
   number: required(20), categoryId: z.uuid('Bitte wählen'), floor: text(20), note: text(300), active: z.boolean(), priceOverrideCents: cents.nullable(),
 });
+/** Mehrere Zimmer einer Kategorie auf einmal anlegen: fortlaufende Nummern ab firstNumber */
+export const roomBulkInput = z.object({
+  categoryId: z.uuid('Bitte wählen'), count: count(1, 50), firstNumber: count(1, 99_999), floor: text(20),
+});
 export const rateRuleInput = z.object({
   name: required(80), startDate: isoDate, endDate: isoDate, weekdays: z.array(z.number().int().min(0).max(6)).max(7),
   categoryId: z.uuid().nullable(), mode: z.enum(RULE_MODES), value: z.number('Bitte eine Zahl eingeben').min(-100_000).max(100_000),

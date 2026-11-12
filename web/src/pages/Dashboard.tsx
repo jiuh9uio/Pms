@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { formatMoney, type BookingListRow, type DashboardDto } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
 import { useAuth } from '../App.tsx';
@@ -36,7 +37,7 @@ export function Dashboard() {
     <>
       <PageHeader title={`Guten Tag, ${user.name}`} sub={today} actions={<Button variant="primary" onClick={() => newBooking()}>Neue Reservierung</Button>} />
       <LoadState error={error} loading={!data} />
-      {data && data.rooms.total === 0 && <p className="notice warn">Es sind noch keine Zimmer angelegt. {user.role === 'admin' ? 'Bitte unter „Zimmer & Preise“ Kategorien und Zimmer einrichten.' : 'Bitte den Administrator bitten, Zimmer einzurichten.'}</p>}
+      {data && data.rooms.total === 0 && <p className="notice warn">Es sind noch keine Zimmer angelegt. {user.role === 'admin' ? <Link to="/zimmer">Jetzt Kategorien, Preise und Zimmer einrichten</Link> : 'Bitte den Administrator bitten, Zimmer einzurichten.'}</p>}
       {data && (
         <>
           <div className="kpis">

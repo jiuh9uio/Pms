@@ -29,6 +29,7 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   api.put('/categories/:id', admin, (req) => rooms.saveCategory(db, actor(req), idOf(req), H.categoryInput.parse(req.body), versionOf(req)));
 
   api.get('/rooms', user, () => rooms.listRooms(db));
+  api.post('/rooms/bulk', admin, (req) => rooms.createRoomsBulk(db, actor(req), H.roomBulkInput.parse(req.body)));
   api.post('/rooms', admin, (req) => rooms.saveRoom(db, actor(req), null, H.roomInput.parse(req.body)));
   api.put('/rooms/:id', admin, (req) => rooms.saveRoom(db, actor(req), idOf(req), H.roomInput.parse(req.body), versionOf(req)));
 

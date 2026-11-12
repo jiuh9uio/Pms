@@ -58,6 +58,22 @@ describe('Zimmer und Preise', () => {
     expect((await ok('GET', '/rooms', user)).map((r: { number: string }) => r.number)).toEqual(['1', '2']);
   });
 
+  it('legt mehrere Zimmer auf einmal an – alle oder keines', async () => {
+    const [cat] = await ok('GET', '/categories', admin);
+    const ez = await ok('POST', '/categories', admin, { ...cat, name: 'Einzelzimmer', basePriceCents: 6900, stdOccupancy: 1, maxPersons: 1 });
+    expect((await call('POST', '/rooms/bulk', user, { categoryId: ez.id, count: 3, firstNumber: 10, floor: '1' })).statusCode).toBe(403);
+    const made = await ok('POST', '/rooms/bulk', admin, { categoryId: ez.id, count: 3, firstNumber: 10, floor: '1' });
+    expect(made.numbers).toEqual(['10', '11', '12']);
+    const clash = await call('POST', '/rooms/bulk', admin, { categoryId: ez.id, count: 3, firstNumber: 12, floor: '1' });
+    expect(clash.statusCode).toBe(409);
+    expect(clash.json().error.message).toContain('12');
+    expect((await ok('GET', '/rooms', user)).map((r: { number: string }) => r.number)).toEqual(['1', '2', '10', '11', '12']);
+    expect((await call('POST', '/rooms/bulk', admin, { categoryId: ez.id, count: 0, firstNumber: 20, floor: '' })).statusCode).toBe(400);
+    // für die folgenden Tests wieder nur Zimmer 1 und 2 buchbar
+    for (const r of (await ok('GET', '/rooms', admin)).filter((x: { number: string }) => Number(x.number) >= 10))
+      await ok('PUT', `/rooms/${r.id}`, admin, { number: r.number, categoryId: r.categoryId, floor: r.floor, note: '', active: false, priceOverrideCents: null, version: r.version });
+  });
+
   it('berechnet Wochenend- und Saisonpreise in Reihenfolge der Priorität', async () => {
     const rule = { name: 'Wochenende', startDate: '2031-01-01', endDate: '2031-12-31', weekdays: [5, 6], categoryId: null, mode: 'percent', value: 10, priority: 20, active: true };
     await ok('POST', '/rate-rules', admin, rule);
