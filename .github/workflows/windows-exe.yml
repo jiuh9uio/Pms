@@ -1,0 +1,84 @@
+name: Windows-Version (pms.exe)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/hotel-pms-gmx-0rifkh', 'main']
+    paths: ['src/**', 'web/**', 'migrations/**', 'scripts/build-exe.mjs', 'package*.json', '.github/workflows/windows-exe.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+      - name: Paket bauen (pms.exe + PostgreSQL)
+        shell: pwsh
+        run: |
+          Write-Host "PostgreSQL aus $env:PGROOT"
+          & "$env:PGBIN\postgres.exe" --version
+          node scripts/build-exe.mjs "$env:PGROOT"
+
+      - name: Funktionstest unter Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dir = "release\SchuetzenhausPMS"
+          $base = "http://127.0.0.1:3000/api/v1"
+          function Start-Pms { Start-Process -FilePath "$dir\pms.exe" -ArgumentList '--no-browser' -WorkingDirectory $dir -RedirectStandardOutput "$dir\run.log" -RedirectStandardError "$dir\err.log" -PassThru }
+          function Wait-Pms { foreach ($i in 1..90) { try { Invoke-RestMethod "$base/health" | Out-Null; return } catch { Start-Sleep 1 } }; Get-Content "$dir\run.log", "$dir\err.log"; throw 'PMS ist nicht gestartet' }
+          function Stop-Pms($p) { Stop-Process -Id $p.Id -Force; & "$dir\pgsql\bin\pg_ctl.exe" stop -D "$dir\data\postgres" -m fast -w }
+          function Post($path, $body, $s) { Invoke-RestMethod -Method Post -Uri "$base$path" -ContentType 'application/json' -Body ($body | ConvertTo-Json -Depth 6) -WebSession $s }
+
+          $p = Start-Pms; Wait-Pms
+          $s = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+          Post '/auth/setup' @{ username = 'chef'; name = 'Test'; password = 'sehr-geheim-123' } $s | Out-Null
+          $cat = Post '/categories' @{ name = 'Doppelzimmer'; description = ''; stdOccupancy = 2; maxPersons = 2; basePriceCents = 9900; sort = 1 } $s
+          $rooms = Post '/rooms/bulk' @{ categoryId = $cat.id; count = 3; firstNumber = 101; floor = '1' } $s
+          if ($rooms.created -ne 3) { throw 'Zimmer wurden nicht angelegt' }
+          $room = (Invoke-RestMethod "$base/rooms" -WebSession $s)[0]
+          $guest = @{ salutation = ''; firstName = 'Test'; lastName = 'Gast'; company = ''; email = ''; phone = ''; street = ''; zip = ''; city = ''; country = ''; birthdate = ''; nationality = ''; idNumber = ''; notes = '' }
+          $booking = @{ guest = $guest; groupName = ''; source = 'Telefon'; paymentMethod = ''; notes = ''; breakfast = $false
+            rooms = @(@{ roomId = $room.id; from = '2031-05-08'; to = '2031-05-11'; adults = 2; children = 0; status = 'confirmed'; pricePerNightCents = $null }) }
+          $b = Post '/bookings' $booking $s
+          Write-Host "Buchung $($b.number) angelegt"
+          $clash = $false
+          try { Post '/bookings' $booking $s | Out-Null } catch { $clash = $_.Exception.Response.StatusCode.value__ -eq 409 }
+          if (-not $clash) { throw 'Doppelbuchung wurde nicht abgelehnt' }
+          if ((Invoke-WebRequest 'http://127.0.0.1:3000/plan').StatusCode -ne 200) { throw 'Oberfläche wird nicht ausgeliefert' }
+
+          & "$dir\pms.exe" --backup
+          if (-not (Get-ChildItem "$dir\backups\*.dump")) { throw 'Keine Sicherung geschrieben' }
+
+          Stop-Pms $p
+          $p = Start-Pms; Wait-Pms
+          $s2 = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+          Post '/auth/login' @{ username = 'chef'; password = 'sehr-geheim-123' } $s2 | Out-Null
+          $list = Invoke-RestMethod "$base/bookings?status=active" -WebSession $s2
+          if ($list.Count -ne 1) { throw 'Daten nach Neustart nicht vorhanden' }
+          Stop-Pms $p
+
+          $dump = (Get-ChildItem "$dir\backups\*.dump")[0].FullName
+          & "$dir\pms.exe" --restore $dump --ja
+          if ($LASTEXITCODE -ne 0) { throw 'Wiederherstellung fehlgeschlagen' }
+          Write-Host 'Funktionstest bestanden'
+
+      - name: Testdaten entfernen
+        shell: pwsh
+        run: Remove-Item -Recurse -Force release\SchuetzenhausPMS\data, release\SchuetzenhausPMS\backups, release\SchuetzenhausPMS\*.log
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SchuetzenhausPMS-Windows
+          path: release/SchuetzenhausPMS
+          retention-days: 90

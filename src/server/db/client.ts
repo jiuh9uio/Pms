@@ -16,7 +16,6 @@ export function connect(url: string, max = 10) {
 }
 
 /** Spielt ausstehende Migrationen ein (beim Start des Servers). */
-export async function runMigrations(db: Db) {
-  const dir = fileURLToPath(new URL('../../../migrations', import.meta.url));
-  await migrate(db, { migrationsFolder: dir });
+export async function runMigrations(db: Db, dir?: string) {
+  await migrate(db, { migrationsFolder: dir ?? fileURLToPath(new URL('../../../migrations', import.meta.url)) });
 }

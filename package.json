@@ -14,7 +14,8 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "backup": "node scripts/backup.mjs",
-    "restore": "node scripts/restore.mjs"
+    "restore": "node scripts/restore.mjs",
+    "build:exe": "npm run build && node scripts/build-exe.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.5",
@@ -34,6 +35,8 @@
     "@vitejs/plugin-react": "^6.3.0",
     "concurrently": "^10.0.7",
     "drizzle-kit": "^0.31.11",
+    "esbuild": "^0.28.2",
+    "postject": "^1.0.0-alpha.6",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
