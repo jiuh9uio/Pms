@@ -1,12 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ROLE_LABEL, type UserDto } from '../../src/shared/schemas.js';
 import { api } from './api.ts';
 import { Account } from './pages/Account.tsx';
 import { Audit } from './pages/Audit.tsx';
 import { DataProvider } from './data.tsx';
+import { ControlType } from './pages/ControlType.tsx';
+import { Controls } from './pages/Controls.tsx';
 import { Dashboard } from './pages/Dashboard.tsx';
 import { Guests } from './pages/Guests.tsx';
+import { Launcher } from './pages/Launcher.tsx';
 import { Login } from './pages/Login.tsx';
 import { Plan } from './pages/Plan.tsx';
 import { Reservations } from './pages/Reservations.tsx';
@@ -20,16 +23,17 @@ const AuthCtx = createContext<{ user: UserDto; refresh: () => Promise<void> }>(n
 export const useAuth = () => useContext(AuthCtx);
 
 const NAV = [
-  { to: '/', label: 'Übersicht', icon: '◧', admin: false },
-  { to: '/plan', label: 'Belegungsplan', short: 'Plan', icon: '▦', admin: false },
-  { to: '/reservierungen', label: 'Reservierungen', short: 'Buchungen', icon: '☷', admin: false },
-  { to: '/gaeste', label: 'Gäste', icon: '☺', admin: false },
-  { to: '/zimmer', label: 'Zimmer & Preise', short: 'Zimmer', icon: '⌂', admin: true, more: true },
-  { to: '/benutzer', label: 'Benutzer', icon: '◉', admin: true, more: true },
-  { to: '/protokoll', label: 'Protokoll', icon: '☰', admin: true, more: true },
-  { to: '/einstellungen', label: 'Einstellungen', short: 'Einstell.', icon: '⚙', admin: true, more: true },
-  { to: '/konto', label: 'Mein Konto', short: 'Konto', icon: '◐', admin: false },
-] as { to: string; label: string; short?: string; icon: string; admin: boolean; more?: boolean }[];
+  { to: '/hotel', label: 'Übersicht', icon: '◧', admin: false, module: 'hotel' },
+  { to: '/plan', label: 'Belegungsplan', short: 'Plan', icon: '▦', admin: false, module: 'hotel' },
+  { to: '/reservierungen', label: 'Reservierungen', short: 'Buchungen', icon: '☷', admin: false, module: 'hotel' },
+  { to: '/gaeste', label: 'Gäste', icon: '☺', admin: false, module: 'hotel' },
+  { to: '/zimmer', label: 'Zimmer & Preise', short: 'Zimmer', icon: '⌂', admin: true, more: true, module: 'hotel' },
+  { to: '/kontrollen', label: 'Kontrollen', icon: '✓', admin: false, module: 'kontrollen' },
+  { to: '/benutzer', label: 'Benutzer', icon: '◉', admin: true, module: 'verwaltung' },
+  { to: '/protokoll', label: 'Protokoll', icon: '☰', admin: true, module: 'verwaltung' },
+  { to: '/einstellungen', label: 'Einstellungen', short: 'Einstell.', icon: '⚙', admin: true, module: 'verwaltung' },
+] as { to: string; label: string; short?: string; icon: string; admin: boolean; more?: boolean; module: string }[];
+const MODULE_TITLE: Record<string, string> = { hotel: 'Hotel', kontrollen: 'Kontrollen', verwaltung: 'Verwaltung' };
 
 export function App() {
   const [state, setState] = useState<AuthState | null>(null);
@@ -62,22 +66,30 @@ export function App() {
 
 function Shell({ user }: { user: UserDto }) {
   const isAdmin = user.role === 'admin';
-  const nav = NAV.filter((n) => !n.admin || isAdmin);
+  const { pathname } = useLocation();
+  // Der Bereich (Hotel, Kontrollen, Verwaltung) ergibt sich aus der Adresse; das Startmenü hat keine Seitenleiste.
+  const module = NAV.find((n) => pathname === n.to || pathname.startsWith(n.to + '/'))?.module;
+  const nav = NAV.filter((n) => n.module === module && (!n.admin || isAdmin));
+  if (pathname === '/') return <Launcher />;
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand"><span className="mark">S</span><span>Schützenhaus<small>PMS</small></span></div>
+        <div className="brand"><span className="mark">S</span><span>Schützenhaus<small>{module ? MODULE_TITLE[module] : 'PMS'}</small></span></div>
         <nav aria-label="Hauptnavigation">
+          <NavLink to="/" end className="menu"><span className="ico" aria-hidden>☰</span><span className="full">Menü</span><span className="short">Menü</span></NavLink>
           {nav.map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.to === '/'} className={n.more ? 'more' : undefined}><span className="ico" aria-hidden>{n.icon}</span><span className="full">{n.label}</span><span className="short">{n.short ?? n.label}</span></NavLink>
+            <NavLink key={n.to} to={n.to} end={n.to === '/hotel'} className={n.more ? 'more' : undefined}><span className="ico" aria-hidden>{n.icon}</span><span className="full">{n.label}</span><span className="short">{n.short ?? n.label}</span></NavLink>
           ))}
+          <NavLink to="/konto" className="konto"><span className="ico" aria-hidden>◐</span><span className="full">Mein Konto</span><span className="short">Konto</span></NavLink>
         </nav>
         <div className="whoami"><b>{user.name}</b><span>{ROLE_LABEL[user.role]}</span></div>
       </aside>
       <main className="content">
         <DataProvider>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/hotel" element={<Dashboard />} />
+          <Route path="/kontrollen" element={<Controls />} />
+          <Route path="/kontrollen/:id" element={<ControlType />} />
           <Route path="/plan" element={<Plan />} />
           <Route path="/reservierungen" element={<Reservations />} />
           <Route path="/gaeste" element={<Guests />} />

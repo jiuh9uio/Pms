@@ -237,3 +237,71 @@ export const charges = pgTable('charges', {
   taxRatePercent: numeric('tax_rate_percent', { precision: 5, scale: 2, mode: 'number' }).notNull(),
   ...stamps,
 }, (t) => [index('charges_booking_idx').on(t.bookingId)]);
+
+// =====================================================================================
+// Kontrollen (Hygieneamt, Finanzamt …) und Temperatur-Eigenkontrolle
+// =====================================================================================
+
+/** Art einer behördlichen Kontrolle. kind 'hygiene' zeigt zusätzlich die Temperaturprotokolle. */
+export const inspectionTypes = pgTable('inspection_types', {
+  id: id(),
+  name: text('name').notNull().unique(),
+  kind: text('kind', { enum: ['hygiene', 'generic'] }).notNull().default('generic'),
+  sort: integer('sort').notNull().default(0),
+  active: boolean('active').notNull().default(true),
+  ...stamps,
+});
+
+/** Unterlage, die für eine Kontrolle bereitliegen soll */
+export const inspectionItems = pgTable('inspection_items', {
+  id: id(),
+  typeId: uuid('type_id').notNull().references(() => inspectionTypes.id, { onDelete: 'cascade' }),
+  text: text('text').notNull(),
+  ready: boolean('ready').notNull().default(false),
+  note: text('note').notNull().default(''),
+  sort: integer('sort').notNull().default(0),
+  ...stamps,
+});
+
+/** Stattgefundene Kontrolle */
+export const inspectionVisits = pgTable('inspection_visits', {
+  id: id(),
+  typeId: uuid('type_id').notNull().references(() => inspectionTypes.id, { onDelete: 'cascade' }),
+  date: date('date', { mode: 'string' }).notNull(),
+  inspector: text('inspector').notNull().default(''),
+  result: text('result').notNull().default(''),
+  notes: text('notes').notNull().default(''),
+  recordedBy: text('recorded_by').notNull().default(''),
+  ...stamps,
+});
+
+export const hygieneAreas = pgTable('hygiene_areas', {
+  id: id(),
+  name: text('name').notNull().unique(),
+  sort: integer('sort').notNull().default(0),
+  active: boolean('active').notNull().default(true),
+  ...stamps,
+});
+
+/** Messstelle, z. B. Kühltruhe, mit Sollbereich in °C */
+export const hygienePoints = pgTable('hygiene_points', {
+  id: id(),
+  areaId: uuid('area_id').notNull().references(() => hygieneAreas.id),
+  name: text('name').notNull(),
+  minC: numeric('min_c', { precision: 5, scale: 1, mode: 'number' }),
+  maxC: numeric('max_c', { precision: 5, scale: 1, mode: 'number' }),
+  sort: integer('sort').notNull().default(0),
+  active: boolean('active').notNull().default(true),
+  ...stamps,
+});
+
+/** Gemessener Wert: je Messstelle und Tag ein Eintrag; enteredAt zeigt, wann er tatsächlich erfasst wurde. */
+export const hygieneReadings = pgTable('hygiene_readings', {
+  pointId: uuid('point_id').notNull().references(() => hygienePoints.id),
+  date: date('date', { mode: 'string' }).notNull(),
+  valueC: numeric('value_c', { precision: 5, scale: 1, mode: 'number' }).notNull(),
+  /** Bemerkung bzw. ergriffene Maßnahme bei Abweichung */
+  note: text('note').notNull().default(''),
+  userName: text('user_name').notNull(),
+  enteredAt: ts('entered_at').notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.pointId, t.date] })]);

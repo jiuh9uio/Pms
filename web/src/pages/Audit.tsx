@@ -3,12 +3,19 @@ import type { AuditDto, UserDto } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { Button, LoadState, PageHeader, fmtDateTime, useLoad } from '../ui.tsx';
 
-const ENTITY: Record<string, string> = { user: 'Benutzer', session: 'Anmeldung', settings: 'Einstellungen', tax_rate: 'Steuersatz' };
+const ENTITY: Record<string, string> = {
+  user: 'Benutzer', session: 'Anmeldung', settings: 'Einstellungen', tax_rate: 'Steuersatz',
+  booking: 'Reservierung', guest: 'Gast', block: 'Zimmersperre', category: 'Kategorie', room: 'Zimmer', rate_rule: 'Preisregel', service: 'Leistung',
+  inspection_type: 'Kontrollart', inspection_item: 'Unterlage', inspection_visit: 'Kontrollbesuch', hygiene_area: 'Bereich', hygiene_point: 'Messstelle', hygiene_reading: 'Messwert',
+};
 const ACTION: Record<string, string> = {
   setup: 'Ersteinrichtung', create: 'angelegt', update: 'geändert', password_reset: 'Passwort zurückgesetzt', password_changed: 'Passwort geändert',
+  remove: 'entfernt', correct: 'korrigiert', create_many: 'mehrere angelegt', status: 'Status geändert', room_add: 'Zimmer hinzugefügt', room_update: 'Zimmerbuchung geändert',
+  charge_add: 'Leistung hinzugefügt', charge_remove: 'Leistung entfernt',
   login: 'Anmeldung', logout: 'Abmeldung', login_failed: 'Fehlgeschlagene Anmeldung', login_locked: 'Konto nach Fehlversuchen gesperrt',
 };
 const FIELD: Record<string, string> = {
+  valueC: 'Wert in °C', point: 'Messstelle', date: 'Datum', note: 'Bemerkung', enteredBy: 'Eingetragen von', text: 'Unterlage', ready: 'Liegt bereit', inspector: 'Prüfer', result: 'Ergebnis',
   name: 'Name', username: 'Benutzername', role: 'Rolle', active: 'Aktiv', ratePercent: 'Satz in %', defaultFor: 'Standard für',
   street: 'Straße', zip: 'PLZ', city: 'Ort', country: 'Land', phone: 'Telefon', email: 'E-Mail', website: 'Website', taxNumber: 'Steuernummer',
   vatId: 'USt-IdNr.', bankName: 'Bank', iban: 'IBAN', bic: 'BIC', checkinTime: 'Check-in ab', checkoutTime: 'Check-out bis',

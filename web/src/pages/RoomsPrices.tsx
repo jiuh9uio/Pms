@@ -14,26 +14,28 @@ type Value = string | boolean | number[];
 type Draft = Record<string, Value>;
 interface FieldDef {
   key: string; label: string; hint?: string; wide?: boolean;
-  type: 'text' | 'money' | 'moneyOpt' | 'int' | 'number' | 'select' | 'selectOpt' | 'check' | 'date' | 'weekdays';
+  type: 'text' | 'money' | 'moneyOpt' | 'int' | 'number' | 'numberOpt' | 'select' | 'selectOpt' | 'check' | 'date' | 'weekdays';
   options?: [string, string][];
 }
 
 /** Entwurf (Texte aus den Eingabefeldern) in die Werte umwandeln, die der Server erwartet. */
 function toPayload(fields: FieldDef[], d: Draft) {
-  const out: Record<string, unknown> = {};
+  // Werte ohne eigenes Eingabefeld (z. B. „aktiv“ beim Anlegen) werden unverändert übernommen
+  const out: Record<string, unknown> = { ...d };
   for (const f of fields) {
     const v = d[f.key];
     const s = typeof v === 'string' ? v.trim() : '';
     if (f.type === 'money') out[f.key] = parseMoney(s);
     else if (f.type === 'moneyOpt') out[f.key] = s === '' ? null : parseMoney(s);
     else if (f.type === 'int' || f.type === 'number') out[f.key] = s === '' ? NaN : Number(s.replace(',', '.'));
+    else if (f.type === 'numberOpt') out[f.key] = s === '' ? null : Number(s.replace(',', '.').replace('−', '-'));
     else if (f.type === 'selectOpt') out[f.key] = s === '' ? null : s;
     else out[f.key] = v;
   }
   return out;
 }
 
-function MasterDialog({ title, fields, initial, schema, path, id, version, onClose }: {
+export function MasterDialog({ title, fields, initial, schema, path, id, version, onClose }: {
   title: string; fields: FieldDef[]; initial: Draft; schema: ZodType; path: string; id: string | null; version?: number; onClose: () => void;
 }) {
   const { bump } = useData();
@@ -76,6 +78,9 @@ function MasterDialog({ title, fields, initial, schema, path, id, version, onClo
             </Field>
           );
         })}
+        {Object.entries(f.errors).some(([k]) => !fields.some((x) => x.key === k)) && (
+          <p className="notice danger wide" role="alert">{Object.entries(f.errors).filter(([k]) => !fields.some((x) => x.key === k)).map(([, m]) => m).join(' · ')}</p>
+        )}
         <button type="submit" hidden />
       </form>
     </Dialog>

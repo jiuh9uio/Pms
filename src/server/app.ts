@@ -13,6 +13,7 @@ import { listAudit, type Actor } from './modules/audit.js';
 import * as auth from './modules/auth.js';
 import * as settings from './modules/settings.js';
 import * as usersMod from './modules/users.js';
+import { registerControlRoutes } from './routes-controls.js';
 import { registerHotelRoutes } from './routes-hotel.js';
 
 const COOKIE = 'pms_session';
@@ -142,6 +143,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.patch('/tax-rates/:id', { preHandler: requireAdmin }, (req) => settings.updateTaxRate(db, actor(req), idParam(req), S.taxRateUpdateInput.parse(req.body)));
 
     registerHotelRoutes(api, { db, requireUser, requireAdmin, actor });
+    registerControlRoutes(api, { db, requireUser, requireAdmin, actor });
 
     api.setNotFoundHandler(() => { throw new AppError(404, 'not_found', 'Unbekannte Adresse'); });
   }, { prefix: '/api/v1' });
