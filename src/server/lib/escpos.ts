@@ -23,7 +23,7 @@ export function encodeCp858(text: string): Buffer {
   return Buffer.from(out);
 }
 
-export type Line = { text: string; align?: 'left' | 'center'; bold?: boolean; big?: boolean } | { rule: true } | { feed: number };
+export type Line = { text: string; align?: 'left' | 'center'; bold?: boolean; big?: boolean } | { rule: true } | { feed: number } | { qr: string };
 
 /** Baut den Druckauftrag: Initialisieren, Zeichentabelle, Zeilen, Vorschub, Schnitt. */
 export function buildJob(lines: Line[], width: number): Buffer {
@@ -32,6 +32,13 @@ export function buildJob(lines: Line[], width: number): Buffer {
   for (const l of lines) {
     if ('rule' in l) parts.push(encodeCp858('-'.repeat(width) + '\n'));
     else if ('feed' in l) parts.push(Buffer.from([ESC, 0x64, Math.min(10, Math.max(0, l.feed))]));
+    else if ('qr' in l) {
+      // QR-Code (Epson: GS ( k): Modell 2, Modulgröße 6, Fehlerkorrektur M, Daten speichern, drucken – zentriert
+      const data = Buffer.from(l.qr, 'utf8');
+      const len = data.length + 3;
+      parts.push(Buffer.from([ESC, 0x61, 1, GS, 0x28, 0x6b, 4, 0, 49, 65, 50, 0, GS, 0x28, 0x6b, 3, 0, 49, 67, 6, GS, 0x28, 0x6b, 3, 0, 49, 69, 49,
+        GS, 0x28, 0x6b, len & 0xff, len >> 8, 49, 80, 48]), data, Buffer.from([GS, 0x28, 0x6b, 3, 0, 49, 81, 48, 0x0a]));
+    }
     else {
       parts.push(Buffer.from([ESC, 0x61, l.align === 'center' ? 1 : 0, ESC, 0x45, l.bold ? 1 : 0, GS, 0x21, l.big ? 0x11 : 0x00]));
       parts.push(encodeCp858(l.text + '\n'));
@@ -77,4 +84,21 @@ export function sendToPrinter(host: string, port: number, data: Buffer, timeoutM
       setTimeout(() => sock.destroy(), 2000).unref();
     });
   });
+}
+
+/** Bricht Text an Wortgrenzen auf die Zeilenbreite um; vorhandene Zeilenumbrüche bleiben. */
+export function wrap(text: string, width: number): string[] {
+  const out: string[] = [];
+  for (const para of text.replace(/\r/g, '').split('\n')) {
+    let line = '';
+    for (const word of para.split(/\s+/).filter(Boolean)) {
+      let w = word;
+      while (w.length > width) { if (line) { out.push(line); line = ''; } out.push(w.slice(0, width)); w = w.slice(width); }
+      if (!line) line = w;
+      else if (line.length + 1 + w.length <= width) line += ' ' + w;
+      else { out.push(line); line = w; }
+    }
+    out.push(line);
+  }
+  return out;
 }

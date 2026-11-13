@@ -259,4 +259,58 @@ describe('E-Mail an den Gast', () => {
     const user = session(await call('POST', '/auth/login', {}, { username: 'kueche', password: 'sehr-geheim-456' }));
     expect((await call('GET', `/bookings/${bookingId}/mail`, user)).statusCode).toBe(403);
   });
+
+  it('druckt Info-Zettel im Schnelldruck: Öffnungszeiten, WLAN mit QR-Code, eigene Vorlagen, freier Text', async () => {
+    const { createServer } = await import('node:net');
+    const got: Buffer[] = [];
+    let connections = 0;
+    const server = createServer({ allowHalfOpen: true }, (sock) => { connections++; sock.on('data', (d) => got.push(d)); });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const port = (server.address() as { port: number }).port;
+    const text = async () => { await new Promise((r) => setTimeout(r, 120)); const t = Buffer.concat(got).toString('latin1'); got.length = 0; return t; };
+
+    // ohne Bondrucker vorne wird der Küchendrucker verwendet; ist keiner eingerichtet, gibt es eine klare Meldung
+    await ok('PUT', '/settings/kitchen-printer', admin, { enabled: false, host: '', port: 9100, width: 48 });
+    expect((await ok('GET', '/quickprint', admin)).printerReady).toBe(false);
+    expect((await call('POST', '/quickprint/print', admin, { id: 'info', copies: 1 })).json().error.code).toBe('printer_not_configured');
+    await ok('PUT', '/settings/kitchen-printer', admin, { enabled: true, host: '127.0.0.1', port, width: 48 });
+    expect((await ok('GET', '/quickprint', admin)).printerName).toBe('Küchendrucker');
+    expect((await call('PUT', '/settings/front-printer', admin, { enabled: true, host: '1.2.3.4', port, width: 32 })).statusCode).toBe(400);
+    await ok('PUT', '/settings/front-printer', admin, { enabled: true, host: '127.0.0.1', port, width: 32 });
+
+    const hotel = await ok('GET', '/settings/hotel', admin);
+    await ok('PUT', '/settings/hotel', admin, { ...hotel, phone: '01234 56789', openingHours: 'Mo-Fr 11:30-14:00 und 17:30-22:00\nDi Ruhetag' });
+    const o = await ok('GET', '/quickprint', admin);
+    expect(o).toMatchObject({ printerReady: true, printerName: 'Bondrucker vorne' });
+    expect(o.slips.map((x: { id: string }) => x.id)).toEqual(['info', 'wifi']);
+    expect(o.slips[0].preview).toContain('Di Ruhetag');
+
+    await ok('POST', '/quickprint/print', admin, { id: 'info', copies: 2 });
+    let bon = await text();
+    expect(connections).toBe(2); // zwei Ausdrucke
+    expect(bon).toContain('Di Ruhetag');
+    expect(bon).toContain('Telefon: 01234 56789');
+    expect(bon.split('\n').every((l) => l.replace(/[\x00-\x1f].?/g, '').length <= 34)).toBe(true); // auf 32 Zeichen umbrochen
+
+    await ok('POST', '/quickprint/print', admin, { id: 'wifi', copies: 1 });
+    bon = await text();
+    expect(bon).toContain('WIFI:T:WPA;S:Schuetzenhaus-Gast;P:willkommen-2031;;'); // Inhalt des QR-Codes
+    expect(bon).toContain('\x1d(k\x03\x001Q0'); // QR-Code drucken
+    expect(bon).toContain('Passwort: willkommen-2031');
+
+    const user = session(await call('POST', '/auth/login', {}, { username: 'theke', password: 'sehr-geheim-789' }));
+    expect((await call('POST', '/quickprint/templates', user, { title: 'Taxi', body: 'x', sort: 1 })).statusCode).toBe(403);
+    const t = await ok('POST', '/quickprint/templates', admin, { title: 'Taxi', body: 'Taxi Muster: 01234 11111\nRund um die Uhr erreichbar.', sort: 1 });
+    await ok('POST', '/quickprint/print', admin, { id: t.id, copies: 1 });
+    expect(await text()).toContain('Taxi Muster: 01234 11111');
+    const slip = (await ok('GET', '/quickprint', admin)).slips.find((x: { id: string }) => x.id === t.id);
+    await ok('PUT', `/quickprint/templates/${t.id}`, admin, { title: 'Taxi', body: 'Neue Nummer 22222', sort: 1, version: slip.version });
+    await ok('POST', '/quickprint/text', admin, { title: 'Weg zum Bahnhof', text: 'Links, dann 300 m geradeaus.', copies: 1 });
+    expect(await text()).toContain('300 m geradeaus.');
+    await ok('POST', `/quickprint/templates/${t.id}/remove`, admin);
+    expect((await call('POST', '/quickprint/print', admin, { id: t.id, copies: 1 })).statusCode).toBe(404);
+    expect((await call('POST', '/quickprint/print', admin, { id: 'info', copies: 9 })).statusCode).toBe(400);
+    server.close();
+    await new Promise((r) => setTimeout(r, 2200));
+  }, 30_000);
 });

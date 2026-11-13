@@ -339,6 +339,15 @@ export const cleaningLog = pgTable('cleaning_log', {
   doneAt: ts('done_at').notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.taskId, t.date] })]);
 
+/** Schnelldruck: eigene Info-Zettel (Titel und Text) für den Bondrucker. */
+export const printTemplates = pgTable('print_templates', {
+  id: id(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  sort: integer('sort').notNull().default(0),
+  ...stamps,
+});
+
 /** Ausfälle der Internetverbindung des PMS-Rechners (nur Beginn und Ende, erfasst solange das Programm läuft). */
 export const netOutages = pgTable('net_outages', {
   id: id(),

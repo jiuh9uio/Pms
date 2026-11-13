@@ -107,6 +107,12 @@ jobs:
           $client = $listener.AcceptTcpClient(); $buf = New-Object byte[] 4096; $n = $client.GetStream().Read($buf, 0, 4096); $client.Close(); $listener.Stop()
           if ($n -lt 20 -or $buf[0] -ne 0x1b -or $buf[1] -ne 0x40) { throw "Druckauftrag an den Küchendrucker fehlerhaft ($n Bytes)" }
           Write-Host "Küchendrucker: $n Bytes empfangen"
+          $qp = Invoke-RestMethod "$base/quickprint" -WebSession $s
+          if (-not $qp.printerReady -or @($qp.slips).Count -lt 2) { throw "Schnelldruck nicht bereit: $($qp | ConvertTo-Json -Depth 3)" }
+          $listener.Start(); Post '/quickprint/print' @{ id = 'wifi'; copies = 1 } $s | Out-Null
+          $client = $listener.AcceptTcpClient(); Start-Sleep -Milliseconds 300; $n = $client.GetStream().Read($buf, 0, 4096); $client.Close(); $listener.Stop()
+          if ($n -lt 50) { throw "Schnelldruck fehlerhaft ($n Bytes)" }
+          Write-Host "Schnelldruck WLAN-Zettel: $n Bytes empfangen"
           $gr = Post '/goods-receipts' @{ supplier = 'Test'; goods = 'Ware'; tempC = 3.5; ok = $true; note = '' } $s
           if (-not $gr.id) { throw 'Wareneingang wurde nicht gespeichert' }
           $rep = Invoke-RestMethod "$base/reports/year?year=2031" -WebSession $s

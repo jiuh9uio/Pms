@@ -14,6 +14,7 @@ import { listAudit, record, type Actor } from './modules/audit.js';
 import * as auth from './modules/auth.js';
 import * as guestforms from './modules/guestforms.js';
 import * as network from './modules/network.js';
+import * as quickprint from './modules/quickprint.js';
 import { guestFormInput } from '../shared/hotel.js';
 import * as settings from './modules/settings.js';
 import * as usersMod from './modules/users.js';
@@ -195,6 +196,19 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
         .filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => `${req.protocol}://${i!.address}${port ? `:${port}` : ''}`);
       return { addresses, localOnly: (process.env.HOST ?? '') === '127.0.0.1' };
     });
+
+    // ---------- Bereich „Schnelldruck“: Info-Zettel auf dem Bondrucker ----------
+    const quick = { preHandler: requireModule('schnelldruck') };
+    api.get('/quickprint', quick, () => quickprint.overview(db));
+    api.post('/quickprint/print', quick, (req) => { const v = S.quickPrintInput.parse(req.body); return quickprint.printSlip(db, actor(req), v.id, v.copies); });
+    api.post('/quickprint/text', quick, (req) => quickprint.printText(db, actor(req), S.quickTextInput.parse(req.body)));
+    api.post('/quickprint/templates', { preHandler: requireAdmin }, (req) => quickprint.saveTemplate(db, actor(req), null, S.printTemplateInput.parse(req.body)));
+    api.put('/quickprint/templates/:id', { preHandler: requireAdmin }, (req) =>
+      quickprint.saveTemplate(db, actor(req), idParam(req), S.printTemplateInput.parse(req.body), z.object({ version: z.number().int() }).parse(req.body).version));
+    api.post('/quickprint/templates/:id/remove', { preHandler: requireAdmin }, async (req) => { await quickprint.removeTemplate(db, actor(req), idParam(req)); return { ok: true }; });
+    api.get('/settings/front-printer', { preHandler: requireAdmin }, () => quickprint.getFrontPrinter(db));
+    api.put('/settings/front-printer', { preHandler: requireAdmin }, (req) => quickprint.saveFrontPrinter(db, actor(req), S.bonPrinterInput.parse(req.body)));
+    api.post('/settings/front-printer/test', { preHandler: requireAdmin }, async () => { await quickprint.testFrontPrinter(db); return { ok: true }; });
 
     // ---------- Bereich „Internet“: Verbindung und Geräte im Hausnetz (Administrator oder Freigabe) ----------
     const internet = { preHandler: requireModule('internet') };

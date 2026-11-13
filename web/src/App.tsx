@@ -20,6 +20,7 @@ import { Launcher } from './pages/Launcher.tsx';
 import { Network } from './pages/Network.tsx';
 import { Login } from './pages/Login.tsx';
 import { Plan } from './pages/Plan.tsx';
+import { QuickPrint } from './pages/QuickPrint.tsx';
 import { Reservations } from './pages/Reservations.tsx';
 import { Restaurant } from './pages/Restaurant.tsx';
 import { RoomsPrices } from './pages/RoomsPrices.tsx';
@@ -53,6 +54,7 @@ const NAV = [
   { to: '/auswertung', label: 'Auswertung', icon: '◔', admin: false, module: 'hotel', more: true },
   { to: '/zimmer', label: 'Zimmer & Preise', short: 'Zimmer', icon: '⌂', admin: true, more: true, module: 'hotel' },
   { to: '/restaurant', label: 'Tischreservierungen', short: 'Tische', icon: '◍', admin: false, module: 'restaurant' },
+  { to: '/schnelldruck', label: 'Schnelldruck', short: 'Druck', icon: '⎙', admin: false, module: 'schnelldruck' },
   { to: '/kontrollen', label: 'Kontrollen', icon: '✓', admin: false, module: 'kontrollen' },
   { to: '/erechnung', label: 'E-Rechnung', icon: '✉', admin: false, module: 'erechnung' },
   { to: '/internet', label: 'Geräte im Netz', short: 'Geräte', icon: '⌁', admin: false, module: 'internet' },
@@ -60,7 +62,7 @@ const NAV = [
   { to: '/protokoll', label: 'Protokoll', icon: '☰', admin: true, module: 'verwaltung' },
   { to: '/einstellungen', label: 'Einstellungen', short: 'Einstell.', icon: '⚙', admin: true, module: 'verwaltung' },
 ] as { to: string; label: string; short?: string; icon: string; admin: boolean; more?: boolean; module: string }[];
-const MODULE_TITLE: Record<string, string> = { hotel: 'Hotel', restaurant: 'Restaurant', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet', verwaltung: 'Verwaltung' };
+const MODULE_TITLE: Record<string, string> = { hotel: 'Hotel', restaurant: 'Restaurant', schnelldruck: 'Schnelldruck', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet', verwaltung: 'Verwaltung' };
 
 export function App() {
   const [state, setState] = useState<AuthState | null>(null);
@@ -136,6 +138,7 @@ function Shell({ user }: { user: UserDto }) {
           {isAdmin && <Route path="/konto" element={<Account />} />}
           {isAdmin && <Route path="/benutzer" element={<Users />} />}
           {hasModule(user, 'restaurant') && <Route path="/restaurant" element={<Restaurant />} />}
+          {hasModule(user, 'schnelldruck') && <Route path="/schnelldruck" element={<QuickPrint />} />}
           {internet && <Route path="/internet" element={<Network />} />}
           {isAdmin && <Route path="/protokoll" element={<Audit />} />}
           {isAdmin && <Route path="/einstellungen" element={<Settings />} />}

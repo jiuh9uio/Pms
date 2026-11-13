@@ -14,7 +14,8 @@ export function Settings() {
       <HotelForm />
       <MailSettings />
       <TaxRates />
-      <KitchenPrinterCard />
+      <KitchenPrinterCard kind="kitchen" />
+      <KitchenPrinterCard kind="front" />
       <NetworkCard />
       <BackupCard />
       <UpdateCard />
@@ -45,6 +46,11 @@ function HotelForm() {
         {input('street', 'Straße und Hausnummer')}{input('zip', 'PLZ')}{input('city', 'Ort')}
         {input('country', 'Land')}{input('phone', 'Telefon')}{input('email', 'E-Mail', { type: 'email' })}
         {input('website', 'Website')}{input('checkinTime', 'Check-in ab', { type: 'time' })}{input('checkoutTime', 'Check-out bis', { type: 'time' })}
+      </div>
+      <div className="formgrid">
+        <Field label="Öffnungszeiten" error={f.errors.openingHours} wide hint="eine Zeile je Angabe, z. B. „Mo–Fr 11:30–14:00 und 17:30–22:00“, „Di Ruhetag“ – erscheint auf dem Info-Zettel im Schnelldruck">
+          <textarea rows={4} value={v.openingHours ?? ''} onChange={(e) => setV({ ...v, openingHours: e.target.value })} />
+        </Field>
       </div>
       <h3>Angaben für Rechnungen</h3>
       <div className="formgrid cols3">

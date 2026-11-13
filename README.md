@@ -121,6 +121,15 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
   des Tages aus dem Bereich Restaurant. Vom Betreiber mit einem Epson-Drucker als funktionierend gemeldet (13.11.2026). Drucker anderer Hersteller funktionieren nur, wenn sie
   ESC/POS verstehen.
 
+**Seit Version 1.12.0 zusätzlich:**
+
+- **Schnelldruck:** Info-Zettel auf dem Bondrucker: „Öffnungszeiten und Kontakt“ (aus den Hotel-Einstellungen, neues Feld
+  Öffnungszeiten), „WLAN-Zugang“ mit QR-Code (aus Internet → Gäste-WLAN), eigene Vorlagen (anlegen/ändern: Administrator) und
+  einmaliger freier Text. Text wird an Wortgrenzen auf die Papierbreite umbrochen. Gedruckt wird auf dem „Bondrucker vorne“
+  (eigene Einstellung), sonst auf dem Küchendrucker. Der QR-Code nutzt den Epson-Befehl `GS ( k`; **der QR-Druck ist mit keinem
+  echten Drucker erprobt** und fehlt auf Druckern, die diesen Befehl nicht kennen (dann erscheint nur der Text).
+  Jeder Druck steht im Änderungsprotokoll.
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

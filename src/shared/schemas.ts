@@ -7,11 +7,11 @@ export type Role = (typeof ROLES)[number];
 export const ROLE_LABEL: Record<Role, string> = { admin: 'Administrator', user: 'Benutzer' };
 
 /** Bereiche des Programms, die je Benutzer freigegeben werden. Verwaltung und Konto sind dem Administrator vorbehalten. */
-export const MODULES = ['hotel', 'restaurant', 'kontrollen', 'erechnung', 'internet'] as const;
+export const MODULES = ['hotel', 'restaurant', 'schnelldruck', 'kontrollen', 'erechnung', 'internet'] as const;
 /** Bereiche, die neue Benutzer von sich aus erhalten – „Internet“ (Geräte im Netz) gibt der Administrator bewusst frei. */
-export const DEFAULT_MODULES: Module[] = ['hotel', 'restaurant', 'kontrollen', 'erechnung'];
+export const DEFAULT_MODULES: Module[] = ['hotel', 'restaurant', 'schnelldruck', 'kontrollen', 'erechnung'];
 export type Module = (typeof MODULES)[number];
-export const MODULE_LABEL: Record<Module, string> = { hotel: 'Hotel', restaurant: 'Restaurant', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet' };
+export const MODULE_LABEL: Record<Module, string> = { hotel: 'Hotel', restaurant: 'Restaurant', schnelldruck: 'Schnelldruck', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet' };
 const modules = z.array(z.enum(MODULES)).max(MODULES.length);
 export const hasModule = (u: { role: Role; modules: string[] }, m: Module) => u.role === 'admin' || u.modules.includes(m);
 
@@ -43,12 +43,14 @@ export const hotelSettings = z.object({
   invoicePrefix: z.string().trim().regex(/^[A-Za-z0-9-]{0,10}$/, 'Bis zu 10 Buchstaben, Ziffern oder Bindestriche'),
   paymentTermDays: z.number('Bitte eine Zahl eingeben').int().min(0, 'Mindestens 0').max(120, 'Höchstens 120'),
   invoiceFooter: text(500),
+  /** Öffnungszeiten als freier Text, eine Zeile je Angabe – für den Schnelldruck am Bondrucker */
+  openingHours: text(600).default(''),
 });
 export type HotelSettings = z.infer<typeof hotelSettings>;
 export const HOTEL_DEFAULTS: HotelSettings = {
   name: 'Hotel & Restaurant Schützenhaus', street: '', zip: '', city: '', country: 'Deutschland', phone: '', email: '', website: '',
   taxNumber: '', vatId: '', bankName: '', iban: '', bic: '', checkinTime: '15:00', checkoutTime: '11:00',
-  invoicePrefix: 'RE', paymentTermDays: 14, invoiceFooter: '',
+  invoicePrefix: 'RE', paymentTermDays: 14, invoiceFooter: '', openingHours: '',
 };
 
 const rate = z.number('Bitte eine Zahl eingeben').min(0, 'Mindestens 0').max(100, 'Höchstens 100');
@@ -89,3 +91,15 @@ export type WifiSettings = z.infer<typeof wifiSettingsInput>;
 export interface WifiDto extends WifiSettings { /** QR-Code als Bild-Adresse; null, solange kein WLAN-Name eingetragen ist */ qr: string | null; hotelName: string }
 export interface NetOutageDto { id: string; startedAt: string; endedAt: string | null; uncertain: boolean }
 export interface NetOutagesDto { monitoring: boolean; outages: NetOutageDto[] }
+
+// ---------- Schnelldruck: Info-Zettel für Gäste auf dem Bondrucker ----------
+export const bonPrinterInput = z.object({
+  enabled: z.boolean(), host: z.string().trim().max(15).regex(/^(\d{1,3}(\.\d{1,3}){3})?$/, 'IP-Adresse im Format 192.168.1.50'),
+  port: z.number('Bitte eine Zahl eingeben').int().min(1).max(65535), width: z.union([z.literal(32), z.literal(42), z.literal(48)]),
+});
+export type BonPrinter = z.infer<typeof bonPrinterInput>;
+export const printTemplateInput = z.object({ title: required(40), body: required(1500), sort: z.number('Bitte eine Zahl eingeben').int().min(0).max(999) });
+export const quickPrintInput = z.object({ id: z.string().max(40), copies: z.number().int().min(1).max(5) });
+export const quickTextInput = z.object({ title: text(40), text: required(1500), copies: z.number().int().min(1).max(5) });
+export interface QuickSlipDto { id: string; title: string; preview: string; /** eigene Vorlage (änderbar) oder eingebaut */ custom: boolean; body?: string; sort?: number; version?: number; hint?: string }
+export interface QuickPrintDto { printerReady: boolean; printerName: string; slips: QuickSlipDto[] }

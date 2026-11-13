@@ -134,6 +134,13 @@
       "when": 1794586471543,
       "tag": "0018_internet_ausfaelle",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794600850711,
+      "tag": "0019_schnelldruck",
+      "breakpoints": true
     }
   ]
 }
