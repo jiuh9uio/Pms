@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseGateway, parseNeighbors, wifiQrText } from '../src/server/modules/network.js';
-import { getUpdateStatus, installUpdate, isNewer } from '../src/server/update.js';
+import { getChangelog, getUpdateStatus, installUpdate, isNewer, parseChangelog } from '../src/server/update.js';
 
 describe('Programm-Update', () => {
   it('vergleicht Versionsnummern', () => {
@@ -52,5 +52,15 @@ Aktive Routen:
     expect(wifiQrText({ ssid: 'Schuetzenhaus-Gast', password: 'geheim1234', open: false, note: '' })).toBe('WIFI:T:WPA;S:Schuetzenhaus-Gast;P:geheim1234;;');
     expect(wifiQrText({ ssid: 'Gast;WLAN', password: 'a:b,c"d\\e', open: false, note: '' })).toBe('WIFI:T:WPA;S:Gast\\;WLAN;P:a\\:b\\,c\\"d\\\\e;;');
     expect(wifiQrText({ ssid: 'Offen', password: '', open: true, note: '' })).toBe('WIFI:T:nopass;S:Offen;;');
+  });
+});
+
+describe('Was ist neu', () => {
+  it('liest die Abschnitte je Version, neueste zuerst', () => {
+    const md = '# Versionen\n\nEinleitung\n\n## 2.1.0\n\n- Neu A\n- Neu B\n\n## 2.0.0\n\nText\n\n## Sonstiges\n\nkein Versionsabschnitt';
+    expect(parseChangelog(md)).toEqual([{ version: '2.1.0', text: '- Neu A\n- Neu B' }, { version: '2.0.0', text: 'Text' }]);
+    const real = getChangelog();
+    expect(real.length).toBeGreaterThan(5);
+    expect(real.at(-1)!.version).toBe('1.0.0');
   });
 });

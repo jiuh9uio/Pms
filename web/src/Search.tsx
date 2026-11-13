@@ -37,7 +37,7 @@ const PAGES: Page[] = [
   { to: '/einstellungen?ansicht=steuern', title: 'Steuersätze', area: 'Einstellungen', words: 'mehrwertsteuer umsatzsteuer mwst 7 19', admin: true },
   { to: '/einstellungen?ansicht=netz', title: 'Zugriff im Hausnetz', area: 'Einstellungen', words: 'tablet adresse firewall netzwerk', admin: true },
   { to: '/einstellungen?ansicht=sicherung', title: 'Datensicherung', area: 'Einstellungen', words: 'backup sichern sicherung wiederherstellen', admin: true },
-  { to: '/einstellungen?ansicht=update', title: 'Programm-Update', area: 'Einstellungen', words: 'version aktualisieren update', admin: true },
+  { to: '/einstellungen?ansicht=update', title: 'Programm-Update', area: 'Einstellungen', words: 'version aktualisieren update was ist neu änderungen neuigkeiten', admin: true },
   { to: '/konto', title: 'Mein Konto', area: 'Verwaltung', words: 'eigenes passwort ändern darstellung dunkel hell', admin: true },
 ];
 const KIND: Record<SearchHit['kind'], string> = { guest: 'Gast', booking: 'Reservierung', invoice: 'Rechnung', company: 'Firma', table: 'Tischreservierung' };

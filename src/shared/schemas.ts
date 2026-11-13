@@ -118,3 +118,6 @@ export interface QuickPrintDto { printerReady: boolean; printerName: string; sli
 // ---------- Suche ----------
 export interface SearchHit { kind: 'guest' | 'booking' | 'invoice' | 'company' | 'table'; id: string; title: string; sub: string }
 export interface SearchResult { hits: SearchHit[] }
+
+// ---------- „Heute im Haus“ im Startmenü ----------
+export interface OverviewItem { key: string; label: string; value: string; sub: string; to: string; tone: 'neutral' | 'ok' | 'warn' }

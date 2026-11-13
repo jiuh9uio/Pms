@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.17.0
+
+- Startmenü: neue Übersicht „Heute im Haus“ – Anreisen, Abreisen, belegte Zimmer, Frühstück morgen, Tischreservierungen heute, offene Temperaturen und fällige Reinigung, überfällige Rechnungen. Jeder sieht nur seine freigegebenen Bereiche; ein Tipp führt zur passenden Seite.
+- Einstellungen → Programm-Update: neuer Abschnitt „Was ist neu“ mit den Änderungen aller Versionen.
+
 ## 1.16.0
 
 - EC-Gerät (Testbetrieb): Kartenzahlungen im Hotel lassen sich an ein EC-Gerät mit Kassenschnittstelle (ZVT über Netzwerk) senden – z. B. Geräte von VR Payment. Einrichten unter Einstellungen → EC-Gerät (IP-Adresse, Port, Passwort, „Verbindung prüfen“). Bei Zahlungen mit „Karte“ erscheint dann „Mit EC-Gerät kassieren“; bei Erfolg wird die Zahlung automatisch gebucht.

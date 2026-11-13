@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ROLE_LABEL, hasModule, type Module } from '../../../src/shared/schemas.js';
+import { ROLE_LABEL, hasModule, type Module, type OverviewItem } from '../../../src/shared/schemas.js';
 import { useAuth, useLogout } from '../App.tsx';
 import { api } from '../api.ts';
 import { Search } from '../Search.tsx';
@@ -27,6 +27,7 @@ export function Launcher() {
   const upd = useLoad(() => (user.role === 'admin' ? api<UpdateStatus>('GET', '/update/status') : Promise.resolve(null))).data;
   const bak = useLoad(() => (user.role === 'admin' ? api<BackupStatus>('GET', '/backup/status') : Promise.resolve(null))).data;
   const bakWarn = bak ? backupWarning(bak) : null;
+  const today = useLoad(() => api<OverviewItem[]>('GET', '/overview')).data;
   const tiles = TILES.filter((t) => (!t.admin || user.role === 'admin') && (!t.module || hasModule(user, t.module)));
   return (
     <div className="launcher">
@@ -37,6 +38,13 @@ export function Launcher() {
       <Search variant="big" />
       {upd?.available && <p className="notice warn">Programm-Update verfügbar: Version {upd.latest}. <Link to="/einstellungen?ansicht=update">Jetzt ansehen und einspielen</Link></p>}
       {bakWarn && <p className="notice danger">{bakWarn} <Link to="/einstellungen?ansicht=sicherung">Zur Datensicherung</Link></p>}
+      {today && today.length > 0 && (
+        <section className="todaystrip" aria-label="Heute im Haus">
+          {today.map((t) => (
+            <Link key={t.key} to={t.to} className={`todayitem ${t.tone}`}><span>{t.label}</span><b>{t.value}</b><small>{t.sub}</small></Link>
+          ))}
+        </section>
+      )}
       <nav className="tiles" aria-label="Bereiche">
         {tiles.map((t) => (
           <Link key={t.to} to={t.to} className="tile">

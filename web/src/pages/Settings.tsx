@@ -5,7 +5,7 @@ import { MailSettings } from './MailSettings.tsx';
 import { BackupCard } from './BackupCard.tsx';
 import { KitchenPrinterCard } from './KitchenPrinterCard.tsx';
 import { TerminalCard } from './TerminalCard.tsx';
-import { UpdateCard } from './UpdateCard.tsx';
+import { Changelog, UpdateCard } from './UpdateCard.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
 
 export const SETTINGS_TABS = [
@@ -26,7 +26,7 @@ export function Settings() {
       {current === 'steuern' && <TaxRates />}
       {current === 'netz' && <NetworkCard />}
       {current === 'sicherung' && <BackupCard />}
-      {current === 'update' && <UpdateCard />}
+      {current === 'update' && <><UpdateCard /><Changelog /></>}
     </>
   );
 }

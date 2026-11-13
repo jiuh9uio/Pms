@@ -55,6 +55,24 @@ export function initUpdater(c: Ctx) {
 
 export const getUpdateStatus = () => status;
 
+export interface ChangelogEntry { version: string; text: string }
+/** „Was ist neu“: Abschnitte aus CHANGELOG.md (im Paket unter app/, sonst im Projektordner), neueste zuerst. */
+export function parseChangelog(md: string): ChangelogEntry[] {
+  const out: ChangelogEntry[] = [];
+  for (const part of md.split(/^## /m).slice(1)) {
+    const nl = part.indexOf('\n');
+    const version = (nl < 0 ? part : part.slice(0, nl)).trim();
+    if (/^\d+(\.\d+)+$/.test(version)) out.push({ version, text: (nl < 0 ? '' : part.slice(nl + 1)).trim() });
+  }
+  return out;
+}
+export function getChangelog(): ChangelogEntry[] {
+  for (const file of [ctx ? join(ctx.home, 'app', 'CHANGELOG.md') : '', join(process.cwd(), 'CHANGELOG.md')]) {
+    try { if (file && existsSync(file)) return parseChangelog(readFileSync(file, 'utf8')).slice(0, 30); } catch { /* nächste Stelle */ }
+  }
+  return [];
+}
+
 async function get(url: string) {
   const res = await fetch(url, { headers: { 'User-Agent': 'pms-updater', Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(60_000), redirect: 'follow' });
   if (!res.ok) throw new Error(`Antwort ${res.status} von ${new URL(url).host}`);

@@ -15,6 +15,7 @@ import * as auth from './modules/auth.js';
 import * as guestforms from './modules/guestforms.js';
 import * as network from './modules/network.js';
 import * as quickprint from './modules/quickprint.js';
+import { overview } from './modules/overview.js';
 import { search } from './modules/search.js';
 import { guestFormInput } from '../shared/hotel.js';
 import * as settings from './modules/settings.js';
@@ -25,7 +26,7 @@ import { registerEInvoiceRoutes } from './routes-einvoice.js';
 import { registerHotelRoutes } from './routes-hotel.js';
 import { registerRestaurantRoutes } from './routes-restaurant.js';
 import { getBackupStatus, runBackup } from './backup.js';
-import { checkForUpdate, getUpdateStatus, installUpdate } from './update.js';
+import { checkForUpdate, getChangelog, getUpdateStatus, installUpdate } from './update.js';
 
 const COOKIE = 'pms_session';
 
@@ -184,6 +185,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     // ---------- Programm-Update (nur Administrator) ----------
     api.get('/update/status', { preHandler: requireAdmin }, (req) =>
       (z.object({ refresh: z.string().optional() }).parse(req.query).refresh ? checkForUpdate() : getUpdateStatus()));
+    api.get('/update/changelog', { preHandler: requireUser }, () => getChangelog());
     api.post('/update/install', { preHandler: requireAdmin }, async (req) => {
       const r = await installUpdate();
       await record(db, actor(req), { action: 'update', entity: 'program', after: { version: r.version } });
@@ -197,6 +199,9 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
         .filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => `${req.protocol}://${i!.address}${port ? `:${port}` : ''}`);
       return { addresses, localOnly: (process.env.HOST ?? '') === '127.0.0.1' };
     });
+
+    // ---------- „Heute im Haus“ für das Startmenü ----------
+    api.get('/overview', { preHandler: requireUser }, (req) => overview(db, req.user!));
 
     // ---------- Suche über alle freigegebenen Bereiche ----------
     api.get('/search', { preHandler: requireUser }, (req) => search(db, req.user!, z.object({ q: z.string().trim().min(2, 'Mindestens 2 Zeichen').max(60) }).parse(req.query).q));

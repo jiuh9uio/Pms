@@ -391,3 +391,14 @@ tr.faded td { opacity: .55; } .rowactions { text-align: right; white-space: nowr
   .sidebar nav .navsearch { flex-direction: column; gap: 0; padding: 6px 4px; font-size: 11px; flex: 1; min-width: 0; text-align: center; margin: 0; width: auto; }
   .sidebar nav .navsearch .full { display: none; } .sidebar nav .navsearch .short { display: block; }
 }
+
+/* Startmenü: Heute im Haus */
+.todaystrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 0 0 20px; }
+.todayitem { display: grid; gap: 2px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); }
+.todayitem:hover { text-decoration: none; border-color: var(--accent); } .todayitem span { font-size: 12px; color: var(--ink-2); } .todayitem b { font-size: 22px; line-height: 1.2; } .todayitem small { color: var(--ink-2); }
+.todayitem.warn { border-color: var(--warn); background: var(--warn-soft); } .todayitem.warn b { color: var(--warn); } .todayitem.ok b { color: var(--ok, #1a7f4b); }
+@media print { .todaystrip { display: none !important; } }
+
+/* Was ist neu */
+.changelog { border-top: 1px solid var(--line); padding: 8px 0; } .changelog:first-of-type { border-top: 0; }
+.changelog summary { cursor: pointer; font-weight: 600; padding: 4px 0; } .changelog ul { margin: 6px 0 4px; padding-left: 20px; color: var(--ink-2); } .changelog li { margin: 4px 0; } .changelog li.plain { list-style: none; margin-left: -20px; color: var(--ink); }

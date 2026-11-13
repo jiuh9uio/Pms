@@ -9,6 +9,23 @@ export interface UpdateStatus {
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** „Was ist neu“: Änderungen je Version, die aktuelle aufgeklappt. */
+export function Changelog({ current }: { current?: string }) {
+  const { data } = useLoad(() => api<{ version: string; text: string }[]>('GET', '/update/changelog'));
+  if (!data || data.length === 0) return null;
+  return (
+    <section className="card">
+      <h2>Was ist neu</h2>
+      {data.map((e, i) => (
+        <details key={e.version} className="changelog" open={current ? e.version === current : i === 0}>
+          <summary>Version {e.version}{e.version === current && ' – installiert'}</summary>
+          <ul>{e.text.split('\n').map((l) => l.trim()).filter(Boolean).map((l, n) => (l.startsWith('- ') ? <li key={n}>{l.slice(2)}</li> : <li key={n} className="plain">{l}</li>))}</ul>
+        </details>
+      ))}
+    </section>
+  );
+}
+
 /** Programm-Update: Version anzeigen, nach Updates suchen, mit einem Klick einspielen. */
 export function UpdateCard() {
   const toast = useToast();

@@ -272,6 +272,18 @@ describe('E-Mail an den Gast', () => {
     expect((await ok('GET', '/search?q=kegelclub', kueche)).hits).toEqual([]);
   });
 
+  it('zeigt im Startmenü „Heute im Haus“ nur für freigegebene Bereiche', async () => {
+    const all = await ok('GET', '/overview', admin);
+    const keys = all.map((x: { key: string }) => x.key);
+    expect(keys).toEqual(expect.arrayContaining(['arrivals', 'departures', 'inhouse', 'breakfast', 'tables', 'temps']));
+    expect(all.find((x: { key: string }) => x.key === 'inhouse').value).toBe('0 / 1');
+    const kueche = session(await call('POST', '/auth/login', {}, { username: 'kueche', password: 'sehr-geheim-456' }));
+    const few = await ok('GET', '/overview', kueche);
+    expect(few.map((x: { key: string }) => x.key)).toEqual(['temps']);
+    expect(few[0]).toMatchObject({ to: '/kontrollen' });
+    expect((await call('GET', '/overview', {})).statusCode).toBe(401);
+  });
+
   it('verlangt die Freigabe für den Bereich Hotel', async () => {
     const user = session(await call('POST', '/auth/login', {}, { username: 'kueche', password: 'sehr-geheim-456' }));
     expect((await call('GET', `/bookings/${bookingId}/mail`, user)).statusCode).toBe(403);

@@ -40,6 +40,7 @@ execFileSync(process.execPath, [postject, target, 'NODE_SEA_BLOB', blob, '--sent
 cpSync(join('dist', 'web'), join(out, 'app', 'web'), { recursive: true });
 cpSync('migrations', join(out, 'app', 'migrations'), { recursive: true });
 cpSync('assets', join(out, 'app', 'assets'), { recursive: true });
+copyFileSync('CHANGELOG.md', join(out, 'app', 'CHANGELOG.md'));
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
 const pgVersion = execFileSync(join(pgRoot, 'bin', win ? 'postgres.exe' : 'postgres'), ['--version']).toString();
 const pgMajor = /(\d+)\./.exec(pgVersion)?.[1] ?? '';

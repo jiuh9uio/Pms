@@ -3,6 +3,22 @@
 Property-Management-System für das Hotel & Restaurant Schützenhaus.
 Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
 
+## Bereiche des Programms (Stand Version 1.17.0)
+
+| Bereich | Inhalt |
+|---|---|
+| Startmenü | Kacheln je freigegebenem Bereich, Suche (Strg+K), „Heute im Haus“ |
+| Hotel | Übersicht, Belegungsplan, Reservierungen, Frühstücksliste, Gäste, Firmen, Rechnungen und Zahlungen (auch EC-Gerät im Testbetrieb), Auswertung, Zimmer & Preise |
+| Restaurant | Tischreservierungen je Tag, Tische |
+| Schnelldruck | Info-Zettel auf dem Bondrucker (Öffnungszeiten, WLAN, Aufenthalt, Bewertung, eigene) |
+| Kontrollen | Temperatur-, Reinigungs- und Wareneingangsprotokoll, Unterlagen, Kontrollbesuche |
+| E-Rechnung | PDF → ZUGFeRD, Versand per E-Mail |
+| Internet | Verbindung und Ausfallprotokoll, Gäste-WLAN-Aushang, Geräte im Netz |
+| Verwaltung | Benutzer und Freigaben, Änderungsprotokoll, Einstellungen (Haus, E-Mail, Drucker, EC-Gerät, Steuersätze, Hausnetz, Datensicherung, Programm-Update) |
+
+Die Abschnitte „Seit Version …“ weiter unten beschreiben jede Ergänzung mit ihren Grenzen; was nicht erprobt oder nicht
+rechtlich geprüft ist, steht dort ausdrücklich.
+
 ## Stand
 
 | Phase | Inhalt | Status |
