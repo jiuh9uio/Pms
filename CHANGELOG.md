@@ -3,6 +3,17 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.18.0
+
+Abrechnung im Hotel überarbeitet:
+
+- Neuer Knopf „Bezahlen / Abrechnen“ in jeder Reservierung: Zusammenfassung mit Anzahlungen und offenem Betrag, Zahlungsart Bar (mit Rückgeld-Berechnung), EC/Karte (mit Statusanzeige am Terminal oder von Hand bestätigt) oder Überweisung (Rechnung bleibt offen), auf Wunsch wird die Rechnung gleich ausgestellt.
+- Schutz vor doppelter Abrechnung: Was schon auf einer Rechnung steht, wird nicht noch einmal berechnet; mehr als der offene Betrag lässt sich nicht buchen; ein versehentlicher Doppelklick wird abgefangen.
+- Der Check-out zeigt deutlich, wenn noch etwas offen oder nicht berechnet ist.
+- Rechnungsarchiv (bisher „Rechnungen“): Filter nach Status, Rechnungsdatum, Leistungszeitraum und Zahlungsart, Summenzeile, PDF-Ansicht und Download. Das Rechnungs-PDF wird beim Ausstellen gespeichert und danach unverändert ausgegeben; Druck, Download, E-Mail und E-Rechnung verwenden dieselbe Datei.
+- Stornieren von Rechnungen und Gegenbuchen von Zahlungen darf nur noch der Administrator.
+- Einstellungen → Haus: Logo hochladen (erscheint auf neuen Rechnungen und im Startmenü). Einstellungen → EC-Gerät: Hersteller, Modell und Terminal-ID lassen sich eintragen.
+
 ## 1.17.1
 
 - Startmenü: „Heute im Haus“ lässt sich ein- und ausblenden und ist zunächst ausgeblendet. Die Wahl merkt sich das jeweilige Gerät.

@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import type { AuditDto, TaxRateDto } from '../../../src/shared/schemas.js';
 import {
+  isActiveStatus,
   PAYMENT_METHODS, SOURCES, STATUS_LABEL, addDays, bookingRoomInput, bookingRoomUpdateInput, bookingUpdateInput, chargeInput, diffDays, formatMoney,
   guestInput, isIsoDate, moneyInput, parseMoney, todayBerlin,
   type BookingDto, type BookingRoomDto, type FreeRoomDto, type RoomStatus, type ServiceDto,
 } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
+import type { BookingBillingDto } from '../../../src/shared/billing.js';
 import { BookingBilling } from '../billing/BookingBilling.tsx';
 import { CompanySelect } from './CompanySelect.tsx';
 import { GuestFormDialog } from './GuestFormDialog.tsx';
@@ -235,6 +237,10 @@ function Checkout({ booking, room, onClose }: { booking: BookingDto; room: Booki
   const keptCents = (room.nightly ?? []).filter((n) => n.date < end).reduce((s, n) => s + n.priceCents, 0);
   const roomCharges = booking.charges.filter((c) => c.bookingRoomId === room.id || c.bookingRoomId === null);
   const chargesCents = roomCharges.reduce((s, c) => s + c.totalCents, 0);
+  // offener Betrag und noch nicht berechnete Leistungen der ganzen Reservierung
+  const billing = useLoad(() => api<BookingBillingDto>('GET', `/bookings/${booking.id}/billing`), [booking.id]).data;
+  const bookingTotal = booking.rooms.filter((r) => isActiveStatus(r.status)).reduce((s, r) => s + r.lodgingCents, 0) + booking.chargesCents;
+  const bill = billing ? { open: Math.max(bookingTotal - billing.paidCents, 0), uninvoiced: billing.uninvoicedCents } : null;
   const go = async () => {
     setBusy(true);
     try {
@@ -255,7 +261,9 @@ function Checkout({ booking, room, onClose }: { booking: BookingDto; room: Booki
         <tr className="sum"><td>Summe</td><td className="num">{formatMoney(keptCents + chargesCents)}</td></tr>
       </tbody></table>
       {early && roomCharges.length > 0 && <p className="muted small">Leistungen werden bei vorzeitiger Abreise nicht automatisch gekürzt – bitte in der Reservierung prüfen.</p>}
-      <p className="notice">Nach dem Check-out in der Reservierung unter „Rechnungen und Zahlungen“ die Rechnung erstellen und die Zahlung buchen.</p>
+      {bill && (bill.open > 0 || bill.uninvoiced > 0)
+        ? <p className="notice warn" role="alert"><b>Noch nicht abgerechnet:</b> {bill.open > 0 && <>offen {formatMoney(bill.open)}</>}{bill.open > 0 && bill.uninvoiced > 0 && ' · '}{bill.uninvoiced > 0 && <>{formatMoney(bill.uninvoiced)} ohne Rechnung</>}. Der Check-out ist trotzdem möglich; abrechnen lässt sich vorher oder danach über „Bezahlen / Abrechnen“ in der Reservierung.</p>
+        : bill ? <p className="notice">Die Reservierung ist vollständig berechnet und bezahlt.</p> : null}
     </Dialog>
   );
 }

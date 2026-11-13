@@ -178,6 +178,26 @@ rechtlich geprüft ist, steht dort ausdrücklich.
   Belegdruck durch das PMS (das Gerät druckt selbst), andere Währungen als Euro, serielle/USB-Anbindung. Die Anbindung ändert
   nichts an der offenen Frage, ob für Bar- und Kartenzahlungen eine TSE nötig ist (siehe Konzept).
 
+**Seit Version 1.18.0 zusätzlich – Abrechnung überarbeitet:**
+
+- **Bezahlen / Abrechnen:** geführter Dialog in der Reservierung. Reihenfolge: erst Zahlung, dann Rechnung – so steht die
+  Zahlung bereits auf der archivierten Rechnung. Eine Zahlung zur Reservierung wird auf deren offene Rechnungen verteilt
+  (älteste zuerst), der Rest ist Anzahlung und wird mit der nächsten Rechnung verrechnet. Überweisung bucht keine Zahlung.
+- **Schutz vor Doppelabrechnung:** Rechnungspositionen merken sich ihre Herkunft (Nächte eines Zimmers bzw. Leistung). Beim
+  Abrechnen wird die Reservierung in der Datenbank gesperrt und nur berechnet, was auf keiner gültigen Rechnung (Entwurf oder
+  ausgestellt) steht. Rechnungen aus älteren Versionen ohne Herkunftsangaben gelten als Rechnung über die ganze Reservierung.
+  Zahlungen über den offenen Betrag hinaus und identische Zahlungen desselben Benutzers binnen 8 Sekunden werden abgelehnt.
+- **Rechnungs-PDF und Archiv:** ein Server-PDF (pdf-lib, eingebettete Schrift, optional Logo) für Druck, Download, E-Mail und
+  als Träger der E-Rechnung. Beim Ausstellen wird es in `invoice_documents` gespeichert; Datenbank-Trigger verhindern Ändern und
+  Löschen. Rechnungen aus älteren Versionen erhalten ihre Archivkopie beim ersten Abruf – mit den dann aktuellen Zahlungen und
+  dem dann hinterlegten Logo. Das Archiv ist damit technisch gegen Veränderung geschützt; eine geprüfte GoBD-Konformität
+  („revisionssicher“) ist das nicht – dazu gehören Verfahrensdokumentation, Aufbewahrung und Datensicherung außerhalb des Programms.
+- **Rechte:** Rechnung stornieren und Zahlung gegenbuchen nur durch Administratoren.
+- **Barzahlung:** Betrag, gegebener Betrag, Zeit und Benutzer werden gespeichert. **Es gibt keine TSE-Anbindung.** Ob das PMS
+  damit als elektronisches Aufzeichnungssystem mit Kassenfunktion gilt, ist ungeklärt und mit der Steuerberatung zu klären.
+- **Noch offen aus dem Prüfbericht:** Rechnungseditor mit Vorlagen (bisher nur Logo), einstellbares Nummernformat,
+  Erprobung des EC-Geräts, XRechnung, validierte ZUGFeRD-Ausgabe.
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

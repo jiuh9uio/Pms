@@ -4,7 +4,8 @@ import {
 } from '../../shared/billing.js';
 import { addDays, isActiveStatus, todayBerlin } from '../../shared/hotel.js';
 import type { Db, Exec, Tx } from '../db/client.js';
-import { bookings, companies, invoiceLines, invoices, numberSequences, payments } from '../db/schema.js';
+import { bookings, companies, invoiceLines, invoices, numberSequences, payments, invoiceDocuments, settings } from '../db/schema.js';
+import { renderInvoice, type Logo } from '../einvoice/invoicepdf.js';
 import { AppError, conflict, notFound, stale } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 import { getBooking } from './bookings.js';
@@ -45,10 +46,16 @@ function toRow(x: Raw): InvoiceListRow {
   };
 }
 
-export async function listInvoices(db: Exec, f: { status?: string; q?: string; from?: string; to?: string; bookingId?: string }) {
+export async function listInvoices(db: Exec, f: { status?: string; q?: string; from?: string; to?: string; bookingId?: string; serviceFrom?: string; serviceTo?: string; method?: string }) {
   const c: SQL[] = [sql`true`];
   if (f.status === 'open') c.push(sql`i.status = 'issued' and i.kind = 'invoice' and i.gross_cents <> coalesce((select sum(p.amount_cents) from payments p where p.invoice_id = i.id), 0)`);
+  else if (f.status === 'paid') c.push(sql`i.status = 'issued' and i.kind = 'invoice' and i.gross_cents = coalesce((select sum(p.amount_cents) from payments p where p.invoice_id = i.id), 0)`);
+  else if (f.status === 'archive') c.push(sql`i.status <> 'draft'`);
   else if (f.status) c.push(sql`i.status = ${f.status}`);
+  // Leistungszeitraum überschneidet den gewählten Zeitraum
+  if (f.serviceFrom) c.push(sql`coalesce(i.service_to, i.service_from) >= ${f.serviceFrom}::date`);
+  if (f.serviceTo) c.push(sql`i.service_from <= ${f.serviceTo}::date`);
+  if (f.method) c.push(sql`exists (select 1 from payments p where p.invoice_id = i.id and p.method = ${f.method})`);
   if (f.from) c.push(sql`coalesce(i.issue_date, i.created_at::date) >= ${f.from}::date`);
   if (f.to) c.push(sql`coalesce(i.issue_date, i.created_at::date) <= ${f.to}::date`);
   if (f.bookingId) c.push(sql`i.booking_id = ${f.bookingId}`);
@@ -95,6 +102,7 @@ export async function bookingBilling(db: Exec, bookingId: string): Promise<Booki
     invoicedCents: inv.filter((i) => i.status === 'issued' && i.kind === 'invoice').reduce((s, i) => s + i.grossCents, 0),
     paidCents: pays.reduce((s, p) => s + p.amountCents, 0),
     unassignedPaidCents: pays.filter((p) => !p.invoiceId).reduce((s, p) => s + p.amountCents, 0),
+    uninvoicedCents: await uninvoicedCents(db, bookingId),
   };
 }
 
@@ -105,6 +113,41 @@ export async function openSummary(db: Exec) {
           from invoices i where i.status = 'issued' and i.kind = 'invoice') x where open <> 0`);
   const x = r as Raw;
   return { count: x.n as number, cents: x.cents as number, overdue: x.overdue as number };
+}
+
+/**
+ * Was von einer Reservierung schon auf einer gültigen Rechnung (Entwurf oder ausgestellt, nicht storniert) steht.
+ * legacy = es gibt eine ältere Rechnung ohne Herkunftsangaben; sie gilt als Rechnung über die ganze Reservierung.
+ */
+async function invoiced(tx: Exec, bookingId: string) {
+  const rows = Array.from(await tx.execute(sql`
+    select i.id as invoice_id, l.source_kind, l.source_id, l.source_from::text as f, l.source_to::text as t
+    from invoices i left join invoice_lines l on l.invoice_id = i.id
+    where i.booking_id = ${bookingId} and i.kind = 'invoice' and i.status in ('draft', 'issued')`)) as { invoice_id: string; source_kind: string | null; source_id: string | null; f: string | null; t: string | null }[];
+  const nights = new Set<string>(), charges = new Set<string>();
+  for (const r of rows) {
+    if (r.source_kind === 'night' && r.source_id && r.f && r.t) { for (let d = r.f; d < r.t; d = addDays(d, 1)) nights.add(`${r.source_id}:${d}`); }
+    else if (r.source_kind === 'charge' && r.source_id) charges.add(r.source_id);
+  }
+  // Rechnungen mit Positionen, aber ganz ohne Herkunft (aus Versionen vor 1.18 oder von Hand umgebaut) gelten als Gesamtrechnung
+  const lineCount = Array.from(await tx.execute(sql`
+    select i.id from invoices i where i.booking_id = ${bookingId} and i.kind = 'invoice' and i.status in ('draft', 'issued')
+      and exists (select 1 from invoice_lines l where l.invoice_id = i.id) and not exists (select 1 from invoice_lines l where l.invoice_id = i.id and l.source_kind is not null)`)).length;
+  return { nights, charges, legacy: lineCount > 0 };
+}
+
+/** Betrag der Reservierung, der noch auf keiner Rechnung steht. */
+async function uninvoicedCents(tx: Exec, bookingId: string): Promise<number> {
+  const [b, done] = [await getBooking(tx, bookingId), await invoiced(tx, bookingId)];
+  if (done.legacy) return 0;
+  let cents = 0;
+  for (const r of b.rooms.filter((x) => isActiveStatus(x.status))) for (const n of r.nightly ?? []) if (!done.nights.has(`${r.id}:${n.date}`)) cents += n.priceCents;
+  for (const c of b.charges) {
+    const room = b.rooms.find((r) => r.id === c.bookingRoomId);
+    if (room && !isActiveStatus(room.status)) continue;
+    if (!done.charges.has(c.id)) cents += c.totalCents;
+  }
+  return cents;
 }
 
 // ---------- Entwürfe ----------
@@ -118,12 +161,16 @@ async function lockDraft(tx: Exec, id: string) {
 /** Legt einen Rechnungsentwurf an – leer oder mit den Positionen einer Reservierung. */
 export async function createInvoice(db: Db, actor: Actor, v: { bookingId?: string; include: 'all' | 'lodging' | 'extras' | 'none' }) {
   return db.transaction(async (tx) => {
-    const lines: { description: string; detail: string; quantity: number; unitPriceCents: number; taxRatePercent: number }[] = [];
+    const lines: { description: string; detail: string; quantity: number; unitPriceCents: number; taxRatePercent: number; sourceKind?: 'night' | 'charge'; sourceId?: string; sourceFrom?: string; sourceTo?: string }[] = [];
     let recipient = {};
     let serviceFrom: string | null = null;
     let serviceTo: string | null = null;
     if (v.bookingId) {
+      // Reservierung sperren: zwei gleichzeitige Abrechnungen derselben Reservierung laufen nacheinander
+      await tx.execute(sql`select 1 from bookings where id = ${v.bookingId} for update`);
       const b = await getBooking(tx, v.bookingId);
+      const done = await invoiced(tx, v.bookingId);
+      if (done.legacy && v.include !== 'none') throw conflict('Für diese Reservierung gibt es bereits eine Rechnung. Für eine Korrektur die Rechnung stornieren (Administrator) und danach neu abrechnen.', 'already_invoiced');
       const g = b.guest;
       const person = [g.salutation, g.firstName, g.lastName].filter(Boolean).join(' ');
       recipient = {
@@ -147,22 +194,25 @@ export async function createInvoice(db: Db, actor: Actor, v: { bookingId?: strin
           // Nächte mit gleichem Preis und Steuersatz zu einer Position zusammenfassen
           const groups: { price: number; tax: number; from: string; to: string; n: number }[] = [];
           for (const n of r.nightly ?? []) {
+            if (done.nights.has(`${r.id}:${n.date}`)) continue; // schon auf einer Rechnung
             const last = groups.at(-1);
-            if (last && last.price === n.priceCents && last.tax === n.taxRatePercent) { last.n++; last.to = addDays(n.date, 1); }
+            if (last && last.price === n.priceCents && last.tax === n.taxRatePercent && last.to === n.date) { last.n++; last.to = addDays(n.date, 1); }
             else groups.push({ price: n.priceCents, tax: n.taxRatePercent, from: n.date, to: addDays(n.date, 1), n: 1 });
           }
           for (const gr of groups)
-            lines.push({ description: `Übernachtung ${r.categoryName}, Zimmer ${r.roomNumber}`, detail: `${de(gr.from)} – ${de(gr.to)}`, quantity: gr.n, unitPriceCents: gr.price, taxRatePercent: gr.tax });
+            lines.push({ description: `Übernachtung ${r.categoryName}, Zimmer ${r.roomNumber}`, detail: `${de(gr.from)} – ${de(gr.to)}`, quantity: gr.n, unitPriceCents: gr.price, taxRatePercent: gr.tax , sourceKind: 'night', sourceId: r.id, sourceFrom: gr.from, sourceTo: gr.to });
         }
       }
       if (v.include === 'all' || v.include === 'extras') {
         for (const c of b.charges) {
           const room = b.rooms.find((r) => r.id === c.bookingRoomId);
           if (room && !isActiveStatus(room.status)) continue;
-          lines.push({ description: c.name, detail: room ? `Zimmer ${room.roomNumber}` : '', quantity: c.quantity, unitPriceCents: c.unitPriceCents, taxRatePercent: c.taxRatePercent });
+          if (done.charges.has(c.id)) continue; // schon auf einer Rechnung
+          lines.push({ description: c.name, detail: room ? `Zimmer ${room.roomNumber}` : '', quantity: c.quantity, unitPriceCents: c.unitPriceCents, taxRatePercent: c.taxRatePercent, sourceKind: 'charge', sourceId: c.id });
         }
       }
     }
+    if (v.bookingId && v.include !== 'none' && lines.length === 0) throw conflict('Alle Leistungen dieser Reservierung stehen bereits auf einer Rechnung', 'already_invoiced');
     const [inv] = await tx.insert(invoices).values({ bookingId: v.bookingId ?? null, ...recipient, serviceFrom, serviceTo, createdBy: actor.userName }).returning();
     if (lines.length)
       await tx.insert(invoiceLines).values(lines.map((l, i) => ({ ...l, invoiceId: inv!.id, pos: i + 1, totalCents: Math.round(l.quantity * l.unitPriceCents) })));
@@ -302,23 +352,78 @@ export async function cancelInvoice(db: Db, actor: Actor, id: string, reason: st
 }
 
 // ---------- Zahlungen ----------
-export async function addPayment(db: Db, actor: Actor, v: { bookingId?: string; invoiceId?: string; amountCents: number; method: string; date: string; payer: string; note: string }) {
+interface PayIn { bookingId?: string; invoiceId?: string; amountCents: number; method: string; date: string; payer: string; note: string; givenCents?: number | null }
+
+/** Schutz vor versehentlichem Doppelklick: dieselbe Zahlung desselben Benutzers innerhalb weniger Sekunden. */
+async function refuseRepeat(tx: Exec, actor: Actor, v: { bookingId: string | null; amountCents: number; method: string }) {
+  if (!v.bookingId) return;
+  const [dup] = await tx.execute(sql`
+    select 1 from payments where booking_id = ${v.bookingId} and amount_cents = ${v.amountCents} and method = ${v.method}
+      and recorded_by = ${actor.userName} and reverses_id is null and created_at > now() - interval '8 seconds' limit 1`);
+  if (dup) throw conflict('Diese Zahlung wurde gerade eben schon gebucht. Bitte die Zahlungsliste prüfen, bevor erneut gebucht wird.', 'duplicate_payment');
+}
+const euro = (c: number) => (c / 100).toFixed(2).replace('.', ',') + ' €';
+
+async function insertPayment(tx: Exec, actor: Actor, v: { bookingId: string | null; invoiceId: string | null; amountCents: number; method: string; date: string; payer: string; note: string; givenCents?: number | null }) {
+  const [p] = await tx.insert(payments).values({ ...v, givenCents: v.givenCents ?? null, recordedBy: actor.userName }).returning();
+  await record(tx, actor, { action: 'payment', entity: 'payment', entityId: p!.id, after: { bookingId: v.bookingId, invoiceId: v.invoiceId, amountCents: v.amountCents, method: v.method, date: v.date } });
+  return p!.id;
+}
+
+export async function addPayment(db: Db, actor: Actor, v: PayIn) {
   if (v.date > todayBerlin()) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { date: 'Das Datum liegt in der Zukunft' });
+  if (v.givenCents != null && v.givenCents < v.amountCents) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { givenCents: 'Der gegebene Betrag ist kleiner als der Zahlbetrag' });
+  // Zahlung auf die Reservierung: wird zuerst auf offene Rechnungen verteilt, der Rest ist Anzahlung
+  if (!v.invoiceId && v.bookingId && v.amountCents > 0) return payBooking(db, actor, { ...v, bookingId: v.bookingId });
   return db.transaction(async (tx) => {
     let bookingId = v.bookingId ?? null;
     if (v.invoiceId) {
-      const [inv] = await tx.select().from(invoices).where(eq(invoices.id, v.invoiceId));
+      const [inv] = await tx.select().from(invoices).where(eq(invoices.id, v.invoiceId)).for('update');
       if (!inv) throw notFound('Rechnung');
       if (inv.status !== 'issued' || inv.kind !== 'invoice') throw conflict('Zahlungen können nur auf ausgestellte, nicht stornierte Rechnungen gebucht werden');
       if (bookingId && inv.bookingId && bookingId !== inv.bookingId) throw conflict('Rechnung gehört zu einer anderen Reservierung');
       bookingId = inv.bookingId;
+      const [{ paid }] = (await tx.execute(sql`select coalesce(sum(amount_cents), 0)::int as paid from payments where invoice_id = ${v.invoiceId}`)) as unknown as [{ paid: number }];
+      const open = inv.grossCents - paid;
+      if (v.amountCents > 0 && v.amountCents > open) throw conflict(open > 0 ? `Auf dieser Rechnung sind nur noch ${euro(open)} offen` : 'Diese Rechnung ist bereits vollständig bezahlt', 'overpay');
     } else {
       const [b] = await tx.select({ id: bookings.id }).from(bookings).where(eq(bookings.id, bookingId!));
       if (!b) throw notFound('Reservierung');
     }
-    const [p] = await tx.insert(payments).values({ bookingId, invoiceId: v.invoiceId ?? null, amountCents: v.amountCents, method: v.method, date: v.date, payer: v.payer, note: v.note, recordedBy: actor.userName }).returning();
-    await record(tx, actor, { action: 'payment', entity: 'payment', entityId: p!.id, after: { bookingId, invoiceId: v.invoiceId ?? null, amountCents: v.amountCents, method: v.method, date: v.date } });
-    return { id: p!.id };
+    await refuseRepeat(tx, actor, { bookingId, amountCents: v.amountCents, method: v.method });
+    return { id: await insertPayment(tx, actor, { bookingId, invoiceId: v.invoiceId ?? null, amountCents: v.amountCents, method: v.method, date: v.date, payer: v.payer, note: v.note, givenCents: v.givenCents }) };
+  });
+}
+
+/**
+ * Zahlung zu einer Reservierung: Der Betrag wird auf die offenen Rechnungen der Reservierung verteilt (älteste zuerst),
+ * ein Rest wird als Anzahlung gebucht und mit der nächsten Rechnung verrechnet. Mehr als der offene Gesamtbetrag ist nicht möglich.
+ */
+export async function payBooking(db: Db, actor: Actor, v: PayIn & { bookingId: string }) {
+  return db.transaction(async (tx) => {
+    const [locked] = await tx.execute(sql`select id from bookings where id = ${v.bookingId} for update`);
+    if (!locked) throw notFound('Reservierung');
+    const b = await getBooking(tx, v.bookingId);
+    const bill = await bookingBilling(tx, v.bookingId);
+    const total = b.rooms.filter((r) => isActiveStatus(r.status)).reduce((s, r) => s + r.lodgingCents, 0) + b.chargesCents;
+    const openInvoices = bill.invoices.filter((i) => i.status === 'issued' && i.kind === 'invoice' && i.openCents > 0).sort((x, y) => (x.issuedAt ?? '').localeCompare(y.issuedAt ?? ''));
+    // offen ist, was auf Rechnungen noch fehlt, mindestens aber der Rest der Reservierung
+    const remaining = Math.max(total - bill.paidCents, openInvoices.reduce((s, i) => s + i.openCents, 0));
+    if (v.amountCents > remaining) throw conflict(remaining > 0 ? `Für diese Reservierung sind nur noch ${euro(remaining)} offen` : 'Für diese Reservierung ist nichts mehr offen', 'overpay');
+    await refuseRepeat(tx, actor, { bookingId: v.bookingId, amountCents: v.amountCents, method: v.method });
+    let rest = v.amountCents;
+    let first: string | null = null;
+    const base = { bookingId: v.bookingId, method: v.method, date: v.date, payer: v.payer, note: v.note };
+    for (const i of openInvoices) {
+      if (rest <= 0) break;
+      const part = Math.min(rest, i.openCents);
+      // der gegebene Betrag steht nur an der ersten Teilbuchung
+      const id = await insertPayment(tx, actor, { ...base, invoiceId: i.id, amountCents: part, givenCents: first ? null : v.givenCents != null ? v.givenCents - (v.amountCents - part) : null });
+      first ??= id;
+      rest -= part;
+    }
+    if (rest > 0) { const id = await insertPayment(tx, actor, { ...base, invoiceId: null, amountCents: rest, givenCents: first ? null : v.givenCents }); first ??= id; }
+    return { id: first! };
   });
 }
 
@@ -371,3 +476,44 @@ export async function exportPaymentsCsv(db: Exec, from: string, to: string) {
   return '﻿' + [head.map(cell).join(';'), ...body].join('\r\n');
 }
 
+
+// ---------- Logo und Rechnungs-PDF ----------
+export async function getLogo(db: Exec): Promise<Logo | null> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'logo'));
+  const v = row?.value as { mime?: Logo['mime']; data?: string } | undefined;
+  return v?.mime && v.data ? { mime: v.mime, data: Buffer.from(v.data, 'base64') } : null;
+}
+export async function saveLogo(db: Db, actor: Actor, v: { mime: Logo['mime']; dataBase64: string } | null) {
+  if (!v) await db.delete(settings).where(eq(settings.key, 'logo'));
+  else {
+    const data = Buffer.from(v.dataBase64, 'base64');
+    if (data.length > 400 * 1024) throw new AppError(400, 'too_large', 'Das Logo ist zu groß (höchstens 400 kB)');
+    const png = data.subarray(0, 8).toString('hex') === '89504e470d0a1a0a', jpg = data[0] === 0xff && data[1] === 0xd8;
+    if ((v.mime === 'image/png' && !png) || (v.mime === 'image/jpeg' && !jpg)) throw new AppError(400, 'bad_image', 'Die Datei ist kein gültiges PNG- oder JPEG-Bild');
+    const value = { mime: v.mime, data: data.toString('base64') };
+    await db.insert(settings).values({ key: 'logo', value }).onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date() } });
+  }
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: 'logo', after: { logo: v ? `${v.mime}` : 'entfernt' } });
+}
+
+/**
+ * PDF einer Rechnung. Ausgestellte Rechnungen und Stornobelege werden beim ersten Abruf (spätestens direkt nach dem Ausstellen)
+ * erzeugt und als Archivkopie gespeichert; danach kommt immer genau diese Datei zurück. Entwürfe werden jedes Mal neu gezeichnet.
+ */
+export async function invoicePdf(db: Db, id: string): Promise<{ filename: string; pdf: Buffer; archived: boolean }> {
+  const inv = await getInvoice(db, id);
+  const name = `${(inv.number ?? 'Entwurf').replace(/[^A-Za-z0-9._-]+/g, '_')}.pdf`;
+  if (inv.status !== 'draft') {
+    const [doc] = await db.select().from(invoiceDocuments).where(eq(invoiceDocuments.invoiceId, id));
+    if (doc) return { filename: name, pdf: doc.pdf, archived: true };
+  }
+  const h = await getHotel(db);
+  const issuer: IssuerDto = inv.issuer ?? { name: h.name, street: h.street, zip: h.zip, city: h.city, country: h.country, phone: h.phone, email: h.email, website: h.website,
+    taxNumber: h.taxNumber, vatId: h.vatId, bankName: h.bankName, iban: h.iban, bic: h.bic, footer: h.invoiceFooter };
+  const pdf = Buffer.from(await renderInvoice(inv, issuer, await getLogo(db)));
+  if (inv.status === 'draft') return { filename: name, pdf, archived: false };
+  // gleichzeitige Abrufe: die zuerst gespeicherte Kopie gilt
+  await db.insert(invoiceDocuments).values({ invoiceId: id, pdf }).onConflictDoNothing();
+  const [doc] = await db.select().from(invoiceDocuments).where(eq(invoiceDocuments.invoiceId, id));
+  return { filename: name, pdf: doc!.pdf, archived: true };
+}

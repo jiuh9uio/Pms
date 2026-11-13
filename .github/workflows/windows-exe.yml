@@ -69,6 +69,12 @@ jobs:
           if (-not $issued.number -or $issued.grossCents -ne 29700) { throw "Rechnung falsch ausgestellt: $($issued | ConvertTo-Json -Depth 2)" }
           Post '/payments' @{ invoiceId = $inv.id; amountCents = 29700; method = 'Bar'; date = (Get-Date -Format 'yyyy-MM-dd'); payer = ''; note = '' } $s | Out-Null
           Write-Host "Rechnung $($issued.number) ausgestellt und bezahlt"
+          Invoke-WebRequest "$base/invoices/$($inv.id)/pdf" -WebSession $s -OutFile "$dir\rechnung.pdf"
+          if (-not ([System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes("$dir\rechnung.pdf"), 0, 5) -eq '%PDF-')) { throw 'Rechnungs-PDF fehlt' }
+          Remove-Item "$dir\rechnung.pdf"
+          $again = $false
+          try { Post '/invoices' @{ bookingId = $b.id; include = 'all' } $s | Out-Null } catch { $again = $_.Exception.Response.StatusCode.value__ -eq 409 }
+          if (-not $again) { throw 'Doppelte Abrechnung wurde nicht abgelehnt' }
           $e = Post "/einvoices/from-invoice/$($inv.id)" @{} $s
           Invoke-WebRequest "$base/einvoices/$($e.id)/pdf" -WebSession $s -OutFile "$dir\e-rechnung.pdf"
           $pdfText = [System.Text.Encoding]::GetEncoding(28591).GetString([System.IO.File]::ReadAllBytes("$dir\e-rechnung.pdf"))

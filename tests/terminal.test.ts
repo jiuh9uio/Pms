@@ -123,12 +123,12 @@ describe('EC-Gerät (Kassenschnittstelle ZVT)', () => {
 
   it('bucht eine erfolgreiche Kartenzahlung mit Angaben des Geräts', async () => {
     seen = [];
-    const r = await ok('POST', '/payments/terminal', admin, { bookingId, amountCents: 9900, payer: '', note: 'Anzahlung' });
+    const r = await ok('POST', '/payments/terminal', admin, { bookingId, amountCents: 4900, payer: '', note: 'Anzahlung' });
     expect(r.message).toContain('girocard');
-    expect(seen[1]).toBe('0601:04000000009900490978');
+    expect(seen[1]).toBe('0601:04000000004900490978');
     const list = await paid();
     expect(list).toHaveLength(1);
-    expect(list[0]).toMatchObject({ amountCents: 9900, method: 'Karte' });
+    expect(list[0]).toMatchObject({ amountCents: 4900, method: 'Karte' });
     expect(list[0]!.note).toContain('Beleg 0045');
     expect(list[0]!.note).toContain('TA-Nr. 000123');
     expect(list[0]!.note).toContain('Anzahlung');

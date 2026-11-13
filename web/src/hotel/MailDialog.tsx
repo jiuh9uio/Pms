@@ -26,7 +26,7 @@ export function MailDialog({ path, title, onClose, onSent }: { path: string; tit
             <Field label="Betreff" error={f.errors.subject} wide><input value={v.subject} onChange={(e) => setV({ ...v, subject: e.target.value })} /></Field>
             <Field label="Text" error={f.errors.text} wide><textarea rows={14} value={v.text} onChange={(e) => setV({ ...v, text: e.target.value })} /></Field>
           </div>
-          {data.attachment && <p className="muted small">Anhang: {data.attachment} (Rechnung als PDF mit eingebetteten ZUGFeRD-Daten)</p>}
+          {data.attachment && <p className="muted small">Anhang: {data.attachment} (die Rechnung als PDF, wie sie im Rechnungsarchiv liegt)</p>}
         </form>
       )}
     </Dialog>

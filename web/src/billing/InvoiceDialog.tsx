@@ -65,12 +65,13 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
     <Dialog title={<>{title} {inv && <InvoiceStatus inv={inv} />}</>} onClose={onClose} size="xl"
       footer={inv && <>
         {inv.status === 'draft' && <Button variant="danger" className="left" onClick={() => void remove()}>Entwurf verwerfen</Button>}
-        {inv.status === 'issued' && inv.kind === 'invoice' && <Button variant="danger" className="left" onClick={() => setCancel(true)}>Stornieren</Button>}
+        {inv.status === 'issued' && inv.kind === 'invoice' && user.role === 'admin' && <Button variant="danger" className="left" onClick={() => setCancel(true)}>Stornieren</Button>}
         {inv.bookingId && <Button onClick={() => openBooking(inv.bookingId!)}>Reservierung {inv.bookingNumber}</Button>}
         {inv.status === 'issued' && inv.kind === 'invoice' && hasModule(user, 'erechnung') && <Button busy={busy} onClick={() => void einvoice()}>E-Rechnung</Button>}
         {inv.status === 'issued' && inv.kind === 'invoice' && <Button onClick={() => setMail('invoice')}>Per E-Mail senden</Button>}
         {inv.status === 'issued' && inv.kind === 'invoice' && inv.openCents > 0 && inv.dueDate && inv.dueDate < todayBerlin() && <Button onClick={() => setMail('reminder')}>Zahlungserinnerung</Button>}
-        <a className="btn" href={`/rechnung/${id}`} target="_blank" rel="noopener">{inv.status === 'draft' ? 'Vorschau' : 'Drucken / PDF'}</a>
+        <a className="btn" href={`/api/v1/invoices/${id}/pdf`} target="_blank" rel="noopener">{inv.status === 'draft' ? 'Vorschau (PDF)' : 'Drucken / PDF'}</a>
+        {inv.status !== 'draft' && <a className="btn" href={`/api/v1/invoices/${id}/pdf?download=1`}>Herunterladen</a>}
         {inv.status === 'draft' ? <Button variant="primary" busy={busy} onClick={() => void issue()}>Ausstellen</Button> : <Button onClick={onClose}>Schließen</Button>}
       </>}>
       {!inv ? <LoadState error={error} loading /> : (
@@ -256,6 +257,7 @@ export function PaymentList({ list }: { list: PaymentDto[] }) {
   const { bump } = useData();
   const toast = useToast();
   const [reverse, setReverse] = useState<PaymentDto | null>(null);
+  const isAdmin = useAuth().user.role === 'admin'; // Gegenbuchungen nur durch den Administrator
   const f = useSubmit(reverseInput, async (d) => { await api('POST', `/payments/${reverse!.id}/reverse`, d); toast('Gegenbuchung erfasst'); setReverse(null); bump(); });
   const [note, setNote] = useState('');
   if (!list.length) return <p className="muted small">Noch keine Zahlungen.</p>;
@@ -266,7 +268,7 @@ export function PaymentList({ list }: { list: PaymentDto[] }) {
           <li key={p.id} className={p.reversed || p.reversesId ? 'struck' : ''}>
             <span>{deDate(p.date)} · {p.method}{p.invoiceNumber ? ` · ${p.invoiceNumber}` : ' · Anzahlung'}<br /><small>{[p.payer, p.note, p.recordedBy].filter(Boolean).join(' · ')}</small></span>
             <b className="num">{formatMoney(p.amountCents)}</b>
-            {!p.reversed && !p.reversesId && <button type="button" className="linkbtn" onClick={() => { setNote(''); setReverse(p); }}>Gegenbuchen</button>}
+            {isAdmin && !p.reversed && !p.reversesId && <button type="button" className="linkbtn" onClick={() => { setNote(''); setReverse(p); }}>Gegenbuchen</button>}
           </li>
         ))}
       </ul>

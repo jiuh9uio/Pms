@@ -9,7 +9,7 @@ import { COUNTRIES, computeEInvoice, type EInvoiceData } from '../../shared/einv
 /** Ordner mit Schrift und Farbprofil; die Windows-Version setzt ihn ausdrücklich. */
 let assetsDir: string | null = null;
 export const setAssetsDir = (dir: string) => { assetsDir = dir; };
-function asset(name: string) {
+export function asset(name: string) {
   const dir = assetsDir ?? fileURLToPath(new URL('../../../assets/einvoice', import.meta.url));
   const file = join(dir, name);
   if (!existsSync(file)) throw new Error(`Datei für die E-Rechnung fehlt: ${file}`);

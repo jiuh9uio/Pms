@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ROLE_LABEL, hasModule, type Module, type OverviewItem } from '../../../src/shared/schemas.js';
 import { useAuth, useLogout } from '../App.tsx';
@@ -32,11 +32,14 @@ export function Launcher() {
   const [showToday, setShowToday] = useState(() => { try { return localStorage.getItem('pms.heute') === 'an'; } catch { return false; } });
   const toggleToday = () => { const next = !showToday; setShowToday(next); try { localStorage.setItem('pms.heute', next ? 'an' : 'aus'); } catch { /* ohne Speicher gilt die Wahl bis zum Neuladen */ } };
   const today = useLoad(() => (showToday ? api<OverviewItem[]>('GET', '/overview') : Promise.resolve(null)), [showToday]).data;
+  // Logo des Hauses, falls hinterlegt (nur mit Freigabe für den Bereich Hotel abrufbar)
+  const [logo, setLogo] = useState(false);
+  useEffect(() => { if (hasModule(user, 'hotel')) api<{ present: boolean }>('GET', '/settings/logo-info').then((r) => setLogo(r.present)).catch(() => setLogo(false)); }, [user]);
   const tiles = TILES.filter((t) => (!t.admin || user.role === 'admin') && (!t.module || hasModule(user, t.module)));
   return (
     <div className="launcher">
       <header>
-        <div className="brand big"><span className="mark">S</span><span>Schützenhaus<small>Hotel &amp; Restaurant</small></span></div>
+        <div className="brand big">{logo ? <img className="brandlogo" src="/api/v1/settings/logo" alt="" /> : <span className="mark">S</span>}<span>Schützenhaus<small>Hotel &amp; Restaurant</small></span></div>
         <p className="muted">{user.name} · {ROLE_LABEL[user.role]} <button type="button" className="btn" onClick={() => void logout()}>Abmelden</button></p>
       </header>
       <Search variant="big" />

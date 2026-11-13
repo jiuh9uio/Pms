@@ -19,7 +19,7 @@ export interface ZvtResult {
   /** Angaben des Geräts zur Zahlung, soweit gemeldet */
   trace: string; receiptNo: string; cardName: string; terminalId: string; amountCents: number | null;
 }
-export interface ZvtOptions { host: string; port: number; password: string; timeoutMs?: number; onStatus?: (code: number) => void }
+export interface ZvtOptions { host: string; port: number; password: string; timeoutMs?: number; onStatus?: (code: number) => void; /** connected = angemeldet, payment = Betrag steht am Gerät */ onPhase?: (phase: 'connected' | 'payment') => void }
 
 const ACK = Buffer.from([0x80, 0x00, 0x00]);
 const bcd = (digits: string) => Buffer.from(digits.match(/../g)!.map((p) => parseInt(p, 16)));
@@ -117,7 +117,7 @@ export function zvtRun(o: ZvtOptions, amountCents: number | null): Promise<ZvtRe
       e.code === 'ECONNREFUSED' ? `Das EC-Gerät ${o.host} nimmt auf Port ${o.port} keine Verbindung an (Kassenschnittstelle ZVT aktiv? Port richtig?).`
         : e.code === 'EHOSTUNREACH' || e.code === 'ENETUNREACH' ? `Das EC-Gerät ${o.host} ist im Netz nicht erreichbar.` : `Verbindung zum EC-Gerät gestört (${e.code ?? e.message}).`));
     sock.on('close', () => broken('Die Verbindung zum EC-Gerät wurde getrennt.'));
-    sock.on('connect', () => { sock.setTimeout(0); phase = 'register'; sock.write(registration(o.password)); });
+    sock.on('connect', () => { sock.setTimeout(0); phase = 'register'; o.onPhase?.('connected'); sock.write(registration(o.password)); });
     sock.on('data', (chunk: Buffer) => {
       const split = splitApdus(Buffer.concat([buf, chunk]));
       buf = split.rest;
@@ -138,6 +138,7 @@ export function zvtRun(o: ZvtOptions, amountCents: number | null): Promise<ZvtRe
             if (amountCents === null) { finish('approved', 'Verbindung zum EC-Gerät steht.', null); return; }
             status = {};
             phase = 'pay';
+            o.onPhase?.('payment');
             sock.write(authorization(amountCents));
           } else if (status.resultCode === 0x00) {
             if (status.amountCents != null && status.amountCents !== amountCents) finish('unknown', `Das EC-Gerät meldet einen anderen Betrag (${(status.amountCents / 100).toFixed(2)} €) als angefordert. Bitte am Gerät prüfen.`);

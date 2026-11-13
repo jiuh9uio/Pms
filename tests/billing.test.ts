@@ -108,8 +108,9 @@ describe('Rechnungen', () => {
   it('bucht Teilzahlungen und korrigiert per Gegenbuchung', async () => {
     const p = await ok('POST', '/payments', user, { invoiceId: invId, amountCents: 10000, method: 'Karte', date: today, payer: 'Beispiel GmbH', note: '' });
     expect((await ok('GET', `/invoices/${invId}`, user)).openCents).toBe(9800);
-    await ok('POST', `/payments/${p.id}/reverse`, user, { note: 'falscher Betrag' });
-    expect((await call('POST', `/payments/${p.id}/reverse`, user, { note: 'nochmal' })).statusCode).toBe(409);
+    expect((await call('POST', `/payments/${p.id}/reverse`, user, { note: 'falscher Betrag' })).statusCode).toBe(403); // nur Administrator
+    await ok('POST', `/payments/${p.id}/reverse`, admin, { note: 'falscher Betrag' });
+    expect((await call('POST', `/payments/${p.id}/reverse`, admin, { note: 'nochmal' })).statusCode).toBe(409);
     let inv = await ok('GET', `/invoices/${invId}`, user);
     expect(inv.openCents).toBe(19800);
     expect(inv.payments.find((x: { id: string }) => x.id === p.id).reversed).toBe(true);
@@ -121,15 +122,16 @@ describe('Rechnungen', () => {
   });
 
   it('storniert mit eigenem Stornobeleg und überträgt Zahlungen auf die Reservierung', async () => {
-    expect((await call('POST', `/invoices/${invId}/cancel`, user, { reason: '' })).statusCode).toBe(400);
-    const st = await ok('POST', `/invoices/${invId}/cancel`, user, { reason: 'falscher Empfänger' });
+    expect((await call('POST', `/invoices/${invId}/cancel`, user, { reason: 'falscher Empfänger' })).statusCode).toBe(403); // nur Administrator
+    expect((await call('POST', `/invoices/${invId}/cancel`, admin, { reason: '' })).statusCode).toBe(400);
+    const st = await ok('POST', `/invoices/${invId}/cancel`, admin, { reason: 'falscher Empfänger' });
     expect(st.number).toBe(`RE-${year}-0002`);
     const orig = await ok('GET', `/invoices/${invId}`, user);
     expect(orig).toMatchObject({ status: 'cancelled', cancelReason: 'falscher Empfänger', openCents: 0, paidCents: 0, cancelledByNumber: `RE-${year}-0002` });
     const storno = await ok('GET', `/invoices/${st.id}`, user);
     expect(storno).toMatchObject({ kind: 'cancellation', status: 'issued', grossCents: -24800, cancelsNumber: `RE-${year}-0001` });
     expect(storno.lines.every((l: { totalCents: number }) => l.totalCents < 0)).toBe(true);
-    expect((await call('POST', `/invoices/${invId}/cancel`, user, { reason: 'nochmal' })).statusCode).toBe(409);
+    expect((await call('POST', `/invoices/${invId}/cancel`, admin, { reason: 'nochmal' })).statusCode).toBe(409);
     expect((await call('POST', '/payments', user, { invoiceId: invId, amountCents: 100, method: 'Bar', date: today, payer: '', note: '' })).statusCode).toBe(409);
 
     const billing = await ok('GET', `/bookings/${bookingId}/billing`, user);

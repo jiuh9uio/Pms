@@ -3,11 +3,18 @@ import type { Db, Exec } from '../db/client.js';
 import { conflict } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 import { getBooking } from './bookings.js';
+import { getInvoice, invoicePdf } from './billing.js';
 import { buildFromInvoice } from './einvoices.js';
 import { getMailSettings, sendMail } from './mail.js';
 import { getHotel } from './settings.js';
 
 /** E-Mails aus dem Bereich „Hotel“: Buchungsbestätigung und Rechnung an den Gast. Der Text ist vor dem Senden änderbar. */
+
+async function issuedInvoice(db: Exec, id: string) {
+  const inv = await getInvoice(db, id);
+  if (inv.kind !== 'invoice' || inv.status !== 'issued' || !inv.number) throw conflict('Per E-Mail lassen sich nur ausgestellte, nicht stornierte Rechnungen senden');
+  return inv;
+}
 
 const de = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
 const safe = (s: string) => s.replace(/[^A-Za-z0-9._-]+/g, '_').slice(0, 60) || 'rechnung';
@@ -59,7 +66,7 @@ export async function sendBookingMail(db: Db, actor: Actor, bookingId: string, v
 export type InvoiceMailKind = 'invoice' | 'reminder';
 
 export async function invoiceMailDraft(db: Exec, invoiceId: string, kind: InvoiceMailKind = 'invoice'): Promise<MailDraft> {
-  const { inv } = await buildFromInvoice(db, invoiceId);
+  const inv = await issuedInvoice(db, invoiceId);
   if (kind === 'reminder' && inv.openCents <= 0) throw conflict('Die Rechnung ist bereits bezahlt – eine Zahlungserinnerung ist nicht nötig');
   const h = await getHotel(db);
   const guest = inv.bookingId ? (await getBooking(db, inv.bookingId)).guest : null;
@@ -80,15 +87,16 @@ export async function invoiceMailDraft(db: Exec, invoiceId: string, kind: Invoic
     inv.openCents > 0
       ? `Bitte überweisen Sie den offenen Betrag von ${formatMoney(inv.openCents)}${inv.dueDate ? ` bis zum ${de(inv.dueDate)}` : ''} unter Angabe der Rechnungsnummer.`
       : 'Der Betrag ist bereits beglichen – vielen Dank.',
-    '', 'Die PDF-Datei enthält die Rechnungsdaten zusätzlich in maschinenlesbarer Form (ZUGFeRD).',
     '', signature(h),
   ].join('\n');
   return { to: guest?.email ?? '', subject: `Rechnung ${inv.number} – ${h.name}`, text, attachment: `${safe(inv.number!)}.pdf`, ready: await ready(db) };
 }
 
 export async function sendInvoiceMail(db: Db, actor: Actor, invoiceId: string, v: { to: string; subject: string; text: string }, kind: InvoiceMailKind = 'invoice') {
-  const { inv, pdf } = await buildFromInvoice(db, invoiceId);
+  const inv = await issuedInvoice(db, invoiceId);
   if (kind === 'reminder' && inv.openCents <= 0) throw conflict('Die Rechnung ist bereits bezahlt – eine Zahlungserinnerung ist nicht nötig');
+  // mit eingebetteten E-Rechnungsdaten, wo das möglich ist; sonst das archivierte PDF
+  const pdf = await buildFromInvoice(db, invoiceId).then((r) => r.pdf, async () => (await invoicePdf(db, invoiceId)).pdf);
   await sendMail(db, actor, { ...v, attachments: [{ filename: `${safe(inv.number!)}.pdf`, content: Buffer.from(pdf), contentType: 'application/pdf' }] });
   await record(db, actor, { action: kind === 'reminder' ? 'reminder' : 'mail', entity: 'invoice', entityId: inv.id, after: { to: v.to, subject: v.subject } });
 }

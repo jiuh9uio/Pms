@@ -5,6 +5,7 @@ import {
 
 const id = () => uuid('id').primaryKey().default(sql`gen_random_uuid()`);
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
+const bytea = customType<{ data: Buffer }>({ dataType: () => 'bytea' });
 const stamps = {
   createdAt: ts('created_at').notNull().defaultNow(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
@@ -486,7 +487,19 @@ export const invoiceLines = pgTable('invoice_lines', {
   unitPriceCents: integer('unit_price_cents').notNull(),
   taxRatePercent: numeric('tax_rate_percent', { precision: 5, scale: 2, mode: 'number' }).notNull(),
   totalCents: integer('total_cents').notNull(),
+  /** Herkunft aus der Reservierung, damit nichts doppelt berechnet wird: Nächte eines Zimmers (von–bis, bis exklusiv) oder eine Leistung */
+  sourceKind: text('source_kind', { enum: ['night', 'charge'] }),
+  sourceId: uuid('source_id'),
+  sourceFrom: date('source_from', { mode: 'string' }),
+  sourceTo: date('source_to', { mode: 'string' }),
 }, (t) => [index('invoice_lines_invoice_idx').on(t.invoiceId)]);
+
+/** Archivkopie: das PDF einer Rechnung, wie es beim Ausstellen erzeugt wurde. Wird nie überschrieben. */
+export const invoiceDocuments = pgTable('invoice_documents', {
+  invoiceId: uuid('invoice_id').primaryKey().references(() => invoices.id),
+  pdf: bytea('pdf').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});
 
 /** Zahlung (negativer Betrag = Erstattung bzw. Gegenbuchung). Nicht änderbar oder löschbar. */
 export const payments = pgTable('payments', {
@@ -498,6 +511,8 @@ export const payments = pgTable('payments', {
   date: date('date', { mode: 'string' }).notNull(),
   payer: text('payer').notNull().default(''),
   note: text('note').notNull().default(''),
+  /** Barzahlung: vom Gast gegebener Betrag (Rückgeld = gegeben − Betrag) */
+  givenCents: integer('given_cents'),
   /** Bei einer Gegenbuchung: die korrigierte Zahlung */
   reversesId: uuid('reverses_id'),
   recordedBy: text('recorded_by').notNull(),
@@ -535,7 +550,6 @@ export const companyRates = pgTable('company_rates', {
 // =====================================================================================
 // E-Rechnung (ZUGFeRD/Factur-X) und E-Mail-Versand
 // =====================================================================================
-const bytea = customType<{ data: Buffer }>({ dataType: () => 'bytea' });
 
 export const einvoices = pgTable('einvoices', {
   id: id(),

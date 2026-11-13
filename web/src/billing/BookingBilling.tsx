@@ -6,6 +6,7 @@ import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
 import { Button, useLoad, useToast } from '../ui.tsx';
 import { InvoiceStatus, PaymentForm, PaymentList } from './InvoiceDialog.tsx';
+import { SettleDialog } from './SettleDialog.tsx';
 
 /** In der Reservierung: Rechnungen, Anzahlungen, Zahlungen und was noch offen ist. */
 export function BookingBilling({ booking }: { booking: BookingDto }) {
@@ -13,6 +14,7 @@ export function BookingBilling({ booking }: { booking: BookingDto }) {
   const toast = useToast();
   const { data } = useLoad(() => api<BookingBillingDto>('GET', `/bookings/${booking.id}/billing`), [booking.id, rev]);
   const [pay, setPay] = useState(false);
+  const [settle, setSettle] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const create = async (include: 'all' | 'lodging' | 'extras') => {
     setBusy(include);
@@ -46,13 +48,15 @@ export function BookingBilling({ booking }: { booking: BookingDto }) {
         </ul>
       )}
       <div className="btnrow">
-        {drafts.length === 0 && <Button variant="primary" busy={busy === 'all'} onClick={() => void create('all')}>Rechnung erstellen</Button>}
-        {drafts.length === 0 && booking.chargesCents > 0 && <>
-          <Button busy={busy === 'lodging'} onClick={() => void create('lodging')}>Nur Übernachtung</Button>
-          <Button busy={busy === 'extras'} onClick={() => void create('extras')}>Nur Extras</Button>
+        <Button variant="primary" onClick={() => setSettle(true)}>Bezahlen / Abrechnen</Button>
+        {drafts.length === 0 && data.uninvoicedCents > 0 && booking.chargesCents > 0 && <>
+          <Button busy={busy === 'lodging'} onClick={() => void create('lodging')}>Rechnung nur Übernachtung</Button>
+          <Button busy={busy === 'extras'} onClick={() => void create('extras')}>Rechnung nur Extras</Button>
         </>}
-        <Button onClick={() => setPay(!pay)} aria-expanded={pay}>{pay ? 'Zahlung schließen' : 'Anzahlung / Zahlung'}</Button>
+        {drafts.length === 0 && data.uninvoicedCents > 0 && <Button busy={busy === 'all'} onClick={() => void create('all')}>Rechnungsentwurf</Button>}
+        <Button onClick={() => setPay(!pay)} aria-expanded={pay}>{pay ? 'Zahlung schließen' : 'Einzelne Zahlung'}</Button>
       </div>
+      {settle && <SettleDialog booking={booking} onClose={() => setSettle(false)} />}
       {pay && <PaymentForm bookingId={booking.id} suggestCents={Math.max(0, balance)} onDone={() => setPay(false)} />}
       {data.payments.length > 0 && <><h3>Zahlungen</h3><PaymentList list={data.payments} /></>}
       {data.unassignedPaidCents !== 0 && <p className="muted small">{formatMoney(data.unassignedPaidCents)} Anzahlung ohne Rechnung – wird beim Ausstellen der nächsten Rechnung verrechnet.</p>}

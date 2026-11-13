@@ -19,7 +19,7 @@ export function Settings() {
     <>
       <PageHeader title="Einstellungen" sub="Angaben zum Haus, E-Mail, Drucker, EC-Gerät, Steuersätze, Hausnetz, Datensicherung und Programm-Update" />
       {bar}
-      {current === 'haus' && <HotelForm />}
+      {current === 'haus' && <><HotelForm /><LogoCard /></>}
       {current === 'email' && <MailSettings />}
       {current === 'drucker' && <><KitchenPrinterCard kind="kitchen" /><KitchenPrinterCard kind="front" /></>}
       {current === 'ecgeraet' && <TerminalCard />}
@@ -167,6 +167,39 @@ function NetworkCard() {
           </p>
         </>
       )}
+    </section>
+  );
+}
+
+/** Logo des Hauses: erscheint auf Rechnungen (oben rechts) und im Startmenü. */
+function LogoCard() {
+  const toast = useToast();
+  const [rev, setRev] = useState(0);
+  const [has, setHas] = useState<boolean | null>(null);
+  useEffect(() => { api<{ present: boolean }>('GET', '/settings/logo-info').then((r) => setHas(r.present)).catch(() => setHas(false)); }, [rev]);
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    if (!['image/png', 'image/jpeg'].includes(file.type)) { toast('Bitte ein PNG- oder JPEG-Bild wählen', 'error'); return; }
+    if (file.size > 400 * 1024) { toast('Das Logo ist zu groß (höchstens 400 kB) – bitte verkleinern', 'error'); return; }
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let bin = ''; for (const b of bytes) bin += String.fromCharCode(b);
+    try { await api('PUT', '/settings/logo', { mime: file.type, dataBase64: btoa(bin) }); toast('Logo gespeichert'); setRev(rev + 1); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+  };
+  const remove = async () => {
+    if (!window.confirm('Logo entfernen?')) return;
+    try { await api('POST', '/settings/logo/remove', {}); toast('Logo entfernt'); setRev(rev + 1); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+  };
+  return (
+    <section className="card">
+      <h2>Logo</h2>
+      <p className="muted">Erscheint oben rechts auf neuen Rechnungen und im Startmenü. Bereits ausgestellte Rechnungen behalten ihr Aussehen.</p>
+      {has && <p><img className="logopreview" src={`/api/v1/settings/logo?v=${rev}`} alt="Aktuelles Logo" /></p>}
+      <div className="formactions">
+        <label className="btn">{has ? 'Anderes Logo wählen' : 'Logo hochladen'}<input type="file" accept="image/png,image/jpeg" hidden onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = ''; }} /></label>
+        {has && <Button variant="danger" onClick={() => void remove()}>Entfernen</Button>}
+      </div>
+      <p className="muted small">PNG oder JPEG, höchstens 400 kB. Am besten quer und mit transparentem oder weißem Hintergrund.</p>
     </section>
   );
 }

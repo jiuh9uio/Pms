@@ -14,7 +14,6 @@ import { EInvoice } from './pages/EInvoice.tsx';
 import { Guests } from './pages/Guests.tsx';
 import { Invoices } from './pages/Invoices.tsx';
 import { Companies } from './pages/Companies.tsx';
-import { InvoicePrint } from './billing/InvoicePrint.tsx';
 import { RegistrationPrint } from './hotel/RegistrationPrint.tsx';
 import { Launcher } from './pages/Launcher.tsx';
 import { Network } from './pages/Network.tsx';
@@ -51,7 +50,7 @@ const NAV = [
   { to: '/fruehstueck', label: 'Frühstück', icon: '☕', admin: false, module: 'hotel' },
   { to: '/gaeste', label: 'Gäste', icon: '☺', admin: false, module: 'hotel' },
   { to: '/firmen', label: 'Firmen', icon: '⌘', admin: false, module: 'hotel', more: true },
-  { to: '/rechnungen', label: 'Rechnungen', icon: '€', admin: false, module: 'hotel' },
+  { to: '/rechnungen', label: 'Rechnungsarchiv', short: 'Rechn.', icon: '€', admin: false, module: 'hotel' },
   { to: '/auswertung', label: 'Auswertung', icon: '◔', admin: false, module: 'hotel', more: true },
   { to: '/zimmer', label: 'Zimmer & Preise', short: 'Zimmer', icon: '⌂', admin: true, more: true, module: 'hotel' },
   { to: '/restaurant', label: 'Tischreservierungen', short: 'Tische', icon: '◍', admin: false, module: 'restaurant' },
@@ -106,7 +105,6 @@ function Shell({ user }: { user: UserDto }) {
   const erechnung = hasModule(user, 'erechnung');
   const internet = hasModule(user, 'internet');
   if (pathname === '/') return <DataProvider><Launcher /></DataProvider>;
-  if (hotel && pathname.startsWith('/rechnung/')) return <Routes><Route path="/rechnung/:id" element={<InvoicePrint />} /></Routes>;
   if (hotel && pathname.startsWith('/meldeschein/')) return <Routes><Route path="/meldeschein/:id" element={<RegistrationPrint />} /></Routes>;
   return (
     <DataProvider>

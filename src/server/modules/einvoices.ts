@@ -2,11 +2,11 @@ import { desc, eq } from 'drizzle-orm';
 import { computeEInvoice, countryCode, type EInvoiceData, type EInvoiceRow } from '../../shared/einvoice.js';
 import type { Db, Exec } from '../db/client.js';
 import { einvoices } from '../db/schema.js';
-import { embedXml, loadPdf, renderInvoicePdf } from '../einvoice/pdf.js';
+import { embedXml, loadPdf } from '../einvoice/pdf.js';
 import { buildXml } from '../einvoice/xml.js';
 import { AppError, conflict, notFound } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
-import { getInvoice } from './billing.js';
+import { getInvoice, invoicePdf } from './billing.js';
 import { sendMail } from './mail.js';
 import { getHotel } from './settings.js';
 
@@ -66,8 +66,8 @@ export async function buildFromInvoice(db: Exec, invoiceId: string) {
   if (data.lines.some((l) => l.unitGrossCents < 0) || computeEInvoice(data).grossCents <= 0)
     throw conflict('Rechnungen mit Nachlass-Positionen oder ohne positiven Betrag werden als E-Rechnung noch nicht unterstützt');
   const xml = buildXml(data);
-  const footer = [i.footer, [i.taxNumber && `Steuernummer: ${i.taxNumber}`, i.vatId && `USt-IdNr.: ${i.vatId}`].filter(Boolean).join(' · '), [i.bankName, i.iban && `IBAN ${i.iban}`, i.bic && `BIC ${i.bic}`].filter(Boolean).join(' · ')];
-  const pdf = await embedXml(await renderInvoicePdf(data, footer), xml, { title: `Rechnung ${inv.number}`, author: i.name, generated: true });
+  // Träger der E-Rechnung ist das archivierte Rechnungs-PDF – dieselbe Datei wie für Druck und Download
+  const pdf = await embedXml(await loadPdf((await invoicePdf(db as Db, invoiceId)).pdf), xml, { title: `Rechnung ${inv.number}`, author: i.name, generated: true });
   return { inv, data, xml, pdf };
 }
 

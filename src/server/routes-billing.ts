@@ -20,8 +20,9 @@ export function registerBillingRoutes(api: FastifyInstance, { db, requireUser, r
 
   api.get('/invoices', user, (req) => {
     const q = z.object({
-      status: z.enum(['open', 'draft', 'issued', 'cancelled']).optional(), q: z.string().max(100).optional(),
+      status: z.enum(['open', 'paid', 'draft', 'issued', 'cancelled', 'archive']).optional(), q: z.string().max(100).optional(),
       from: z.string().refine(isIsoDate).optional(), to: z.string().refine(isIsoDate).optional(),
+      serviceFrom: z.string().refine(isIsoDate).optional(), serviceTo: z.string().refine(isIsoDate).optional(), method: z.enum(B.PAYMENT_METHODS_BILLING).optional(),
     }).parse(req.query);
     return billing.listInvoices(db, q);
   });
@@ -51,13 +52,37 @@ export function registerBillingRoutes(api: FastifyInstance, { db, requireUser, r
   });
   api.post('/invoices/:id/issue', user, async (req) => {
     await billing.issueInvoice(db, actor(req), idOf(req), z.object({ version: z.number().int() }).parse(req.body).version);
+    // Archivkopie sofort anlegen; schlägt das fehl, wird sie beim ersten Abruf erzeugt
+    await billing.invoicePdf(db, idOf(req)).catch((e) => req.log.error(e));
     return billing.getInvoice(db, idOf(req));
   });
-  api.post('/invoices/:id/cancel', user, (req) => billing.cancelInvoice(db, actor(req), idOf(req), B.cancelInput.parse(req.body).reason));
+  // Stornieren darf nur der Administrator
+  api.post('/invoices/:id/cancel', admin, async (req) => {
+    const r = await billing.cancelInvoice(db, actor(req), idOf(req), B.cancelInput.parse(req.body).reason);
+    await billing.invoicePdf(db, r.id).catch((e) => req.log.error(e));
+    return r;
+  });
+  api.get('/invoices/:id/pdf', user, async (req, reply) => {
+    const f = await billing.invoicePdf(db, idOf(req));
+    const download = z.object({ download: z.string().optional() }).parse(req.query).download;
+    return reply.header('Content-Type', 'application/pdf').header('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename="${f.filename}"`).send(f.pdf);
+  });
+  api.get('/settings/logo-info', user, async () => ({ present: !!(await billing.getLogo(db)) }));
+  api.get('/settings/logo', user, async (_req, reply) => {
+    const logo = await billing.getLogo(db);
+    if (!logo) return reply.status(404).send({ error: { code: 'not_found', message: 'Kein Logo hinterlegt' } });
+    return reply.header('Content-Type', logo.mime).header('Cache-Control', 'no-cache').send(logo.data);
+  });
+  api.put('/settings/logo', { ...admin, bodyLimit: 700 * 1024 }, async (req) => {
+    await billing.saveLogo(db, actor(req), z.object({ mime: z.enum(['image/png', 'image/jpeg']), dataBase64: z.string().max(600_000) }).parse(req.body));
+    return { ok: true };
+  });
+  api.post('/settings/logo/remove', admin, async (req) => { await billing.saveLogo(db, actor(req), null); return { ok: true }; });
 
   api.get('/bookings/:id/billing', user, (req) => billing.bookingBilling(db, idOf(req)));
   // ---------- EC-Gerät ----------
   api.get('/terminal/status', user, async () => ({ ready: await terminal.terminalReady(db) }));
+  api.get('/terminal/progress', user, () => terminal.terminalProgress());
   api.post('/payments/terminal', user, (req) => terminal.payByTerminal(db, actor(req), B.terminalPayInput.parse(req.body)));
   api.get('/settings/terminal', admin, () => terminal.getTerminal(db));
   api.put('/settings/terminal', admin, (req) => terminal.saveTerminal(db, actor(req), B.terminalSettingsInput.parse(req.body)));
@@ -65,5 +90,6 @@ export function registerBillingRoutes(api: FastifyInstance, { db, requireUser, r
   api.get('/terminal/log', admin, () => terminal.terminalLog(db));
 
   api.post('/payments', user, (req) => billing.addPayment(db, actor(req), B.paymentInput.parse(req.body)));
-  api.post('/payments/:id/reverse', user, (req) => billing.reversePayment(db, actor(req), idOf(req), B.reverseInput.parse(req.body).note));
+  // Gegenbuchungen (Storno einer Zahlung) darf nur der Administrator
+  api.post('/payments/:id/reverse', admin, (req) => billing.reversePayment(db, actor(req), idOf(req), B.reverseInput.parse(req.body).note));
 }

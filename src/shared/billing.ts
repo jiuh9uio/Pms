@@ -33,6 +33,8 @@ export const paymentInput = z.object({
   bookingId: z.uuid().optional(), invoiceId: z.uuid().optional(),
   amountCents: z.number('Bitte einen Betrag eingeben').int('Ungültiger Betrag').refine((n) => n !== 0, 'Betrag darf nicht 0 sein').refine((n) => Math.abs(n) <= 10_000_000, 'Betrag zu hoch'),
   method: z.enum(PAYMENT_METHODS_BILLING, 'Bitte Zahlungsart wählen'), date: isoDate, payer: text(160), note: text(300),
+  /** Barzahlung: vom Gast gegebener Betrag */
+  givenCents: z.number().int().min(0).max(100_000_000).nullable().optional(),
 }).refine((v) => !!v.bookingId || !!v.invoiceId, { message: 'Reservierung oder Rechnung angeben', path: ['bookingId'] });
 export const reverseInput = z.object({ note: required(300) });
 
@@ -61,14 +63,18 @@ export interface InvoiceDto {
   issuer: IssuerDto | null; lines: InvoiceLineDto[]; payments: PaymentDto[]; taxes: ReturnType<typeof taxBreakdown>;
 }
 export type InvoiceListRow = Omit<InvoiceDto, 'lines' | 'payments' | 'taxes' | 'issuer'>;
-export interface BookingBillingDto { invoices: InvoiceListRow[]; payments: PaymentDto[]; invoicedCents: number; paidCents: number; unassignedPaidCents: number }
+export interface BookingBillingDto { invoices: InvoiceListRow[]; payments: PaymentDto[]; invoicedCents: number; paidCents: number; unassignedPaidCents: number; /** Betrag der Reservierung, der noch auf keiner Rechnung steht */ uninvoicedCents: number }
 
 // ---------- EC-Gerät (Kassenschnittstelle ZVT) ----------
 export const terminalSettingsInput = z.object({
   enabled: z.boolean(), host: z.string().trim().max(15).regex(/^(\d{1,3}(\.\d{1,3}){3})?$/, 'IP-Adresse im Format 192.168.1.60'),
   port: z.number('Bitte eine Zahl eingeben').int().min(1).max(65535),
   password: z.string().regex(/^\d{6}$/, 'Genau 6 Ziffern, meist 000000'),
+  /** Angaben zum Gerät – nur zur Dokumentation und für Rückfragen bei VR Payment */
+  maker: text(60).default(''), model: text(60).default(''), terminalId: text(20).default(''),
 });
+/** Fortschritt einer laufenden Zahlung am EC-Gerät. */
+export interface TerminalProgress { phase: 'idle' | 'preparing' | 'connecting' | 'payment'; since: string | null }
 export type TerminalSettings = z.infer<typeof terminalSettingsInput>;
 export const terminalPayInput = z.object({
   bookingId: z.uuid().optional(), invoiceId: z.uuid().optional(),

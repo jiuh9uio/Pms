@@ -1,5 +1,5 @@
 import { desc, eq } from 'drizzle-orm';
-import type { TerminalLogDto, TerminalSettings } from '../../shared/billing.js';
+import type { TerminalLogDto, TerminalProgress, TerminalSettings } from '../../shared/billing.js';
 import { todayBerlin } from '../../shared/hotel.js';
 import type { Db, Exec } from '../db/client.js';
 import { cardTerminalLog, settings } from '../db/schema.js';
@@ -11,7 +11,7 @@ import { addPayment } from './billing.js';
 
 /** Kartenzahlung über das EC-Gerät: Betrag ans Gerät senden und bei Erfolg als Zahlung „Karte“ buchen. */
 
-const DEFAULT: TerminalSettings = { enabled: false, host: '', port: 20007, password: '000000' };
+const DEFAULT: TerminalSettings = { enabled: false, host: '', port: 20007, password: '000000', maker: '', model: '', terminalId: '' };
 export async function getTerminal(db: Exec): Promise<TerminalSettings> {
   const [row] = await db.select().from(settings).where(eq(settings.key, 'card_terminal'));
   return { ...DEFAULT, ...((row?.value as Partial<TerminalSettings>) ?? {}) };
@@ -19,19 +19,23 @@ export async function getTerminal(db: Exec): Promise<TerminalSettings> {
 export async function saveTerminal(db: Db, actor: Actor, v: TerminalSettings) {
   if (v.host && !isPrivateIp(v.host)) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { host: 'Bitte die IP-Adresse des EC-Geräts im Hausnetz eintragen, z. B. 192.168.1.60' });
   await db.insert(settings).values({ key: 'card_terminal', value: v }).onConflictDoUpdate({ target: settings.key, set: { value: v, updatedAt: new Date() } });
-  await record(db, actor, { action: 'update', entity: 'settings', entityId: 'card_terminal', after: { enabled: v.enabled, host: v.host, port: v.port } });
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: 'card_terminal', after: { enabled: v.enabled, host: v.host, port: v.port, maker: v.maker, model: v.model, terminalId: v.terminalId } });
   return v;
 }
 export const terminalReady = async (db: Exec) => { const t = await getTerminal(db); return t.enabled && !!t.host; };
 
 let busy = false;
+let progress: TerminalProgress = { phase: 'idle', since: null };
+const setPhase = (phase: TerminalProgress['phase']) => { progress = { phase, since: phase === 'idle' ? null : new Date().toISOString() }; };
+export const terminalProgress = () => progress;
 async function run(db: Exec, amountCents: number | null): Promise<ZvtResult> {
   const t = await getTerminal(db);
   if (!t.enabled || !t.host) throw conflict('Das EC-Gerät ist noch nicht eingerichtet (Verwaltung → Einstellungen → EC-Gerät)', 'terminal_not_configured');
   if (busy) throw conflict('Am EC-Gerät läuft gerade ein anderer Vorgang – bitte warten', 'terminal_busy');
   busy = true;
-  try { return await zvtRun({ host: t.host, port: t.port, password: t.password, timeoutMs: Number(process.env.PMS_TERMINAL_TIMEOUT_MS) || undefined }, amountCents); }
-  finally { busy = false; }
+  setPhase('connecting');
+  try { return await zvtRun({ host: t.host, port: t.port, password: t.password, timeoutMs: Number(process.env.PMS_TERMINAL_TIMEOUT_MS) || undefined, onPhase: (p) => setPhase(p === 'payment' ? 'payment' : 'connecting') }, amountCents); }
+  finally { busy = false; setPhase('idle'); }
 }
 
 /** Nur anmelden – es wird nichts abgebucht. */
