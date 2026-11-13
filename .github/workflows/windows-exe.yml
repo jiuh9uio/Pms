@@ -120,6 +120,7 @@ jobs:
           if ($n -lt 50) { throw "Schnelldruck fehlerhaft ($n Bytes)" }
           Write-Host "Schnelldruck WLAN-Zettel: $n Bytes empfangen"
           if ((Invoke-RestMethod "$base/terminal/status" -WebSession $s).ready) { throw 'EC-Gerät ist ohne Einrichtung als bereit gemeldet' }
+          try { Invoke-RestMethod "$base/tse/info" -WebSession $s | Out-Null; throw 'TSE liefert Daten ohne Einrichtung' } catch { if ($_.Exception.Response.StatusCode.value__ -ne 409) { throw "TSE ohne Einrichtung: erwartet 409, erhalten $($_.Exception.Message)" } }
           $gr = Post '/goods-receipts' @{ supplier = 'Test'; goods = 'Ware'; tempC = 3.5; ok = $true; note = '' } $s
           if (-not $gr.id) { throw 'Wareneingang wurde nicht gespeichert' }
           $rep = Invoke-RestMethod "$base/reports/year?year=2031" -WebSession $s

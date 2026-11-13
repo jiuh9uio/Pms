@@ -198,6 +198,20 @@ rechtlich geprüft ist, steht dort ausdrücklich.
 - **Noch offen aus dem Prüfbericht:** Rechnungseditor mit Vorlagen (bisher nur Logo), einstellbares Nummernformat,
   Erprobung des EC-Geräts, XRechnung, validierte ZUGFeRD-Ausgabe.
 
+**Seit Version 1.19.0 zusätzlich – TSE prüfen (Epson):**
+
+- **Was es tut:** Einstellungen → TSE liest über die lokale ePOS-Device-XML-Schnittstelle des „Epson TSE Driver“ (TCP 8009,
+  Gerät `local_TSE`, Typ `type_storage`) die Daten des Sticks (`GetStorageInfo`), das Zertifikat (`GetLogMessageCertificate`)
+  und führt auf Knopfdruck den Selbsttest aus (`RunTSESelfTest`, bis 120 s). Das Datenblatt lässt sich auf dem Bondrucker
+  drucken, das Zertifikat als PEM-Datei speichern. Quelle: Epson „ePOS-Device XML User's Manual“ und „Germany Fiscal Element
+  JSON Specification“ (Rev. C).
+- **Was es bewusst nicht tut:** keine Anmeldung an der TSE (keine PIN, keine PIN-Versuche), keine Inbetriebnahme, keine
+  Zeitsetzung, keine Vorgänge (`StartTransaction`/`FinishTransaction`), kein Export. **Zahlungen im PMS werden nicht mit der TSE
+  signiert**; die Frage, ob das nötig ist, bleibt offen (siehe Abrechnung).
+- **Grenzen:** mit keinem echten Stick erprobt, nur gegen eine nachgebaute Schnittstelle. Der Epson TSE Driver ist laut Epson
+  nur für Windows verfügbar – auf einem Linux-Server lässt sich ein USB-Stick so nicht ansprechen. Öffnet ein anderes Programm
+  die TSE exklusiv (z. B. die Kassensoftware), kann der Zugriff abgelehnt werden.
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

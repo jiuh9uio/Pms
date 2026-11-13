@@ -5,11 +5,12 @@ import { MailSettings } from './MailSettings.tsx';
 import { BackupCard } from './BackupCard.tsx';
 import { KitchenPrinterCard } from './KitchenPrinterCard.tsx';
 import { TerminalCard } from './TerminalCard.tsx';
+import { TseCard } from './TseCard.tsx';
 import { Changelog, UpdateCard } from './UpdateCard.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
 
 export const SETTINGS_TABS = [
-  ['haus', 'Haus'], ['email', 'E-Mail'], ['drucker', 'Drucker'], ['ecgeraet', 'EC-Gerät'], ['steuern', 'Steuersätze'], ['netz', 'Hausnetz'], ['sicherung', 'Datensicherung'], ['update', 'Programm-Update'],
+  ['haus', 'Haus'], ['email', 'E-Mail'], ['drucker', 'Drucker'], ['ecgeraet', 'EC-Gerät'], ['tse', 'TSE'], ['steuern', 'Steuersätze'], ['netz', 'Hausnetz'], ['sicherung', 'Datensicherung'], ['update', 'Programm-Update'],
 ] as const;
 
 /** Einstellungen, aufgeteilt in Reiter – jeder Reiter ist über /einstellungen?ansicht=… direkt erreichbar. */
@@ -17,12 +18,13 @@ export function Settings() {
   const { current, bar } = useTabs(SETTINGS_TABS);
   return (
     <>
-      <PageHeader title="Einstellungen" sub="Angaben zum Haus, E-Mail, Drucker, EC-Gerät, Steuersätze, Hausnetz, Datensicherung und Programm-Update" />
+      <PageHeader title="Einstellungen" sub="Angaben zum Haus, E-Mail, Drucker, EC-Gerät, TSE, Steuersätze, Hausnetz, Datensicherung und Programm-Update" />
       {bar}
       {current === 'haus' && <><HotelForm /><LogoCard /></>}
       {current === 'email' && <MailSettings />}
       {current === 'drucker' && <><KitchenPrinterCard kind="kitchen" /><KitchenPrinterCard kind="front" /></>}
       {current === 'ecgeraet' && <TerminalCard />}
+      {current === 'tse' && <TseCard />}
       {current === 'steuern' && <TaxRates />}
       {current === 'netz' && <NetworkCard />}
       {current === 'sicherung' && <BackupCard />}

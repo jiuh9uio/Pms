@@ -121,3 +121,20 @@ export interface SearchResult { hits: SearchHit[] }
 
 // ---------- „Heute im Haus“ im Startmenü ----------
 export interface OverviewItem { key: string; label: string; value: string; sub: string; to: string; tone: 'neutral' | 'ok' | 'warn' }
+
+// ---------- TSE (Epson): Stick prüfen ----------
+export const tseSettingsInput = z.object({
+  enabled: z.boolean(), host: z.string().trim().regex(/^\d{1,3}(\.\d{1,3}){3}$/, 'IP-Adresse, für diesen Rechner 127.0.0.1'),
+  port: z.number('Bitte eine Zahl eingeben').int().min(1).max(65535),
+});
+export type TseSettings = z.infer<typeof tseSettingsInput>;
+export interface TseInfoDto {
+  readAt: string; vendorType: string; serialNumberHex: string; serialNumberBase64: string; publicKeyBase64: string; signatureAlgorithm: string;
+  /** Zertifikats-ID des BSI */ description: string; cdcId: string;
+  initializationState: string; hasValidTime: boolean | null; hasPassedSelfTest: boolean | null; unlocked: boolean | null; timeUntilNextSelfTest: number | null;
+  certificateExpirationDate: string; lastExportExecutedDate: string;
+  createdSignatures: number | null; remainingSignatures: number | null; maxSignatures: number | null;
+  registeredClients: number | null; maxRegisteredClients: number | null; startedTransactions: number | null;
+  capacityBlocks: number | null; usedBlocks: number | null; softwareVersion: number | null; hardwareVersion: number | null; healthStatus: string;
+  certificatePem: string; certificateFingerprint: string; certificateNote: string;
+}

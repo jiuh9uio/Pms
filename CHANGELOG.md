@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.19.0
+
+- Einstellungen → neuer Reiter „TSE“: Daten des Epson-TSE-Sticks anzeigen (Seriennummer, BSI-Zertifizierung, Gültigkeit, Zustand, Signaturen, Speicher), Selbsttest ausführen, Datenblatt auf dem Bondrucker drucken und das Zertifikat als Datei speichern.
+- Wichtig: Die Seite prüft den Stick nur. Zahlungen im Programm werden weiterhin nicht mit der TSE signiert. Noch nicht mit einem echten Stick erprobt.
+
 ## 1.18.1
 
 - Vorbereitung für den Betrieb auf einem gemieteten Linux-Server: Installationsskript mit verschlüsselter Verbindung (HTTPS), täglicher Sicherung und Update-Befehl. Auf einem solchen Server ist die Gerätesuche im Netz abgeschaltet. Für die Windows-Version ändert sich nichts.

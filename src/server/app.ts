@@ -17,6 +17,7 @@ import * as network from './modules/network.js';
 import * as quickprint from './modules/quickprint.js';
 import { overview } from './modules/overview.js';
 import { search } from './modules/search.js';
+import * as tse from './modules/tse.js';
 import { guestFormInput } from '../shared/hotel.js';
 import * as settings from './modules/settings.js';
 import * as usersMod from './modules/users.js';
@@ -235,6 +236,13 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
       await network.nameDevice(db, actor(req), mac, S.netDeviceNameInput.parse(req.body).name);
       return { ok: true };
     });
+
+    // ---------- TSE prüfen (nur Administrator) ----------
+    api.get('/settings/tse', { preHandler: requireAdmin }, () => tse.getTse(db));
+    api.put('/settings/tse', { preHandler: requireAdmin }, (req) => tse.saveTse(db, actor(req), S.tseSettingsInput.parse(req.body)));
+    api.get('/tse/info', { preHandler: requireAdmin }, () => tse.tseInfo(db));
+    api.post('/tse/selftest', { preHandler: requireAdmin }, (req) => tse.tseSelfTest(db, actor(req)));
+    api.post('/tse/print', { preHandler: requireAdmin }, (req) => tse.printTseSheet(db, actor(req)));
 
     // ---------- Datensicherung (nur Administrator) ----------
     api.get('/backup/status', { preHandler: requireAdmin }, () => getBackupStatus());
