@@ -90,6 +90,17 @@ describe('E-Mail an den Gast', () => {
     expect(sent[1]!.files).toEqual([{ name: d.attachment, head: '%PDF-' }]);
   });
 
+  it('schlägt eine Zahlungserinnerung nur für offene Rechnungen vor', async () => {
+    const [inv] = await ok('GET', '/invoices', admin);
+    const d = await ok('GET', `/invoices/${inv.id}/mail?kind=reminder`, admin);
+    expect(d.subject).toContain('Zahlungserinnerung');
+    expect(d.text).toMatch(/noch ein Betrag von 198,00\s€ offen/);
+    await ok('POST', `/invoices/${inv.id}/mail?kind=reminder`, admin, { to: d.to, subject: d.subject, text: d.text });
+    expect(sent.at(-1)!.subject).toContain('Zahlungserinnerung');
+    await ok('POST', '/payments', admin, { invoiceId: inv.id, amountCents: 19800, method: 'Überweisung', date: new Date().toISOString().slice(0, 10), payer: '', note: '' });
+    expect((await call('GET', `/invoices/${inv.id}/mail?kind=reminder`, admin)).statusCode).toBe(409);
+  });
+
   it('wertet das Jahr je Monat aus', async () => {
     const r = await ok('GET', '/reports/year?year=2031', admin);
     expect(r.rooms).toBe(1);

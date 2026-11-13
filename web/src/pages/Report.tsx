@@ -17,7 +17,8 @@ export function Report() {
       <LoadState error={error} loading={!data} />
       {data && (
         <>
-          <div className="tablewrap card flush"><table>
+          <h2 className="printhead">Auswertung {year} – Auslastung und Umsatz je Monat</h2>
+          <div className="tablewrap card flush printable"><table>
             <thead><tr><th>Monat</th><th className="num">Zimmernächte</th><th>Auslastung</th><th className="num">Logisumsatz gebucht</th><th className="num">Rechnungen</th><th className="num">Rechnungssumme</th></tr></thead>
             <tbody>{data.months.map((m) => (
               <tr key={m.month}>

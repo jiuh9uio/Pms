@@ -204,3 +204,28 @@ describe('Reinigungsprotokoll', () => {
     expect(audit).toEqual(['undo', 'done', 'done']);
   });
 });
+
+describe('Wareneingangskontrolle', () => {
+  it('trägt Lieferungen ein und verlangt bei Beanstandung eine Notiz', async () => {
+    const a = await ok('POST', '/goods-receipts', user, { supplier: 'Metzgerei Muster', goods: 'Frischfleisch', tempC: 3.5, ok: true, note: '' });
+    expect(a).toMatchObject({ date: today, tempC: 3.5, ok: true });
+    const bad = await call('POST', '/goods-receipts', user, { supplier: 'Metzgerei Muster', goods: 'Hackfleisch', tempC: 9, ok: false, note: '' });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().error.fields.note).toBeTruthy();
+    await ok('POST', '/goods-receipts', user, { supplier: 'Getränke Beispiel', goods: 'Fassbier', tempC: null, ok: false, note: 'Fass beschädigt, Annahme verweigert' });
+    const list = await ok('GET', `/goods-receipts?month=${today.slice(0, 7)}`, user);
+    expect(list).toHaveLength(2);
+    expect(list.map((r: { ok: boolean }) => r.ok).sort()).toEqual([false, true]);
+    expect(await ok('GET', '/goods-receipts/suppliers', user)).toEqual(expect.arrayContaining(['Metzgerei Muster', 'Getränke Beispiel']));
+    expect((await ok('GET', '/goods-receipts?month=2020-01', user))).toHaveLength(0);
+  });
+
+  it('löscht nur Einträge von heute', async () => {
+    const [first] = await ok('GET', `/goods-receipts?month=${today.slice(0, 7)}`, user);
+    await db.execute(sql`update goods_receipts set date = ${addDays(today, -1)}::date where id = ${first.id}`);
+    expect((await call('POST', `/goods-receipts/${first.id}/remove`, admin)).statusCode).toBe(409);
+    await db.execute(sql`update goods_receipts set date = ${today}::date where id = ${first.id}`);
+    await ok('POST', `/goods-receipts/${first.id}/remove`, user);
+    expect(await ok('GET', `/goods-receipts?month=${today.slice(0, 7)}`, user)).toHaveLength(1);
+  });
+});

@@ -28,11 +28,21 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
 - **Auswertung (Bereich Hotel):** Zimmernächte, Auslastung, gebuchter Logisumsatz und Rechnungssumme je Monat. Die Auslastung
   bezieht sich auf die heute aktiven Zimmer; Sperren und frühere Zimmerzahlen bleiben unberücksichtigt. Kein Ersatz für die Buchhaltung.
 
+**Seit Version 1.2.0 zusätzlich:**
+
+- **Wareneingangskontrolle** (Kontrollen → Hygieneamt): je Lieferung Lieferant, Ware, optional Temperatur, Befund; bei Beanstandung ist
+  eine Notiz Pflicht. Löschen nur am Tag des Eintrags, danach bleibt der Eintrag stehen. Monatsliste zum Ausdrucken.
+  Welche Wareneingänge in welchem Umfang zu dokumentieren sind, legt der Betrieb mit seinem HACCP-Konzept fest.
+- **Meldeschein** zum Ausdrucken aus der Reservierung, vorausgefüllt aus dem Gästeprofil. Das ist ein Formular zum Unterschreiben –
+  ob und für welche Gäste es nötig ist und wie lange es aufzubewahren ist, wurde **nicht rechtlich geprüft**.
+- **Zahlungserinnerung** per E-Mail für überfällige offene Rechnungen, mit Rechnung im Anhang; der Versand steht im Änderungsprotokoll.
+  Keine Mahnstufen, Mahngebühren oder Verzugszinsen.
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
-- DATEV-Format, Mahnwesen, Kassenfunktion/TSE
+- DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE
 - Aufpreise für Zusatzpersonen und Kinderpreise (derzeit über Sonderpreis je Nacht)
-- Meldeschein-Druck, automatische Löschfristen für Gästedaten
+- Digitaler Meldeschein, automatische Löschfristen für Gästedaten
 - Channel-Manager, Onlinebuchung, automatischer E-Mail-Versand (z. B. Erinnerung vor Anreise)
 
 Der frühere Prototyp liegt unverändert unter `prototype/`.
@@ -127,7 +137,7 @@ Der frühere Prototyp liegt unverändert unter `prototype/`.
   des Sollbereichs, ist die ergriffene Maßnahme einzutragen.
 - Jeder Wert wird mit Namen und Zeitpunkt der Erfassung gespeichert; nachträglich eingetragene Werte sind gekennzeichnet,
   Korrekturen stehen mit altem und neuem Wert im Änderungsprotokoll. Ein Datum in der Zukunft ist nicht möglich.
-- Nicht enthalten: automatische Übernahme aus Funk-Thermometern/Datenloggern, Reinigungspläne zum Abzeichnen, Wareneingangskontrolle.
+- Nicht enthalten: automatische Übernahme aus Funk-Thermometern/Datenloggern, Schädlingsmonitoring, Schulungsnachweise.
 
 ### So ist der Hotelbetrieb umgesetzt
 

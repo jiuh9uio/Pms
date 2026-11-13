@@ -3,7 +3,7 @@ import { mailSendInput, type MailDraft } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
 import { Button, Dialog, Field, LoadState, useLoad, useSubmit, useToast } from '../ui.tsx';
 
-/** E-Mail an den Gast: Vorschlag laden, anpassen, senden. path = /bookings/<id>/mail oder /invoices/<id>/mail */
+/** E-Mail an den Gast: Vorschlag laden, anpassen, senden. path = /bookings/<id>/mail oder /invoices/<id>/mail?kind=invoice|reminder */
 export function MailDialog({ path, title, onClose, onSent }: { path: string; title: string; onClose: () => void; onSent?: () => void }) {
   const toast = useToast();
   const { data, error } = useLoad(() => api<MailDraft>('GET', path), [path]);

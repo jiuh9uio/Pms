@@ -79,6 +79,8 @@ jobs:
 
           $bak = Post '/backup/run' @{} $s
           if (-not $bak.last.file) { throw 'Sicherung auf Knopfdruck hat nichts geschrieben' }
+          $gr = Post '/goods-receipts' @{ supplier = 'Test'; goods = 'Ware'; tempC = 3.5; ok = $true; note = '' } $s
+          if (-not $gr.id) { throw 'Wareneingang wurde nicht gespeichert' }
           $rep = Invoke-RestMethod "$base/reports/year?year=2031" -WebSession $s
           if ($rep.total.nights -ne 3) { throw "Auswertung falsch: $($rep.total | ConvertTo-Json)" }
           Start-Sleep 1

@@ -14,6 +14,7 @@ import { Guests } from './pages/Guests.tsx';
 import { Invoices } from './pages/Invoices.tsx';
 import { Companies } from './pages/Companies.tsx';
 import { InvoicePrint } from './billing/InvoicePrint.tsx';
+import { RegistrationPrint } from './hotel/RegistrationPrint.tsx';
 import { Launcher } from './pages/Launcher.tsx';
 import { Login } from './pages/Login.tsx';
 import { Plan } from './pages/Plan.tsx';
@@ -96,6 +97,7 @@ function Shell({ user }: { user: UserDto }) {
   const erechnung = hasModule(user, 'erechnung');
   if (pathname === '/') return <Launcher />;
   if (hotel && pathname.startsWith('/rechnung/')) return <Routes><Route path="/rechnung/:id" element={<InvoicePrint />} /></Routes>;
+  if (hotel && pathname.startsWith('/meldeschein/')) return <Routes><Route path="/meldeschein/:id" element={<RegistrationPrint />} /></Routes>;
   return (
     <div className="shell">
       <aside className="sidebar">

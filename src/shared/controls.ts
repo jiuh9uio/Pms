@@ -57,3 +57,11 @@ export interface CleaningTaskDto {
 }
 export interface CleaningEntryDto { taskId: string; date: string; userName: string; doneAt: string }
 export interface CleaningDueDto { areaId: string; areaName: string; tasks: { id: string; name: string; intervalDays: number }[] }
+
+// ---------- Wareneingangskontrolle ----------
+export const goodsReceiptInput = z.object({
+  supplier: required(120), goods: required(200),
+  tempC: z.number('Bitte eine Zahl eingeben').min(-60, 'Mindestens −60').max(60, 'Höchstens 60').nullable(),
+  ok: z.boolean(), note: text(500),
+}).refine((v) => v.ok || v.note.length > 0, { path: ['note'], message: 'Bei einer Beanstandung bitte kurz notieren, was nicht in Ordnung war und was damit geschah' });
+export interface GoodsReceiptDto { id: string; date: string; supplier: string; goods: string; tempC: number | null; ok: boolean; note: string; userName: string; createdAt: string }

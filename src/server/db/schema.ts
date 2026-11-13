@@ -335,6 +335,20 @@ export const cleaningLog = pgTable('cleaning_log', {
   doneAt: ts('done_at').notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.taskId, t.date] })]);
 
+/** Wareneingangskontrolle: je Lieferung ein Eintrag mit Befund; Korrektur nur am selben Tag (danach bleibt der Eintrag stehen). */
+export const goodsReceipts = pgTable('goods_receipts', {
+  id: id(),
+  date: date('date', { mode: 'string' }).notNull(),
+  supplier: text('supplier').notNull(),
+  goods: text('goods').notNull(),
+  /** gemessene Temperatur bei Kühl-/Tiefkühlware; leer = nicht gemessen */
+  tempC: numeric('temp_c', { precision: 5, scale: 1, mode: 'number' }),
+  ok: boolean('ok').notNull(),
+  note: text('note').notNull().default(''),
+  userName: text('user_name').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+}, (t) => [index('goods_receipts_date_idx').on(t.date)]);
+
 // =====================================================================================
 // Abrechnung: Rechnungen, Stornobelege, Zahlungen
 // =====================================================================================

@@ -263,7 +263,7 @@ input.bad { border-color: var(--danger); background: var(--danger-soft); }
   .sidebar nav a.menu { border: 0; margin: 0; padding-bottom: 6px; } .sidebar nav a.konto { margin: 0; }
 }
 @media print {
-  .sidebar, .noprint, .pagehead, .crumb, .toasts, .card:not(.hygiene), .hygiene .cardhead p { display: none !important; }
+  .sidebar, .noprint, .pagehead, .crumb, .toasts, .card:not(.hygiene):not(.printable), .hygiene .cardhead p { display: none !important; }
   .shell { display: block; } .content { padding: 0; max-width: none; } body { background: #fff; color: #000; }
   .card.hygiene { border: 0; box-shadow: none; padding: 0; } .hide-sm { display: table-cell !important; }
   table.temps td, table.temps th { padding: 4px 6px; border: 1px solid #999; font-size: 11px; } .temp.bad { color: #000; text-decoration: underline; }
@@ -286,7 +286,7 @@ fieldset.checks { border: 1px solid var(--line); border-radius: 8px; padding: 10
 .checklist li.off { opacity: .55; } .checklist .right { margin-left: auto; text-align: right; }
 .chips.small { margin: 6px 0 0; display: flex; gap: 6px; flex-wrap: wrap; } .chips.small .chip { padding: 3px 10px; font-size: 12px; }
 @media print {
-  body[data-print='cleaning'] .hygiene:not(.cleaning), body[data-print='temp'] .cleaning { display: none !important; }
+  body[data-print='cleaning'] .hygiene:not(.cleaning), body[data-print='temp'] .cleaning, body[data-print='temp'] .goods, body[data-print='goods'] .hygiene:not(.goods) { display: none !important; }
 }
 
 /* ===================== Abrechnung ===================== */
@@ -337,3 +337,10 @@ ol.steps, ul.bullets { margin: 0 0 10px; padding-left: 20px; display: grid; gap:
 .bar { display: inline-block; height: 8px; border-radius: 4px; background: var(--accent); vertical-align: middle; margin-right: 8px; min-width: 1px; }
 .barcell { min-width: 150px; white-space: nowrap; }
 tfoot td { font-weight: 600; border-top: 2px solid var(--border); }
+
+.printhead { display: none; } @media print { .printhead { display: block; font-size: 16px; margin: 0 0 8px; } .card.printable { border: 0; box-shadow: none; } }
+/* Meldeschein */
+.regform h1 { font-size: 20px; margin: 24px 0 12px; } .regform table { width: 100%; border-collapse: collapse; }
+.regform th { text-align: left; font-weight: 500; width: 46%; padding: 9px 10px 9px 0; border-bottom: 1px solid #bbb; vertical-align: bottom; background: none; }
+.regform td { border-bottom: 1px solid #bbb; padding: 9px 0; height: 38px; }
+.regform .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 70px; } .regform .signatures span { border-top: 1px solid #000; padding-top: 6px; font-size: 12px; }

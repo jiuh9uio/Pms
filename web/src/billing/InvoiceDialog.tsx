@@ -33,7 +33,7 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
   const { data: inv, error } = useLoad(() => api<InvoiceDto>('GET', `/invoices/${id}`), [id, rev]);
   const [busy, setBusy] = useState(false);
   const [cancel, setCancel] = useState(false);
-  const [mail, setMail] = useState(false);
+  const [mail, setMail] = useState<false | 'invoice' | 'reminder'>(false);
 
   const issue = async () => {
     if (!inv || !window.confirm('Rechnung jetzt ausstellen? Danach vergibt das Programm die Rechnungsnummer und die Rechnung kann nicht mehr geändert, nur noch storniert werden.')) return;
@@ -68,7 +68,8 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
         {inv.status === 'issued' && inv.kind === 'invoice' && <Button variant="danger" className="left" onClick={() => setCancel(true)}>Stornieren</Button>}
         {inv.bookingId && <Button onClick={() => openBooking(inv.bookingId!)}>Reservierung {inv.bookingNumber}</Button>}
         {inv.status === 'issued' && inv.kind === 'invoice' && hasModule(user, 'erechnung') && <Button busy={busy} onClick={() => void einvoice()}>E-Rechnung</Button>}
-        {inv.status === 'issued' && inv.kind === 'invoice' && <Button onClick={() => setMail(true)}>Per E-Mail senden</Button>}
+        {inv.status === 'issued' && inv.kind === 'invoice' && <Button onClick={() => setMail('invoice')}>Per E-Mail senden</Button>}
+        {inv.status === 'issued' && inv.kind === 'invoice' && inv.openCents > 0 && inv.dueDate && inv.dueDate < todayBerlin() && <Button onClick={() => setMail('reminder')}>Zahlungserinnerung</Button>}
         <a className="btn" href={`/rechnung/${id}`} target="_blank" rel="noopener">{inv.status === 'draft' ? 'Vorschau' : 'Drucken / PDF'}</a>
         {inv.status === 'draft' ? <Button variant="primary" busy={busy} onClick={() => void issue()}>Ausstellen</Button> : <Button onClick={onClose}>Schließen</Button>}
       </>}>
@@ -103,7 +104,7 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
           </aside>
         </div>
       )}
-      {inv && mail && <MailDialog path={`/invoices/${id}/mail`} title={`Rechnung ${inv.number} per E-Mail`} onClose={() => setMail(false)} onSent={bump} />}
+      {inv && mail && <MailDialog path={`/invoices/${id}/mail?kind=${mail}`} title={mail === 'reminder' ? `Zahlungserinnerung zur Rechnung ${inv.number}` : `Rechnung ${inv.number} per E-Mail`} onClose={() => setMail(false)} onSent={bump} />}
       {inv && cancel && <CancelDialog inv={inv} onClose={() => setCancel(false)} onDone={(newId) => { setCancel(false); openInvoice(newId); }} />}
     </Dialog>
   );

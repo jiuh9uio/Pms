@@ -5,6 +5,7 @@ import { isIsoDate } from '../shared/hotel.js';
 import type { Db } from './db/client.js';
 import type { Actor } from './modules/audit.js';
 import * as controls from './modules/controls.js';
+import * as goods from './modules/goods.js';
 
 interface Ctx {
   db: Db;
@@ -52,6 +53,14 @@ export function registerControlRoutes(api: FastifyInstance, { db, requireUser, r
     return controls.listReadings(db, q.from, q.to);
   });
   // Reinigungsprotokoll
+  api.get('/goods-receipts', user, (req) => goods.listReceipts(db, z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) }).parse(req.query).month));
+  api.get('/goods-receipts/suppliers', user, () => goods.suppliers(db));
+  api.post('/goods-receipts', user, (req) => goods.addReceipt(db, actor(req), C.goodsReceiptInput.parse(req.body)));
+  api.post('/goods-receipts/:id/remove', user, async (req) => {
+    await goods.removeReceipt(db, actor(req), idOf(req));
+    return { ok: true };
+  });
+
   api.get('/cleaning/tasks', user, () => controls.listCleaningTasks(db));
   api.post('/cleaning/tasks', admin, (req) => controls.saveCleaningTask(db, actor(req), null, C.cleaningTaskInput.parse(req.body)));
   api.put('/cleaning/tasks/:id', admin, (req) => controls.saveCleaningTask(db, actor(req), idOf(req), C.cleaningTaskInput.parse(req.body), versionOf(req)));

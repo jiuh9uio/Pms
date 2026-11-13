@@ -38,7 +38,7 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
   const guestName = b ? [b.guest.firstName, b.guest.lastName].filter(Boolean).join(' ') : '';
   return (
     <Dialog title={b ? <>Reservierung {b.number} <span className="muted light">· {guestName}</span></> : 'Reservierung'} onClose={onClose} size="xl"
-      footer={<>{b && <Button onClick={() => setMail(true)}>Bestätigung per E-Mail</Button>}<Button onClick={onClose}>Schließen</Button></>}>
+      footer={<>{b && <a className="btn" href={`/meldeschein/${b.id}`} target="_blank" rel="noopener">Meldeschein</a>}{b && <Button onClick={() => setMail(true)}>Bestätigung per E-Mail</Button>}<Button onClick={onClose}>Schließen</Button></>}>
       {!b ? <LoadState error={error} loading /> : (
         <div className="split">
           <div>

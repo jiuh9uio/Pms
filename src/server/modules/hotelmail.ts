@@ -56,10 +56,24 @@ export async function sendBookingMail(db: Db, actor: Actor, bookingId: string, v
   await record(db, actor, { action: 'mail', entity: 'booking', entityId: b.id, after: { to: v.to, subject: v.subject } });
 }
 
-export async function invoiceMailDraft(db: Exec, invoiceId: string): Promise<MailDraft> {
+export type InvoiceMailKind = 'invoice' | 'reminder';
+
+export async function invoiceMailDraft(db: Exec, invoiceId: string, kind: InvoiceMailKind = 'invoice'): Promise<MailDraft> {
   const { inv } = await buildFromInvoice(db, invoiceId);
+  if (kind === 'reminder' && inv.openCents <= 0) throw conflict('Die Rechnung ist bereits bezahlt – eine Zahlungserinnerung ist nicht nötig');
   const h = await getHotel(db);
   const guest = inv.bookingId ? (await getBooking(db, inv.bookingId)).guest : null;
+  if (kind === 'reminder') {
+    const text = [
+      guest ? greeting(guest) : 'Guten Tag,', '',
+      `sicher ist es Ihrer Aufmerksamkeit entgangen: Für die Rechnung ${inv.number} vom ${de(inv.issueDate!)} über ${formatMoney(inv.grossCents)} ist noch ein Betrag von ${formatMoney(inv.openCents)} offen${inv.dueDate ? ` (fällig seit dem ${de(inv.dueDate)})` : ''}.`,
+      '', 'Wir bitten Sie, den offenen Betrag in den nächsten Tagen unter Angabe der Rechnungsnummer zu überweisen.',
+      inv.issuer?.iban ? `Bankverbindung: ${[inv.issuer.bankName, `IBAN ${inv.issuer.iban}`, inv.issuer.bic && `BIC ${inv.issuer.bic}`].filter(Boolean).join(', ')}` : '',
+      '', 'Sollten Sie die Zahlung inzwischen veranlasst haben, betrachten Sie dieses Schreiben bitte als gegenstandslos. Die Rechnung liegt zur Erinnerung noch einmal bei.',
+      '', signature(h),
+    ].filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n');
+    return { to: guest?.email ?? '', subject: `Zahlungserinnerung zur Rechnung ${inv.number} – ${h.name}`, text, attachment: `${safe(inv.number!)}.pdf`, ready: await ready(db) };
+  }
   const text = [
     guest ? greeting(guest) : 'Guten Tag,', '',
     `anbei erhalten Sie die Rechnung ${inv.number} vom ${de(inv.issueDate!)} über ${formatMoney(inv.grossCents)}.`,
@@ -72,8 +86,9 @@ export async function invoiceMailDraft(db: Exec, invoiceId: string): Promise<Mai
   return { to: guest?.email ?? '', subject: `Rechnung ${inv.number} – ${h.name}`, text, attachment: `${safe(inv.number!)}.pdf`, ready: await ready(db) };
 }
 
-export async function sendInvoiceMail(db: Db, actor: Actor, invoiceId: string, v: { to: string; subject: string; text: string }) {
+export async function sendInvoiceMail(db: Db, actor: Actor, invoiceId: string, v: { to: string; subject: string; text: string }, kind: InvoiceMailKind = 'invoice') {
   const { inv, pdf } = await buildFromInvoice(db, invoiceId);
+  if (kind === 'reminder' && inv.openCents <= 0) throw conflict('Die Rechnung ist bereits bezahlt – eine Zahlungserinnerung ist nicht nötig');
   await sendMail(db, actor, { ...v, attachments: [{ filename: `${safe(inv.number!)}.pdf`, content: Buffer.from(pdf), contentType: 'application/pdf' }] });
-  await record(db, actor, { action: 'mail', entity: 'invoice', entityId: inv.id, after: { to: v.to, subject: v.subject } });
+  await record(db, actor, { action: kind === 'reminder' ? 'reminder' : 'mail', entity: 'invoice', entityId: inv.id, after: { to: v.to, subject: v.subject } });
 }

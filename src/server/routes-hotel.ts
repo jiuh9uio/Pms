@@ -113,9 +113,10 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
     await hotelmail.sendBookingMail(db, actor(req), idOf(req), H.mailSendInput.parse(req.body));
     return { ok: true };
   });
-  api.get('/invoices/:id/mail', user, (req) => hotelmail.invoiceMailDraft(db, idOf(req)));
+  const mailKind = (req: FastifyRequest) => z.object({ kind: z.enum(['invoice', 'reminder']).default('invoice') }).parse(req.query).kind;
+  api.get('/invoices/:id/mail', user, (req) => hotelmail.invoiceMailDraft(db, idOf(req), mailKind(req)));
   api.post('/invoices/:id/mail', user, async (req) => {
-    await hotelmail.sendInvoiceMail(db, actor(req), idOf(req), H.mailSendInput.parse(req.body));
+    await hotelmail.sendInvoiceMail(db, actor(req), idOf(req), H.mailSendInput.parse(req.body), mailKind(req));
     return { ok: true };
   });
   api.get('/bookings/:id/history', user, async (req) => (await listAudit(db, { entity: 'booking', entityId: idOf(req), limit: 200 })).items);
