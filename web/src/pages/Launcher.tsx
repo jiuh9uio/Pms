@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { ROLE_LABEL, hasModule, type Module } from '../../../src/shared/schemas.js';
 import { useAuth, useLogout } from '../App.tsx';
 import { api } from '../api.ts';
+import { Search } from '../Search.tsx';
 import { useLoad } from '../ui.tsx';
 import { backupWarning, type BackupStatus } from './BackupCard.tsx';
 import type { UpdateStatus } from './UpdateCard.tsx';
@@ -33,8 +34,9 @@ export function Launcher() {
         <div className="brand big"><span className="mark">S</span><span>Schützenhaus<small>Hotel &amp; Restaurant</small></span></div>
         <p className="muted">{user.name} · {ROLE_LABEL[user.role]} <button type="button" className="btn" onClick={() => void logout()}>Abmelden</button></p>
       </header>
-      {upd?.available && <p className="notice warn">Programm-Update verfügbar: Version {upd.latest}. <Link to="/einstellungen">Jetzt ansehen und einspielen</Link></p>}
-      {bakWarn && <p className="notice danger">{bakWarn} <Link to="/einstellungen">Zur Datensicherung</Link></p>}
+      <Search variant="big" />
+      {upd?.available && <p className="notice warn">Programm-Update verfügbar: Version {upd.latest}. <Link to="/einstellungen?ansicht=update">Jetzt ansehen und einspielen</Link></p>}
+      {bakWarn && <p className="notice danger">{bakWarn} <Link to="/einstellungen?ansicht=sicherung">Zur Datensicherung</Link></p>}
       <nav className="tiles" aria-label="Bereiche">
         {tiles.map((t) => (
           <Link key={t.to} to={t.to} className="tile">

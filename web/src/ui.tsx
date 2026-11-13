@@ -2,6 +2,7 @@ import {
   createContext, useCallback, useContext, useEffect, useRef, useState,
   type ButtonHTMLAttributes, type FormEvent, type ReactNode,
 } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { ZodType } from 'zod';
 import { ApiFailure } from './api.ts';
 
@@ -137,3 +138,22 @@ export function printOnly(which: 'temp' | 'cleaning' | 'goods' | 'wifi') {
 
 export const fmtDateTime = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '–';
+
+/**
+ * Reiter innerhalb einer Seite. Der gewählte Reiter steht in der Adresse (?ansicht=…), damit Verweise und die Suche
+ * direkt dorthin führen und „Zurück“ im Browser funktioniert.
+ */
+export function useTabs<K extends string>(tabs: readonly (readonly [K, string])[], param = 'ansicht') {
+  const [params, setParams] = useSearchParams();
+  const wanted = params.get(param);
+  const current = (tabs.find(([k]) => k === wanted)?.[0] ?? tabs[0]![0]) as K;
+  const bar = (
+    <div className="tabs noprint" role="tablist">
+      {tabs.map(([k, label]) => (
+        <button key={k} type="button" role="tab" aria-selected={k === current} className={k === current ? 'on' : ''}
+          onClick={() => { const next = new URLSearchParams(params); next.set(param, k); setParams(next, { replace: false }); }}>{label}</button>
+      ))}
+    </div>
+  );
+  return { current, bar };
+}

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { wifiSettingsInput, type InternetStatusDto, type NetDeviceDto, type NetOutagesDto, type NetScanDto, type WifiDto } from '../../../src/shared/schemas.js';
 import { useAuth } from '../App.tsx';
 import { api } from '../api.ts';
-import { Badge, Button, Dialog, Field, LoadState, PageHeader, fmtDateTime, printOnly, useLoad, useSubmit, useToast } from '../ui.tsx';
+import { Badge, Button, Dialog, Field, LoadState, PageHeader, fmtDateTime, printOnly, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
 
 const duration = (a: string, b: string) => {
   const min = Math.max(1, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60_000));
@@ -85,7 +85,23 @@ function InternetCard() {
 }
 
 /** Bereich „Internet“: Verbindung prüfen und Geräte im Hausnetz anzeigen. Für Administratoren und freigegebene Benutzer. */
+export const NET_TABS = [['verbindung', 'Internetverbindung'], ['wlan', 'Gäste-WLAN'], ['geraete', 'Geräte im Netz']] as const;
+
 export function Network() {
+  const { current, bar } = useTabs(NET_TABS);
+  return (
+    <>
+      <PageHeader title="Internet" sub="Internetverbindung und Geräte, die gerade im selben Netz wie dieser Rechner erreichbar sind" />
+      {bar}
+      {current === 'verbindung' && <InternetCard />}
+      {current === 'wlan' && <WifiCard />}
+      {current === 'geraete' && <DeviceList />}
+    </>
+  );
+}
+
+/** Geräte, die gerade im selben Netz wie der PMS-Rechner erreichbar sind. */
+function DeviceList() {
   const toast = useToast();
   const [rev, setRev] = useState(0);
   const { data, error } = useLoad(() => api<NetScanDto>('GET', '/network/devices'), [rev]);
@@ -107,11 +123,7 @@ export function Network() {
   const off = s?.devices.filter((d) => !d.online).length ?? 0;
   return (
     <>
-      <PageHeader title="Internet" sub="Internetverbindung und Geräte, die gerade im selben Netz wie dieser Rechner erreichbar sind"
-        actions={<Button variant="primary" busy={!s && !error} onClick={rescan}>Neu suchen</Button>} />
-      <InternetCard />
-      <WifiCard />
-      <h2>Geräte im Netz</h2>
+      <div className="cardhead"><h2>Geräte im Netz</h2><div className="actions"><Button variant="primary" busy={!s && !error} onClick={rescan}>Neu suchen</Button></div></div>
       {!s && <LoadState error={error} loading />}
       {!s && !error && <p className="muted">Das Netz wird durchsucht – das dauert einige Sekunden.</p>}
       {s && (

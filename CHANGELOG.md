@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.15.0
+
+- Übersichtlicher: Volle Seiten sind jetzt in Reiter aufgeteilt – Einstellungen (Haus, E-Mail, Drucker, Steuersätze, Hausnetz, Datensicherung, Programm-Update), Zimmer & Preise, Kontrollen (Temperatur, Reinigung, Wareneingang, Unterlagen, Kontrollbesuche) und Internet.
+- Neue Suche im Startmenü und in der Seitenleiste (auch mit Strg+K): findet Seiten und Einstellungen sowie Gäste, Reservierungen, Rechnungen, Firmen und Tischreservierungen.
+
 ## 1.14.0
 
 Schnelldruck erweitert:

@@ -26,6 +26,7 @@ import { Restaurant } from './pages/Restaurant.tsx';
 import { RoomsPrices } from './pages/RoomsPrices.tsx';
 import { Settings } from './pages/Settings.tsx';
 import { Users } from './pages/Users.tsx';
+import { Search } from './Search.tsx';
 import { ToastProvider } from './ui.tsx';
 
 interface AuthState { needsSetup: boolean; user: UserDto | null }
@@ -104,15 +105,17 @@ function Shell({ user }: { user: UserDto }) {
   const kontrollen = hasModule(user, 'kontrollen');
   const erechnung = hasModule(user, 'erechnung');
   const internet = hasModule(user, 'internet');
-  if (pathname === '/') return <Launcher />;
+  if (pathname === '/') return <DataProvider><Launcher /></DataProvider>;
   if (hotel && pathname.startsWith('/rechnung/')) return <Routes><Route path="/rechnung/:id" element={<InvoicePrint />} /></Routes>;
   if (hotel && pathname.startsWith('/meldeschein/')) return <Routes><Route path="/meldeschein/:id" element={<RegistrationPrint />} /></Routes>;
   return (
+    <DataProvider>
     <div className="shell">
       <aside className="sidebar">
         <div className="brand"><span className="mark">S</span><span>Schützenhaus<small>{module ? MODULE_TITLE[module] : 'PMS'}</small></span></div>
         <nav aria-label="Hauptnavigation">
           <NavLink to="/" end className="menu"><span className="ico" aria-hidden>☰</span><span className="full">Menü</span><span className="short">Menü</span></NavLink>
+          <Search variant="nav" />
           {nav.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.to === '/hotel'} className={n.more ? 'more' : undefined}><span className="ico" aria-hidden>{n.icon}</span><span className="full">{n.label}</span><span className="short">{n.short ?? n.label}</span></NavLink>
           ))}
@@ -121,7 +124,6 @@ function Shell({ user }: { user: UserDto }) {
         <div className="whoami"><b>{user.name}</b><span>{ROLE_LABEL[user.role]}</span><button type="button" className="linkbtn" onClick={() => void logout()}>Abmelden</button></div>
       </aside>
       <main className="content">
-        <DataProvider>
         <Routes>
           {hotel && <Route path="/hotel" element={<Dashboard />} />}
           {erechnung && <Route path="/erechnung" element={<EInvoice />} />}
@@ -144,8 +146,8 @@ function Shell({ user }: { user: UserDto }) {
           {isAdmin && <Route path="/einstellungen" element={<Settings />} />}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-        </DataProvider>
       </main>
     </div>
+    </DataProvider>
   );
 }

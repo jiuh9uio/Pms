@@ -114,3 +114,7 @@ export const slipSuggestionsInput = z.object({ keys: z.array(z.string().max(40))
 /** Kennzeichen für Stellen, die der Betrieb in einer Vorlage noch ausfüllen muss. */
 export const PLACEHOLDER = '(bitte eintragen)';
 export interface QuickPrintDto { printerReady: boolean; printerName: string; slips: QuickSlipDto[] }
+
+// ---------- Suche ----------
+export interface SearchHit { kind: 'guest' | 'booking' | 'invoice' | 'company' | 'table'; id: string; title: string; sub: string }
+export interface SearchResult { hits: SearchHit[] }

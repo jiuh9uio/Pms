@@ -8,7 +8,7 @@ import {
 import { api } from '../api.ts';
 import { useData } from '../data.tsx';
 import { WD, deDate } from '../hotel/common.tsx';
-import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useToast } from '../ui.tsx';
+import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useToast, useTabs } from '../ui.tsx';
 
 type Value = string | boolean | number[];
 type Draft = Record<string, Value>;
@@ -88,6 +88,8 @@ export function MasterDialog({ title, fields, initial, schema, path, id, version
   );
 }
 
+export const ROOM_TABS = [['kategorien', 'Kategorien'], ['zimmer', 'Zimmer'], ['regeln', 'Preisregeln'], ['leistungen', 'Frühstück und Leistungen']] as const;
+
 function Section({ title, hint, add, extra, children }: { title: string; hint?: string; add: () => void; extra?: ReactNode; children: ReactNode }) {
   return (
     <section className="card">
@@ -109,6 +111,7 @@ export function RoomsPrices() {
     return { cats, rooms, rules, services, taxes: taxes.filter((t) => t.active) };
   }, [rev]);
   const [dlg, setDlg] = useState<ReactNode>(null);
+  const { current, bar } = useTabs(ROOM_TABS);
   const close = () => setDlg(null);
   if (!data) return <><PageHeader title="Zimmer & Preise" /><LoadState error={error} loading /></>;
   const { cats, rooms, rules, services, taxes } = data;
@@ -175,7 +178,8 @@ export function RoomsPrices() {
       {rooms.length === 0 && (
         <p className="notice">So richten Sie das Haus ein: <b>1.</b> Kategorien anlegen (Art des Zimmers und Preis je Nacht), <b>2.</b> unter „Zimmer“ mit „Mehrere anlegen“ die Anzahl je Kategorie eintragen, <b>3.</b> bei Bedarf Preisregeln und Frühstück ergänzen. Alles lässt sich später ändern.</p>
       )}
-      <Section title="Kategorien" add={() => editCat()}>
+      {bar}
+      {current === 'kategorien' && <Section title="Kategorien" add={() => editCat()}>
         {cats.length === 0 ? <p className="muted">Zuerst eine Kategorie anlegen (z. B. Einzelzimmer, Doppelzimmer), danach die Zimmer.</p> : (
           <div className="tablewrap"><table>
             <thead><tr><th>Kategorie</th><th className="num">Grundpreis</th><th className="num">Belegung</th><th className="num">Zimmer</th></tr></thead>
@@ -185,8 +189,8 @@ export function RoomsPrices() {
             ))}</tbody>
           </table></div>
         )}
-      </Section>
-      <Section title="Zimmer" hint={`${rooms.filter((r) => r.active).length} buchbare Zimmer`} add={() => (cats.length ? editRoom() : editCat())}
+      </Section>}
+      {current === 'zimmer' && <Section title="Zimmer" hint={`${rooms.filter((r) => r.active).length} buchbare Zimmer`} add={() => (cats.length ? editRoom() : editCat())}
         extra={cats.length > 0 && <Button onClick={addMany}>Mehrere anlegen</Button>}>
         {rooms.length === 0 ? <p className="muted">Noch keine Zimmer angelegt.</p> : (
           <div className="tablewrap"><table>
@@ -197,8 +201,8 @@ export function RoomsPrices() {
             ))}</tbody>
           </table></div>
         )}
-      </Section>
-      <Section title="Preisregeln" hint="Saison-, Wochenend- und Aktionspreise. Regeln wirken nur auf neue Buchungen; gebuchte Preise bleiben bestehen." add={() => editRule()}>
+      </Section>}
+      {current === 'regeln' && <Section title="Preisregeln" hint="Saison-, Wochenend- und Aktionspreise. Regeln wirken nur auf neue Buchungen; gebuchte Preise bleiben bestehen." add={() => editRule()}>
         {rules.length === 0 ? <p className="muted">Keine Regeln – es gilt immer der Grundpreis.</p> : (
           <div className="tablewrap"><table>
             <thead><tr><th>Name</th><th>Zeitraum</th><th className="hide-sm">Tage</th><th className="hide-sm">Kategorie</th><th className="num">Wert</th><th className="num hide-sm">Priorität</th><th>Status</th></tr></thead>
@@ -209,8 +213,8 @@ export function RoomsPrices() {
             ))}</tbody>
           </table></div>
         )}
-      </Section>
-      <Section title="Frühstück und Zusatzleistungen" add={() => editService()}>
+      </Section>}
+      {current === 'leistungen' && <Section title="Frühstück und Zusatzleistungen" add={() => editService()}>
         {services.length === 0 ? <p className="muted">Noch keine Leistungen angelegt (z. B. Frühstück, Parkplatz, Haustier).</p> : (
           <div className="tablewrap"><table>
             <thead><tr><th>Leistung</th><th className="num">Preis</th><th>Berechnung</th><th className="num">MwSt.</th><th>Status</th></tr></thead>
@@ -220,7 +224,7 @@ export function RoomsPrices() {
             ))}</tbody>
           </table></div>
         )}
-      </Section>
+      </Section>}
       {dlg}
     </>
   );

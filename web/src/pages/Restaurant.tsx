@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from 'react';
-import { addDays, todayBerlin } from '../../../src/shared/hotel.js';
+import { useEffect, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { addDays, isIsoDate, todayBerlin } from '../../../src/shared/hotel.js';
 import {
   TABLE_STATUS_LABEL, endTime, holdsTable, overlaps, restaurantTableInput, tableReservationInput,
   type RestaurantTableDto, type TableReservationDto, type TableStatus,
@@ -22,7 +23,11 @@ export function Restaurant() {
   const toast = useToast();
   const isAdmin = user.role === 'admin';
   const today = todayBerlin();
-  const [date, setDate] = useState(today);
+  const [params] = useSearchParams();
+  const wanted = params.get('datum');
+  const [date, setDate] = useState(wanted && isIsoDate(wanted) ? wanted : today);
+  // Sprung aus der Suche auf einen bestimmten Tag
+  useEffect(() => { if (wanted && isIsoDate(wanted)) setDate(wanted); }, [wanted]);
   const [dlg, setDlg] = useState<ReactNode>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const { data, error } = useLoad(async () => {

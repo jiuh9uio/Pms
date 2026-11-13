@@ -31,7 +31,7 @@ export function EInvoice() {
       <PageHeader title="E-Rechnung" sub="PDF-Rechnungen in das Format ZUGFeRD umwandeln und per E-Mail versenden"
         actions={<Button variant="primary" onClick={() => setUpload(true)}>PDF umwandeln</Button>} />
       {mail.data && !mail.data.ready && (
-        <p className="notice warn">Der E-Mail-Versand ist noch nicht eingerichtet. {user.role === 'admin' ? <Link to="/einstellungen">Jetzt in den Einstellungen eintragen</Link> : 'Bitte den Administrator ansprechen.'} Herunterladen geht auch ohne.</p>
+        <p className="notice warn">Der E-Mail-Versand ist noch nicht eingerichtet. {user.role === 'admin' ? <Link to="/einstellungen?ansicht=email">Jetzt in den Einstellungen eintragen</Link> : 'Bitte den Administrator ansprechen.'} Herunterladen geht auch ohne.</p>
       )}
       <LoadState error={error} loading={!data} />
       {data && (data.length === 0 ? (

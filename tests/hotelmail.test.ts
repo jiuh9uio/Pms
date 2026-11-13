@@ -254,8 +254,25 @@ describe('E-Mail an den Gast', () => {
     expect(typeof st.online).toBe('boolean');
   }, 60_000);
 
-  it('verlangt die Freigabe für den Bereich Hotel', async () => {
+  it('sucht über Gäste, Reservierungen, Rechnungen und Tischreservierungen – nur in freigegebenen Bereichen', async () => {
+    const r = await ok('GET', '/search?q=beispiel', admin);
+    const kinds = r.hits.map((h: { kind: string }) => h.kind);
+    expect(kinds).toEqual(expect.arrayContaining(['guest', 'booking', 'invoice']));
+    expect(r.hits.find((h: { kind: string }) => h.kind === 'booking').sub).toContain('08.05.2031');
+    const byNumber = await ok('GET', `/search?q=${encodeURIComponent((await ok('GET', '/invoices', admin))[0].number)}`, admin);
+    expect(byNumber.hits.some((h: { kind: string }) => h.kind === 'invoice')).toBe(true);
+    expect((await ok('GET', '/search?q=kegelclub', admin)).hits[0]).toMatchObject({ kind: 'table', id: '2031-05-09' });
+    expect((await ok('GET', '/search?q=100%25', admin)).hits).toEqual([]); // Sonderzeichen sind kein Platzhalter
+    expect((await call('GET', '/search?q=x', admin)).statusCode).toBe(400);
+    expect((await call('GET', '/search?q=beispiel', {})).statusCode).toBe(401);
+    // Benutzer nur mit „Kontrollen“: keine Treffer aus Hotel oder Restaurant
     await ok('POST', '/users', admin, { username: 'kueche', name: 'Küche', password: 'sehr-geheim-456', role: 'user', modules: ['kontrollen'] });
+    const kueche = session(await call('POST', '/auth/login', {}, { username: 'kueche', password: 'sehr-geheim-456' }));
+    expect((await ok('GET', '/search?q=beispiel', kueche)).hits).toEqual([]);
+    expect((await ok('GET', '/search?q=kegelclub', kueche)).hits).toEqual([]);
+  });
+
+  it('verlangt die Freigabe für den Bereich Hotel', async () => {
     const user = session(await call('POST', '/auth/login', {}, { username: 'kueche', password: 'sehr-geheim-456' }));
     expect((await call('GET', `/bookings/${bookingId}/mail`, user)).statusCode).toBe(403);
   });

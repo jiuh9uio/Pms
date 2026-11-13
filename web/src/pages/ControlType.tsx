@@ -6,11 +6,14 @@ import { api } from '../api.ts';
 import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
-import { Button, Field, LoadState, PageHeader, useLoad, useSubmit, useToast } from '../ui.tsx';
+import { Button, Field, LoadState, PageHeader, useLoad, useSubmit, useToast, useTabs } from '../ui.tsx';
 import { TypeDialog } from './Controls.tsx';
 import { Cleaning } from './Cleaning.tsx';
 import { GoodsReceipts } from './GoodsReceipts.tsx';
 import { Hygiene } from './Hygiene.tsx';
+
+export const HYGIENE_TABS = [['temperatur', 'Temperaturprotokoll'], ['reinigung', 'Reinigungsprotokoll'], ['wareneingang', 'Wareneingang'], ['unterlagen', 'Unterlagen'], ['besuche', 'Kontrollbesuche']] as const;
+const PLAIN_TABS = [['unterlagen', 'Unterlagen'], ['besuche', 'Kontrollbesuche']] as const;
 
 export function ControlType() {
   const { id } = useParams();
@@ -36,6 +39,7 @@ export function ControlType() {
     bump();
   });
 
+  const { current, bar } = useTabs(data?.type.kind === 'hygiene' ? HYGIENE_TABS : PLAIN_TABS);
   if (!data) return <><PageHeader title="Kontrolle" /><LoadState error={error} loading /></>;
   const { type, items, visits } = data;
   return (
@@ -43,9 +47,12 @@ export function ControlType() {
       <p className="crumb"><Link to="/kontrollen">Kontrollen</Link> ›</p>
       <PageHeader title={type.name} actions={isAdmin && <Button onClick={() => setEdit(true)}>Bearbeiten</Button>} />
 
-      {type.kind === 'hygiene' && <><Hygiene /><Cleaning /><GoodsReceipts /></>}
+      {bar}
+      {current === 'temperatur' && <Hygiene />}
+      {current === 'reinigung' && <Cleaning />}
+      {current === 'wareneingang' && <GoodsReceipts />}
 
-      <section className="card">
+      {current === 'unterlagen' && <section className="card">
         <h2>Unterlagen bereithalten</h2>
         <p className="muted">Abhaken, was griffbereit ist, und notieren, wo es liegt. Die Liste ist ein Vorschlag und nicht vollständig – welche Unterlagen verlangt werden können, bitte mit der zuständigen Stelle oder der Steuerberatung klären.</p>
         {items.length === 0 && <p className="muted">Noch keine Unterlagen erfasst.</p>}
@@ -66,9 +73,9 @@ export function ControlType() {
           </form>
         )}
         {addItem.errors.text && <p className="error">{addItem.errors.text}</p>}
-      </section>
+      </section>}
 
-      <section className="card">
+      {current === 'besuche' && <section className="card">
         <h2>Kontrollbesuche</h2>
         <form className="formgrid cols3" onSubmit={(e) => void addVisit.submit(visit, e)} noValidate>
           <Field label="Datum" error={addVisit.errors.date}><input type="date" value={visit.date} max={todayBerlin()} onChange={(e) => setVisit({ ...visit, date: e.target.value })} /></Field>
@@ -85,7 +92,7 @@ export function ControlType() {
             ))}</tbody>
           </table></div>
         )}
-      </section>
+      </section>}
       {edit && <TypeDialog type={type} onClose={() => setEdit(false)} />}
     </>
   );

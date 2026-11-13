@@ -136,6 +136,15 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
   Vorschläge (z. B. zu Allergenen oder Hausordnung) sind Formulierungshilfen, keine rechtlich geprüften Aushänge.
   Der Link wird nicht geprüft – bitte selbst scannen, ob er zur richtigen Seite führt.
 
+**Seit Version 1.15.0 zusätzlich:**
+
+- **Reiter:** Einstellungen, Zimmer & Preise, Kontrollarten und Internet zeigen je Reiter nur einen Abschnitt; der Reiter steht
+  in der Adresse (`?ansicht=…`).
+- **Suche** (Startmenü, Seitenleiste, Strg+K): Seiten und Einstellungen über eine feste Stichwortliste im Programm; Gäste,
+  Reservierungen, Rechnungen, Firmen und Tischreservierungen (ab gestern) über den Server – nur in den Bereichen, die für den
+  Benutzer freigegeben sind. Nicht durchsucht werden Protokolle (Temperatur, Reinigung, Wareneingang), E-Rechnungen,
+  Schnelldruck-Zettel und das Änderungsprotokoll. Je Art werden höchstens sechs Treffer gezeigt.
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

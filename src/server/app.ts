@@ -15,6 +15,7 @@ import * as auth from './modules/auth.js';
 import * as guestforms from './modules/guestforms.js';
 import * as network from './modules/network.js';
 import * as quickprint from './modules/quickprint.js';
+import { search } from './modules/search.js';
 import { guestFormInput } from '../shared/hotel.js';
 import * as settings from './modules/settings.js';
 import * as usersMod from './modules/users.js';
@@ -196,6 +197,9 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
         .filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => `${req.protocol}://${i!.address}${port ? `:${port}` : ''}`);
       return { addresses, localOnly: (process.env.HOST ?? '') === '127.0.0.1' };
     });
+
+    // ---------- Suche über alle freigegebenen Bereiche ----------
+    api.get('/search', { preHandler: requireUser }, (req) => search(db, req.user!, z.object({ q: z.string().trim().min(2, 'Mindestens 2 Zeichen').max(60) }).parse(req.query).q));
 
     // ---------- Bereich „Schnelldruck“: Info-Zettel auf dem Bondrucker ----------
     const quick = { preHandler: requireModule('schnelldruck') };
