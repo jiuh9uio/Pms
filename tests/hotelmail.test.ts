@@ -282,7 +282,7 @@ describe('E-Mail an den Gast', () => {
     await ok('PUT', '/settings/hotel', admin, { ...hotel, phone: '01234 56789', openingHours: 'Mo-Fr 11:30-14:00 und 17:30-22:00\nDi Ruhetag' });
     const o = await ok('GET', '/quickprint', admin);
     expect(o).toMatchObject({ printerReady: true, printerName: 'Bondrucker vorne' });
-    expect(o.slips.map((x: { id: string }) => x.id)).toEqual(['info', 'wifi', 'review']);
+    expect(o.slips.map((x: { id: string }) => x.id)).toEqual(['info', 'wifi', 'stay', 'review']);
     expect(o.slips[0].preview).toContain('Di Ruhetag');
 
     await ok('POST', '/quickprint/print', admin, { id: 'info', copies: 2 });
@@ -310,6 +310,33 @@ describe('E-Mail an den Gast', () => {
     await ok('POST', `/quickprint/templates/${t.id}/remove`, admin);
     expect((await call('POST', '/quickprint/print', admin, { id: t.id, copies: 1 })).statusCode).toBe(404);
     expect((await call('POST', '/quickprint/print', admin, { id: 'info', copies: 9 })).statusCode).toBe(400);
+    // Zettel „Ihr Aufenthalt“ und Website-QR aus den Hotel-Einstellungen
+    const h2 = await ok('GET', '/settings/hotel', admin);
+    await ok('PUT', '/settings/hotel', admin, { ...h2, breakfastTimes: 'täglich 7:00-10:00 Uhr', website: 'www.schuetzenhaus.example' });
+    await ok('POST', '/quickprint/print', admin, { id: 'stay', copies: 1 });
+    bon = await text();
+    expect(bon).toContain('bis 11:00 Uhr');
+    expect(bon).toContain('7:00-10:00 Uhr');
+    await ok('POST', '/quickprint/print', admin, { id: 'web', copies: 1 });
+    expect(await text()).toContain('https://www.schuetzenhaus.example');
+
+    // Vorschläge: übernehmen, Platzhalter sperren den Druck bis zum Ausfüllen
+    const sug = await ok('GET', '/quickprint/suggestions', admin);
+    expect(sug.map((x: { key: string }) => x.key)).toEqual(expect.arrayContaining(['notfall', 'taxi', 'feiern']));
+    expect((await call('POST', '/quickprint/suggestions', user, { keys: ['taxi'] })).statusCode).toBe(403);
+    expect(await ok('POST', '/quickprint/suggestions', admin, { keys: ['notfall', 'feiern', 'gibt-es-nicht'] })).toEqual({ added: 2 });
+    expect((await ok('GET', '/quickprint/suggestions', admin)).some((x: { key: string }) => x.key === 'notfall')).toBe(false);
+    const all = (await ok('GET', '/quickprint', admin)).slips;
+    const notfall = all.find((x: { title: string }) => x.title === 'Wichtige Rufnummern');
+    const feiern = all.find((x: { title: string }) => x.title === 'Feiern bei uns');
+    expect(notfall.hint).toContain('Platzhalter');
+    expect((await call('POST', '/quickprint/print', admin, { id: notfall.id, copies: 1 })).json().error.code).toBe('slip_incomplete');
+    await ok('POST', '/quickprint/print', admin, { id: feiern.id, copies: 1 });
+    expect(await text()).toContain('Familienfeier');
+    await ok('PUT', `/quickprint/templates/${notfall.id}`, admin, { title: notfall.title, body: 'Notruf: 112\nPolizei: 110\nApotheke am Markt: 01234 222', sort: notfall.sort, version: notfall.version });
+    await ok('POST', '/quickprint/print', admin, { id: notfall.id, copies: 1 });
+    expect(await text()).toContain('Apotheke am Markt');
+
     // Bewertungs-Zettel: erst mit Link druckbar, QR-Code führt zur Bewertungsseite
     expect((await call('POST', '/quickprint/print', admin, { id: 'review', copies: 1 })).json().error.code).toBe('slip_incomplete');
     expect((await call('PUT', '/quickprint/review', admin, { url: 'http://unsicher.example', headline: '', text: '', thanks: '' })).statusCode).toBe(400);
@@ -324,5 +351,5 @@ describe('E-Mail an den Gast', () => {
     expect(bon).toMatch(/Bewertung bei[\s\S]{0,30}Google/); // auf 32 Zeichen umbrochen
     server.close();
     await new Promise((r) => setTimeout(r, 2200));
-  }, 30_000);
+  }, 60_000);
 });

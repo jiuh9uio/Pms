@@ -373,3 +373,4 @@ tr.faded td { opacity: .55; } .rowactions { text-align: right; white-space: nowr
 .slip { display: flex; flex-direction: column; gap: 10px; margin: 0; } .slip .btn { align-self: flex-start; }
 .bon { margin: 0; padding: 12px; background: #fff; color: #111; border: 1px solid var(--line); border-radius: 6px; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-x: auto; white-space: pre; }
 .inlinefield { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); } .inlinefield select { width: auto; }
+.suggestions { display: grid; gap: 12px; } .suggestions .check { align-items: flex-start; } .suggestions small { display: block; margin-top: 2px; }

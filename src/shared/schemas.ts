@@ -45,12 +45,14 @@ export const hotelSettings = z.object({
   invoiceFooter: text(500),
   /** Öffnungszeiten als freier Text, eine Zeile je Angabe – für den Schnelldruck am Bondrucker */
   openingHours: text(600).default(''),
+  /** Frühstückszeiten als kurzer Text, z. B. „Mo–Fr 7:00–10:00, Sa/So 8:00–11:00“ – für den Zettel „Ihr Aufenthalt“ */
+  breakfastTimes: text(160).default(''),
 });
 export type HotelSettings = z.infer<typeof hotelSettings>;
 export const HOTEL_DEFAULTS: HotelSettings = {
   name: 'Hotel & Restaurant Schützenhaus', street: '', zip: '', city: '', country: 'Deutschland', phone: '', email: '', website: '',
   taxNumber: '', vatId: '', bankName: '', iban: '', bic: '', checkinTime: '15:00', checkoutTime: '11:00',
-  invoicePrefix: 'RE', paymentTermDays: 14, invoiceFooter: '', openingHours: '',
+  invoicePrefix: 'RE', paymentTermDays: 14, invoiceFooter: '', openingHours: '', breakfastTimes: '',
 };
 
 const rate = z.number('Bitte eine Zahl eingeben').min(0, 'Mindestens 0').max(100, 'Höchstens 100');
@@ -107,4 +109,8 @@ export const reviewSlipInput = z.object({
 });
 export type ReviewSlip = z.infer<typeof reviewSlipInput>;
 export interface QuickSlipDto { /** Einstellungen des Bewertungs-Zettels (nur bei id „review“) */ review?: ReviewSlip; id: string; title: string; preview: string; /** eigene Vorlage (änderbar) oder eingebaut */ custom: boolean; body?: string; sort?: number; version?: number; hint?: string }
+export interface SlipSuggestionDto { key: string; title: string; body: string }
+export const slipSuggestionsInput = z.object({ keys: z.array(z.string().max(40)).min(1).max(20) });
+/** Kennzeichen für Stellen, die der Betrieb in einer Vorlage noch ausfüllen muss. */
+export const PLACEHOLDER = '(bitte eintragen)';
 export interface QuickPrintDto { printerReady: boolean; printerName: string; slips: QuickSlipDto[] }

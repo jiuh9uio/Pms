@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { printTemplateInput, quickTextInput, reviewSlipInput, type QuickPrintDto, type QuickSlipDto } from '../../../src/shared/schemas.js';
+import { printTemplateInput, quickTextInput, reviewSlipInput, type QuickPrintDto, type QuickSlipDto, type SlipSuggestionDto } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { useAuth } from '../App.tsx';
 import { Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useToast } from '../ui.tsx';
@@ -15,6 +15,7 @@ export function QuickPrint() {
   const [copies, setCopies] = useState(1);
   const [edit, setEdit] = useState<QuickSlipDto | 'new' | null>(null);
   const [free, setFree] = useState({ title: '', text: '' });
+  const [suggest, setSuggest] = useState(false);
   const reload = () => setRev((r) => r + 1);
 
   const print = async (s: QuickSlipDto) => {
@@ -30,6 +31,7 @@ export function QuickPrint() {
       <PageHeader title="Schnelldruck" sub="Info-Zettel für Gäste – ein Tipp, und der Bon kommt aus dem Drucker"
         actions={<>
           <label className="inlinefield">Anzahl <select value={copies} onChange={(e) => setCopies(Number(e.target.value))} aria-label="Anzahl der Ausdrucke">{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}×</option>)}</select></label>
+          {isAdmin && <Button onClick={() => setSuggest(true)}>Vorschläge</Button>}
           {isAdmin && <Button onClick={() => setEdit('new')}>Eigenen Zettel anlegen</Button>}
         </>} />
       <LoadState error={error} loading={!data} />
@@ -44,7 +46,7 @@ export function QuickPrint() {
                 <div className="cardhead"><h2>{s.title}</h2>{(s.custom || s.review) && isAdmin && <button type="button" className="linkbtn" onClick={() => setEdit(s)}>{s.review && !s.review.url ? 'Link eintragen' : 'ändern'}</button>}</div>
                 <pre className="bon">{s.preview}</pre>
                 {s.hint && <p className="muted small">{s.hint}</p>}
-                <Button variant="primary" busy={busy === s.id} disabled={!data.printerReady || (!!s.review && !s.review.url)} onClick={() => void print(s)}>Drucken</Button>
+                <Button variant="primary" busy={busy === s.id} disabled={!data.printerReady || (!!s.review && !s.review.url) || (s.custom && !!s.hint)} onClick={() => void print(s)}>Drucken</Button>
               </section>
             ))}
             <form className="card slip" onSubmit={(e) => void f.submit({ ...free, copies }, e)} noValidate>
@@ -57,6 +59,7 @@ export function QuickPrint() {
           <p className="muted small">Öffnungszeiten, Telefon und Adresse stammen aus Verwaltung → Einstellungen → Hotel; der WLAN-Zettel erscheint, sobald unter Internet das Gäste-WLAN hinterlegt ist. Die Vorschau zeigt den Text ungefähr so, wie er auf dem Bon steht.</p>
         </>
       )}
+      {suggest && <SuggestDialog onClose={() => setSuggest(false)} onDone={() => { setSuggest(false); reload(); }} />}
       {edit && edit !== 'new' && edit.review && <ReviewDialog slip={edit} onClose={() => setEdit(null)} onDone={() => { setEdit(null); reload(); }} />}
       {edit && (edit === 'new' || !edit.review) && <TemplateDialog slip={edit === 'new' ? null : edit} count={data?.slips.length ?? 0} onClose={() => setEdit(null)} onDone={() => { setEdit(null); reload(); }} />}
     </>
@@ -104,6 +107,35 @@ function ReviewDialog({ slip, onClose, onDone }: { slip: QuickSlipDto; onClose: 
         <Field label="Text" error={f.errors.text} wide><textarea rows={3} value={v.text} onChange={(e) => setV({ ...v, text: e.target.value })} /></Field>
         <Field label="Dank am Ende" error={f.errors.thanks} wide hint="Leere Felder werden mit dem Standardtext gefüllt."><input value={v.thanks} onChange={(e) => setV({ ...v, thanks: e.target.value })} /></Field>
       </form>
+    </Dialog>
+  );
+}
+
+/** Vorschläge für eigene Zettel: auswählen und übernehmen, danach über „ändern“ mit den eigenen Angaben füllen. */
+function SuggestDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const { data, error } = useLoad(() => api<SlipSuggestionDto[]>('GET', '/quickprint/suggestions'));
+  const [picked, setPicked] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const add = async () => {
+    setBusy(true);
+    try { const r = await api<{ added: number }>('POST', '/quickprint/suggestions', { keys: picked }); toast(`${r.added} ${r.added === 1 ? 'Zettel' : 'Zettel'} übernommen`); onDone(); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); setBusy(false); }
+  };
+  return (
+    <Dialog title="Vorschläge für Info-Zettel" onClose={onClose} size="lg"
+      footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={busy} disabled={picked.length === 0} onClick={() => void add()}>Ausgewählte übernehmen</Button></>}>
+      {!data ? <LoadState error={error} loading /> : data.length === 0 ? <p className="muted">Alle Vorschläge sind bereits übernommen.</p> : (
+        <>
+          <p className="muted">Übernommene Zettel können Sie danach über „ändern“ anpassen. Stellen mit „(bitte eintragen)“ füllen Sie mit Ihren eigenen Angaben – vorher lässt sich der Zettel nicht drucken.</p>
+          <div className="suggestions">{data.map((s) => (
+            <label key={s.key} className="check">
+              <input type="checkbox" checked={picked.includes(s.key)} onChange={(e) => setPicked(e.target.checked ? [...picked, s.key] : picked.filter((k) => k !== s.key))} />
+              <span><b>{s.title}</b><small className="pre">{s.body}</small></span>
+            </label>
+          ))}</div>
+        </>
+      )}
     </Dialog>
   );
 }

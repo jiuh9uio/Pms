@@ -130,7 +130,11 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
   echten Drucker erprobt** und fehlt auf Druckern, die diesen Befehl nicht kennen (dann erscheint nur der Text).
   Jeder Druck steht im Änderungsprotokoll.
   Seit 1.13.0 zusätzlich der Zettel „Bitte um Google-Bewertung“: Link (nur https) und Texte in den Einstellungen des Zettels,
-  QR-Code mit dem Link. Der Link wird nicht geprüft – bitte selbst scannen, ob er zur richtigen Seite führt.
+  QR-Code mit dem Link. Seit 1.14.0: Zettel „Ihr Aufenthalt“ (Zeiten, WLAN, Telefon aus den Einstellungen), „Unsere Website“ mit
+  QR-Code und eine Vorschlagsliste für eigene Zettel. In den Vorschlägen sind nur bundesweit einheitliche Rufnummern (112, 110,
+  116 117) vorgegeben; alles Örtliche steht als „(bitte eintragen)“ und sperrt den Druck, bis es ausgefüllt ist. Die Texte der
+  Vorschläge (z. B. zu Allergenen oder Hausordnung) sind Formulierungshilfen, keine rechtlich geprüften Aushänge.
+  Der Link wird nicht geprüft – bitte selbst scannen, ob er zur richtigen Seite führt.
 
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 

@@ -51,6 +51,9 @@ function HotelForm() {
         <Field label="Öffnungszeiten" error={f.errors.openingHours} wide hint="eine Zeile je Angabe, z. B. „Mo–Fr 11:30–14:00 und 17:30–22:00“, „Di Ruhetag“ – erscheint auf dem Info-Zettel im Schnelldruck">
           <textarea rows={4} value={v.openingHours ?? ''} onChange={(e) => setV({ ...v, openingHours: e.target.value })} />
         </Field>
+        <Field label="Frühstückszeiten" error={f.errors.breakfastTimes} wide hint="z. B. „Mo–Fr 7:00–10:00 Uhr, Sa und So 8:00–11:00 Uhr“ – erscheint auf dem Zettel „Ihr Aufenthalt“">
+          <input value={v.breakfastTimes ?? ''} onChange={(e) => setV({ ...v, breakfastTimes: e.target.value })} />
+        </Field>
       </div>
       <h3>Angaben für Rechnungen</h3>
       <div className="formgrid cols3">

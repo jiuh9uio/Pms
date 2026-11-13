@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.14.0
+
+Schnelldruck erweitert:
+
+- Neuer Zettel „Ihr Aufenthalt“ für Hotelgäste: Check-in/Check-out, Frühstückszeiten, Öffnungszeiten des Restaurants, WLAN und Telefon. Die Frühstückszeiten tragen Sie unter Einstellungen → Hotel ein.
+- Neuer Zettel „Unsere Website“ mit QR-Code (erscheint, sobald in den Einstellungen eine Website steht).
+- Knopf „Vorschläge“: fertige Zettel zum Übernehmen – Wichtige Rufnummern, Taxi, Parken, Bus und Bahn, Ausflugstipps, Feiern bei uns, Gutscheine, Gut zu wissen, Allergene. Stellen mit „(bitte eintragen)“ füllen Sie selbst aus; vorher druckt der Zettel nicht.
+
 ## 1.13.0
 
 - Schnelldruck: neuer Zettel „Bitte um Google-Bewertung“ zum Anheften an die Rechnung – mit Sternen, großer Überschrift, kurzem Text und QR-Code, der direkt zur Bewertungsseite führt. Link und Texte trägt der Administrator über „ändern“ ein.

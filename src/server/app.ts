@@ -202,6 +202,8 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.get('/quickprint', quick, () => quickprint.overview(db));
     api.post('/quickprint/print', quick, (req) => { const v = S.quickPrintInput.parse(req.body); return quickprint.printSlip(db, actor(req), v.id, v.copies); });
     api.post('/quickprint/text', quick, (req) => quickprint.printText(db, actor(req), S.quickTextInput.parse(req.body)));
+    api.get('/quickprint/suggestions', { preHandler: requireAdmin }, () => quickprint.suggestions(db));
+    api.post('/quickprint/suggestions', { preHandler: requireAdmin }, (req) => quickprint.addSuggestions(db, actor(req), S.slipSuggestionsInput.parse(req.body).keys));
     api.put('/quickprint/review', { preHandler: requireAdmin }, (req) => quickprint.saveReview(db, actor(req), S.reviewSlipInput.parse(req.body)));
     api.post('/quickprint/templates', { preHandler: requireAdmin }, (req) => quickprint.saveTemplate(db, actor(req), null, S.printTemplateInput.parse(req.body)));
     api.put('/quickprint/templates/:id', { preHandler: requireAdmin }, (req) =>

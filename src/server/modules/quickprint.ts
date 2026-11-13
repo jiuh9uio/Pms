@@ -1,9 +1,9 @@
 import { asc, eq } from 'drizzle-orm';
-import type { BonPrinter, QuickPrintDto, QuickSlipDto, ReviewSlip } from '../../shared/schemas.js';
+import { PLACEHOLDER, type BonPrinter, type QuickPrintDto, type QuickSlipDto, type ReviewSlip, type SlipSuggestionDto } from '../../shared/schemas.js';
 import type { Db, Exec } from '../db/client.js';
 import { printTemplates, settings } from '../db/schema.js';
 import { AppError, conflict, notFound, stale } from '../lib/errors.js';
-import { buildJob, isPrivateIp, sendToPrinter, wrap, type Line } from '../lib/escpos.js';
+import { buildJob, columns, isPrivateIp, sendToPrinter, wrap, type Line } from '../lib/escpos.js';
 import { record, type Actor } from './audit.js';
 import { getPrinter as getKitchenPrinter } from './breakfast.js';
 import { getWifi, wifiQrText } from './network.js';
@@ -86,6 +86,21 @@ async function slips(db: Exec): Promise<Slip[]> {
       ...center(`Netz: ${wifi.ssid}`, w, { bold: true }), ...center(wifi.open ? 'ohne Passwort' : `Passwort: ${wifi.password}`, w, { bold: true }), ...(wifi.note ? center(wifi.note, w) : [])],
   });
   out.push({
+    id: 'stay', title: 'Ihr Aufenthalt', custom: false,
+    hint: h.breakfastTimes ? 'Für Hotelgäste bei der Anreise.' : 'Frühstückszeiten sind noch nicht eingetragen (Verwaltung → Einstellungen → Hotel).',
+    lines: (w) => [...head(w), ...center('Herzlich willkommen!', w, { bold: true, big: true }), { feed: 1 },
+      { text: columns('Anreise (Check-in)', `ab ${h.checkinTime} Uhr`, w) }, { text: columns('Abreise (Check-out)', `bis ${h.checkoutTime} Uhr`, w) },
+      ...(h.breakfastTimes ? [{ feed: 1 } as Line, { text: 'Frühstück', bold: true } as Line, ...wrap(h.breakfastTimes, w).map((text) => ({ text }))] : []),
+      ...(h.openingHours ? [{ feed: 1 } as Line, { text: 'Restaurant', bold: true } as Line, ...wrap(h.openingHours, w).map((text) => ({ text }))] : []),
+      ...(wifi.ssid && (wifi.open || wifi.password) ? [{ feed: 1 } as Line, { text: 'WLAN', bold: true } as Line, { text: columns('Netz', wifi.ssid, w) }, { text: columns('Passwort', wifi.open ? 'ohne' : wifi.password, w) }] : []),
+      { rule: true }, ...(h.phone ? center(`Fragen? Wir sind für Sie da: ${h.phone}`, w) : []), ...center('Wir wünschen einen angenehmen Aufenthalt!', w, { bold: true })],
+  });
+  const site = /^https?:\/\//.test(h.website) ? h.website : h.website ? `https://${h.website}` : '';
+  if (site) out.push({
+    id: 'web', title: 'Unsere Website', custom: false, hint: 'QR-Code zur Website aus den Hotel-Einstellungen.',
+    lines: (w) => [...head(w), ...center('Besuchen Sie uns online', w, { bold: true }), { feed: 1 }, { qr: site, size: 7 }, ...center(h.website, w), { feed: 1 }, ...contact(w).slice(0, 2)],
+  });
+  out.push({
     id: 'review', title: 'Bitte um Google-Bewertung', custom: false, review,
     hint: review.url ? 'Zum Anheften an die Rechnung.' : 'Der Link zu Ihrer Google-Bewertungsseite fehlt noch.',
     blocked: review.url ? undefined : 'Bitte zuerst den Link zur Google-Bewertung eintragen (Schnelldruck → „Bitte um Google-Bewertung“ → ändern)',
@@ -102,6 +117,8 @@ async function slips(db: Exec): Promise<Slip[]> {
   });
   for (const t of own) out.push({
     id: t.id, title: t.title, custom: true, body: t.body, sort: t.sort, version: t.version,
+    hint: t.body.includes(PLACEHOLDER) ? 'Enthält noch Platzhalter – bitte über „ändern“ ausfüllen.' : undefined,
+    blocked: t.body.includes(PLACEHOLDER) ? `Der Zettel „${t.title}“ enthält noch Platzhalter „${PLACEHOLDER}“ – bitte zuerst ausfüllen` : undefined,
     lines: (w) => [...head(w), ...center(t.title, w, { bold: true }), { feed: 1 }, ...wrap(t.body, w).map((text) => ({ text })), { rule: true }, ...contact(w)],
   });
   return out;
@@ -152,4 +169,30 @@ export async function removeTemplate(db: Db, actor: Actor, id: string) {
   const [row] = await db.delete(printTemplates).where(eq(printTemplates.id, id)).returning();
   if (!row) throw notFound('Vorlage');
   await record(db, actor, { action: 'remove', entity: 'print_template', entityId: id, before: { title: row.title, body: row.body } });
+}
+
+// ---------- Vorschläge für eigene Zettel ----------
+const P = PLACEHOLDER;
+/** Vorlagen zum Übernehmen. Bundesweit einheitliche Rufnummern sind eingetragen, alles Örtliche trägt der Betrieb selbst ein. */
+const SUGGESTIONS: SlipSuggestionDto[] = [
+  { key: 'notfall', title: 'Wichtige Rufnummern', body: `Notruf Feuerwehr / Rettungsdienst: 112\nPolizei: 110\nÄrztlicher Bereitschaftsdienst: 116 117\n\nNächste Apotheke: ${P}\nNächstes Krankenhaus: ${P}\nZahnärztlicher Notdienst: ${P}` },
+  { key: 'taxi', title: 'Taxi', body: `Taxi: ${P}\n\nGern rufen wir Ihnen ein Taxi – sprechen Sie uns einfach an.` },
+  { key: 'parken', title: 'Parken', body: `Parkplätze für unsere Gäste: ${P}\n\nBitte keine Wertsachen im Fahrzeug lassen.` },
+  { key: 'bahn', title: 'Bus und Bahn', body: `Nächste Haltestelle: ${P}\nNächster Bahnhof: ${P}\n\nAktuelle Abfahrtszeiten: bahn.de oder in der App „DB Navigator“.` },
+  { key: 'ausflug', title: 'Ausflugstipps', body: `Unsere Empfehlungen in der Umgebung:\n\n1. ${P}\n2. ${P}\n3. ${P}\n\nWeitere Tipps geben wir Ihnen gern persönlich.` },
+  { key: 'feiern', title: 'Feiern bei uns', body: `Sie planen eine Familienfeier, ein Jubiläum oder ein Firmenessen?\n\nWir richten Ihre Feier gern aus – sprechen Sie uns an oder rufen Sie uns an. Wir beraten Sie persönlich und machen Ihnen ein Angebot.` },
+  { key: 'gutschein', title: 'Gutscheine', body: `Verschenken Sie Genuss: Gutscheine für Restaurant und Übernachtung erhalten Sie direkt bei uns – in jeder gewünschten Höhe.` },
+  { key: 'hausordnung', title: 'Gut zu wissen', body: `Nachtruhe: ${P}\nRauchen: nur im Freien, die Zimmer sind Nichtraucherzimmer.\nHaustiere: ${P}\nZimmerschlüssel: bei Abreise bitte an der Rezeption abgeben.` },
+  { key: 'allergene', title: 'Allergene und Zusatzstoffe', body: `Informationen zu Allergenen und Zusatzstoffen in unseren Speisen und Getränken erhalten Sie von unserem Servicepersonal – bitte sprechen Sie uns an.` },
+];
+
+export async function suggestions(db: Exec): Promise<SlipSuggestionDto[]> {
+  const have = new Set((await db.select({ title: printTemplates.title }).from(printTemplates)).map((t) => t.title));
+  return SUGGESTIONS.filter((s) => !have.has(s.title));
+}
+export async function addSuggestions(db: Db, actor: Actor, keys: string[]) {
+  const open = (await suggestions(db)).filter((s) => keys.includes(s.key));
+  let sort = (await db.select().from(printTemplates)).length;
+  for (const s of open) await saveTemplate(db, actor, null, { title: s.title, body: s.body, sort: ++sort });
+  return { added: open.length };
 }
