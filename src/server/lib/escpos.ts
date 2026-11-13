@@ -56,15 +56,25 @@ export const isPrivateIp = (ip: string) => {
   return a === 10 || a === 127 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
 };
 
+/**
+ * Sendet den Druckauftrag. Fertig ist er, sobald die Daten vollständig übergeben sind – ob und wann der Drucker
+ * die Verbindung von sich aus schließt, ist je nach Modell verschieden und wird nicht abgewartet.
+ */
 export function sendToPrinter(host: string, port: number, data: Buffer, timeoutMs = 6000): Promise<void> {
   return new Promise((resolve, reject) => {
     const sock = connect({ host, port });
-    const fail = (message: string) => { sock.destroy(); reject(new Error(message)); };
+    let sent = false;
+    const fail = (message: string) => { sock.destroy(); if (!sent) reject(new Error(message)); };
     sock.setTimeout(timeoutMs, () => fail(`Der Drucker ${host} antwortet nicht (Zeitüberschreitung). Ist er eingeschaltet und im Netz?`));
     sock.on('error', (e: NodeJS.ErrnoException) => fail(
       e.code === 'ECONNREFUSED' ? `Der Drucker ${host} nimmt auf Port ${port} keine Verbindung an` :
       e.code === 'EHOSTUNREACH' || e.code === 'ENETUNREACH' ? `Der Drucker ${host} ist im Netz nicht erreichbar` : `Druckfehler: ${e.message}`));
     sock.on('connect', () => sock.end(data));
-    sock.on('close', (hadError) => { if (!hadError) resolve(); });
+    sock.on('finish', () => {
+      sent = true;
+      resolve();
+      // dem Drucker kurz Zeit lassen, die Verbindung selbst zu schließen; danach aufräumen
+      setTimeout(() => sock.destroy(), 2000).unref();
+    });
   });
 }

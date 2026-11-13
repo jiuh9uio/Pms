@@ -122,7 +122,8 @@ describe('E-Mail an den Gast', () => {
     // Drucker: nur Adressen im eigenen Netz; hier ein Test-Drucker auf diesem Rechner
     expect((await call('PUT', '/settings/kitchen-printer', admin, { enabled: true, host: '8.8.8.8', port: 9100, width: 48 })).statusCode).toBe(400);
     const got: Buffer[] = [];
-    const server = createServer((sock) => { sock.on('data', (d) => got.push(d)); });
+    // der Test-Drucker schließt die Verbindung nie von sich aus – das Programm darf darauf nicht warten
+    const server = createServer({ allowHalfOpen: true }, (sock) => { sock.on('data', (d) => got.push(d)); });
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
     const port = (server.address() as { port: number }).port;
     await ok('PUT', '/settings/kitchen-printer', admin, { enabled: true, host: '127.0.0.1', port, width: 48 });
@@ -135,7 +136,8 @@ describe('E-Mail an den Gast', () => {
     expect(text).toContain('Zi. 101  Erika Beispiel');
     expect(text).toContain('2 Personen');
     expect([...job.subarray(-4)]).toEqual([0x1d, 0x56, 66, 0]); // Schnitt
-    await new Promise((r) => server.close(() => r(null)));
+    server.close();
+    await new Promise((r) => setTimeout(r, 2200)); // offene Verbindung wird vom Programm selbst abgebaut
     const down = await call('POST', '/breakfast/print', admin, { date: '2031-05-09' });
     expect(down.statusCode).toBe(502);
     expect(down.json().error.message).toContain('keine Verbindung');
