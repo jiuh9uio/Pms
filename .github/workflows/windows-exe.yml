@@ -69,7 +69,7 @@ jobs:
           if (-not $issued.number -or $issued.grossCents -ne 29700) { throw "Rechnung falsch ausgestellt: $($issued | ConvertTo-Json -Depth 2)" }
           Post '/payments' @{ invoiceId = $inv.id; amountCents = 29700; method = 'Bar'; date = (Get-Date -Format 'yyyy-MM-dd'); payer = ''; note = '' } $s | Out-Null
           Write-Host "Rechnung $($issued.number) ausgestellt und bezahlt"
-          $e = Invoke-RestMethod -Method Post -Uri "$base/einvoices/from-invoice/$($inv.id)" -WebSession $s
+          $e = Post "/einvoices/from-invoice/$($inv.id)" @{} $s
           Invoke-WebRequest "$base/einvoices/$($e.id)/pdf" -WebSession $s -OutFile "$dir\e-rechnung.pdf"
           $pdfText = [System.Text.Encoding]::GetEncoding(28591).GetString([System.IO.File]::ReadAllBytes("$dir\e-rechnung.pdf"))
           if (-not $pdfText.StartsWith('%PDF-') -or -not $pdfText.Contains('factur-x.xml')) { throw 'E-Rechnung enthält keine eingebettete factur-x.xml' }
