@@ -67,3 +67,12 @@ export interface AuditDto {
   before: unknown; after: unknown; ip: string | null;
 }
 export interface ApiError { error: { code: string; message: string; fields?: Record<string, string> } }
+
+// ---------- Netzwerk: Geräte im Hausnetz ----------
+export const netDeviceNameInput = z.object({ name: text(60) });
+export interface NetDeviceDto {
+  ip: string; mac: string; hostname: string; name: string;
+  /** dieser Rechner */ self: boolean;
+  /** zufällige (private) Geräteadresse, wie sie Handys je WLAN verwenden */ randomMac: boolean;
+}
+export interface NetScanDto { scannedAt: string; networks: string[]; devices: NetDeviceDto[]; note: string | null }

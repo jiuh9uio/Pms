@@ -13,6 +13,7 @@ import { AppError, forbidden, pgCode, pgMessage } from './lib/errors.js';
 import { listAudit, record, type Actor } from './modules/audit.js';
 import * as auth from './modules/auth.js';
 import * as guestforms from './modules/guestforms.js';
+import * as network from './modules/network.js';
 import { guestFormInput } from '../shared/hotel.js';
 import * as settings from './modules/settings.js';
 import * as usersMod from './modules/users.js';
@@ -191,6 +192,14 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
       const addresses = Object.values(networkInterfaces()).flat()
         .filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => `${req.protocol}://${i!.address}${port ? `:${port}` : ''}`);
       return { addresses, localOnly: (process.env.HOST ?? '') === '127.0.0.1' };
+    });
+
+    // ---------- Geräte im Hausnetz (nur Administrator) ----------
+    api.get('/network/devices', { preHandler: requireAdmin }, () => network.scan(db));
+    api.put('/network/devices/:mac', { preHandler: requireAdmin }, async (req) => {
+      const mac = network.normMac(z.object({ mac: z.string().max(17) }).parse(req.params).mac);
+      await network.nameDevice(db, actor(req), mac, S.netDeviceNameInput.parse(req.body).name);
+      return { ok: true };
     });
 
     // ---------- Datensicherung (nur Administrator) ----------

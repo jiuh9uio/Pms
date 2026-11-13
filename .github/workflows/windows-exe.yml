@@ -86,6 +86,9 @@ jobs:
           if ((Invoke-RestMethod "$base/bookings/$($b.id)" -WebSession $s).guest.city -ne 'Ort') { throw 'Angaben des Gastes wurden nicht übernommen' }
           $net = Invoke-RestMethod "$base/system/network" -WebSession $s
           Write-Host "Adressen im Netz: $($net.addresses -join ', ')"
+          $scan = Invoke-RestMethod "$base/network/devices" -WebSession $s -TimeoutSec 60
+          Write-Host "Geräte im Netz: $(($scan.devices | ForEach-Object { $_.ip }) -join ', ') in $($scan.networks -join ', ')"
+          if (@($scan.devices).Count -lt 1) { throw 'Netzwerksuche hat nicht einmal den eigenen Rechner gefunden' }
           $gr = Post '/goods-receipts' @{ supplier = 'Test'; goods = 'Ware'; tempC = 3.5; ok = $true; note = '' } $s
           if (-not $gr.id) { throw 'Wareneingang wurde nicht gespeichert' }
           $rep = Invoke-RestMethod "$base/reports/year?year=2031" -WebSession $s

@@ -64,6 +64,19 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
 - **Zugriff im Hausnetz:** Die Einstellungen zeigen die Netzwerkadressen des Rechners. `Firewall freigeben.bat` legt eine
   Windows-Firewall-Regel für Port 3000 (private Netze) an – **auf Windows nicht erprobt**; bei geändertem Port die Datei anpassen.
 
+**Seit Version 1.5.0 zusätzlich:**
+
+- **Geräte im Netz** (Verwaltung, nur Administrator): Der PMS-Rechner spricht jede Adresse seines eigenen Netzes einmal an
+  (leeres UDP-Paket) und liest danach die Nachbartabelle des Betriebssystems (`arp -a`). Angezeigt werden IP-Adresse, Geräteadresse
+  (MAC), der Name aus der Namensauflösung des Routers und ein selbst vergebener Name. Grenzen:
+  - Sichtbar ist nur das Netz, in dem der PMS-Rechner selbst hängt. Ein getrenntes Gäste-WLAN, vom Router abgeschottete Geräte
+    und schlafende Geräte fehlen. Die vollständige Liste hat nur der Router; eine Router-Abfrage (z. B. FRITZ!Box) ist nicht enthalten.
+  - Es sind Geräte, keine Personen. Handys verwenden zufällige „private“ Geräteadressen, die sich ändern können.
+  - Kein Mitlesen von Datenverkehr, keine Verlaufsliste; gespeichert werden nur vergebene Namen. Sehr große Netze werden je Netz
+    auf 1024 Adressen begrenzt.
+  - Geräteadressen können personenbezogene Daten sein. Ob und wie die Übersicht im Betrieb genutzt werden darf (Gäste,
+    Mitarbeitende), wurde **nicht rechtlich geprüft**.
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

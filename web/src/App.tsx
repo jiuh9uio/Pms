@@ -16,6 +16,7 @@ import { Companies } from './pages/Companies.tsx';
 import { InvoicePrint } from './billing/InvoicePrint.tsx';
 import { RegistrationPrint } from './hotel/RegistrationPrint.tsx';
 import { Launcher } from './pages/Launcher.tsx';
+import { Network } from './pages/Network.tsx';
 import { Login } from './pages/Login.tsx';
 import { Plan } from './pages/Plan.tsx';
 import { Reservations } from './pages/Reservations.tsx';
@@ -51,6 +52,7 @@ const NAV = [
   { to: '/kontrollen', label: 'Kontrollen', icon: '✓', admin: false, module: 'kontrollen' },
   { to: '/erechnung', label: 'E-Rechnung', icon: '✉', admin: false, module: 'erechnung' },
   { to: '/benutzer', label: 'Benutzer', icon: '◉', admin: true, module: 'verwaltung' },
+  { to: '/netzwerk', label: 'Geräte im Netz', short: 'Netz', icon: '⌁', admin: true, module: 'verwaltung' },
   { to: '/protokoll', label: 'Protokoll', icon: '☰', admin: true, module: 'verwaltung' },
   { to: '/einstellungen', label: 'Einstellungen', short: 'Einstell.', icon: '⚙', admin: true, module: 'verwaltung' },
 ] as { to: string; label: string; short?: string; icon: string; admin: boolean; more?: boolean; module: string }[];
@@ -127,6 +129,7 @@ function Shell({ user }: { user: UserDto }) {
           {isAdmin && <Route path="/zimmer" element={<RoomsPrices />} />}
           {isAdmin && <Route path="/konto" element={<Account />} />}
           {isAdmin && <Route path="/benutzer" element={<Users />} />}
+          {isAdmin && <Route path="/netzwerk" element={<Network />} />}
           {isAdmin && <Route path="/protokoll" element={<Audit />} />}
           {isAdmin && <Route path="/einstellungen" element={<Settings />} />}
           <Route path="*" element={<Navigate to="/" replace />} />

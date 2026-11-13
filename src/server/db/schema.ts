@@ -339,6 +339,13 @@ export const cleaningLog = pgTable('cleaning_log', {
   doneAt: ts('done_at').notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.taskId, t.date] })]);
 
+/** Vom Administrator benannte Netzwerkgeräte (z. B. „Kasse“, „Drucker“). Gefundene Geräte selbst werden nicht gespeichert. */
+export const netDevices = pgTable('net_devices', {
+  mac: text('mac').primaryKey(),
+  name: text('name').notNull(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
 /** Online-Meldeschein: einmaliger Link (QR-Code) je Reservierung, über den der Gast seine Angaben selbst einträgt. */
 export const guestForms = pgTable('guest_forms', {
   id: id(),

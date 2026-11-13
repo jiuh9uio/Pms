@@ -136,6 +136,20 @@ describe('E-Mail an den Gast', () => {
     expect((await call('GET', pub(link.url), {})).statusCode).toBe(404);
   });
 
+  it('zeigt Geräte im Netz nur Administratoren und merkt sich vergebene Namen', async () => {
+    const scan = await ok('GET', '/network/devices', admin);
+    expect(scan.devices.some((d: { self: boolean }) => d.self)).toBe(true);
+    const d = scan.devices[0];
+    expect(d.mac).toMatch(/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/);
+    await ok('PUT', `/network/devices/${d.mac}`, admin, { name: 'Kasse' });
+    expect((await ok('GET', '/network/devices', admin)).devices.find((x: { mac: string }) => x.mac === d.mac).name).toBe('Kasse');
+    await ok('PUT', `/network/devices/${d.mac}`, admin, { name: '' });
+    expect((await call('PUT', '/network/devices/keine-mac', admin, { name: 'x' })).statusCode).toBe(400);
+    await ok('POST', '/users', admin, { username: 'theke', name: 'Theke', password: 'sehr-geheim-789', role: 'user', modules: ['hotel'] });
+    const user = session(await call('POST', '/auth/login', {}, { username: 'theke', password: 'sehr-geheim-789' }));
+    expect((await call('GET', '/network/devices', user)).statusCode).toBe(403);
+  }, 20_000);
+
   it('verlangt die Freigabe für den Bereich Hotel', async () => {
     await ok('POST', '/users', admin, { username: 'kueche', name: 'Küche', password: 'sehr-geheim-456', role: 'user', modules: ['kontrollen'] });
     const user = session(await call('POST', '/auth/login', {}, { username: 'kueche', password: 'sehr-geheim-456' }));

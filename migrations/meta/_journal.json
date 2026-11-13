@@ -113,6 +113,13 @@
       "when": 1794582208073,
       "tag": "0015_personenpreise",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794582479209,
+      "tag": "0016_netzwerk",
+      "breakpoints": true
     }
   ]
 }
