@@ -12,7 +12,7 @@ let app: FastifyInstance;
 let admin: Record<string, string>;
 let user: Record<string, string>;
 
-type Method = 'GET' | 'POST' | 'PATCH' | 'PUT';
+type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 const call = (method: Method, path: string, cookies: Record<string, string>, payload?: unknown) =>
   app.inject({ method, url: '/api/v1' + path, cookies, payload: payload as object | undefined });
 const ok = async (method: Method, path: string, cookies: Record<string, string>, payload?: unknown) => {
@@ -277,5 +277,52 @@ describe('Personenabhängige Preise', () => {
     await ok('PUT', `/categories/${cat.id}`, admin, { ...cat, basePriceCents: cat.basePriceCents + 5000 });
     await ok('PATCH', `/booking-rooms/${before.id}`, user, { adults: 2, version: before.version });
     expect((await price(id)).lodgingCents).toBe(before.lodgingCents); // gebuchter Preis bleibt trotz späterer Preiserhöhung
+  });
+
+  it('lässt nur Administratoren Stammdaten löschen – und nichts, woran Buchungen hängen', async () => {
+    const cat = (await ok('POST', '/categories', admin, { name: 'Zum Löschen', description: '', stdOccupancy: 2, maxPersons: 2, basePriceCents: 9000, sort: 99 })).id as string;
+    const mkRoom = async (number: string) => (await ok('POST', '/rooms', admin, { number, categoryId: cat, floor: '', note: '', active: true, priceOverrideCents: null })).id as string;
+    const free = await mkRoom('L1'), booked = await mkRoom('L2'), blocked = await mkRoom('L3');
+    const rule = (await ok('POST', '/rate-rules', admin, { name: 'Nur diese Kategorie', startDate: '2033-01-01', endDate: '2033-12-31', weekdays: [], categoryId: cat, mode: 'percent', value: 10, priority: 5, active: true })).id as string;
+    const loose = (await ok('POST', '/rate-rules', admin, { name: 'Einzeln löschen', startDate: '2033-01-01', endDate: '2033-12-31', weekdays: [], categoryId: null, mode: 'amount', value: 5, priority: 6, active: true })).id as string;
+
+    expect((await call('DELETE', `/rooms/${free}`, user)).statusCode).toBe(403);
+    expect((await call('DELETE', `/categories/${cat}`, admin)).statusCode).toBe(409); // hat noch Zimmer
+
+    // gebuchtes Zimmer bleibt – auch nach Storno der Buchung
+    const bid = (await ok('POST', '/bookings', user, booking([room(booked, '2033-03-01', '2033-03-03')]))).id;
+    expect((await call('DELETE', `/rooms/${booked}`, admin)).statusCode).toBe(409);
+    // gesperrtes Zimmer erst nach Aufheben der Sperre
+    const block = await ok('POST', '/blocks', user, { roomId: blocked, from: '2033-04-01', to: '2033-04-03', reason: 'Test' });
+    expect((await call('DELETE', `/rooms/${blocked}`, admin)).statusCode).toBe(409);
+    await ok('POST', `/blocks/${block.id}/remove`, user, {});
+    await ok('DELETE', `/rooms/${blocked}`, admin);
+    await ok('DELETE', `/rooms/${free}`, admin);
+    expect((await call('DELETE', `/rooms/${free}`, admin)).statusCode).toBe(404);
+    const numbers = (await ok('GET', '/rooms', user)).map((r: { number: string }) => r.number);
+    expect(numbers).toContain('L2');
+    expect(numbers).not.toContain('L1');
+    expect(numbers).not.toContain('L3');
+
+    await ok('DELETE', `/rate-rules/${loose}`, admin);
+    // Leistung löschen: in der Buchung bleibt sie stehen
+    const [tax] = await ok('GET', '/tax-rates', admin);
+    const svc = (await ok('POST', '/services', admin, { name: 'Löschbare Leistung', priceCents: 700, per: 'stay', taxRateId: tax.id, isBreakfast: false, active: true })).id as string;
+    await ok('DELETE', `/services/${svc}`, admin);
+    expect((await ok('GET', '/services', user)).some((x: { id: string }) => x.id === svc)).toBe(false);
+
+    // Kategorie mit Buchung bleibt, auch wenn das Zimmer umgehängt wird
+    const [other] = await ok('GET', '/categories', admin);
+    const r = (await ok('GET', '/rooms', admin)).find((x: { id: string }) => x.id === booked);
+    await ok('PUT', `/rooms/${booked}`, admin, { number: 'L2', categoryId: other.id, floor: '', note: '', active: false, priceOverrideCents: null, version: r.version });
+    expect((await call('DELETE', `/categories/${cat}`, admin)).statusCode).toBe(409);
+    expect((await ok('GET', `/bookings/${bid}`, user)).id).toBe(bid);
+    expect((await ok('GET', '/rate-rules', admin)).some((x: { id: string }) => x.id === rule)).toBe(true);
+
+    // leere Kategorie: löschbar, ihre eigene Preisregel geht mit
+    const empty = (await ok('POST', '/categories', admin, { name: 'Leer', description: '', stdOccupancy: 1, maxPersons: 1, basePriceCents: 5000, sort: 98 })).id as string;
+    const own = (await ok('POST', '/rate-rules', admin, { name: 'Regel der leeren Kategorie', startDate: '2033-01-01', endDate: '2033-12-31', weekdays: [], categoryId: empty, mode: 'percent', value: 5, priority: 7, active: true })).id as string;
+    await ok('DELETE', `/categories/${empty}`, admin);
+    expect((await ok('GET', '/rate-rules', admin)).some((x: { id: string }) => x.id === own)).toBe(false);
   });
 });

@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.20.0
+
+- Zimmer & Preise: Administratoren können Kategorien, Zimmer, Preisregeln und Leistungen jetzt endgültig löschen (Schaltfläche „Löschen“ im Bearbeiten-Fenster, mit Rückfrage).
+- Schutz: Zimmer und Kategorien mit Buchungen (auch vergangenen oder stornierten) lassen sich nicht löschen – dort bleibt „nicht buchbar“ der richtige Weg. Jedes Löschen steht im Protokoll.
+
 ## 1.19.0
 
 - Einstellungen → neuer Reiter „TSE“: Daten des Epson-TSE-Sticks anzeigen (Seriennummer, BSI-Zertifizierung, Gültigkeit, Zustand, Signaturen, Speicher), Selbsttest ausführen, Datenblatt auf dem Bondrucker drucken und das Zertifikat als Datei speichern.

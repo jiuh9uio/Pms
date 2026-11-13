@@ -48,11 +48,13 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   api.get('/categories', user, () => rooms.listCategories(db));
   api.post('/categories', admin, (req) => rooms.saveCategory(db, actor(req), null, H.categoryInput.parse(req.body)));
   api.put('/categories/:id', admin, (req) => rooms.saveCategory(db, actor(req), idOf(req), H.categoryInput.parse(req.body), versionOf(req)));
+  api.delete('/categories/:id', admin, (req) => rooms.deleteCategory(db, actor(req), idOf(req)));
 
   api.get('/rooms', user, () => rooms.listRooms(db));
   api.post('/rooms/bulk', admin, (req) => rooms.createRoomsBulk(db, actor(req), H.roomBulkInput.parse(req.body)));
   api.post('/rooms', admin, (req) => rooms.saveRoom(db, actor(req), null, H.roomInput.parse(req.body)));
   api.put('/rooms/:id', admin, (req) => rooms.saveRoom(db, actor(req), idOf(req), H.roomInput.parse(req.body), versionOf(req)));
+  api.delete('/rooms/:id', admin, (req) => rooms.deleteRoom(db, actor(req), idOf(req)));
 
   api.post('/rooms/:id/housekeeping', user, async (req) => {
     await rooms.setHousekeeping(db, actor(req), idOf(req), z.object({ status: z.enum(['clean', 'dirty']) }).parse(req.body).status);
@@ -62,10 +64,12 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   api.get('/rate-rules', user, () => rooms.listRateRules(db));
   api.post('/rate-rules', admin, (req) => rooms.saveRateRule(db, actor(req), null, H.rateRuleInput.parse(req.body)));
   api.put('/rate-rules/:id', admin, (req) => rooms.saveRateRule(db, actor(req), idOf(req), H.rateRuleInput.parse(req.body), versionOf(req)));
+  api.delete('/rate-rules/:id', admin, (req) => rooms.deleteRateRule(db, actor(req), idOf(req)));
 
   api.get('/services', user, () => rooms.listServices(db));
   api.post('/services', admin, (req) => rooms.saveService(db, actor(req), null, H.serviceInput.parse(req.body)));
   api.put('/services/:id', admin, (req) => rooms.saveService(db, actor(req), idOf(req), H.serviceInput.parse(req.body), versionOf(req)));
+  api.delete('/services/:id', admin, (req) => rooms.deleteService(db, actor(req), idOf(req)));
 
   // ---------- Belegungsplan, Verfügbarkeit, Preisauskunft ----------
   api.get('/calendar', user, (req) => {

@@ -2,7 +2,7 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
 import { eachNight, personAdjust, weekdayOf, type CategoryDto, type RateRuleDto, type RoomDto, type ServiceDto } from '../../shared/hotel.js';
 import type { Db, Exec } from '../db/client.js';
-import { rateRules, roomAllocations, roomBlocks, roomCategories, rooms, services, taxRates } from '../db/schema.js';
+import { bookingRooms, rateRules, roomAllocations, roomBlocks, roomCategories, rooms, services, taxRates } from '../db/schema.js';
 import { AppError, conflict, notFound, stale } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 
@@ -30,11 +30,42 @@ async function save(db: Db, actor: Actor, table: PgTable, entity: string, id: st
   });
 }
 
+/**
+ * Stammdatensatz endgültig löschen – mit Protokolleintrag. `guard` prüft vorher, ob etwas daran hängt.
+ * Lehnt die Datenbank das Löschen trotzdem ab (Fremdschlüssel), wird das als verständliche Meldung weitergegeben.
+ */
+async function remove(db: Db, actor: Actor, table: PgTable, entity: string, what: string, id: string, guard?: (tx: Exec) => Promise<void>) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const t = table as any;
+  try {
+    await db.transaction(async (tx) => {
+      const [before] = await tx.select().from(t).where(eq(t.id, id)).for('update');
+      if (!before) throw notFound(what);
+      if (guard) await guard(tx);
+      await tx.delete(t).where(eq(t.id, id));
+      await record(tx, actor, { action: 'delete', entity, entityId: id, before });
+    });
+  } catch (e) {
+    const code = (e as { code?: string; cause?: { code?: string } }).cause?.code ?? (e as { code?: string }).code;
+    if (code === '23503') throw conflict(`${what} wird noch verwendet und kann nicht gelöscht werden. Stattdessen auf „nicht aktiv“ stellen.`, 'in_use');
+    throw e;
+  }
+  return { ok: true };
+}
+
 // ---------- Kategorien ----------
 export const listCategories = async (db: Exec): Promise<CategoryDto[]> =>
   db.select().from(roomCategories).orderBy(asc(roomCategories.sort), asc(roomCategories.name));
 export const saveCategory = (db: Db, actor: Actor, id: string | null, v: Omit<CategoryDto, 'id' | 'version'>, version?: number) =>
   save(db, actor, roomCategories, 'category', id, v, version);
+/** Kategorie löschen – nur ohne Zimmer und ohne Buchungen. Preisregeln und Firmenpreise nur für diese Kategorie gehen mit. */
+export const deleteCategory = (db: Db, actor: Actor, id: string) =>
+  remove(db, actor, roomCategories, 'category', 'Kategorie', id, async (tx) => {
+    const [r] = await tx.select({ n: sql<number>`count(*)::int` }).from(rooms).where(eq(rooms.categoryId, id));
+    if (r!.n > 0) throw conflict(`Zu dieser Kategorie gehören noch ${r!.n} Zimmer. Bitte zuerst die Zimmer löschen oder einer anderen Kategorie zuordnen.`, 'in_use');
+    const [b] = await tx.select({ n: sql<number>`count(*)::int` }).from(bookingRooms).where(eq(bookingRooms.categoryId, id));
+    if (b!.n > 0) throw conflict('Mit dieser Kategorie gibt es Buchungen (auch vergangene oder stornierte). Sie kann deshalb nicht gelöscht werden.', 'in_use');
+  });
 
 // ---------- Zimmer ----------
 export async function listRooms(db: Exec, onlyActive = false): Promise<RoomDto[]> {
@@ -51,6 +82,14 @@ export async function listRooms(db: Exec, onlyActive = false): Promise<RoomDto[]
 }
 export const saveRoom = (db: Db, actor: Actor, id: string | null, v: { number: string; categoryId: string; floor: string; note: string; active: boolean; priceOverrideCents: number | null }, version?: number) =>
   save(db, actor, rooms, 'room', id, v, version);
+/** Zimmer löschen – nur wenn es nie gebucht war und keine Sperre mehr läuft. Aufgehobene Sperren werden mit entfernt. */
+export const deleteRoom = (db: Db, actor: Actor, id: string) =>
+  remove(db, actor, rooms, 'room', 'Zimmer', id, async (tx) => {
+    const allocs = await tx.select({ id: roomAllocations.id, kind: roomAllocations.kind, active: roomAllocations.active }).from(roomAllocations).where(eq(roomAllocations.roomId, id));
+    if (allocs.some((a) => a.kind === 'stay')) throw conflict('Für dieses Zimmer gibt es Buchungen (auch vergangene oder stornierte). Es kann deshalb nicht gelöscht werden – stattdessen „Buchbar“ ausschalten, dann erscheint es nicht mehr im Belegungsplan.', 'in_use');
+    if (allocs.some((a) => a.active)) throw conflict('Für dieses Zimmer läuft noch eine Sperre. Bitte zuerst die Sperre im Belegungsplan aufheben.', 'in_use');
+    if (allocs.length) await tx.delete(roomAllocations).where(eq(roomAllocations.roomId, id)); // nur aufgehobene Sperren; room_blocks hängt per cascade daran
+  });
 
 /** Legt mehrere Zimmer mit fortlaufenden Nummern an – alle oder keines. */
 export async function createRoomsBulk(db: Db, actor: Actor, v: { categoryId: string; count: number; firstNumber: number; floor: string }) {
@@ -71,6 +110,8 @@ export const listRateRules = async (db: Exec): Promise<RateRuleDto[]> =>
   db.select().from(rateRules).orderBy(asc(rateRules.priority), asc(rateRules.startDate));
 export const saveRateRule = (db: Db, actor: Actor, id: string | null, v: Omit<RateRuleDto, 'id' | 'version'>, version?: number) =>
   save(db, actor, rateRules, 'rate_rule', id, v, version);
+/** Preisregel löschen – gebuchte Preise bleiben bestehen, sie stehen in der Buchung. */
+export const deleteRateRule = (db: Db, actor: Actor, id: string) => remove(db, actor, rateRules, 'rate_rule', 'Preisregel', id);
 
 export async function listServices(db: Exec): Promise<ServiceDto[]> {
   const rows = await db.select({ s: services, taxRatePercent: taxRates.ratePercent }).from(services)
@@ -81,6 +122,8 @@ export async function listServices(db: Exec): Promise<ServiceDto[]> {
 }
 export const saveService = (db: Db, actor: Actor, id: string | null, v: Omit<ServiceDto, 'id' | 'version' | 'taxRatePercent'>, version?: number) =>
   save(db, actor, services, 'service', id, v, version);
+/** Leistung löschen – in bestehenden Buchungen bleibt sie mit Name und Preis stehen (dort nur die Verknüpfung entfällt). */
+export const deleteService = (db: Db, actor: Actor, id: string) => remove(db, actor, services, 'service', 'Leistung', id);
 
 // ---------- Preisberechnung ----------
 export interface NightPrice { date: string; priceCents: number; source: string }

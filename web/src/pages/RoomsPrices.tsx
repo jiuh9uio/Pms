@@ -36,8 +36,9 @@ function toPayload(fields: FieldDef[], d: Draft) {
   return out;
 }
 
-export function MasterDialog({ title, fields, initial, schema, path, id, version, onClose }: {
-  title: string; fields: FieldDef[]; initial: Draft; schema: ZodType; path: string; id: string | null; version?: number; onClose: () => void;
+export function MasterDialog({ title, fields, initial, schema, path, id, version, onClose, del }: {
+  /** Löschen anbieten: Rückfrage-Text; nur bei bestehenden Einträgen */
+  del?: string; title: string; fields: FieldDef[]; initial: Draft; schema: ZodType; path: string; id: string | null; version?: number; onClose: () => void;
 }) {
   const { bump } = useData();
   const toast = useToast();
@@ -49,10 +50,18 @@ export function MasterDialog({ title, fields, initial, schema, path, id, version
     onClose();
   });
   const send = (e?: React.FormEvent) => void f.submit(toPayload(fields, d), e);
+  const [delBusy, setDelBusy] = useState(false);
+  const [delError, setDelError] = useState<string | null>(null);
+  const remove = async () => {
+    if (!id || !del || !window.confirm(del)) return;
+    setDelBusy(true); setDelError(null);
+    try { await api('DELETE', `${path}/${id}`); toast('Gelöscht'); bump(); onClose(); }
+    catch (e) { setDelError(e instanceof Error ? e.message : 'Löschen nicht möglich'); setDelBusy(false); }
+  };
   const set = (k: string, v: Value) => setD({ ...d, [k]: v });
   return (
     <Dialog title={title} onClose={onClose}
-      footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={f.busy} onClick={() => send()}>Speichern</Button></>}>
+      footer={<>{id && del && <Button variant="danger" busy={delBusy} onClick={() => void remove()} style={{ marginRight: 'auto' }}>Löschen</Button>}<Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={f.busy} onClick={() => send()}>Speichern</Button></>}>
       <form className="formgrid" onSubmit={send} noValidate>
         {fields.map((fd) => {
           const v = d[fd.key];
@@ -82,6 +91,7 @@ export function MasterDialog({ title, fields, initial, schema, path, id, version
         {Object.entries(f.errors).some(([k]) => !fields.some((x) => x.key === k)) && (
           <p className="notice danger wide" role="alert">{Object.entries(f.errors).filter(([k]) => !fields.some((x) => x.key === k)).map(([, m]) => m).join(' · ')}</p>
         )}
+        {delError && <p className="notice danger wide" role="alert">{delError}</p>}
         <button type="submit" hidden />
       </form>
     </Dialog>
@@ -117,7 +127,7 @@ export function RoomsPrices() {
   const { cats, rooms, rules, services, taxes } = data;
   const catOpts = cats.map((c): [string, string] => [c.id, c.name]);
 
-  const editCat = (c?: CategoryDto) => setDlg(<MasterDialog title={c ? 'Kategorie bearbeiten' : 'Kategorie anlegen'} path="/categories" id={c?.id ?? null} version={c?.version} schema={categoryInput} onClose={close}
+  const editCat = (c?: CategoryDto) => setDlg(<MasterDialog title={c ? 'Kategorie bearbeiten' : 'Kategorie anlegen'} del={c && `Kategorie „${c.name}“ endgültig löschen? Preisregeln und Firmenpreise, die nur für diese Kategorie gelten, werden mit gelöscht.`} path="/categories" id={c?.id ?? null} version={c?.version} schema={categoryInput} onClose={close}
     fields={[
       { key: 'name', label: 'Name', type: 'text' }, { key: 'basePriceCents', label: 'Grundpreis je Nacht (brutto)', type: 'money' },
       { key: 'description', label: 'Beschreibung', type: 'text', wide: true },
@@ -129,7 +139,7 @@ export function RoomsPrices() {
     ]}
     initial={{ name: c?.name ?? '', basePriceCents: moneyInput(c?.basePriceCents), singleDiscountCents: moneyInput(c?.singleDiscountCents ?? 0), extraAdultCents: moneyInput(c?.extraAdultCents ?? 0), extraChildCents: moneyInput(c?.extraChildCents ?? 0), description: c?.description ?? '', stdOccupancy: String(c?.stdOccupancy ?? 2), maxPersons: String(c?.maxPersons ?? 2), sort: String(c?.sort ?? cats.length + 1) }} />);
 
-  const editRoom = (r?: RoomDto) => setDlg(<MasterDialog title={r ? `Zimmer ${r.number} bearbeiten` : 'Zimmer anlegen'} path="/rooms" id={r?.id ?? null} version={r?.version} schema={roomInput} onClose={close}
+  const editRoom = (r?: RoomDto) => setDlg(<MasterDialog title={r ? `Zimmer ${r.number} bearbeiten` : 'Zimmer anlegen'} del={r && `Zimmer ${r.number} endgültig löschen?`} path="/rooms" id={r?.id ?? null} version={r?.version} schema={roomInput} onClose={close}
     fields={[
       { key: 'number', label: 'Zimmernummer', type: 'text' }, { key: 'categoryId', label: 'Kategorie', type: 'select', options: [['', 'Bitte wählen'], ...catOpts] },
       { key: 'floor', label: 'Etage', type: 'text' }, { key: 'priceOverrideCents', label: 'Eigener Preis je Nacht', type: 'moneyOpt', hint: 'leer = Preis der Kategorie' },
@@ -148,7 +158,7 @@ export function RoomsPrices() {
     ]}
     initial={{ categoryId: cats[0]?.id ?? '', count: '5', firstNumber: String(nextNumber), floor: '' }} />);
 
-  const editRule = (r?: RateRuleDto) => setDlg(<MasterDialog title={r ? 'Preisregel bearbeiten' : 'Preisregel anlegen'} path="/rate-rules" id={r?.id ?? null} version={r?.version} schema={rateRuleInput} onClose={close}
+  const editRule = (r?: RateRuleDto) => setDlg(<MasterDialog title={r ? 'Preisregel bearbeiten' : 'Preisregel anlegen'} del={r && `Preisregel „${r.name}“ endgültig löschen? Bereits gebuchte Preise bleiben unverändert.`} path="/rate-rules" id={r?.id ?? null} version={r?.version} schema={rateRuleInput} onClose={close}
     fields={[
       { key: 'name', label: 'Name', type: 'text', wide: true },
       { key: 'startDate', label: 'Gültig von', type: 'date' }, { key: 'endDate', label: 'Gültig bis (einschließlich)', type: 'date' },
@@ -160,7 +170,7 @@ export function RoomsPrices() {
     ]}
     initial={{ name: r?.name ?? '', startDate: r?.startDate ?? todayBerlin(), endDate: r?.endDate ?? `${Number(todayBerlin().slice(0, 4)) + 1}-12-31`, weekdays: r?.weekdays ?? [], categoryId: r?.categoryId ?? '', mode: r?.mode ?? 'percent', value: r ? String(r.value).replace('.', ',') : '', priority: String(r?.priority ?? 10), active: r?.active ?? true }} />);
 
-  const editService = (s?: ServiceDto) => setDlg(<MasterDialog title={s ? 'Leistung bearbeiten' : 'Leistung anlegen'} path="/services" id={s?.id ?? null} version={s?.version} schema={serviceInput} onClose={close}
+  const editService = (s?: ServiceDto) => setDlg(<MasterDialog title={s ? 'Leistung bearbeiten' : 'Leistung anlegen'} del={s && `Leistung „${s.name}“ endgültig löschen? In bestehenden Buchungen bleibt sie stehen.`} path="/services" id={s?.id ?? null} version={s?.version} schema={serviceInput} onClose={close}
     fields={[
       { key: 'name', label: 'Name', type: 'text' }, { key: 'priceCents', label: 'Preis (brutto)', type: 'money' },
       { key: 'per', label: 'Berechnung', type: 'select', options: SERVICE_PER.map((p) => [p, PER_LABEL[p]]) },

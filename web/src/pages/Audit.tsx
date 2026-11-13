@@ -10,7 +10,7 @@ const ENTITY: Record<string, string> = {
 };
 const ACTION: Record<string, string> = {
   setup: 'Ersteinrichtung', create: 'angelegt', update: 'geändert', password_reset: 'Passwort zurückgesetzt', password_changed: 'Passwort geändert',
-  remove: 'entfernt', correct: 'korrigiert', confirm: 'im Sollbereich bestätigt', create_many: 'mehrere angelegt', status: 'Status geändert', room_add: 'Zimmer hinzugefügt', room_update: 'Zimmerbuchung geändert',
+  remove: 'entfernt', delete: 'gelöscht', correct: 'korrigiert', confirm: 'im Sollbereich bestätigt', create_many: 'mehrere angelegt', status: 'Status geändert', room_add: 'Zimmer hinzugefügt', room_update: 'Zimmerbuchung geändert',
   charge_add: 'Leistung hinzugefügt', charge_remove: 'Leistung entfernt', mail: 'per E-Mail gesendet', reminder: 'Zahlungserinnerung gesendet', guest_form_link: 'QR-Code für Meldeschein erzeugt', guest_form: 'Meldeschein vom Gast ausgefüllt', backup: 'Datensicherung', issue: 'ausgestellt', send: 'versendet',
   login: 'Anmeldung', logout: 'Abmeldung', login_failed: 'Fehlgeschlagene Anmeldung', login_locked: 'Konto nach Fehlversuchen gesperrt',
 };
