@@ -274,3 +274,8 @@ input.bad { border-color: var(--danger); background: var(--danger-soft); }
 fieldset.checks { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0; display: flex; gap: 20px; flex-wrap: wrap; } fieldset.checks legend { font-size: 13px; font-weight: 500; padding: 0 4px; } fieldset.checks .check { align-items: center; } fieldset.checks .check input { margin: 0; }
 .btn.big { height: 48px; min-width: 110px; font-size: 17px; }
 .temp.ok { color: var(--ok); font-weight: 650; }
+
+/* Bereiche auf der Kontrollen-Startseite */
+.btn.linklike { display: inline-flex; align-items: center; color: var(--ink); font-weight: 550; } .btn.linklike:hover { text-decoration: none; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 0 0; }
+.chip { border: 1px dashed var(--line-strong); background: var(--surface); border-radius: 999px; padding: 6px 14px; cursor: pointer; } .chip:hover { border-style: solid; border-color: var(--accent); color: var(--accent-text); }

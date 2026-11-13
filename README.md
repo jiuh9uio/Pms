@@ -33,6 +33,8 @@ Der frühere Prototyp liegt unverändert unter `prototype/` und wird mit Phase 3
 - Unter **Kontrollen** gibt es je Kontrollart (Hygieneamt, Finanzamt; weitere legt der Administrator an) eine Liste der
   bereitzuhaltenden Unterlagen zum Abhaken und ein Verzeichnis der stattgefundenen Kontrollen.
   Die mitgelieferten Unterlagenlisten sind Vorschläge, keine vollständige oder rechtlich geprüfte Aufstellung.
+- **Bereiche (Zonen)** wie Küche, Theke oder Lager legt der Administrator direkt auf der Kontrollen-Startseite an (auch per Vorschlag zum Antippen)
+  oder im Hygieneamt; dort kommen je Bereich die Messstellen dazu. Abgefragt wird ein Bereich, sobald er mindestens eine Messstelle hat.
 - Beim **Hygieneamt** steht oben das Temperaturprotokoll: Bereiche (z. B. Küche) als Reiter, darunter eine Tabelle der Messstellen
   (z. B. Kühltruhe) mit Sollbereich, den Werten der letzten Tage und der Eingabe für den gewählten Tag. „Monatsprotokoll“ zeigt den Monat zum Ausdrucken.
 - **Kurzabfrage:** Beim Öffnen von „Kontrollen“ fragt das Programm je Bereich, in dem heute noch etwas fehlt: „Küche: alles im Sollwert?“
