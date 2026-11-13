@@ -194,9 +194,11 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
       return { addresses, localOnly: (process.env.HOST ?? '') === '127.0.0.1' };
     });
 
-    // ---------- Geräte im Hausnetz (nur Administrator) ----------
-    api.get('/network/devices', { preHandler: requireAdmin }, () => network.scan(db));
-    api.put('/network/devices/:mac', { preHandler: requireAdmin }, async (req) => {
+    // ---------- Bereich „Internet“: Verbindung und Geräte im Hausnetz (Administrator oder Freigabe) ----------
+    const internet = { preHandler: requireModule('internet') };
+    api.get('/network/status', internet, () => network.internetStatus());
+    api.get('/network/devices', internet, () => network.scan(db));
+    api.put('/network/devices/:mac', internet, async (req) => {
       const mac = network.normMac(z.object({ mac: z.string().max(17) }).parse(req.params).mac);
       await network.nameDevice(db, actor(req), mac, S.netDeviceNameInput.parse(req.body).name);
       return { ok: true };

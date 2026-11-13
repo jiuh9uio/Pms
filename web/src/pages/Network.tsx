@@ -1,9 +1,27 @@
 import { useState } from 'react';
-import type { NetDeviceDto, NetScanDto } from '../../../src/shared/schemas.js';
+import type { InternetStatusDto, NetDeviceDto, NetScanDto } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, fmtDateTime, useLoad, useToast } from '../ui.tsx';
 
-/** Geräte im Hausnetz: was ist gerade im selben Netz wie der PMS-Rechner erreichbar? Nur für Administratoren. */
+/** Internetverbindung des PMS-Rechners: erreichbar ja/nein, Antwortzeit. */
+function InternetCard() {
+  const [rev, setRev] = useState(0);
+  const { data, error } = useLoad(() => api<InternetStatusDto>('GET', '/network/status'), [rev]);
+  return (
+    <section className="card">
+      <div className="cardhead"><h2>Internetverbindung</h2><div className="actions"><Button onClick={() => setRev(rev + 1)}>Erneut prüfen</Button></div></div>
+      {!data ? <LoadState error={error} loading /> : (
+        <>
+          <p>{data.online ? <Badge tone="ok">verbunden</Badge> : <Badge tone="danger">keine Verbindung</Badge>}{' '}
+            {data.online ? `Antwort aus dem Internet nach ${data.ms} ms.` : data.error} <span className="muted">Geprüft {fmtDateTime(data.checkedAt)}.</span></p>
+          <p className="muted small">Adresse dieses Rechners im Hausnetz: {data.addresses.join(', ') || 'keine Netzwerkverbindung'}. Geprüft wird die Verbindung dieses Rechners (eine kurze Anfrage an api.github.com) – nicht die Geschwindigkeit und nicht das Gäste-WLAN.</p>
+        </>
+      )}
+    </section>
+  );
+}
+
+/** Bereich „Internet“: Verbindung prüfen und Geräte im Hausnetz anzeigen. Für Administratoren und freigegebene Benutzer. */
 export function Network() {
   const toast = useToast();
   const [rev, setRev] = useState(0);
@@ -24,8 +42,10 @@ export function Network() {
   const unknown = s?.devices.filter((d) => !d.name && !d.self).length ?? 0;
   return (
     <>
-      <PageHeader title="Geräte im Netz" sub="Welche Geräte sind gerade im selben Netz wie dieser Rechner erreichbar?"
+      <PageHeader title="Internet" sub="Internetverbindung und Geräte, die gerade im selben Netz wie dieser Rechner erreichbar sind"
         actions={<Button variant="primary" busy={!s && !error} onClick={rescan}>Neu suchen</Button>} />
+      <InternetCard />
+      <h2>Geräte im Netz</h2>
       {!s && <LoadState error={error} loading />}
       {!s && !error && <p className="muted">Das Netz wird durchsucht – das dauert einige Sekunden.</p>}
       {s && (

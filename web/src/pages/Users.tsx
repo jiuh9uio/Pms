@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MODULES, MODULE_LABEL, ROLES, ROLE_LABEL, type Module, passwordResetInput, userCreateInput, userUpdateInput, type Role, type UserDto } from '../../../src/shared/schemas.js';
+import { DEFAULT_MODULES, MODULES, MODULE_LABEL, ROLES, ROLE_LABEL, type Module, passwordResetInput, userCreateInput, userUpdateInput, type Role, type UserDto } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { useAuth } from '../App.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, fmtDateTime, useLoad, useSubmit, useToast } from '../ui.tsx';
@@ -61,7 +61,7 @@ function ModuleChecks({ role, value, onChange }: { role: Role; value: Module[]; 
 
 function CreateUser({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const toast = useToast();
-  const [v, setV] = useState({ name: '', username: '', password: '', role: 'user' as Role, modules: [...MODULES] as Module[] });
+  const [v, setV] = useState({ name: '', username: '', password: '', role: 'user' as Role, modules: [...DEFAULT_MODULES] });
   const f = useSubmit(userCreateInput, async (d) => {
     await api('POST', '/users', d);
     toast(`${d.name} wurde angelegt`);

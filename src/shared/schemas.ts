@@ -7,9 +7,11 @@ export type Role = (typeof ROLES)[number];
 export const ROLE_LABEL: Record<Role, string> = { admin: 'Administrator', user: 'Benutzer' };
 
 /** Bereiche des Programms, die je Benutzer freigegeben werden. Verwaltung und Konto sind dem Administrator vorbehalten. */
-export const MODULES = ['hotel', 'kontrollen', 'erechnung'] as const;
+export const MODULES = ['hotel', 'kontrollen', 'erechnung', 'internet'] as const;
+/** Bereiche, die neue Benutzer von sich aus erhalten – „Internet“ (Geräte im Netz) gibt der Administrator bewusst frei. */
+export const DEFAULT_MODULES: Module[] = ['hotel', 'kontrollen', 'erechnung'];
 export type Module = (typeof MODULES)[number];
-export const MODULE_LABEL: Record<Module, string> = { hotel: 'Hotel', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung' };
+export const MODULE_LABEL: Record<Module, string> = { hotel: 'Hotel', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet' };
 const modules = z.array(z.enum(MODULES)).max(MODULES.length);
 export const hasModule = (u: { role: Role; modules: string[] }, m: Module) => u.role === 'admin' || u.modules.includes(m);
 
@@ -25,7 +27,7 @@ export const loginInput = z.object({ username: z.string().trim().toLowerCase().m
 export const setupInput = z.object({ username, name: required(100), password });
 export const changePasswordInput = z.object({ current: z.string().min(1, 'Pflichtfeld').max(200), password });
 
-export const userCreateInput = z.object({ username, name: required(100), password, role: z.enum(ROLES), modules: modules.default([...MODULES]) });
+export const userCreateInput = z.object({ username, name: required(100), password, role: z.enum(ROLES), modules: modules.default([...DEFAULT_MODULES]) });
 export const userUpdateInput = z.object({
   name: required(100).optional(), role: z.enum(ROLES).optional(), active: z.boolean().optional(), modules: modules.optional(), version: z.number().int(),
 });
@@ -76,3 +78,4 @@ export interface NetDeviceDto {
   /** zufällige (private) Geräteadresse, wie sie Handys je WLAN verwenden */ randomMac: boolean;
 }
 export interface NetScanDto { scannedAt: string; networks: string[]; devices: NetDeviceDto[]; note: string | null }
+export interface InternetStatusDto { online: boolean; ms: number | null; checkedAt: string; addresses: string[]; error: string | null }

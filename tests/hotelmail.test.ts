@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 process.env.PMS_DATA_DIR = mkdtempSync(join(tmpdir(), 'pms-test-'));
+process.env.PMS_ONLINE_CHECK_URL = 'http://127.0.0.1:9/';
 const { buildApp } = await import('../src/server/app.js');
 const { connect, runMigrations } = await import('../src/server/db/client.js');
 const { setMailSender } = await import('../src/server/modules/mail.js');
@@ -136,7 +137,7 @@ describe('E-Mail an den Gast', () => {
     expect((await call('GET', pub(link.url), {})).statusCode).toBe(404);
   });
 
-  it('zeigt Geräte im Netz nur Administratoren und merkt sich vergebene Namen', async () => {
+  it('zeigt Geräte im Netz nur mit Freigabe für den Bereich Internet und merkt sich vergebene Namen', async () => {
     const scan = await ok('GET', '/network/devices', admin);
     expect(scan.devices.some((d: { self: boolean }) => d.self)).toBe(true);
     const d = scan.devices[0];
@@ -148,7 +149,16 @@ describe('E-Mail an den Gast', () => {
     await ok('POST', '/users', admin, { username: 'theke', name: 'Theke', password: 'sehr-geheim-789', role: 'user', modules: ['hotel'] });
     const user = session(await call('POST', '/auth/login', {}, { username: 'theke', password: 'sehr-geheim-789' }));
     expect((await call('GET', '/network/devices', user)).statusCode).toBe(403);
-  }, 20_000);
+    expect((await call('GET', '/network/status', user)).statusCode).toBe(403);
+    // neue Benutzer erhalten den Bereich nicht von selbst; der Administrator gibt ihn frei
+    const created = await ok('POST', '/users', admin, { username: 'technik', name: 'Technik', password: 'sehr-geheim-000', role: 'user' });
+    expect(created.modules).not.toContain('internet');
+    await call('PATCH' as never, `/users/${created.id}`, admin, { modules: ['internet'], version: created.version });
+    const tech = session(await call('POST', '/auth/login', {}, { username: 'technik', password: 'sehr-geheim-000' }));
+    expect((await call('GET', '/network/devices', tech)).statusCode).toBe(200);
+    const st = await ok('GET', '/network/status', admin);
+    expect(typeof st.online).toBe('boolean');
+  }, 40_000);
 
   it('verlangt die Freigabe für den Bereich Hotel', async () => {
     await ok('POST', '/users', admin, { username: 'kueche', name: 'Küche', password: 'sehr-geheim-456', role: 'user', modules: ['kontrollen'] });

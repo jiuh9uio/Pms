@@ -66,7 +66,8 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
 
 **Seit Version 1.5.0 zusätzlich:**
 
-- **Geräte im Netz** (Verwaltung, nur Administrator): Der PMS-Rechner spricht jede Adresse seines eigenen Netzes einmal an
+- **Geräte im Netz** (seit 1.6.0 eigener Bereich „Internet“ im Startmenü, zusammen mit einer Prüfung der Internetverbindung;
+  Administratoren immer, Benutzer nur mit Freigabe – neue Benutzer erhalten sie nicht von selbst): Der PMS-Rechner spricht jede Adresse seines eigenen Netzes einmal an
   (leeres UDP-Paket) und liest danach die Nachbartabelle des Betriebssystems (`arp -a`). Angezeigt werden IP-Adresse, Geräteadresse
   (MAC), der Name aus der Namensauflösung des Routers und ein selbst vergebener Name. Grenzen:
   - Sichtbar ist nur das Netz, in dem der PMS-Rechner selbst hängt. Ein getrenntes Gäste-WLAN, vom Router abgeschottete Geräte

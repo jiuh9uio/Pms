@@ -4,7 +4,7 @@ import { reverse } from 'node:dns/promises';
 import { readFile } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
 import { eq } from 'drizzle-orm';
-import type { NetDeviceDto, NetScanDto } from '../../shared/schemas.js';
+import type { InternetStatusDto, NetDeviceDto, NetScanDto } from '../../shared/schemas.js';
 import type { Db, Exec } from '../db/client.js';
 import { netDevices } from '../db/schema.js';
 import { AppError } from '../lib/errors.js';
@@ -98,4 +98,17 @@ export async function nameDevice(db: Db, actor: Actor, mac: string, name: string
   if (name) await db.insert(netDevices).values({ mac, name }).onConflictDoUpdate({ target: netDevices.mac, set: { name, updatedAt: new Date() } });
   else await db.delete(netDevices).where(eq(netDevices.mac, mac));
   await record(db, actor, { action: 'update', entity: 'net_device', entityId: mac, after: { name } });
+}
+
+/** Internetverbindung prüfen: eine kurze Anfrage an die Adresse, die auch das Programm-Update verwendet. */
+export async function internetStatus(): Promise<InternetStatusDto> {
+  const addresses = localNets().map((n) => n.address);
+  const start = Date.now();
+  try {
+    await fetch(process.env.PMS_ONLINE_CHECK_URL || 'https://api.github.com/zen', { method: 'GET', signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'pms' } });
+    return { online: true, ms: Date.now() - start, checkedAt: new Date().toISOString(), addresses, error: null };
+  } catch (e) {
+    const c = (e as { cause?: { code?: string } }).cause?.code;
+    return { online: false, ms: null, checkedAt: new Date().toISOString(), addresses, error: c === 'ENOTFOUND' || c === 'EAI_AGAIN' ? 'Namensauflösung fehlgeschlagen (kein Internet oder DNS-Störung)' : 'Keine Antwort aus dem Internet innerhalb von 8 Sekunden' };
+  }
 }
