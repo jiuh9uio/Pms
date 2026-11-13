@@ -51,6 +51,22 @@ export function registerControlRoutes(api: FastifyInstance, { db, requireUser, r
     const q = z.object({ from: z.string().refine(isIsoDate), to: z.string().refine(isIsoDate) }).parse(req.query);
     return controls.listReadings(db, q.from, q.to);
   });
+  // Reinigungsprotokoll
+  api.get('/cleaning/tasks', user, () => controls.listCleaningTasks(db));
+  api.post('/cleaning/tasks', admin, (req) => controls.saveCleaningTask(db, actor(req), null, C.cleaningTaskInput.parse(req.body)));
+  api.put('/cleaning/tasks/:id', admin, (req) => controls.saveCleaningTask(db, actor(req), idOf(req), C.cleaningTaskInput.parse(req.body), versionOf(req)));
+  api.get('/cleaning/log', user, (req) => {
+    const q = z.object({ from: z.string().refine(isIsoDate), to: z.string().refine(isIsoDate) }).parse(req.query);
+    return controls.listCleaningLog(db, q.from, q.to);
+  });
+  api.get('/cleaning/due', user, () => controls.cleaningDue(db));
+  api.post('/cleaning/areas/:id/done', user, (req) => controls.markCleaned(db, actor(req), { areaId: idOf(req) }));
+  api.post('/cleaning/tasks/:id/done', user, (req) => controls.markCleaned(db, actor(req), { taskIds: [idOf(req)] }));
+  api.post('/cleaning/tasks/:id/undo', user, async (req) => {
+    await controls.undoCleaned(db, actor(req), idOf(req));
+    return { ok: true };
+  });
+
   api.get('/hygiene/open', user, () => controls.openToday(db));
   api.post('/hygiene/areas/:id/confirm', user, (req) => controls.confirmArea(db, actor(req), idOf(req)));
   api.put('/hygiene/readings', user, (req) => controls.saveReadings(db, actor(req), C.hygieneReadingsInput.parse(req.body).entries));

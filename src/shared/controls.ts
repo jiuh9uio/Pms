@@ -40,3 +40,20 @@ export interface HygieneAreaDto { id: string; name: string; active: boolean; ver
 export interface HygieneReadingDto { pointId: string; date: string; valueC: number | null; confirmed: boolean; note: string; userName: string; enteredAt: string }
 /** Bereich, in dem heute noch Einträge fehlen */
 export interface HygieneOpenDto { areaId: string; areaName: string; points: { id: string; name: string; minC: number | null; maxC: number | null }[] }
+
+// ---------- Reinigungsprotokoll ----------
+export const INTERVALS: [number, string][] = [[1, 'täglich'], [2, 'alle 2 Tage'], [7, 'wöchentlich'], [14, 'alle 2 Wochen'], [30, 'monatlich'], [90, 'vierteljährlich']];
+export const intervalLabel = (days: number) => INTERVALS.find(([d]) => d === days)?.[1] ?? `alle ${days} Tage`;
+export const cleaningTaskInput = z.object({
+  areaId: z.uuid('Bitte wählen'), name: required(120),
+  intervalDays: z.number('Bitte wählen').int().min(1, 'Mindestens 1 Tag').max(366, 'Höchstens 366 Tage'), active: z.boolean(),
+});
+export interface CleaningTaskDto {
+  id: string; areaId: string; name: string; intervalDays: number; active: boolean; version: number;
+  /** letzte Erledigung */
+  lastDate: string | null; lastBy: string | null;
+  /** ab wann wieder fällig; fällig, wenn nicht nach heute */
+  dueDate: string; due: boolean; doneToday: boolean;
+}
+export interface CleaningEntryDto { taskId: string; date: string; userName: string; doneAt: string }
+export interface CleaningDueDto { areaId: string; areaName: string; tasks: { id: string; name: string; intervalDays: number }[] }

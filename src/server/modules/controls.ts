@@ -2,9 +2,10 @@ import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import {
   outOfRange, type HygieneAreaDto, type HygieneOpenDto, type HygieneReadingDto, type InspectionDetailDto, type InspectionTypeDto,
 } from '../../shared/controls.js';
-import { todayBerlin } from '../../shared/hotel.js';
+import type { CleaningDueDto, CleaningEntryDto, CleaningTaskDto } from '../../shared/controls.js';
+import { addDays, todayBerlin } from '../../shared/hotel.js';
 import type { Db, Exec } from '../db/client.js';
-import { hygieneAreas, hygienePoints, hygieneReadings, inspectionItems, inspectionTypes, inspectionVisits } from '../db/schema.js';
+import { cleaningLog, cleaningTasks, hygieneAreas, hygienePoints, hygieneReadings, inspectionItems, inspectionTypes, inspectionVisits } from '../db/schema.js';
 import { AppError, notFound, stale } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 
@@ -101,7 +102,7 @@ export async function listAreas(db: Exec): Promise<HygieneAreaDto[]> {
   }));
 }
 
-async function saveRow(db: Db, actor: Actor, table: typeof hygieneAreas | typeof hygienePoints, entity: string, id: string | null, values: Record<string, unknown>, version?: number) {
+async function saveRow(db: Db, actor: Actor, table: typeof hygieneAreas | typeof hygienePoints | typeof cleaningTasks, entity: string, id: string | null, values: Record<string, unknown>, version?: number) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const t = table as any;
   return db.transaction(async (tx) => {
@@ -189,5 +190,68 @@ export async function saveReadings(db: Db, actor: Actor, entries: { pointId: str
       }
     }
     return { saved: entries.length };
+  });
+}
+
+// ---------- Reinigungsprotokoll ----------
+
+export async function listCleaningTasks(db: Exec): Promise<CleaningTaskDto[]> {
+  const today = todayBerlin();
+  const tasks = await db.select().from(cleaningTasks).orderBy(asc(cleaningTasks.sort), asc(cleaningTasks.createdAt));
+  const last = await db.execute(sql`select distinct on (task_id) task_id, date::text as date, user_name from cleaning_log order by task_id, date desc`);
+  const byTask = new Map(Array.from(last).map((r) => [(r as { task_id: string }).task_id, r as { date: string; user_name: string }]));
+  return tasks.map((t) => {
+    const l = byTask.get(t.id);
+    const dueDate = l ? addDays(l.date, t.intervalDays) : today;
+    return {
+      id: t.id, areaId: t.areaId, name: t.name, intervalDays: t.intervalDays, active: t.active, version: t.version,
+      lastDate: l?.date ?? null, lastBy: l?.user_name ?? null, dueDate, due: dueDate <= today, doneToday: l?.date === today,
+    };
+  });
+}
+
+export const saveCleaningTask = (db: Db, actor: Actor, id: string | null, v: { areaId: string; name: string; intervalDays: number; active: boolean }, version?: number) =>
+  saveRow(db, actor, cleaningTasks, 'cleaning_task', id, v, version);
+
+export async function listCleaningLog(db: Exec, from: string, to: string): Promise<CleaningEntryDto[]> {
+  const rows = await db.select().from(cleaningLog).where(and(gte(cleaningLog.date, from), lte(cleaningLog.date, to))).orderBy(asc(cleaningLog.date));
+  return rows.map((r) => ({ taskId: r.taskId, date: r.date, userName: r.userName, doneAt: r.doneAt.toISOString() }));
+}
+
+/** Bereiche mit heute fälligen, noch nicht erledigten Reinigungsaufgaben. */
+export async function cleaningDue(db: Exec): Promise<CleaningDueDto[]> {
+  const tasks = (await listCleaningTasks(db)).filter((t) => t.active && t.due);
+  return (await listAreas(db)).filter((a) => a.active)
+    .map((a) => ({ areaId: a.id, areaName: a.name, tasks: tasks.filter((t) => t.areaId === a.id).map((t) => ({ id: t.id, name: t.name, intervalDays: t.intervalDays })) }))
+    .filter((a) => a.tasks.length > 0);
+}
+
+/**
+ * Aufgaben als heute erledigt eintragen (mit Namen und Uhrzeit). Nur für den heutigen Tag – nachträgliches Abhaken gibt es nicht.
+ * taskIds leer = alle fälligen Aufgaben des Bereichs.
+ */
+export async function markCleaned(db: Db, actor: Actor, v: { areaId?: string; taskIds?: string[] }) {
+  const today = todayBerlin();
+  return db.transaction(async (tx) => {
+    const all = await listCleaningTasks(tx);
+    const pick = v.taskIds?.length ? all.filter((t) => v.taskIds!.includes(t.id)) : all.filter((t) => t.areaId === v.areaId && t.active && t.due);
+    const open = pick.filter((t) => !t.doneToday);
+    if (v.taskIds?.length && pick.length !== v.taskIds.length) throw notFound('Reinigungsaufgabe');
+    if (open.length) {
+      await tx.insert(cleaningLog).values(open.map((t) => ({ taskId: t.id, date: today, userName: actor.userName })));
+      await record(tx, actor, { action: 'done', entity: 'cleaning', after: { date: today, tasks: open.map((t) => t.name).join(', ') } });
+    }
+    return { done: open.length };
+  });
+}
+
+/** Versehentliches Abhaken von heute zurücknehmen; ältere Einträge bleiben unveränderlich. */
+export async function undoCleaned(db: Db, actor: Actor, taskId: string) {
+  const today = todayBerlin();
+  await db.transaction(async (tx) => {
+    const [row] = await tx.delete(cleaningLog).where(and(eq(cleaningLog.taskId, taskId), eq(cleaningLog.date, today))).returning();
+    if (!row) throw notFound('Eintrag von heute');
+    const [t] = await tx.select().from(cleaningTasks).where(eq(cleaningTasks.id, taskId));
+    await record(tx, actor, { action: 'undo', entity: 'cleaning', entityId: taskId, before: { date: today, task: t?.name, doneBy: row.userName } });
   });
 }

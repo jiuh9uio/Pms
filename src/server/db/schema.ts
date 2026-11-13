@@ -309,3 +309,24 @@ export const hygieneReadings = pgTable('hygiene_readings', {
   userName: text('user_name').notNull(),
   enteredAt: ts('entered_at').notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.pointId, t.date] })]);
+
+// ---------- Reinigungsprotokoll ----------
+/** Wiederkehrende Reinigungsaufgabe eines Bereichs, z. B. „Arbeitsflächen desinfizieren“ täglich */
+export const cleaningTasks = pgTable('cleaning_tasks', {
+  id: id(),
+  areaId: uuid('area_id').notNull().references(() => hygieneAreas.id),
+  name: text('name').notNull(),
+  /** Intervall in Tagen: 1 = täglich, 7 = wöchentlich … */
+  intervalDays: integer('interval_days').notNull().default(1),
+  sort: integer('sort').notNull().default(0),
+  active: boolean('active').notNull().default(true),
+  ...stamps,
+});
+
+/** Erledigte Reinigung: je Aufgabe und Tag ein Eintrag mit Namen und Zeitpunkt */
+export const cleaningLog = pgTable('cleaning_log', {
+  taskId: uuid('task_id').notNull().references(() => cleaningTasks.id),
+  date: date('date', { mode: 'string' }).notNull(),
+  userName: text('user_name').notNull(),
+  doneAt: ts('done_at').notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.taskId, t.date] })]);

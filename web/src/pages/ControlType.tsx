@@ -8,6 +8,7 @@ import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
 import { Button, Field, LoadState, PageHeader, useLoad, useSubmit, useToast } from '../ui.tsx';
 import { TypeDialog } from './Controls.tsx';
+import { Cleaning } from './Cleaning.tsx';
 import { Hygiene } from './Hygiene.tsx';
 
 export function ControlType() {
@@ -41,7 +42,7 @@ export function ControlType() {
       <p className="crumb"><Link to="/kontrollen">Kontrollen</Link> ›</p>
       <PageHeader title={type.name} actions={isAdmin && <Button onClick={() => setEdit(true)}>Bearbeiten</Button>} />
 
-      {type.kind === 'hygiene' && <Hygiene />}
+      {type.kind === 'hygiene' && <><Hygiene /><Cleaning /></>}
 
       <section className="card">
         <h2>Unterlagen bereithalten</h2>

@@ -14,7 +14,7 @@ type Value = string | boolean | number[];
 type Draft = Record<string, Value>;
 interface FieldDef {
   key: string; label: string; hint?: string; wide?: boolean;
-  type: 'text' | 'money' | 'moneyOpt' | 'int' | 'number' | 'numberOpt' | 'select' | 'selectOpt' | 'check' | 'date' | 'weekdays';
+  type: 'text' | 'money' | 'moneyOpt' | 'int' | 'number' | 'numberOpt' | 'select' | 'selectInt' | 'selectOpt' | 'check' | 'date' | 'weekdays';
   options?: [string, string][];
 }
 
@@ -28,6 +28,7 @@ function toPayload(fields: FieldDef[], d: Draft) {
     if (f.type === 'money') out[f.key] = parseMoney(s);
     else if (f.type === 'moneyOpt') out[f.key] = s === '' ? null : parseMoney(s);
     else if (f.type === 'int' || f.type === 'number') out[f.key] = s === '' ? NaN : Number(s.replace(',', '.'));
+    else if (f.type === 'selectInt') out[f.key] = Number(s);
     else if (f.type === 'numberOpt') out[f.key] = s === '' ? null : Number(s.replace(',', '.').replace('−', '-'));
     else if (f.type === 'selectOpt') out[f.key] = s === '' ? null : s;
     else out[f.key] = v;
@@ -72,7 +73,7 @@ export function MasterDialog({ title, fields, initial, schema, path, id, version
           }
           return (
             <Field key={fd.key} label={fd.label} hint={fd.hint} wide={fd.wide} error={f.errors[fd.key]}>
-              {fd.type === 'select' || fd.type === 'selectOpt'
+              {fd.type === 'select' || fd.type === 'selectOpt' || fd.type === 'selectInt'
                 ? <select value={v as string} onChange={(e) => set(fd.key, e.target.value)}>{fd.options!.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
                 : <input type={fd.type === 'date' ? 'date' : 'text'} inputMode={fd.type === 'text' || fd.type === 'date' ? undefined : 'decimal'} value={v as string} onChange={(e) => set(fd.key, e.target.value)} />}
             </Field>

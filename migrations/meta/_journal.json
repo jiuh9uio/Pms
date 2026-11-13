@@ -43,6 +43,13 @@
       "when": 1794526094286,
       "tag": "0005_freigaben",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794535955278,
+      "tag": "0006_reinigung",
+      "breakpoints": true
     }
   ]
 }

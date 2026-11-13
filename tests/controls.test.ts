@@ -169,3 +169,38 @@ describe('Freigabe der Bereiche je Benutzer', () => {
     expect((await ok('GET', '/auth/state', h)).user.modules).toEqual(['kontrollen']);
   });
 });
+
+describe('Reinigungsprotokoll', () => {
+  it('führt Aufgaben mit Intervall, Fälligkeit und Abhaken mit Namen', async () => {
+    const [kueche] = await ok('GET', '/hygiene/areas', admin);
+    const task = { areaId: kueche.id, name: 'Arbeitsflächen desinfizieren', intervalDays: 1, active: true };
+    expect((await call('POST', '/cleaning/tasks', user, task)).statusCode).toBe(403);
+    const t1 = await ok('POST', '/cleaning/tasks', admin, task);
+    const t2 = await ok('POST', '/cleaning/tasks', admin, { ...task, name: 'Kühltruhe abtauen', intervalDays: 30 });
+    expect((await call('POST', '/cleaning/tasks', admin, { ...task, intervalDays: 0 })).statusCode).toBe(400);
+
+    let tasks = await ok('GET', '/cleaning/tasks', user);
+    expect(tasks.every((t: { due: boolean; lastDate: null }) => t.due && t.lastDate === null)).toBe(true);
+    const due = await ok('GET', '/cleaning/due', user);
+    expect(due[0].tasks.map((t: { name: string }) => t.name)).toEqual(['Arbeitsflächen desinfizieren', 'Kühltruhe abtauen']);
+
+    // einzelne Aufgabe abhaken, danach den Rest des Bereichs mit einem Tipp
+    expect((await ok('POST', `/cleaning/tasks/${t2.id}/done`, user)).done).toBe(1);
+    expect((await ok('POST', `/cleaning/areas/${kueche.id}/done`, user)).done).toBe(1);
+    expect((await ok('POST', `/cleaning/areas/${kueche.id}/done`, user)).done).toBe(0);
+    expect(await ok('GET', '/cleaning/due', user)).toEqual([]);
+
+    tasks = await ok('GET', '/cleaning/tasks', user);
+    const abtauen = tasks.find((t: { id: string }) => t.id === t2.id);
+    expect(abtauen).toMatchObject({ lastDate: today, lastBy: 'Küche', due: false, doneToday: true, dueDate: addDays(today, 30) });
+    const log = await ok('GET', `/cleaning/log?from=${today}&to=${today}`, user);
+    expect(log).toHaveLength(2);
+
+    // versehentliches Abhaken von heute zurücknehmen – steht im Änderungsprotokoll
+    await ok('POST', `/cleaning/tasks/${t1.id}/undo`, user);
+    expect((await call('POST', `/cleaning/tasks/${t1.id}/undo`, user)).statusCode).toBe(404);
+    expect((await ok('GET', '/cleaning/due', user))[0].tasks.map((t: { name: string }) => t.name)).toEqual(['Arbeitsflächen desinfizieren']);
+    const audit = (await ok('GET', '/audit?entity=cleaning&limit=20', admin)).items.map((e: { action: string }) => e.action);
+    expect(audit).toEqual(['undo', 'done', 'done']);
+  });
+});

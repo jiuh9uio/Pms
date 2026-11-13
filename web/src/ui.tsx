@@ -129,5 +129,11 @@ export function useSubmit<T>(schema: ZodType<T>, send: (value: T) => Promise<voi
   return { errors, busy, submit };
 }
 
+export function printOnly(which: 'temp' | 'cleaning') {
+  document.body.dataset.print = which;
+  window.print();
+  delete document.body.dataset.print;
+}
+
 export const fmtDateTime = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '–';

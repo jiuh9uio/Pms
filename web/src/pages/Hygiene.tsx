@@ -9,7 +9,7 @@ import { ApiFailure, api } from '../api.ts';
 import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { WD, deDate, deShort } from '../hotel/common.tsx';
-import { Button, LoadState, useLoad, useToast } from '../ui.tsx';
+import { Button, LoadState, printOnly, useLoad, useToast } from '../ui.tsx';
 import { MasterDialog } from './RoomsPrices.tsx';
 
 const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
@@ -121,7 +121,7 @@ export function Hygiene() {
           <div className="areahead">
             <h3>{area.name}{mode === 'month' && ` · ${MONTHS[Number(month.slice(5)) - 1]} ${month.slice(0, 4)}`}</h3>
             <div className="actions noprint">
-              {mode === 'month' && <><input type="month" value={month} max={today.slice(0, 7)} onChange={(e) => e.target.value && setMonth(e.target.value)} aria-label="Monat" /><Button onClick={() => window.print()}>Drucken</Button></>}
+              {mode === 'month' && <><input type="month" value={month} max={today.slice(0, 7)} onChange={(e) => e.target.value && setMonth(e.target.value)} aria-label="Monat" /><Button onClick={() => printOnly('temp')}>Drucken</Button></>}
               {isAdmin && <><Button onClick={() => editArea(area)}>Bereich bearbeiten</Button><Button onClick={() => editPoint()}>Messstelle anlegen</Button></>}
             </div>
           </div>

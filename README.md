@@ -33,6 +33,12 @@ Der frühere Prototyp liegt unverändert unter `prototype/` und wird mit Phase 3
 - Unter **Kontrollen** gibt es je Kontrollart (Hygieneamt, Finanzamt; weitere legt der Administrator an) eine Liste der
   bereitzuhaltenden Unterlagen zum Abhaken und ein Verzeichnis der stattgefundenen Kontrollen.
   Die mitgelieferten Unterlagenlisten sind Vorschläge, keine vollständige oder rechtlich geprüfte Aufstellung.
+- **Weitere Kühlgeräte:** Auf der Kontrollen-Startseite legt der Administrator je Bereich mit einem Tipp weitere Messstellen an
+  („+ Kühltruhe 2“, „+ Kühlschrank“, „+ Kühlhaus“ …, mit üblichem Sollbereich, der danach anpassbar ist).
+- **Reinigungsprotokoll:** Unter dem Temperaturprotokoll stehen je Bereich die Reinigungsaufgaben mit Intervall (täglich, wöchentlich, monatlich …).
+  Das Programm zeigt, was heute fällig oder überfällig ist; abgehakt wird nur für heute, mit Namen und Uhrzeit. Versehentliches Abhaken
+  lässt sich am selben Tag zurücknehmen (steht im Änderungsprotokoll). Das Monatsprotokoll lässt sich getrennt ausdrucken.
+  Die Kurzabfrage fragt nach der Temperatur auch „Reinigung erledigt?“ für die fälligen Aufgaben.
 - **Bereiche (Zonen)** wie Küche, Theke oder Lager legt der Administrator direkt auf der Kontrollen-Startseite an (auch per Vorschlag zum Antippen)
   oder im Hygieneamt; dort kommen je Bereich die Messstellen dazu. Abgefragt wird ein Bereich, sobald er mindestens eine Messstelle hat.
 - Beim **Hygieneamt** steht oben das Temperaturprotokoll: Bereiche (z. B. Küche) als Reiter, darunter eine Tabelle der Messstellen
