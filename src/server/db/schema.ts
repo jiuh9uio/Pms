@@ -339,6 +339,35 @@ export const cleaningLog = pgTable('cleaning_log', {
   doneAt: ts('done_at').notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.taskId, t.date] })]);
 
+// ---------- Restaurant: Tische und Tischreservierungen ----------
+export const restaurantTables = pgTable('restaurant_tables', {
+  id: id(),
+  name: text('name').notNull().unique(),
+  seats: integer('seats').notNull(),
+  /** Raum oder Bereich, z. B. Gaststube, Saal, Terrasse */
+  area: text('area').notNull().default(''),
+  sort: integer('sort').notNull().default(0),
+  active: boolean('active').notNull().default(true),
+  ...stamps,
+});
+
+export const tableReservations = pgTable('table_reservations', {
+  id: id(),
+  date: date('date', { mode: 'string' }).notNull(),
+  /** Uhrzeit HH:MM und Dauer in Minuten */
+  time: text('time').notNull(),
+  durationMin: integer('duration_min').notNull().default(120),
+  persons: integer('persons').notNull(),
+  name: text('name').notNull(),
+  phone: text('phone').notNull().default(''),
+  note: text('note').notNull().default(''),
+  /** leer = noch kein Tisch zugewiesen */
+  tableId: uuid('table_id').references(() => restaurantTables.id),
+  status: text('status', { enum: ['booked', 'seated', 'done', 'cancelled', 'no_show'] }).notNull().default('booked'),
+  createdBy: text('created_by').notNull(),
+  ...stamps,
+}, (t) => [index('table_reservations_date_idx').on(t.date)]);
+
 /** Vom Administrator benannte Netzwerkgeräte (z. B. „Kasse“, „Drucker“). Gefundene Geräte selbst werden nicht gespeichert. */
 export const netDevices = pgTable('net_devices', {
   mac: text('mac').primaryKey(),

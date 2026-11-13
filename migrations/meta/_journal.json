@@ -120,6 +120,13 @@
       "when": 1794582479209,
       "tag": "0016_netzwerk",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794583666718,
+      "tag": "0017_restaurant",
+      "breakpoints": true
     }
   ]
 }

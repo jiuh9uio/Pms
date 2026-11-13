@@ -21,6 +21,7 @@ import { registerBillingRoutes } from './routes-billing.js';
 import { registerControlRoutes } from './routes-controls.js';
 import { registerEInvoiceRoutes } from './routes-einvoice.js';
 import { registerHotelRoutes } from './routes-hotel.js';
+import { registerRestaurantRoutes } from './routes-restaurant.js';
 import { getBackupStatus, runBackup } from './backup.js';
 import { checkForUpdate, getUpdateStatus, installUpdate } from './update.js';
 
@@ -173,6 +174,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.patch('/tax-rates/:id', { preHandler: requireAdmin }, (req) => settings.updateTaxRate(db, actor(req), idParam(req), S.taxRateUpdateInput.parse(req.body)));
 
     registerHotelRoutes(api, { db, requireUser: requireModule('hotel'), requireAdmin, actor });
+    registerRestaurantRoutes(api, { db, requireUser: requireModule('restaurant'), requireAdmin, actor });
     registerControlRoutes(api, { db, requireUser: requireModule('kontrollen'), requireAdmin, actor });
     registerBillingRoutes(api, { db, requireUser: requireModule('hotel'), actor });
     registerEInvoiceRoutes(api, { db, requireUser: requireModule('erechnung'), requireAdmin, actor });

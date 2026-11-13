@@ -89,6 +89,12 @@ jobs:
           $scan = Invoke-RestMethod "$base/network/devices" -WebSession $s -TimeoutSec 60
           Write-Host "Geräte im Netz: $(($scan.devices | ForEach-Object { $_.ip }) -join ', ') in $($scan.networks -join ', ')"
           if (@($scan.devices).Count -lt 1) { throw 'Netzwerksuche hat nicht einmal den eigenen Rechner gefunden' }
+          $tb = Post '/restaurant/tables' @{ name = 'Tisch 1'; seats = 4; area = ''; sort = 1 } $s
+          $tr = @{ date = '2031-05-08'; time = '18:00'; durationMin = 120; persons = 4; name = 'Test'; phone = ''; note = ''; tableId = $tb.id }
+          Post '/restaurant/reservations' $tr $s | Out-Null
+          $twice = $false
+          try { Post '/restaurant/reservations' $tr $s | Out-Null } catch { $twice = $_.Exception.Response.StatusCode.value__ -eq 409 }
+          if (-not $twice) { throw 'Doppelte Tischreservierung wurde nicht abgelehnt' }
           $gr = Post '/goods-receipts' @{ supplier = 'Test'; goods = 'Ware'; tempC = 3.5; ok = $true; note = '' } $s
           if (-not $gr.id) { throw 'Wareneingang wurde nicht gespeichert' }
           $rep = Invoke-RestMethod "$base/reports/year?year=2031" -WebSession $s

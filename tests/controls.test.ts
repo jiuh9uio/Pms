@@ -229,3 +229,49 @@ describe('Wareneingangskontrolle', () => {
     expect(await ok('GET', `/goods-receipts?month=${today.slice(0, 7)}`, user)).toHaveLength(1);
   });
 });
+
+describe('Restaurant: Tischreservierungen', () => {
+  const D = '2031-06-14';
+  const res = (extra: object = {}) => ({ date: D, time: '18:00', durationMin: 120, persons: 4, name: 'Familie Beispiel', phone: '', note: '', tableId: null as string | null, ...extra });
+  let t1: string, t2: string;
+
+  it('lässt nur den Administrator Tische anlegen', async () => {
+    expect((await call('POST', '/restaurant/tables', user, { name: 'Tisch 1', seats: 4, area: '', sort: 1 })).statusCode).toBe(403);
+    expect((await call('GET', '/restaurant/tables', user)).statusCode).toBe(200);
+    t1 = (await ok('POST', '/restaurant/tables', admin, { name: 'Tisch 1', seats: 4, area: 'Gaststube', sort: 1 })).id;
+    t2 = (await ok('POST', '/restaurant/tables', admin, { name: 'Tisch 2', seats: 2, area: 'Gaststube', sort: 2 })).id;
+    expect((await call('POST', '/restaurant/tables', admin, { name: 'Tisch 1', seats: 4, area: '', sort: 3 })).statusCode).toBe(409);
+  });
+
+  it('verhindert doppelt belegte und zu kleine Tische', async () => {
+    const a = (await ok('POST', '/restaurant/reservations', admin, res({ tableId: t1 }))).id;
+    const clash = await call('POST', '/restaurant/reservations', admin, res({ tableId: t1, time: '19:30', name: 'Zweite' }));
+    expect(clash.statusCode).toBe(409);
+    expect(clash.json().error.code).toBe('table_taken');
+    expect((await call('POST', '/restaurant/reservations', admin, res({ tableId: t2, name: 'Zu viele' }))).json().error.code).toBe('table_small');
+    await ok('POST', '/restaurant/reservations', admin, res({ tableId: t1, time: '20:00', name: 'Danach' })); // direkt im Anschluss ist frei
+    await ok('POST', '/restaurant/reservations', admin, res({ name: 'Ohne Tisch', persons: 12 }));
+    expect((await call('POST', '/restaurant/reservations', admin, res({ time: '25:00' }))).statusCode).toBe(400);
+
+    // gleichzeitige Anfragen auf denselben freien Tisch: genau eine gewinnt
+    const both = await Promise.all([1, 2].map((i) => call('POST', '/restaurant/reservations', admin, res({ tableId: t2, persons: 2, time: '12:00', name: `Mittag ${i}` }))));
+    expect(both.map((r) => r.statusCode).sort()).toEqual([200, 409]);
+
+    const list = await ok('GET', `/restaurant/reservations?date=${D}`, admin);
+    expect(list.map((r: { time: string }) => r.time)).toEqual(['12:00', '18:00', '18:00', '20:00']);
+    const first = list.find((r: { id: string }) => r.id === a);
+    expect(first).toMatchObject({ tableName: 'Tisch 1', status: 'booked' });
+
+    // Storno gibt den Tisch frei; Reaktivieren geht nur, solange er noch frei ist
+    await ok('POST', `/restaurant/reservations/${a}/status`, admin, { status: 'cancelled', version: first.version });
+    const b = (await ok('POST', '/restaurant/reservations', admin, res({ tableId: t1, name: 'Nachrücker' }))).id;
+    expect((await call('POST', `/restaurant/reservations/${a}/status`, admin, { status: 'booked', version: first.version + 1 })).statusCode).toBe(409);
+    expect((await call('POST', `/restaurant/reservations/${b}/status`, admin, { status: 'seated', version: 99 })).statusCode).toBe(409); // veralteter Stand
+
+    // Verschieben auf eine belegte Zeit wird abgelehnt, auf eine freie angenommen
+    const nb = (await ok('GET', `/restaurant/reservations?date=${D}`, admin)).find((r: { id: string }) => r.id === b);
+    const { id: _id, tableName: _t, status: _s, createdBy: _c, ...data } = nb;
+    expect((await call('PUT', `/restaurant/reservations/${b}`, admin, { ...data, time: '19:00' })).statusCode).toBe(409);
+    await ok('PUT', `/restaurant/reservations/${b}`, admin, { ...data, time: '16:00', durationMin: 90 });
+  });
+});

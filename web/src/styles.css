@@ -350,3 +350,8 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--border); }
 .guestform h1 { font-size: 22px; margin: 6px 0 2px; } .guestform h1 small { font-weight: 400; color: var(--ink-2); font-size: 14px; margin-left: 6px; }
 .guestform .formgrid { grid-template-columns: minmax(0, 1fr); } .guestform input { height: 44px; font-size: 16px; }
 .qrbox { text-align: center; } .qrbox img { background: #fff; border-radius: 8px; } .qrbox p { text-align: left; } .qrbox .qrurl { text-align: center; font-size: 12px; word-break: break-all; color: var(--ink-2); }
+
+/* Restaurant */
+tr.faded td { opacity: .55; } .rowactions { text-align: right; white-space: nowrap; } .rowactions .btn { margin-left: 6px; padding: 5px 10px; }
+@media (max-width: 900px) { .rowactions { white-space: normal; } .rowactions .btn { margin: 2px 0 2px 6px; } }
+.pagehead .actions input[type='date'], .pagehead .actions input[type='month'] { width: auto; }

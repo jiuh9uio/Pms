@@ -78,6 +78,14 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
   - Geräteadressen können personenbezogene Daten sein. Ob und wie die Übersicht im Betrieb genutzt werden darf (Gäste,
     Mitarbeitende), wurde **nicht rechtlich geprüft**.
 
+**Seit Version 1.7.0 zusätzlich:**
+
+- **Restaurant – Tischreservierungen:** Tagesliste mit Uhrzeit, Dauer, Personen, Name, Telefon, Bemerkung und Tisch; Zustände
+  reserviert → am Tisch → abgeschlossen sowie storniert / nicht erschienen. Tische (Name, Plätze, Raum) richtet der Administrator ein.
+  Der Server lehnt Überschneidungen auf demselben Tisch und zu kleine Tische ab (auch bei gleichzeitigen Anfragen); Reservierungen
+  ohne Tisch sind erlaubt. Bestehende Benutzer erhalten den Bereich erst nach Freigabe. Nicht enthalten: grafischer Tischplan,
+  Zusammenstellen mehrerer Tische, Online-Reservierung durch Gäste, Erinnerungen, Verknüpfung mit Hotelgästen oder Kasse.
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE
