@@ -23,20 +23,20 @@ export function encodeCp858(text: string): Buffer {
   return Buffer.from(out);
 }
 
-export type Line = { text: string; align?: 'left' | 'center'; bold?: boolean; big?: boolean } | { rule: true } | { feed: number } | { qr: string };
+export type Line = { text: string; align?: 'left' | 'center'; bold?: boolean; big?: boolean } | { rule: true; char?: string } | { feed: number } | { qr: string; size?: number };
 
 /** Baut den Druckauftrag: Initialisieren, Zeichentabelle, Zeilen, Vorschub, Schnitt. */
 export function buildJob(lines: Line[], width: number): Buffer {
   const ESC = 0x1b, GS = 0x1d;
   const parts: Buffer[] = [Buffer.from([ESC, 0x40, ESC, 0x74, 19])]; // ESC @, ESC t 19 (CP858)
   for (const l of lines) {
-    if ('rule' in l) parts.push(encodeCp858('-'.repeat(width) + '\n'));
+    if ('rule' in l) parts.push(Buffer.from([ESC, 0x61, 0, ESC, 0x45, 0, GS, 0x21, 0]), encodeCp858((l.char ?? '-').repeat(width) + '\n'));
     else if ('feed' in l) parts.push(Buffer.from([ESC, 0x64, Math.min(10, Math.max(0, l.feed))]));
     else if ('qr' in l) {
       // QR-Code (Epson: GS ( k): Modell 2, Modulgröße 6, Fehlerkorrektur M, Daten speichern, drucken – zentriert
       const data = Buffer.from(l.qr, 'utf8');
       const len = data.length + 3;
-      parts.push(Buffer.from([ESC, 0x61, 1, GS, 0x28, 0x6b, 4, 0, 49, 65, 50, 0, GS, 0x28, 0x6b, 3, 0, 49, 67, 6, GS, 0x28, 0x6b, 3, 0, 49, 69, 49,
+      parts.push(Buffer.from([ESC, 0x61, 1, GS, 0x28, 0x6b, 4, 0, 49, 65, 50, 0, GS, 0x28, 0x6b, 3, 0, 49, 67, Math.min(12, Math.max(3, l.size ?? 6)), GS, 0x28, 0x6b, 3, 0, 49, 69, 49,
         GS, 0x28, 0x6b, len & 0xff, len >> 8, 49, 80, 48]), data, Buffer.from([GS, 0x28, 0x6b, 3, 0, 49, 81, 48, 0x0a]));
     }
     else {

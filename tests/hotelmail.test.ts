@@ -282,7 +282,7 @@ describe('E-Mail an den Gast', () => {
     await ok('PUT', '/settings/hotel', admin, { ...hotel, phone: '01234 56789', openingHours: 'Mo-Fr 11:30-14:00 und 17:30-22:00\nDi Ruhetag' });
     const o = await ok('GET', '/quickprint', admin);
     expect(o).toMatchObject({ printerReady: true, printerName: 'Bondrucker vorne' });
-    expect(o.slips.map((x: { id: string }) => x.id)).toEqual(['info', 'wifi']);
+    expect(o.slips.map((x: { id: string }) => x.id)).toEqual(['info', 'wifi', 'review']);
     expect(o.slips[0].preview).toContain('Di Ruhetag');
 
     await ok('POST', '/quickprint/print', admin, { id: 'info', copies: 2 });
@@ -310,6 +310,18 @@ describe('E-Mail an den Gast', () => {
     await ok('POST', `/quickprint/templates/${t.id}/remove`, admin);
     expect((await call('POST', '/quickprint/print', admin, { id: t.id, copies: 1 })).statusCode).toBe(404);
     expect((await call('POST', '/quickprint/print', admin, { id: 'info', copies: 9 })).statusCode).toBe(400);
+    // Bewertungs-Zettel: erst mit Link druckbar, QR-Code führt zur Bewertungsseite
+    expect((await call('POST', '/quickprint/print', admin, { id: 'review', copies: 1 })).json().error.code).toBe('slip_incomplete');
+    expect((await call('PUT', '/quickprint/review', admin, { url: 'http://unsicher.example', headline: '', text: '', thanks: '' })).statusCode).toBe(400);
+    expect((await call('PUT', '/quickprint/review', user, { url: 'https://g.page/r/abc/review', headline: '', text: '', thanks: '' })).statusCode).toBe(403);
+    await ok('PUT', '/quickprint/review', admin, { url: 'https://g.page/r/abc/review', headline: '', text: '', thanks: '' });
+    const rev = (await ok('GET', '/quickprint', admin)).slips.find((x: { id: string }) => x.id === 'review');
+    expect(rev.review.headline).toBe('Hat es Ihnen gefallen?'); // leere Felder: Standardtext
+    await ok('POST', '/quickprint/print', admin, { id: 'review', copies: 1 });
+    bon = await text();
+    expect(bon).toContain('https://g.page/r/abc/review');
+    expect(bon).toContain('Hat es Ihnen');
+    expect(bon).toMatch(/Bewertung bei[\s\S]{0,30}Google/); // auf 32 Zeichen umbrochen
     server.close();
     await new Promise((r) => setTimeout(r, 2200));
   }, 30_000);

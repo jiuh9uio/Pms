@@ -101,5 +101,10 @@ export type BonPrinter = z.infer<typeof bonPrinterInput>;
 export const printTemplateInput = z.object({ title: required(40), body: required(1500), sort: z.number('Bitte eine Zahl eingeben').int().min(0).max(999) });
 export const quickPrintInput = z.object({ id: z.string().max(40), copies: z.number().int().min(1).max(5) });
 export const quickTextInput = z.object({ title: text(40), text: required(1500), copies: z.number().int().min(1).max(5) });
-export interface QuickSlipDto { id: string; title: string; preview: string; /** eigene Vorlage (änderbar) oder eingebaut */ custom: boolean; body?: string; sort?: number; version?: number; hint?: string }
+export const reviewSlipInput = z.object({
+  url: z.union([z.literal(''), z.url('Bitte den vollständigen Link eintragen, beginnend mit https://').max(300).refine((u) => u.startsWith('https://'), 'Der Link muss mit https:// beginnen')]),
+  headline: text(40), text: text(300), thanks: text(80),
+});
+export type ReviewSlip = z.infer<typeof reviewSlipInput>;
+export interface QuickSlipDto { /** Einstellungen des Bewertungs-Zettels (nur bei id „review“) */ review?: ReviewSlip; id: string; title: string; preview: string; /** eigene Vorlage (änderbar) oder eingebaut */ custom: boolean; body?: string; sort?: number; version?: number; hint?: string }
 export interface QuickPrintDto { printerReady: boolean; printerName: string; slips: QuickSlipDto[] }

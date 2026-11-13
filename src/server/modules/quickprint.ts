@@ -1,5 +1,5 @@
 import { asc, eq } from 'drizzle-orm';
-import type { BonPrinter, QuickPrintDto, QuickSlipDto } from '../../shared/schemas.js';
+import type { BonPrinter, QuickPrintDto, QuickSlipDto, ReviewSlip } from '../../shared/schemas.js';
 import type { Db, Exec } from '../db/client.js';
 import { printTemplates, settings } from '../db/schema.js';
 import { AppError, conflict, notFound, stale } from '../lib/errors.js';
@@ -46,13 +46,31 @@ export const testFrontPrinter = async (db: Exec) => {
   catch (e) { throw new AppError(502, 'printer_failed', e instanceof Error ? e.message : 'Druckfehler'); }
 };
 
+// ---------- Bewertungs-Zettel (zum Anheften an die Rechnung) ----------
+const REVIEW_DEFAULT: ReviewSlip = {
+  url: '', headline: 'Hat es Ihnen gefallen?',
+  text: 'Dann freuen wir uns sehr über Ihre Bewertung bei Google. Sie hilft uns und anderen Gästen.',
+  thanks: 'Vielen Dank für Ihren Besuch!',
+};
+export async function getReview(db: Exec): Promise<ReviewSlip> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'review_slip'));
+  const v = { ...REVIEW_DEFAULT, ...((row?.value as Partial<ReviewSlip>) ?? {}) };
+  // leere Texte fallen auf die Vorgabe zurück
+  return { url: v.url, headline: v.headline || REVIEW_DEFAULT.headline, text: v.text || REVIEW_DEFAULT.text, thanks: v.thanks || REVIEW_DEFAULT.thanks };
+}
+export async function saveReview(db: Db, actor: Actor, v: ReviewSlip) {
+  await db.insert(settings).values({ key: 'review_slip', value: v }).onConflictDoUpdate({ target: settings.key, set: { value: v, updatedAt: new Date() } });
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: 'review_slip', after: v });
+  return getReview(db);
+}
+
 // ---------- Zettel ----------
-type Slip = { id: string; title: string; custom: boolean; hint?: string; lines: (width: number) => Line[]; body?: string; sort?: number; version?: number };
+type Slip = { review?: ReviewSlip; blocked?: string; id: string; title: string; custom: boolean; hint?: string; lines: (width: number) => Line[]; body?: string; sort?: number; version?: number };
 const center = (text: string, width: number, o: { bold?: boolean; big?: boolean } = {}): Line[] =>
   wrap(text, o.big ? Math.floor(width / 2) : width).map((t) => ({ text: t, align: 'center' as const, ...o }));
 
 async function slips(db: Exec): Promise<Slip[]> {
-  const [h, wifi, own] = [await getHotel(db), await getWifi(db), await db.select().from(printTemplates).orderBy(asc(printTemplates.sort), asc(printTemplates.title))];
+  const [h, wifi, review, own] = [await getHotel(db), await getWifi(db), await getReview(db), await db.select().from(printTemplates).orderBy(asc(printTemplates.sort), asc(printTemplates.title))];
   const address = [h.street, [h.zip, h.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
   const head = (w: number): Line[] => [...center(h.name, w, { bold: true, big: true }), ...(address ? center(address, w) : []), { rule: true }];
   const contact = (w: number): Line[] => [h.phone && `Telefon: ${h.phone}`, h.email && `E-Mail: ${h.email}`, h.website].filter(Boolean).flatMap((t) => center(t as string, w));
@@ -67,6 +85,21 @@ async function slips(db: Exec): Promise<Slip[]> {
     lines: (w) => [...head(w), { text: 'WLAN für unsere Gäste', align: 'center', bold: true }, { feed: 1 }, { qr: wifiQrText(wifi) },
       ...center(`Netz: ${wifi.ssid}`, w, { bold: true }), ...center(wifi.open ? 'ohne Passwort' : `Passwort: ${wifi.password}`, w, { bold: true }), ...(wifi.note ? center(wifi.note, w) : [])],
   });
+  out.push({
+    id: 'review', title: 'Bitte um Google-Bewertung', custom: false, review,
+    hint: review.url ? 'Zum Anheften an die Rechnung.' : 'Der Link zu Ihrer Google-Bewertungsseite fehlt noch.',
+    blocked: review.url ? undefined : 'Bitte zuerst den Link zur Google-Bewertung eintragen (Schnelldruck → „Bitte um Google-Bewertung“ → ändern)',
+    lines: (w) => [
+      { rule: true, char: '=' }, { feed: 1 },
+      { text: '* * * * *', align: 'center', bold: true, big: true }, { feed: 1 },
+      ...center(review.headline, w, { bold: true, big: true }), { feed: 1 },
+      ...center(review.text, w - 4), { feed: 1 },
+      ...(review.url ? [{ qr: review.url, size: 7 } as Line] : center('[hier erscheint der QR-Code]', w)),
+      ...center('Einfach mit der Handy-Kamera scannen', w), { feed: 1 },
+      { rule: true }, ...center(review.thanks, w, { bold: true }), ...center(h.name, w),
+      { rule: true, char: '=' },
+    ],
+  });
   for (const t of own) out.push({
     id: t.id, title: t.title, custom: true, body: t.body, sort: t.sort, version: t.version,
     lines: (w) => [...head(w), ...center(t.title, w, { bold: true }), { feed: 1 }, ...wrap(t.body, w).map((text) => ({ text })), { rule: true }, ...contact(w)],
@@ -74,19 +107,20 @@ async function slips(db: Exec): Promise<Slip[]> {
   return out;
 }
 const preview = (lines: Line[], width: number) => lines.map((l) =>
-  'rule' in l ? '-'.repeat(width) : 'feed' in l ? '' : 'qr' in l ? '[QR-Code]'.padStart(Math.floor((width + 9) / 2)) :
+  'rule' in l ? (l.char ?? '-').repeat(width) : 'feed' in l ? '' : 'qr' in l ? '[QR-Code]'.padStart(Math.floor((width + 9) / 2)) :
   l.align === 'center' ? ' '.repeat(Math.max(0, Math.floor((width - l.text.length * (l.big ? 2 : 1)) / 2 / (l.big ? 2 : 1)))) + l.text : l.text).join('\n');
 
 export async function overview(db: Exec): Promise<QuickPrintDto> {
   const t = await target(db);
   const width = t?.printer.width ?? 48;
-  const list: QuickSlipDto[] = (await slips(db)).map((s) => ({ id: s.id, title: s.title, custom: s.custom, hint: s.hint, body: s.body, sort: s.sort, version: s.version, preview: preview(s.lines(width), width) }));
+  const list: QuickSlipDto[] = (await slips(db)).map((s) => ({ id: s.id, title: s.title, custom: s.custom, hint: s.hint, review: s.review, body: s.body, sort: s.sort, version: s.version, preview: preview(s.lines(width), width) }));
   return { printerReady: !!t, printerName: t?.name ?? '', slips: list };
 }
 
 export async function printSlip(db: Db, actor: Actor, id: string, copies: number) {
   const slip = (await slips(db)).find((s) => s.id === id);
   if (!slip) throw notFound('Zettel');
+  if (slip.blocked) throw conflict(slip.blocked, 'slip_incomplete');
   await send(db, slip.lines, copies);
   await record(db, actor, { action: 'print', entity: 'quickprint', entityId: slip.id, after: { title: slip.title, copies } });
   return { ok: true };

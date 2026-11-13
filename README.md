@@ -129,6 +129,8 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
   (eigene Einstellung), sonst auf dem Küchendrucker. Der QR-Code nutzt den Epson-Befehl `GS ( k`; **der QR-Druck ist mit keinem
   echten Drucker erprobt** und fehlt auf Druckern, die diesen Befehl nicht kennen (dann erscheint nur der Text).
   Jeder Druck steht im Änderungsprotokoll.
+  Seit 1.13.0 zusätzlich der Zettel „Bitte um Google-Bewertung“: Link (nur https) und Texte in den Einstellungen des Zettels,
+  QR-Code mit dem Link. Der Link wird nicht geprüft – bitte selbst scannen, ob er zur richtigen Seite führt.
 
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 

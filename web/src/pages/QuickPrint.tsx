@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { printTemplateInput, quickTextInput, type QuickPrintDto, type QuickSlipDto } from '../../../src/shared/schemas.js';
+import { printTemplateInput, quickTextInput, reviewSlipInput, type QuickPrintDto, type QuickSlipDto } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { useAuth } from '../App.tsx';
 import { Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useToast } from '../ui.tsx';
@@ -41,10 +41,10 @@ export function QuickPrint() {
           <div className="slips">
             {data.slips.map((s) => (
               <section key={s.id} className="card slip">
-                <div className="cardhead"><h2>{s.title}</h2>{s.custom && isAdmin && <button type="button" className="linkbtn" onClick={() => setEdit(s)}>ändern</button>}</div>
+                <div className="cardhead"><h2>{s.title}</h2>{(s.custom || s.review) && isAdmin && <button type="button" className="linkbtn" onClick={() => setEdit(s)}>{s.review && !s.review.url ? 'Link eintragen' : 'ändern'}</button>}</div>
                 <pre className="bon">{s.preview}</pre>
                 {s.hint && <p className="muted small">{s.hint}</p>}
-                <Button variant="primary" busy={busy === s.id} disabled={!data.printerReady} onClick={() => void print(s)}>Drucken</Button>
+                <Button variant="primary" busy={busy === s.id} disabled={!data.printerReady || (!!s.review && !s.review.url)} onClick={() => void print(s)}>Drucken</Button>
               </section>
             ))}
             <form className="card slip" onSubmit={(e) => void f.submit({ ...free, copies }, e)} noValidate>
@@ -57,7 +57,8 @@ export function QuickPrint() {
           <p className="muted small">Öffnungszeiten, Telefon und Adresse stammen aus Verwaltung → Einstellungen → Hotel; der WLAN-Zettel erscheint, sobald unter Internet das Gäste-WLAN hinterlegt ist. Die Vorschau zeigt den Text ungefähr so, wie er auf dem Bon steht.</p>
         </>
       )}
-      {edit && <TemplateDialog slip={edit === 'new' ? null : edit} count={data?.slips.length ?? 0} onClose={() => setEdit(null)} onDone={() => { setEdit(null); reload(); }} />}
+      {edit && edit !== 'new' && edit.review && <ReviewDialog slip={edit} onClose={() => setEdit(null)} onDone={() => { setEdit(null); reload(); }} />}
+      {edit && (edit === 'new' || !edit.review) && <TemplateDialog slip={edit === 'new' ? null : edit} count={data?.slips.length ?? 0} onClose={() => setEdit(null)} onDone={() => { setEdit(null); reload(); }} />}
     </>
   );
 }
@@ -82,6 +83,26 @@ function TemplateDialog({ slip, count, onClose, onDone }: { slip: QuickSlipDto |
         <Field label="Überschrift" error={f.errors.title} wide hint="z. B. Taxi, Ärztlicher Notdienst, Ausflugstipps, Frühstückszeiten"><input value={v.title} onChange={(e) => setV({ ...v, title: e.target.value })} autoFocus /></Field>
         <Field label="Text" error={f.errors.body} wide hint="Hotelname und Adresse stehen automatisch oben, Telefon und E-Mail unten."><textarea rows={8} value={v.body} onChange={(e) => setV({ ...v, body: e.target.value })} /></Field>
         <Field label="Reihenfolge" error={f.errors.sort} hint="kleine Zahl zuerst"><input inputMode="numeric" value={v.sort} onChange={(e) => setV({ ...v, sort: e.target.value })} /></Field>
+      </form>
+    </Dialog>
+  );
+}
+
+/** Bewertungs-Zettel: Link zur Google-Bewertung und Texte. */
+function ReviewDialog({ slip, onClose, onDone }: { slip: QuickSlipDto; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const [v, setV] = useState({ ...slip.review! });
+  const f = useSubmit(reviewSlipInput, async (d) => { await api('PUT', '/quickprint/review', d); toast('Gespeichert'); onDone(); });
+  return (
+    <Dialog title="Bitte um Google-Bewertung" onClose={onClose}
+      footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={f.busy} onClick={() => void f.submit(v)}>Speichern</Button></>}>
+      <form className="formgrid" onSubmit={(e) => void f.submit(v, e)} noValidate>
+        <Field label="Link zur Google-Bewertung" error={f.errors.url} wide hint="In Ihrem Google-Unternehmensprofil unter „Rezensionen“ → „Mehr Rezensionen erhalten“ den Link kopieren und hier einfügen (beginnt meist mit https://g.page/r/…).">
+          <input type="url" value={v.url} onChange={(e) => setV({ ...v, url: e.target.value.trim() })} placeholder="https://g.page/r/…/review" autoFocus />
+        </Field>
+        <Field label="Überschrift" error={f.errors.headline} wide><input value={v.headline} onChange={(e) => setV({ ...v, headline: e.target.value })} /></Field>
+        <Field label="Text" error={f.errors.text} wide><textarea rows={3} value={v.text} onChange={(e) => setV({ ...v, text: e.target.value })} /></Field>
+        <Field label="Dank am Ende" error={f.errors.thanks} wide hint="Leere Felder werden mit dem Standardtext gefüllt."><input value={v.thanks} onChange={(e) => setV({ ...v, thanks: e.target.value })} /></Field>
       </form>
     </Dialog>
   );
