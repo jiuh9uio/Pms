@@ -166,3 +166,12 @@ export const companyInput = z.object({
 });
 export type CompanyInput = z.infer<typeof companyInput>;
 export interface CompanyDto extends CompanyInput { id: string; version: number; bookingCount: number; lastStay: string | null; revenueCents: number }
+
+// ---------- E-Mail an den Gast ----------
+export const mailSendInput = z.object({ to: z.email('Ungültige E-Mail-Adresse'), subject: required(200), text: required(8000) });
+/** Vorschlag für eine E-Mail; ready = der Versand ist in der Verwaltung eingerichtet. */
+export interface MailDraft { to: string; subject: string; text: string; attachment: string | null; ready: boolean }
+
+// ---------- Auswertung ----------
+export interface ReportRow { nights: number; available: number; occupancyPercent: number; lodgingCents: number; invoicedCents: number; invoices: number }
+export interface YearReport { year: number; rooms: number; months: (ReportRow & { month: number })[]; total: ReportRow }

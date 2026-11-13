@@ -10,16 +10,30 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
 | 1 Fundament | Anmeldung, Benutzer und Rollen, Änderungsprotokoll, Stammdaten, Steuersätze, Grundlayout (hell/dunkel, mobil), Datensicherung | **fertig** |
 | 2 Hotelbetrieb | Zimmer, Kategorien, Preisregeln, Leistungen, Belegungsplan (Tag/Woche/Monat, Drag-and-drop, Sperren), Reservierungen (auch mehrere Zimmer), Check-in/-out, Gäste, Übersicht mit Kennzahlen und Aufgaben | **fertig** |
 | Kontrollen | Startmenü mit Bereichen; Kontrollarten (Hygieneamt, Finanzamt, eigene), Unterlagenlisten, Kontrollbesuche, Temperaturprotokoll je Bereich und Messstelle mit Monatsausdruck | **fertig** |
-| 3 Abrechnung | Rechnungen mit lückenloser Nummer, Druck/PDF, Storno per Stornobeleg, Zahlungen (bar/Karte/Überweisung …), Anzahlungen, offene Posten, CSV-Export | **fertig** (ohne E-Mail-Versand) |
+| 3 Abrechnung | Rechnungen mit lückenloser Nummer, Druck/PDF, Storno per Stornobeleg, Zahlungen (bar/Karte/Überweisung …), Anzahlungen, offene Posten, CSV-Export | **fertig** |
 | 4 Qualität | Browser-Tests, Sicherheitsprüfung, Bedienung mobil, Anwenderdokumentation | offen |
 
-**Noch nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
+**Seit Version 1.1.0 zusätzlich:**
 
-- E-Mail-Versand (GMX) im Neubau; der Prototyp unter `prototype/` kann es weiterhin
+- **Datensicherung in der Windows-Version:** einmal täglich automatisch, solange das Programm läuft (stündliche Prüfung, neue Sicherung
+  wenn die jüngste älter als 20 Stunden ist), Knopf „Jetzt sichern“ und Stand unter *Einstellungen → Datensicherung*, Warnung im
+  Startmenü bei fehlgeschlagener oder mehr als drei Tage alter Sicherung. `BACKUP_COPY_DIR` in `pms.env` kopiert jede Sicherung
+  zusätzlich in einen zweiten Ordner (USB-Festplatte, Netzlaufwerk); `BACKUP_AUTO=off` schaltet die Automatik ab.
+  Läuft das Programm nicht, wird auch nicht gesichert. Die Sicherungen sind nicht verschlüsselt.
+- **E-Mail an Gäste (Bereich Hotel):** Reservierungsbestätigung aus der Reservierung, Rechnung als PDF (mit eingebetteten
+  ZUGFeRD-Daten) aus der Rechnung. Der Textvorschlag ist vor dem Senden änderbar; der Versand steht im Verlauf der Reservierung
+  bzw. im Änderungsprotokoll. Voraussetzung ist das Postfach unter *Einstellungen → E-Mail-Versand*.
+  Automatisiert getestet mit ersetztem Versand – **der Versand über ein echtes GMX-Postfach ist nicht getestet.**
+  Rechnungen mit Nachlass-Positionen oder unbekanntem Empfängerland lassen sich so nicht senden (dann drucken/als PDF speichern).
+- **Auswertung (Bereich Hotel):** Zimmernächte, Auslastung, gebuchter Logisumsatz und Rechnungssumme je Monat. Die Auslastung
+  bezieht sich auf die heute aktiven Zimmer; Sperren und frühere Zimmerzahlen bleiben unberücksichtigt. Kein Ersatz für die Buchhaltung.
+
+**Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
+
 - DATEV-Format, Mahnwesen, Kassenfunktion/TSE
 - Aufpreise für Zusatzpersonen und Kinderpreise (derzeit über Sonderpreis je Nacht)
-- Meldeschein-Druck, Löschen/Anonymisieren von Gästen nach Fristen, Housekeeping
-- TSE/Kassenfunktion, E-Rechnung, Channel-Manager, Onlinebuchung
+- Meldeschein-Druck, automatische Löschfristen für Gästedaten
+- Channel-Manager, Onlinebuchung, automatischer E-Mail-Versand (z. B. Erinnerung vor Anreise)
 
 Der frühere Prototyp liegt unverändert unter `prototype/`.
 

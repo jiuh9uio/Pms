@@ -154,7 +154,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 :root {
   --st-confirmed: #1f8a4c; --st-tentative: #e3b015; --st-tentative-ink: #3d2f00; --st-in: #2b6fd6; --st-out: #8a93a0; --st-blocked: #cf3a31;
 }
-textarea { width: 100%; padding: 8px 11px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); font: inherit; color: inherit; resize: vertical; }
+textarea { width: 100%; height: auto; min-height: 38px; padding: 8px 11px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); font: inherit; color: inherit; resize: vertical; }
 .small { font-size: 12px; } .light { font-weight: 400; } .right { text-align: right; } small.inl { display: inline; }
 .left { margin-right: auto; }
 .dialog.lg { width: min(860px, calc(100vw - 24px)); } .dialog.xl { width: min(1080px, calc(100vw - 24px)); }
@@ -332,3 +332,8 @@ a.btn.primary { color: var(--accent-ink); }
 ol.steps, ul.bullets { margin: 0 0 10px; padding-left: 20px; display: grid; gap: 6px; }
 .testto { max-width: 300px; }
 @media (max-width: 760px) { .eline { flex-wrap: wrap; } .eline input:first-child { flex-basis: 100%; } .rowactions { flex-wrap: wrap; } }
+
+/* Auswertung */
+.bar { display: inline-block; height: 8px; border-radius: 4px; background: var(--accent); vertical-align: middle; margin-right: 8px; min-width: 1px; }
+.barcell { min-width: 150px; white-space: nowrap; }
+tfoot td { font-weight: 600; border-top: 2px solid var(--border); }

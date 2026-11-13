@@ -6,6 +6,8 @@ import { listAudit, type Actor } from './modules/audit.js';
 import * as bookings from './modules/bookings.js';
 import * as companies from './modules/companies.js';
 import * as guests from './modules/guests.js';
+import * as hotelmail from './modules/hotelmail.js';
+import { yearReport } from './modules/reports.js';
 import * as rooms from './modules/rooms.js';
 
 interface Ctx {
@@ -105,6 +107,17 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
     return bookings.listBookings(db, q);
   });
   api.get('/bookings/:id', user, (req) => bookings.getBooking(db, idOf(req)));
+  api.get('/reports/year', user, (req) => yearReport(db, z.object({ year: z.coerce.number().int().min(2000).max(2100) }).parse(req.query).year));
+  api.get('/bookings/:id/mail', user, (req) => hotelmail.bookingMailDraft(db, idOf(req)));
+  api.post('/bookings/:id/mail', user, async (req) => {
+    await hotelmail.sendBookingMail(db, actor(req), idOf(req), H.mailSendInput.parse(req.body));
+    return { ok: true };
+  });
+  api.get('/invoices/:id/mail', user, (req) => hotelmail.invoiceMailDraft(db, idOf(req)));
+  api.post('/invoices/:id/mail', user, async (req) => {
+    await hotelmail.sendInvoiceMail(db, actor(req), idOf(req), H.mailSendInput.parse(req.body));
+    return { ok: true };
+  });
   api.get('/bookings/:id/history', user, async (req) => (await listAudit(db, { entity: 'booking', entityId: idOf(req), limit: 200 })).items);
   api.post('/bookings', user, (req) => bookings.createBooking(db, actor(req), H.bookingCreateInput.parse(req.body)));
   api.patch('/bookings/:id', user, async (req) => {

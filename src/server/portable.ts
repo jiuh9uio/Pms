@@ -21,6 +21,7 @@ import postgres from 'postgres';
 import { buildApp } from './app.js';
 import { connect, runMigrations } from './db/client.js';
 import { setAssetsDir } from './einvoice/pdf.js';
+import { initBackup } from './backup.js';
 import { initUpdater } from './update.js';
 
 const args = process.argv.slice(2);
@@ -102,6 +103,7 @@ function backup(url: string) {
   console.log(`Sicherung geschrieben: ${file} (${Math.round(statSync(file).size / 1024)} kB)`);
   const old = readdirSync(backupDir).filter((f) => /^pms-\d{8}-\d{6}\.dump$/.test(f)).sort().slice(0, -keep);
   for (const f of old) unlinkSync(join(backupDir, f));
+  return file;
 }
 
 async function main() {
@@ -157,12 +159,14 @@ async function main() {
   };
   for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK'] as const) process.on(s, () => void shutdown());
 
+  initBackup({ dir: backupDir, run: () => backup(pg.url) });
+
   // Programm-Update: Version des Pakets und der mitgelieferten Datenbank
   const versionFile = join(home, 'app', 'version.json');
   if (existsSync(versionFile)) {
     const info = JSON.parse(readFileSync(versionFile, 'utf8')) as { version: string; pgMajor: string };
     console.log(`Version ${info.version}`);
-    initUpdater({ home, version: info.version, pgMajor: info.pgMajor, backup: () => backup(pg.url), shutdown });
+    initUpdater({ home, version: info.version, pgMajor: info.pgMajor, backup: () => { backup(pg.url); }, shutdown });
   }
 }
 

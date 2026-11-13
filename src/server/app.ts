@@ -17,6 +17,7 @@ import { registerBillingRoutes } from './routes-billing.js';
 import { registerControlRoutes } from './routes-controls.js';
 import { registerEInvoiceRoutes } from './routes-einvoice.js';
 import { registerHotelRoutes } from './routes-hotel.js';
+import { getBackupStatus, runBackup } from './backup.js';
 import { checkForUpdate, getUpdateStatus, installUpdate } from './update.js';
 
 const COOKIE = 'pms_session';
@@ -162,6 +163,14 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.post('/update/install', { preHandler: requireAdmin }, async (req) => {
       const r = await installUpdate();
       await record(db, actor(req), { action: 'update', entity: 'program', after: { version: r.version } });
+      return r;
+    });
+
+    // ---------- Datensicherung (nur Administrator) ----------
+    api.get('/backup/status', { preHandler: requireAdmin }, () => getBackupStatus());
+    api.post('/backup/run', { preHandler: requireAdmin }, async (req) => {
+      const r = runBackup();
+      await record(db, actor(req), { action: 'backup', entity: 'program', after: { file: r.last?.file } });
       return r;
     });
 

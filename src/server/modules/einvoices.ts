@@ -44,7 +44,8 @@ async function store(db: Db, actor: Actor, v: { source: 'upload' | 'invoice'; in
 }
 
 /** E-Rechnung aus einer im PMS ausgestellten Rechnung: Daten und PDF kommen vollständig aus dem System. */
-export async function fromInvoice(db: Db, actor: Actor, invoiceId: string) {
+/** Erzeugt Daten, XML und ZUGFeRD-PDF einer ausgestellten Rechnung, ohne etwas zu speichern. */
+export async function buildFromInvoice(db: Exec, invoiceId: string) {
   const inv = await getInvoice(db, invoiceId);
   if (inv.kind !== 'invoice' || inv.status !== 'issued' || !inv.issuer || !inv.number)
     throw conflict('Eine E-Rechnung kann nur aus einer ausgestellten, nicht stornierten Rechnung erzeugt werden');
@@ -67,6 +68,11 @@ export async function fromInvoice(db: Db, actor: Actor, invoiceId: string) {
   const xml = buildXml(data);
   const footer = [i.footer, [i.taxNumber && `Steuernummer: ${i.taxNumber}`, i.vatId && `USt-IdNr.: ${i.vatId}`].filter(Boolean).join(' · '), [i.bankName, i.iban && `IBAN ${i.iban}`, i.bic && `BIC ${i.bic}`].filter(Boolean).join(' · ')];
   const pdf = await embedXml(await renderInvoicePdf(data, footer), xml, { title: `Rechnung ${inv.number}`, author: i.name, generated: true });
+  return { inv, data, xml, pdf };
+}
+
+export async function fromInvoice(db: Db, actor: Actor, invoiceId: string) {
+  const { data, xml, pdf } = await buildFromInvoice(db, invoiceId);
   return store(db, actor, { source: 'invoice', invoiceId, data, xml, pdf, originalName: '', generatedPdf: true });
 }
 

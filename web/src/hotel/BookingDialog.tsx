@@ -8,6 +8,7 @@ import {
 import { api } from '../api.ts';
 import { BookingBilling } from '../billing/BookingBilling.tsx';
 import { CompanySelect } from './CompanySelect.tsx';
+import { MailDialog } from './MailDialog.tsx';
 import { useData } from '../data.tsx';
 import { Button, Dialog, Field, LoadState, fmtDateTime, useLoad, useSubmit, useToast } from '../ui.tsx';
 import { GuestFields, StatusBadge, deDate, deShort, persons, toDraft, type GuestDraft } from './common.tsx';
@@ -21,6 +22,7 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
   const history = useLoad(() => api<AuditDto[]>('GET', `/bookings/${id}/history`), [id, rev]);
   const [sub, setSub] = useState<Sub>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [mail, setMail] = useState(false);
 
   const setStatus = async (room: BookingRoomDto, status: RoomStatus, confirmText?: string) => {
     if (confirmText && !window.confirm(confirmText)) return;
@@ -36,7 +38,7 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
   const guestName = b ? [b.guest.firstName, b.guest.lastName].filter(Boolean).join(' ') : '';
   return (
     <Dialog title={b ? <>Reservierung {b.number} <span className="muted light">· {guestName}</span></> : 'Reservierung'} onClose={onClose} size="xl"
-      footer={<Button onClick={onClose}>Schließen</Button>}>
+      footer={<>{b && <Button onClick={() => setMail(true)}>Bestätigung per E-Mail</Button>}<Button onClick={onClose}>Schließen</Button></>}>
       {!b ? <LoadState error={error} loading /> : (
         <div className="split">
           <div>
@@ -71,6 +73,7 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
           </aside>
         </div>
       )}
+      {b && mail && <MailDialog path={`/bookings/${b.id}/mail`} title={`Bestätigung zu Reservierung ${b.number}`} onClose={() => setMail(false)} onSent={bump} />}
       {b && sub?.kind === 'checkin' && <Checkin booking={b} room={sub.room} onClose={() => setSub(null)} />}
       {b && sub?.kind === 'checkout' && <Checkout booking={b} room={sub.room} onClose={() => setSub(null)} />}
       {b && sub?.kind === 'edit' && <RoomForm booking={b} room={sub.room} onClose={() => setSub(null)} />}

@@ -58,7 +58,8 @@ writeFileSync(join(out, 'Autostart einrichten.bat'), crlf(
 writeFileSync(join(out, 'pms.env'), crlf(
   '# Einstellungen fuer das Schuetzenhaus PMS (Zeilen mit # sind Kommentare)\n' +
   '# Port, unter dem das PMS im Browser erreichbar ist\nPORT=3000\n' +
-  '# 0.0.0.0 = von allen Geraeten im Hausnetz erreichbar, 127.0.0.1 = nur von diesem Rechner\nHOST=0.0.0.0\n'));
+  '# 0.0.0.0 = von allen Geraeten im Hausnetz erreichbar, 127.0.0.1 = nur von diesem Rechner\nHOST=0.0.0.0\n' +
+  '# Jede Datensicherung zusaetzlich in diesen Ordner kopieren (USB-Festplatte, Netzlaufwerk); # am Zeilenanfang entfernen\n#BACKUP_COPY_DIR=E:\\PMS-Sicherung\n'));
 writeFileSync(join(out, 'LIES MICH.txt'), crlf(`Schützenhaus PMS – Windows-Version
 
 Starten:    pms.exe doppelt anklicken. Beim ersten Start wird die Datenbank eingerichtet (dauert einen Moment),
@@ -66,7 +67,9 @@ Starten:    pms.exe doppelt anklicken. Beim ersten Start wird die Datenbank eing
             Fragt die Windows-Firewall nach, den Zugriff für "Private Netzwerke" erlauben, damit andere Geräte
             im Haus das PMS unter http://<Name-dieses-Rechners>:3000 erreichen.
 Beenden:    Das schwarze Fenster schließen oder Strg+C drücken.
-Sicherung:  "Sicherung.bat" doppelt anklicken. Die Sicherungen liegen im Ordner "backups" – diesen Ordner
+Sicherung:  Läuft das PMS, sichert es einmal täglich von selbst (Stand: Einstellungen → Datensicherung).
+            Für eine Kopie auf USB-Festplatte oder Netzlaufwerk in pms.env BACKUP_COPY_DIR eintragen.
+            Von Hand: "Sicherung.bat" doppelt anklicken. Die Sicherungen liegen im Ordner "backups" – diesen Ordner
             regelmäßig auf einen zweiten Datenträger (USB-Platte, NAS) kopieren.
 Update:     Im PMS unter Verwaltung - Einstellungen - "Programm-Update". Das Programm sichert die Daten, lädt die neue
             Version herunter, tauscht die Programmdateien aus und startet neu. Die bisherigen Programmdateien liegen

@@ -77,6 +77,11 @@ jobs:
           Write-Host 'E-Rechnung (ZUGFeRD) erzeugt'
           if ((Invoke-WebRequest 'http://127.0.0.1:3000/plan').StatusCode -ne 200) { throw 'Oberfläche wird nicht ausgeliefert' }
 
+          $bak = Post '/backup/run' @{} $s
+          if (-not $bak.last.file) { throw 'Sicherung auf Knopfdruck hat nichts geschrieben' }
+          $rep = Invoke-RestMethod "$base/reports/year?year=2031" -WebSession $s
+          if ($rep.total.nights -ne 3) { throw "Auswertung falsch: $($rep.total | ConvertTo-Json)" }
+          Start-Sleep 1
           & "$dir\pms.exe" --backup
           if (-not (Get-ChildItem "$dir\backups\*.dump")) { throw 'Keine Sicherung geschrieben' }
 
