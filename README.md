@@ -38,11 +38,27 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
 - **Zahlungserinnerung** per E-Mail für überfällige offene Rechnungen, mit Rechnung im Anhang; der Versand steht im Änderungsprotokoll.
   Keine Mahnstufen, Mahngebühren oder Verzugszinsen.
 
+**Seit Version 1.3.0 zusätzlich:**
+
+- **Meldeschein per QR-Code:** In der Reservierung erzeugt „Meldeschein per QR“ einen Link mit zufälligem Zugangscode (als QR-Code).
+  Der Gast öffnet ihn ohne Anmeldung am eigenen Handy und trägt seine Angaben ein (deutsch/englisch); sie werden ins Gästeprofil
+  übernommen und im Verlauf der Reservierung vermerkt. Die Gästeseite zeigt nur Hotelname, Reservierungsnummer, Zeitraum und den
+  Namen – keine gespeicherten Adress- oder Ausweisdaten. Der Link gilt bis zum Tag nach der Abreise und für eine Abgabe; ein neuer
+  Code macht den alten ungültig. Gespeichert wird nur ein Hash des Codes. Grenzen:
+  - Das PMS läuft im Haus. **Das Handy des Gastes muss den PMS-Rechner erreichen** – also im selben (W)LAN sein, und ein
+    Gäste-WLAN darf den Rechner nicht abschotten. Die Windows-Firewall muss Port 3000 zulassen. Von unterwegs geht es nicht.
+  - Wer im selben Netz ist, erreicht damit auch die Anmeldeseite des PMS (geschützt durch Passwort und Sperre nach Fehlversuchen).
+    Die Übertragung im Hausnetz ist ohne HTTPS unverschlüsselt.
+  - Keine Unterschrift am Handy: Für die Unterschrift den Meldeschein weiterhin drucken. Ob das Verfahren den melderechtlichen
+    Anforderungen genügt, wurde **nicht rechtlich geprüft**.
+  - Mit `PUBLIC_URL=…` in `pms.env` lässt sich die Adresse im QR-Code fest vorgeben (z. B. bei Betrieb hinter einem HTTPS-Proxy).
+  - Getestet automatisiert und im Browser mit Handy-Ansicht; **nicht mit einem echten Handy in einem echten Hausnetz.**
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE
 - Aufpreise für Zusatzpersonen und Kinderpreise (derzeit über Sonderpreis je Nacht)
-- Digitaler Meldeschein, automatische Löschfristen für Gästedaten
+- Unterschrift am Bildschirm, automatische Löschfristen für Gästedaten
 - Channel-Manager, Onlinebuchung, automatischer E-Mail-Versand (z. B. Erinnerung vor Anreise)
 
 Der frühere Prototyp liegt unverändert unter `prototype/`.

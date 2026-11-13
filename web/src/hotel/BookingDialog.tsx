@@ -8,6 +8,7 @@ import {
 import { api } from '../api.ts';
 import { BookingBilling } from '../billing/BookingBilling.tsx';
 import { CompanySelect } from './CompanySelect.tsx';
+import { GuestFormDialog } from './GuestFormDialog.tsx';
 import { MailDialog } from './MailDialog.tsx';
 import { useData } from '../data.tsx';
 import { Button, Dialog, Field, LoadState, fmtDateTime, useLoad, useSubmit, useToast } from '../ui.tsx';
@@ -23,6 +24,7 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
   const [sub, setSub] = useState<Sub>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [mail, setMail] = useState(false);
+  const [qr, setQr] = useState(false);
 
   const setStatus = async (room: BookingRoomDto, status: RoomStatus, confirmText?: string) => {
     if (confirmText && !window.confirm(confirmText)) return;
@@ -38,7 +40,7 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
   const guestName = b ? [b.guest.firstName, b.guest.lastName].filter(Boolean).join(' ') : '';
   return (
     <Dialog title={b ? <>Reservierung {b.number} <span className="muted light">· {guestName}</span></> : 'Reservierung'} onClose={onClose} size="xl"
-      footer={<>{b && <a className="btn" href={`/meldeschein/${b.id}`} target="_blank" rel="noopener">Meldeschein</a>}{b && <Button onClick={() => setMail(true)}>Bestätigung per E-Mail</Button>}<Button onClick={onClose}>Schließen</Button></>}>
+      footer={<>{b && <a className="btn" href={`/meldeschein/${b.id}`} target="_blank" rel="noopener">Meldeschein drucken</a>}{b && <Button onClick={() => setQr(true)}>Meldeschein per QR</Button>}{b && <Button onClick={() => setMail(true)}>Bestätigung per E-Mail</Button>}<Button onClick={onClose}>Schließen</Button></>}>
       {!b ? <LoadState error={error} loading /> : (
         <div className="split">
           <div>
@@ -73,6 +75,7 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
           </aside>
         </div>
       )}
+      {b && qr && <GuestFormDialog bookingId={b.id} number={b.number} onClose={() => { setQr(false); bump(); }} />}
       {b && mail && <MailDialog path={`/bookings/${b.id}/mail`} title={`Bestätigung zu Reservierung ${b.number}`} onClose={() => setMail(false)} onSent={bump} />}
       {b && sub?.kind === 'checkin' && <Checkin booking={b} room={sub.room} onClose={() => setSub(null)} />}
       {b && sub?.kind === 'checkout' && <Checkout booking={b} room={sub.room} onClose={() => setSub(null)} />}
@@ -366,6 +369,9 @@ function describe(h: AuditDto): string {
     case 'status': return `Zimmer ${a.room}: ${STATUS_LABEL[b.status as RoomStatus]} → ${STATUS_LABEL[a.status as RoomStatus]}${a.earlyDeparture ? ' (vorzeitige Abreise)' : ''}`;
     case 'charge_add': return `Leistung hinzugefügt: ${a.name}`;
     case 'charge_remove': return `Leistung entfernt: ${b.name}`;
+    case 'mail': return `Bestätigung per E-Mail gesendet an ${a.to}`;
+    case 'guest_form_link': return 'QR-Code für den Meldeschein erzeugt';
+    case 'guest_form': return `Meldeschein vom Gast ausgefüllt${a.companions ? ` (${a.companions} mitreisende ${a.companions === 1 ? 'Person' : 'Personen'})` : ''}`;
     default: return h.action;
   }
 }

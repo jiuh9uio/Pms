@@ -59,7 +59,8 @@ writeFileSync(join(out, 'pms.env'), crlf(
   '# Einstellungen fuer das Schuetzenhaus PMS (Zeilen mit # sind Kommentare)\n' +
   '# Port, unter dem das PMS im Browser erreichbar ist\nPORT=3000\n' +
   '# 0.0.0.0 = von allen Geraeten im Hausnetz erreichbar, 127.0.0.1 = nur von diesem Rechner\nHOST=0.0.0.0\n' +
-  '# Jede Datensicherung zusaetzlich in diesen Ordner kopieren (USB-Festplatte, Netzlaufwerk); # am Zeilenanfang entfernen\n#BACKUP_COPY_DIR=E:\\PMS-Sicherung\n'));
+  '# Jede Datensicherung zusaetzlich in diesen Ordner kopieren (USB-Festplatte, Netzlaufwerk); # am Zeilenanfang entfernen\n#BACKUP_COPY_DIR=E:\\PMS-Sicherung\n' +
+  '# Adresse im QR-Code fuer den Online-Meldeschein fest vorgeben (sonst wird die Netzwerkadresse dieses Rechners verwendet)\n#PUBLIC_URL=http://192.168.1.10:3000\n'));
 writeFileSync(join(out, 'LIES MICH.txt'), crlf(`Schützenhaus PMS – Windows-Version
 
 Starten:    pms.exe doppelt anklicken. Beim ersten Start wird die Datenbank eingerichtet (dauert einen Moment),

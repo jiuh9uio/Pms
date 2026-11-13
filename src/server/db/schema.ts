@@ -335,6 +335,18 @@ export const cleaningLog = pgTable('cleaning_log', {
   doneAt: ts('done_at').notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.taskId, t.date] })]);
 
+/** Online-Meldeschein: einmaliger Link (QR-Code) je Reservierung, über den der Gast seine Angaben selbst einträgt. */
+export const guestForms = pgTable('guest_forms', {
+  id: id(),
+  bookingId: uuid('booking_id').notNull().unique().references(() => bookings.id, { onDelete: 'cascade' }),
+  /** SHA-256 des Zugangscodes – der Code selbst steht nur im Link */
+  tokenHash: text('token_hash').notNull().unique(),
+  expiresAt: ts('expires_at').notNull(),
+  submittedAt: ts('submitted_at'),
+  createdBy: text('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});
+
 /** Wareneingangskontrolle: je Lieferung ein Eintrag mit Befund; Korrektur nur am selben Tag (danach bleibt der Eintrag stehen). */
 export const goodsReceipts = pgTable('goods_receipts', {
   id: id(),

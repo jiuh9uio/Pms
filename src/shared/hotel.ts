@@ -175,3 +175,16 @@ export interface MailDraft { to: string; subject: string; text: string; attachme
 // ---------- Auswertung ----------
 export interface ReportRow { nights: number; available: number; occupancyPercent: number; lodgingCents: number; invoicedCents: number; invoices: number }
 export interface YearReport { year: number; rooms: number; months: (ReportRow & { month: number })[]; total: ReportRow }
+
+// ---------- Online-Meldeschein (QR-Code) ----------
+const pastDate = z.string().refine(isIsoDate, 'Bitte ein Datum wählen').refine((d) => d < todayBerlin() && d > '1900-01-01', 'Bitte das Geburtsdatum prüfen');
+/** Was der Gast selbst einträgt. */
+export const guestFormInput = z.object({
+  firstName: required(80), lastName: required(80), birthdate: pastDate, nationality: required(80),
+  street: required(200), zip: required(20), city: required(200), country: required(80), idNumber: text(60),
+  companions: z.number('Bitte eine Zahl eingeben').int().min(0, 'Mindestens 0').max(20, 'Höchstens 20'),
+});
+export type GuestFormInput = z.infer<typeof guestFormInput>;
+/** Öffentliche Ansicht für den Gast – bewusst ohne gespeicherte Adress- oder Ausweisdaten. */
+export interface GuestFormPublic { hotelName: string; number: string; from: string; to: string; firstName: string; lastName: string; submitted: boolean }
+export interface GuestFormLink { exists: boolean; url: string | null; qr: string | null; expiresAt: string | null; submittedAt: string | null; localOnly: boolean }

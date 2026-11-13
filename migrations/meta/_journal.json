@@ -99,6 +99,13 @@
       "when": 1794580130082,
       "tag": "0013_wareneingang",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794580724526,
+      "tag": "0014_online_meldeschein",
+      "breakpoints": true
     }
   ]
 }

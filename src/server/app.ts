@@ -11,6 +11,8 @@ import type { users } from './db/schema.js';
 import { AppError, forbidden, pgCode, pgMessage } from './lib/errors.js';
 import { listAudit, record, type Actor } from './modules/audit.js';
 import * as auth from './modules/auth.js';
+import * as guestforms from './modules/guestforms.js';
+import { guestFormInput } from '../shared/hotel.js';
 import * as settings from './modules/settings.js';
 import * as usersMod from './modules/users.js';
 import { registerBillingRoutes } from './routes-billing.js';
@@ -99,6 +101,22 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
   await app.register(async (api) => {
     api.get('/health', async () => {
       await db.execute(sql`select 1`);
+      return { ok: true };
+    });
+
+    // ---------- Online-Meldeschein: ohne Anmeldung, nur mit dem Zugangscode aus dem QR-Code ----------
+    const hits = new Map<string, { n: number; reset: number }>();
+    const publicLimit = async (req: FastifyRequest) => {
+      const now = Date.now();
+      if (hits.size > 5000) hits.clear();
+      const h = hits.get(req.ip);
+      if (!h || h.reset < now) { hits.set(req.ip, { n: 1, reset: now + 60_000 }); return; }
+      if (++h.n > 30) throw new AppError(429, 'too_many', 'Zu viele Anfragen – bitte einen Moment warten');
+    };
+    const tokenOf = (req: FastifyRequest) => z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{20,64}$/) }).parse(req.params).token;
+    api.get('/public/guest-form/:token', { preHandler: publicLimit }, (req) => guestforms.publicForm(db, tokenOf(req)));
+    api.post('/public/guest-form/:token', { preHandler: publicLimit, bodyLimit: 8 * 1024 }, async (req) => {
+      await guestforms.submitForm(db, tokenOf(req), guestFormInput.parse(req.body), req.ip ?? null);
       return { ok: true };
     });
 

@@ -344,3 +344,9 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--border); }
 .regform th { text-align: left; font-weight: 500; width: 46%; padding: 9px 10px 9px 0; border-bottom: 1px solid #bbb; vertical-align: bottom; background: none; }
 .regform td { border-bottom: 1px solid #bbb; padding: 9px 0; height: 38px; }
 .regform .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 70px; } .regform .signatures span { border-top: 1px solid #000; padding-top: 6px; font-size: 12px; }
+
+/* Online-Meldeschein */
+.guestform { max-width: 560px; margin: 0 auto; padding: 20px 16px 40px; } .guestform header { margin-bottom: 16px; }
+.guestform h1 { font-size: 22px; margin: 6px 0 2px; } .guestform h1 small { font-weight: 400; color: var(--ink-2); font-size: 14px; margin-left: 6px; }
+.guestform .formgrid { grid-template-columns: minmax(0, 1fr); } .guestform input { height: 44px; font-size: 16px; }
+.qrbox { text-align: center; } .qrbox img { background: #fff; border-radius: 8px; } .qrbox p { text-align: left; } .qrbox .qrurl { text-align: center; font-size: 12px; word-break: break-all; color: var(--ink-2); }

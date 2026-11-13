@@ -5,6 +5,8 @@ import type { Db } from './db/client.js';
 import { listAudit, type Actor } from './modules/audit.js';
 import * as bookings from './modules/bookings.js';
 import * as companies from './modules/companies.js';
+import { networkInterfaces } from 'node:os';
+import * as guestforms from './modules/guestforms.js';
 import * as guests from './modules/guests.js';
 import * as hotelmail from './modules/hotelmail.js';
 import { yearReport } from './modules/reports.js';
@@ -20,6 +22,21 @@ interface Ctx {
 const idOf = (req: FastifyRequest) => z.object({ id: z.uuid() }).parse(req.params).id;
 const versionOf = (req: FastifyRequest) => z.object({ version: z.number().int() }).parse(req.body).version;
 const range = z.object({ from: z.string().refine(H.isIsoDate), to: z.string().refine(H.isIsoDate) }).refine((v) => v.from < v.to, 'Ungültiger Zeitraum');
+
+/**
+ * Adresse, unter der ein Gast das PMS mit dem eigenen Gerät erreicht: PUBLIC_URL aus pms.env, sonst die Adresse,
+ * die das Personal gerade benutzt. „localhost“ wird durch die Netzwerkadresse des Rechners ersetzt.
+ */
+function guestBaseUrl(req: FastifyRequest): { url: string; localOnly: boolean } {
+  const fixed = (process.env.PUBLIC_URL ?? '').trim().replace(/\/+$/, '');
+  if (/^https?:\/\//.test(fixed)) return { url: fixed, localOnly: false };
+  const u = new URL(`${req.protocol}://${req.headers.host ?? 'localhost'}`);
+  if (['localhost', '127.0.0.1', '[::1]'].includes(u.hostname)) {
+    const lan = Object.values(networkInterfaces()).flat().find((i) => i && i.family === 'IPv4' && !i.internal);
+    if (lan) u.hostname = lan.address;
+  }
+  return { url: u.origin, localOnly: true };
+}
 
 /** Phase 2: Zimmer, Preise, Gäste, Belegungsplan, Reservierungen. */
 export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, requireAdmin, actor }: Ctx) {
@@ -108,6 +125,11 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   });
   api.get('/bookings/:id', user, (req) => bookings.getBooking(db, idOf(req)));
   api.get('/reports/year', user, (req) => yearReport(db, z.object({ year: z.coerce.number().int().min(2000).max(2100) }).parse(req.query).year));
+  api.get('/bookings/:id/guest-form', user, (req) => guestforms.formStatus(db, idOf(req)));
+  api.post('/bookings/:id/guest-form', user, (req) => {
+    const base = guestBaseUrl(req);
+    return guestforms.createForm(db, actor(req), idOf(req), base.url, base.localOnly);
+  });
   api.get('/bookings/:id/mail', user, (req) => hotelmail.bookingMailDraft(db, idOf(req)));
   api.post('/bookings/:id/mail', user, async (req) => {
     await hotelmail.sendBookingMail(db, actor(req), idOf(req), H.mailSendInput.parse(req.body));

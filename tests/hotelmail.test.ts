@@ -110,6 +110,32 @@ describe('E-Mail an den Gast', () => {
     expect(now.total).toMatchObject({ invoices: 1, invoicedCents: 19800 });
   });
 
+  it('lässt den Gast den Meldeschein über einen einmaligen Link ausfüllen', async () => {
+    expect(await ok('GET', `/bookings/${bookingId}/guest-form`, admin)).toMatchObject({ exists: false });
+    const first = await ok('POST', `/bookings/${bookingId}/guest-form`, admin, {});
+    const link = await ok('POST', `/bookings/${bookingId}/guest-form`, admin, {});
+    expect(link.url).toMatch(/\/gast\/[A-Za-z0-9_-]{20,}$/);
+    expect(link.qr).toMatch(/^data:image\/svg\+xml;base64,/);
+    const pub = (u: string) => '/public/guest-form/' + u.split('/gast/')[1];
+    expect((await call('GET', pub(first.url), {})).statusCode).toBe(404); // durch den neuen Link ersetzt
+    expect((await call('GET', '/public/guest-form/' + 'x'.repeat(32), {})).statusCode).toBe(404);
+    const view = await ok('GET', pub(link.url), {});
+    expect(view).toEqual({ hotelName: expect.any(String), number: expect.any(String), from: '2031-05-08', to: '2031-05-10', firstName: 'Erika', lastName: 'Beispiel', submitted: false });
+    const data = { firstName: 'Erika', lastName: 'Beispiel', birthdate: '1980-02-03', nationality: 'deutsch', street: 'Neue Str. 5', zip: '22222', city: 'Neustadt', country: 'Deutschland', idNumber: '', companions: 1 };
+    const bad = await call('POST', pub(link.url), {}, { ...data, birthdate: '2999-01-01', city: '' });
+    expect(bad.statusCode).toBe(400);
+    expect(Object.keys(bad.json().error.fields).sort()).toEqual(['birthdate', 'city']);
+    await ok('POST', pub(link.url), {}, data);
+    expect((await call('POST', pub(link.url), {}, data)).statusCode).toBe(409); // nur eine Abgabe
+    const b = await ok('GET', `/bookings/${bookingId}`, admin);
+    expect(b.guest).toMatchObject({ street: 'Neue Str. 5', city: 'Neustadt', birthdate: '1980-02-03', email: 'erika@example.com' });
+    expect((await ok('GET', `/bookings/${bookingId}/guest-form`, admin)).submittedAt).toBeTruthy();
+    const history = await ok('GET', `/bookings/${bookingId}/history`, admin);
+    expect(history.find((h: { action: string }) => h.action === 'guest_form').userName).toBe('Gast (Online-Meldeschein)');
+    await db.execute(sql`update guest_forms set expires_at = now() - interval '1 minute'`);
+    expect((await call('GET', pub(link.url), {})).statusCode).toBe(404);
+  });
+
   it('verlangt die Freigabe für den Bereich Hotel', async () => {
     await ok('POST', '/users', admin, { username: 'kueche', name: 'Küche', password: 'sehr-geheim-456', role: 'user', modules: ['kontrollen'] });
     const user = session(await call('POST', '/auth/login', {}, { username: 'kueche', password: 'sehr-geheim-456' }));
