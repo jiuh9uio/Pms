@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches: ['claude/hotel-pms-gmx-0rifkh', 'main']
-    paths: ['src/**', 'web/**', 'migrations/**', 'assets/**', 'scripts/build-exe.mjs', 'package*.json', '.github/workflows/windows-exe.yml']
+    paths: ['src/**', 'web/**', 'migrations/**', 'assets/**', 'scripts/**', 'CHANGELOG.md', 'package*.json', '.github/workflows/windows-exe.yml']
 
 permissions:
-  contents: read
+  contents: write # für die Veröffentlichung neuer Versionen (GitHub Release)
 
 concurrency:
   group: windows-exe-${{ github.ref }}
@@ -16,7 +16,7 @@ concurrency:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -99,8 +99,83 @@ jobs:
         shell: pwsh
         run: Remove-Item -Recurse -Force release\SchuetzenhausPMS\data, release\SchuetzenhausPMS\backups, release\SchuetzenhausPMS\*.log
 
+      - name: Update-Paket packen
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          Compress-Archive -Path release\SchuetzenhausPMS -DestinationPath dist\SchuetzenhausPMS-Windows.zip
+          $hash = (Get-FileHash dist\SchuetzenhausPMS-Windows.zip -Algorithm SHA256).Hash.ToLower()
+          Set-Content -Path dist\SchuetzenhausPMS-Windows.zip.sha256 -Value "$hash  SchuetzenhausPMS-Windows.zip" -Encoding ascii
+          $v = (Get-Content release\SchuetzenhausPMS\app\version.json | ConvertFrom-Json).version
+          "PMS_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Update-Test unter Windows (alte Version aktualisiert sich selbst)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $old = "$PWD\updtest\SchuetzenhausPMS"
+          $base = "http://127.0.0.1:3000/api/v1"
+          New-Item -ItemType Directory updtest, updsrv | Out-Null
+          Copy-Item -Recurse release\SchuetzenhausPMS $old
+          Copy-Item dist\* updsrv\
+          # Die Kopie gibt sich als ältere Version aus und fragt einen lokalen Test-Server statt GitHub
+          $info = Get-Content "$old\app\version.json" | ConvertFrom-Json
+          $info.version = '0.0.1'
+          [System.IO.File]::WriteAllText("$old\app\version.json", ($info | ConvertTo-Json))
+          [System.IO.File]::WriteAllText("$old\pms.env", "PORT=3000`r`nHOST=127.0.0.1`r`nPMS_UPDATE_URL=http://127.0.0.1:8099/latest.json`r`nPMS_UPDATE_CHECK=off`r`n")
+          $latest = @{ tag_name = "v$env:PMS_VERSION"; body = 'Test'; assets = @(
+            @{ name = 'SchuetzenhausPMS-Windows.zip'; browser_download_url = 'http://127.0.0.1:8099/SchuetzenhausPMS-Windows.zip' },
+            @{ name = 'SchuetzenhausPMS-Windows.zip.sha256'; browser_download_url = 'http://127.0.0.1:8099/SchuetzenhausPMS-Windows.zip.sha256' }) }
+          [System.IO.File]::WriteAllText("$PWD\updsrv\latest.json", ($latest | ConvertTo-Json -Depth 4))
+          $web = Start-Process python -ArgumentList '-m', 'http.server', '8099', '--bind', '127.0.0.1' -WorkingDirectory updsrv -PassThru
+          function Show-Logs { Get-ChildItem "$old\*.log", "$old\data\*.log", "$old\update\*.log" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "===== $($_.Name)"; Get-Content $_.FullName -Tail 60 } }
+          function Post($path, $body, $s) { Invoke-RestMethod -Method Post -Uri "$base$path" -ContentType 'application/json' -Body ($body | ConvertTo-Json -Depth 6) -WebSession $s }
+          try {
+            Start-Process -FilePath "$old\pms.exe" -ArgumentList '--no-browser' -WorkingDirectory $old -RedirectStandardOutput "$old\run.log" -RedirectStandardError "$old\err.log" | Out-Null
+            $up = $false
+            foreach ($i in 1..45) { try { Invoke-RestMethod "$base/health" -TimeoutSec 2 | Out-Null; $up = $true; break } catch { Start-Sleep 1 } }
+            if (-not $up) { throw 'Alte Version ist nicht gestartet' }
+            $s = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+            Post '/auth/setup' @{ username = 'chef'; name = 'Test'; password = 'sehr-geheim-123' } $s | Out-Null
+            Post '/categories' @{ name = 'Doppelzimmer'; description = ''; stdOccupancy = 2; maxPersons = 2; basePriceCents = 9900; sort = 1 } $s | Out-Null
+            $st = Invoke-RestMethod "$base/update/status?refresh=1" -WebSession $s
+            if (-not $st.available -or $st.current -ne '0.0.1') { throw "Update wurde nicht erkannt: $($st | ConvertTo-Json)" }
+            $r = Post '/update/install' @{} $s
+            Write-Host "Update auf $($r.version) angestossen"
+            $done = $false
+            foreach ($i in 1..90) {
+              Start-Sleep 2
+              try { $st = Invoke-RestMethod "$base/update/status" -WebSession $s -TimeoutSec 3; if ($st.current -eq $env:PMS_VERSION) { $done = $true; break } } catch { }
+            }
+            if (-not $done) { throw 'Die neue Version hat sich nach dem Update nicht gemeldet' }
+            $cats = @(Invoke-RestMethod "$base/categories" -WebSession $s)
+            if ($cats.Count -ne 1) { throw 'Daten nach dem Update nicht vorhanden' }
+            if (-not (Get-ChildItem "$old\backups\*.dump")) { throw 'Vor dem Update wurde keine Sicherung geschrieben' }
+            if (-not (Test-Path "$old\update\previous\pms.exe")) { throw 'Vorherige Programmdateien wurden nicht aufbewahrt' }
+            if (-not (Get-Content "$old\pms.env" -Raw).Contains('PMS_UPDATE_URL')) { throw 'pms.env wurde überschrieben' }
+            Get-Content "$old\update\update.log"
+            Write-Host 'Update-Test bestanden'
+          } catch { Show-Logs; throw } finally {
+            Get-Process pms -ErrorAction SilentlyContinue | Stop-Process -Force
+            if (Test-Path "$old\data\postgres\postmaster.pid") { & "$old\pgsql\bin\pg_ctl.exe" stop -D "$old\data\postgres" -m fast -w }
+            Stop-Process -Id $web.Id -Force -ErrorAction SilentlyContinue
+          }
+
       - uses: actions/upload-artifact@v4
         with:
           name: SchuetzenhausPMS-Windows
           path: release/SchuetzenhausPMS
           retention-days: 90
+
+      # Neue Versionsnummer in package.json => einmalige Veröffentlichung, die installierte Programme als Update finden
+      - name: Version veröffentlichen (nur wenn noch nicht vorhanden)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "v$env:PMS_VERSION"
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) { Write-Host "$tag ist bereits veröffentlicht"; $global:LASTEXITCODE = 0; exit 0 }
+          node scripts/release-notes.mjs $env:PMS_VERSION > notes.md
+          gh release create $tag dist/SchuetzenhausPMS-Windows.zip dist/SchuetzenhausPMS-Windows.zip.sha256 --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Schützenhaus PMS $env:PMS_VERSION" --notes-file notes.md
+          if ($LASTEXITCODE -ne 0) { throw 'Veröffentlichung fehlgeschlagen' }

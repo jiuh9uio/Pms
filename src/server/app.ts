@@ -9,7 +9,7 @@ import * as S from '../shared/schemas.js';
 import type { Db } from './db/client.js';
 import type { users } from './db/schema.js';
 import { AppError, forbidden, pgCode, pgMessage } from './lib/errors.js';
-import { listAudit, type Actor } from './modules/audit.js';
+import { listAudit, record, type Actor } from './modules/audit.js';
 import * as auth from './modules/auth.js';
 import * as settings from './modules/settings.js';
 import * as usersMod from './modules/users.js';
@@ -17,6 +17,7 @@ import { registerBillingRoutes } from './routes-billing.js';
 import { registerControlRoutes } from './routes-controls.js';
 import { registerEInvoiceRoutes } from './routes-einvoice.js';
 import { registerHotelRoutes } from './routes-hotel.js';
+import { checkForUpdate, getUpdateStatus, installUpdate } from './update.js';
 
 const COOKIE = 'pms_session';
 
@@ -154,6 +155,15 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     registerControlRoutes(api, { db, requireUser: requireModule('kontrollen'), requireAdmin, actor });
     registerBillingRoutes(api, { db, requireUser: requireModule('hotel'), actor });
     registerEInvoiceRoutes(api, { db, requireUser: requireModule('erechnung'), requireAdmin, actor });
+
+    // ---------- Programm-Update (nur Administrator) ----------
+    api.get('/update/status', { preHandler: requireAdmin }, (req) =>
+      (z.object({ refresh: z.string().optional() }).parse(req.query).refresh ? checkForUpdate() : getUpdateStatus()));
+    api.post('/update/install', { preHandler: requireAdmin }, async (req) => {
+      const r = await installUpdate();
+      await record(db, actor(req), { action: 'update', entity: 'program', after: { version: r.version } });
+      return r;
+    });
 
     api.setNotFoundHandler(() => { throw new AppError(404, 'not_found', 'Unbekannte Adresse'); });
   }, { prefix: '/api/v1' });

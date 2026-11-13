@@ -2,15 +2,17 @@ import { useEffect, useState } from 'react';
 import { hotelSettings, taxRateCreateInput, taxRateUpdateInput, type HotelSettings, type TaxRateDto } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { MailSettings } from './MailSettings.tsx';
+import { UpdateCard } from './UpdateCard.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useToast } from '../ui.tsx';
 
 export function Settings() {
   return (
     <>
-      <PageHeader title="Einstellungen" sub="Stammdaten des Hauses und Steuersätze" />
+      <PageHeader title="Einstellungen" sub="Stammdaten des Hauses, Steuersätze und Programm-Update" />
       <HotelForm />
       <MailSettings />
       <TaxRates />
+      <UpdateCard />
     </>
   );
 }

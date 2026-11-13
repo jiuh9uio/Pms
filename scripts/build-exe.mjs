@@ -2,7 +2,7 @@
 // Aufruf (nach "npm run build"):  node scripts/build-exe.mjs [Pfad-zu-PostgreSQL]
 // Der PostgreSQL-Pfad ist der Installationsordner mit bin/, lib/ und share/. Ohne Angabe: Umgebungsvariable PGROOT.
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { build } from 'esbuild';
 
@@ -40,6 +40,11 @@ execFileSync(process.execPath, [postject, target, 'NODE_SEA_BLOB', blob, '--sent
 cpSync(join('dist', 'web'), join(out, 'app', 'web'), { recursive: true });
 cpSync('migrations', join(out, 'app', 'migrations'), { recursive: true });
 cpSync('assets', join(out, 'app', 'assets'), { recursive: true });
+const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+const pgVersion = execFileSync(join(pgRoot, 'bin', win ? 'postgres.exe' : 'postgres'), ['--version']).toString();
+const pgMajor = /(\d+)\./.exec(pgVersion)?.[1] ?? '';
+writeFileSync(join(out, 'app', 'version.json'), JSON.stringify({ version: pkg.version, pgMajor, builtAt: new Date().toISOString() }));
+console.log(`Version ${pkg.version}, PostgreSQL ${pgMajor}`);
 for (const d of ['bin', 'lib', 'share']) cpSync(join(pgRoot, d), join(out, 'pgsql', d), { recursive: true, dereference: true });
 for (const d of [['share', 'doc'], ['share', 'man'], ['share', 'locale']]) rmSync(join(out, 'pgsql', ...d), { recursive: true, force: true });
 
@@ -63,6 +68,9 @@ Starten:    pms.exe doppelt anklicken. Beim ersten Start wird die Datenbank eing
 Beenden:    Das schwarze Fenster schließen oder Strg+C drücken.
 Sicherung:  "Sicherung.bat" doppelt anklicken. Die Sicherungen liegen im Ordner "backups" – diesen Ordner
             regelmäßig auf einen zweiten Datenträger (USB-Platte, NAS) kopieren.
+Update:     Im PMS unter Verwaltung - Einstellungen - "Programm-Update". Das Programm sichert die Daten, lädt die neue
+            Version herunter, tauscht die Programmdateien aus und startet neu. Die bisherigen Programmdateien liegen
+            danach im Ordner "update\\previous", das Protokoll in "update\\update.log".
 Autostart:  "Autostart einrichten.bat" ausführen: PMS startet bei jeder Windows-Anmeldung, Sicherung täglich 02:00 Uhr.
 Zurückspielen einer Sicherung (ersetzt alle Daten!), in einer Eingabeaufforderung in diesem Ordner, PMS vorher beenden:
             pms.exe --restore backups\\pms-JJJJMMTT-HHMMSS.dump --ja

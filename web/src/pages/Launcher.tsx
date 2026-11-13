@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom';
 import { ROLE_LABEL, hasModule, type Module } from '../../../src/shared/schemas.js';
 import { useAuth, useLogout } from '../App.tsx';
+import { api } from '../api.ts';
+import { useLoad } from '../ui.tsx';
+import type { UpdateStatus } from './UpdateCard.tsx';
 
 interface Tile { to: string; title: string; text: string; icon: string; admin?: boolean; module?: Module }
 const TILES: Tile[] = [
@@ -15,6 +18,8 @@ const TILES: Tile[] = [
 export function Launcher() {
   const { user } = useAuth();
   const logout = useLogout();
+  // Hinweis auf ein neues Programm-Update – nur für Administratoren
+  const upd = useLoad(() => (user.role === 'admin' ? api<UpdateStatus>('GET', '/update/status') : Promise.resolve(null))).data;
   const tiles = TILES.filter((t) => (!t.admin || user.role === 'admin') && (!t.module || hasModule(user, t.module)));
   return (
     <div className="launcher">
@@ -22,6 +27,7 @@ export function Launcher() {
         <div className="brand big"><span className="mark">S</span><span>Schützenhaus<small>Hotel &amp; Restaurant</small></span></div>
         <p className="muted">{user.name} · {ROLE_LABEL[user.role]} <button type="button" className="btn" onClick={() => void logout()}>Abmelden</button></p>
       </header>
+      {upd?.available && <p className="notice warn">Programm-Update verfügbar: Version {upd.latest}. <Link to="/einstellungen">Jetzt ansehen und einspielen</Link></p>}
       <nav className="tiles" aria-label="Bereiche">
         {tiles.map((t) => (
           <Link key={t.to} to={t.to} className="tile">

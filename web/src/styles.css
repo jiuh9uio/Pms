@@ -70,6 +70,7 @@ ul.plain li:last-child { border-bottom: 0; }
 .notice { padding: 10px 12px; border-radius: 8px; background: var(--surface-2); margin: 10px 0 0; }
 .notice.warn { background: var(--warn-soft); color: var(--warn); } .notice.danger { background: var(--danger-soft); color: var(--danger); }
 .notice a { color: inherit; text-decoration: underline; }
+.pre { white-space: pre-wrap; }
 
 /* Tabellen */
 .tablewrap { overflow-x: auto; }

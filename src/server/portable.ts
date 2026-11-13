@@ -21,6 +21,7 @@ import postgres from 'postgres';
 import { buildApp } from './app.js';
 import { connect, runMigrations } from './db/client.js';
 import { setAssetsDir } from './einvoice/pdf.js';
+import { initUpdater } from './update.js';
 
 const args = process.argv.slice(2);
 const home = resolve(process.env.PMS_HOME ?? dirname(process.execPath));
@@ -155,6 +156,14 @@ async function main() {
     process.exit(0);
   };
   for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK'] as const) process.on(s, () => void shutdown());
+
+  // Programm-Update: Version des Pakets und der mitgelieferten Datenbank
+  const versionFile = join(home, 'app', 'version.json');
+  if (existsSync(versionFile)) {
+    const info = JSON.parse(readFileSync(versionFile, 'utf8')) as { version: string; pgMajor: string };
+    console.log(`Version ${info.version}`);
+    initUpdater({ home, version: info.version, pgMajor: info.pgMajor, backup: () => backup(pg.url), shutdown });
+  }
 }
 
 main().catch((e) => fail(e instanceof Error ? e.message : String(e)));

@@ -148,7 +148,8 @@ scripts/      Datensicherung und Wiederherstellung
 Für den Hausrechner gibt es ein fertiges Paket: einen Ordner `SchuetzenhausPMS` mit `pms.exe`.
 Es bringt die Datenbank mit – weder Node.js noch PostgreSQL müssen installiert werden.
 
-1. Paket herunterladen: auf GitHub unter **Actions → „Windows-Version (pms.exe)“ → neuester erfolgreicher Lauf → Artifacts → SchuetzenhausPMS-Windows**.
+1. Paket herunterladen: auf GitHub unter **Releases → neueste Version → `SchuetzenhausPMS-Windows.zip`**
+   (Zwischenstände: Actions → „Windows-Version (pms.exe)“ → neuester erfolgreicher Lauf → Artifacts).
 2. ZIP vollständig entpacken, z. B. nach `C:\SchuetzenhausPMS` (nicht in einen OneDrive- oder Netzwerkordner).
 3. `pms.exe` doppelt anklicken. Beim ersten Start wird die Datenbank eingerichtet, dann öffnet sich der Browser.
 4. Administrator-Konto anlegen, danach unter „Zimmer & Preise“ das Haus einrichten.
@@ -159,7 +160,40 @@ Die exe ist nicht signiert; Windows SmartScreen zeigt deshalb beim ersten Start 
 
 Das Paket wird bei jeder Änderung automatisch auf einem Windows-Rechner von GitHub gebaut und dort geprüft:
 erster Start, Zimmer und Buchung anlegen, Doppelbuchung wird abgelehnt, Sicherung, Neustart mit erhaltenen Daten,
-Wiederherstellung. Selbst bauen: `npm run build:exe` (auf Windows, mit installiertem PostgreSQL und gesetztem `PGROOT`).
+Wiederherstellung, Programm-Update. Selbst bauen: `npm run build:exe` (auf Windows, mit installiertem PostgreSQL und gesetztem `PGROOT`).
+
+### Automatisches Programm-Update
+
+Die Windows-Version sieht beim Start und zweimal täglich nach, ob auf GitHub eine neuere Version veröffentlicht ist
+(`https://api.github.com/repos/jiuh9uio/Pms/releases/latest`; übertragen wird dabei nichts außer der Anfrage selbst).
+Administratoren sehen dann einen Hinweis im Startmenü. Eingespielt wird **nur auf Knopfdruck** unter
+*Einstellungen → Programm-Update*:
+
+1. Paket herunterladen, SHA-256-Prüfsumme mit der veröffentlichten vergleichen, entpacken, Versionsangabe prüfen.
+2. Datensicherung nach `backups\` schreiben.
+3. PMS beenden; ein Hilfsskript (`update\apply.bat`) kopiert die bisherigen Programmdateien nach `update\previous`
+   und die neuen darüber. `data\`, `backups\` und `pms.env` werden nicht angefasst.
+4. PMS neu starten; die Datenbank wird beim Start durch die mitgelieferten Migrationen angepasst.
+
+Protokoll: `update\update.log`. Schlägt das Kopieren fehl, stellt das Skript die vorherigen Dateien wieder her.
+
+Veröffentlicht wird eine Version, wenn die Versionsnummer in `package.json` erhöht und `CHANGELOG.md` ergänzt wurde –
+der Windows-Bau legt dann nach bestandenem Funktions- und Update-Test das GitHub-Release `v<Version>` an.
+
+Grenzen – bitte beachten:
+
+- Die Prüfsumme schützt vor beschädigten Downloads, **nicht** vor einem manipulierten GitHub-Konto: Paket und
+  Prüfsumme kommen aus derselben Quelle, die exe ist nicht signiert. Wer Schreibzugriff auf das Repository hat,
+  kann Updates ausliefern – das Konto entsprechend schützen (Zwei-Faktor-Anmeldung).
+- Ein Zurück auf die alte Version ist nicht automatisch: Programmdateien aus `update\previous` zurückkopieren **und**
+  die Sicherung von vor dem Update einspielen (neuere Datenbankstände passen nicht zu älteren Programmen).
+- Bringt eine Version eine andere PostgreSQL-Hauptversion mit, lehnt das Update ab; dann von Hand: Sicherung,
+  neues Paket in neuen Ordner, Sicherung dort wiederherstellen.
+- Der Rechner braucht für Prüfung und Download Internetzugang zu `api.github.com` und `github.com`.
+- Abschalten der automatischen Prüfung: `PMS_UPDATE_CHECK=off` in `pms.env`.
+- Getestet: kompletter Ablauf automatisiert unter Linux und auf dem Windows-Baurechner von GitHub mit einem
+  lokalen Test-Server. Nicht getestet: Update auf einem Rechner mit Virenscanner/gesperrten Dateien und
+  mit als geplanter Aufgabe (Autostart) laufendem PMS.
 
 ## Installation aus dem Quelltext (Alternative)
 
