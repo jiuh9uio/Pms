@@ -287,3 +287,35 @@ fieldset.checks { border: 1px solid var(--line); border-radius: 8px; padding: 10
 @media print {
   body[data-print='cleaning'] .hygiene:not(.cleaning), body[data-print='temp'] .cleaning { display: none !important; }
 }
+
+/* ===================== Abrechnung ===================== */
+.kpis { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+a.linkcard { color: var(--ink); font-weight: 400; } a.linkcard:hover { text-decoration: none; border-color: var(--accent); }
+table.lines th { background: none; padding: 4px 8px 4px 0; }
+.payform { display: grid; gap: 8px; margin-top: 10px; } .payform .segmented { display: flex; } .payform .segmented button { flex: 1; padding: 8px 6px; }
+.payform .segmented select { width: auto; height: auto; border: 0; border-radius: 0; background: var(--surface); }
+.payform .inlinefields input { max-width: none; flex: 1; }
+ul.payments { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+ul.payments li { display: flex; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; } ul.payments li > span { flex: 1; }
+ul.payments li.struck b, ul.payments li.struck > span { text-decoration: line-through; color: var(--ink-3); }
+.printpage { background: var(--surface-2); min-height: 100%; padding: 16px; }
+.printbar { max-width: 820px; margin: 0 auto 12px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.invoice { position: relative; max-width: 820px; margin: 0 auto; background: #fff; color: #111; padding: 56px 60px; box-shadow: var(--shadow-lg); font-size: 13px; line-height: 1.5; overflow: hidden; }
+.invoice header { display: flex; justify-content: space-between; gap: 20px; border-bottom: 2px solid #111; padding-bottom: 12px; } .invoice header h1 { font-size: 22px; } .invoice header p { margin: 2px 0 0; color: #555; }
+.invoice .meta { display: flex; justify-content: space-between; gap: 24px; margin: 34px 0 28px; flex-wrap: wrap; }
+.invoice address { font-style: normal; } .invoice .sender { display: block; font-size: 10px; color: #666; text-decoration: underline; margin-bottom: 6px; }
+.invoice .meta td { padding: 1px 0 1px 18px; border: 0; } .invoice .meta td:first-child { color: #555; padding-left: 0; }
+.invoice h2 { font-size: 18px; margin: 0 0 10px; } .invoice small { color: #555; }
+.invoice table.pos th { background: none; color: #555; border-bottom: 1px solid #999; padding: 6px 6px 6px 0; } .invoice table.pos td { padding: 7px 6px 7px 0; border-bottom: 1px solid #ddd; vertical-align: top; }
+.invoice tfoot td { border-bottom: 0 !important; } .invoice tfoot .light td { color: #555; padding: 2px 6px 2px 0; } .invoice tfoot .total td { font-weight: 700; border-top: 2px solid #111; padding-top: 8px; }
+.invoice .notes { margin-top: 16px; white-space: pre-wrap; }
+.invoice footer { margin-top: 44px; padding-top: 10px; border-top: 1px solid #bbb; font-size: 11px; color: #555; } .invoice footer p { margin: 2px 0; }
+.invoice .watermark { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%) rotate(-24deg); font-size: 110px; font-weight: 800; color: rgba(200, 0, 0, .09); pointer-events: none; }
+@media (max-width: 760px) { .invoice { padding: 24px 16px; } .printpage { padding: 8px; } }
+@media print {
+  .printpage { background: #fff; padding: 0; } .invoice { box-shadow: none; padding: 0; max-width: none; } .printbar { display: none !important; }
+  @page { margin: 18mm 16mm; }
+}
+.invoice tfoot .total td { color: #111; }
+a.btn { display: inline-flex; align-items: center; color: var(--ink); } a.btn:hover { text-decoration: none; }
+a.btn.primary { color: var(--accent-ink); }

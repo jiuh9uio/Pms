@@ -10,19 +10,40 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
 | 1 Fundament | Anmeldung, Benutzer und Rollen, Änderungsprotokoll, Stammdaten, Steuersätze, Grundlayout (hell/dunkel, mobil), Datensicherung | **fertig** |
 | 2 Hotelbetrieb | Zimmer, Kategorien, Preisregeln, Leistungen, Belegungsplan (Tag/Woche/Monat, Drag-and-drop, Sperren), Reservierungen (auch mehrere Zimmer), Check-in/-out, Gäste, Übersicht mit Kennzahlen und Aufgaben | **fertig** |
 | Kontrollen | Startmenü mit Bereichen; Kontrollarten (Hygieneamt, Finanzamt, eigene), Unterlagenlisten, Kontrollbesuche, Temperaturprotokoll je Bereich und Messstelle mit Monatsausdruck | **fertig** |
-| 3 Abrechnung | Rechnungen, PDF, Zahlungen (bar/Karte), Firmen, E-Mail | offen |
+| 3 Abrechnung | Rechnungen mit lückenloser Nummer, Druck/PDF, Storno per Stornobeleg, Zahlungen (bar/Karte/Überweisung …), Anzahlungen, offene Posten, CSV-Export | **fertig** (ohne Firmenprofile, E-Mail-Versand) |
 | 4 Qualität | Browser-Tests, Sicherheitsprüfung, Bedienung mobil, Anwenderdokumentation | offen |
 
 **Noch nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
-- Rechnungen, PDF, Zahlungserfassung (bar/Karte), offene Posten, Buchhaltungsexport – Phase 3
-- Firmenprofile mit vereinbarten Preisen und Zahlungsbedingungen – Phase 3 (bis dahin: Firmenname am Gast, Sonderpreis je Buchung)
-- E-Mail-Versand (GMX) im Neubau – Phase 3; der Prototyp unter `prototype/` kann es weiterhin
+- Firmenprofile mit vereinbarten Preisen und Zahlungsbedingungen (bis dahin: Firmenname am Gast bzw. als Rechnungsempfänger, Sonderpreis je Buchung)
+- E-Mail-Versand (GMX) im Neubau; der Prototyp unter `prototype/` kann es weiterhin
+- E-Rechnung, DATEV-Format, Mahnwesen, Kassenfunktion/TSE
 - Aufpreise für Zusatzpersonen und Kinderpreise (derzeit über Sonderpreis je Nacht)
 - Meldeschein-Druck, Löschen/Anonymisieren von Gästen nach Fristen, Housekeeping
 - TSE/Kassenfunktion, E-Rechnung, Channel-Manager, Onlinebuchung
 
-Der frühere Prototyp liegt unverändert unter `prototype/` und wird mit Phase 3 abgelöst.
+Der frühere Prototyp liegt unverändert unter `prototype/`.
+
+### Abrechnung
+
+- **Rechnung erstellen:** In der Reservierung unter „Rechnungen und Zahlungen“ – mit allen Positionen, nur Übernachtung oder nur Extras
+  (für getrennte Rechnungen, z. B. Firma zahlt die Übernachtung, der Gast die Extras). Für Leistungen ohne Reservierung gibt es „Freie Rechnung“.
+- Der **Entwurf** lässt sich bearbeiten: Empfänger (Firma, Name, Anschrift, USt-IdNr. – unabhängig vom Gast), Leistungszeitraum, Hinweis, Positionen.
+- **Ausstellen** vergibt die Rechnungsnummer lückenlos je Jahr (Format einstellbar, z. B. `RE-2027-0001`), setzt Datum und Fälligkeit
+  (Zahlungsziel einstellbar) und kopiert die Absenderangaben in die Rechnung. Voraussetzung: Anschrift und Steuernummer oder USt-IdNr. in den Einstellungen.
+- **Ausgestellte Rechnungen sind unveränderlich** – die Datenbank lehnt jede Änderung und jedes Löschen ab. Korrektur nur über **Storno**:
+  Es entsteht ein Stornobeleg mit eigener Nummer und negativen Beträgen; bereits gezahlte Beträge werden als Anzahlung auf die Reservierung
+  übertragen und mit der korrigierten Rechnung verrechnet.
+- **Zahlungen:** Bar, Karte, Überweisung, PayPal, Gutschein; Teilzahlungen und abweichende Zahler möglich. Anzahlungen werden auf der Reservierung
+  gebucht und beim Ausstellen automatisch der Rechnung zugeordnet. Zahlungen sind nicht änderbar; Fehler korrigiert eine Gegenbuchung.
+- **Offene Posten:** Seite „Rechnungen“ (Filter „Offen“) und Kachel „Offene Rechnungen“ in der Übersicht, mit überfälligen.
+- **Druck / PDF:** Die Druckansicht wird im Browser über „Drucken → Als PDF speichern“ zur PDF-Datei. Das Programm erzeugt und archiviert
+  **keine** PDF-Dateien selbst; maßgeblich sind die unveränderlich gespeicherten Rechnungsdaten.
+- **Export:** CSV mit allen Rechnungen und Stornobelegen (Netto und Umsatzsteuer je Satz, Brutto, bezahlt, offen) sowie aller Zahlungen.
+  Ein DATEV-Format ist nicht enthalten.
+- Nicht enthalten: E-Rechnung (XRechnung/ZUGFeRD), E-Mail-Versand, Mahnwesen, Firmenprofile mit vereinbarten Preisen, Kassenfunktion/TSE.
+  **Die Rechnungsvorlage und die Aufbewahrung sind nicht rechtlich geprüft** – bitte einmal mit der Steuerberatung durchsehen
+  (u. a. Pflichtangaben nach § 14 UStG, GoBD, ob für Barzahlungen eine TSE nötig ist).
 
 ### Kontrollen und Temperaturprotokoll
 

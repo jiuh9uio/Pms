@@ -50,6 +50,20 @@
       "when": 1794535955278,
       "tag": "0006_reinigung",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794536655987,
+      "tag": "0007_abrechnung",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794536656734,
+      "tag": "0008_abrechnung_schutz",
+      "breakpoints": true
     }
   ]
 }

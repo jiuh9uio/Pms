@@ -38,11 +38,15 @@ export const hotelSettings = z.object({
   taxNumber: text(60), vatId: text(60),
   bankName: text(120), iban: text(60), bic: text(20),
   checkinTime: z.string().regex(/^\d{2}:\d{2}$/, 'Format HH:MM'), checkoutTime: z.string().regex(/^\d{2}:\d{2}$/, 'Format HH:MM'),
+  invoicePrefix: z.string().trim().regex(/^[A-Za-z0-9-]{0,10}$/, 'Bis zu 10 Buchstaben, Ziffern oder Bindestriche'),
+  paymentTermDays: z.number('Bitte eine Zahl eingeben').int().min(0, 'Mindestens 0').max(120, 'Höchstens 120'),
+  invoiceFooter: text(500),
 });
 export type HotelSettings = z.infer<typeof hotelSettings>;
 export const HOTEL_DEFAULTS: HotelSettings = {
   name: 'Hotel & Restaurant Schützenhaus', street: '', zip: '', city: '', country: 'Deutschland', phone: '', email: '', website: '',
   taxNumber: '', vatId: '', bankName: '', iban: '', bic: '', checkinTime: '15:00', checkoutTime: '11:00',
+  invoicePrefix: 'RE', paymentTermDays: 14, invoiceFooter: '',
 };
 
 const rate = z.number('Bitte eine Zahl eingeben').min(0, 'Mindestens 0').max(100, 'Höchstens 100');

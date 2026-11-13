@@ -6,6 +6,7 @@ import {
   type BookingDto, type BookingRoomDto, type FreeRoomDto, type RoomStatus, type ServiceDto,
 } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
+import { BookingBilling } from '../billing/BookingBilling.tsx';
 import { useData } from '../data.tsx';
 import { Button, Dialog, Field, LoadState, fmtDateTime, useLoad, useSubmit, useToast } from '../ui.tsx';
 import { GuestFields, StatusBadge, deDate, deShort, persons, toDraft, type GuestDraft } from './common.tsx';
@@ -60,7 +61,7 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
               <tr><td>Frühstück und Leistungen</td><td className="num">{formatMoney(b.chargesCents)}</td></tr>
               <tr className="sum"><td>Gesamt (brutto)</td><td className="num">{formatMoney(b.totalCents)}</td></tr>
             </tbody></table>
-            <p className="muted small">Rechnung und Zahlungserfassung folgen mit der Abrechnung (Phase 3).</p>
+            <BookingBilling booking={b} />
             <Meta booking={b} />
             <h3>Verlauf</h3>
             <ul className="history">
@@ -247,7 +248,7 @@ function Checkout({ booking, room, onClose }: { booking: BookingDto; room: Booki
         <tr className="sum"><td>Summe</td><td className="num">{formatMoney(keptCents + chargesCents)}</td></tr>
       </tbody></table>
       {early && roomCharges.length > 0 && <p className="muted small">Leistungen werden bei vorzeitiger Abreise nicht automatisch gekürzt – bitte in der Reservierung prüfen.</p>}
-      <p className="notice">Rechnung und Zahlung können in dieser Version noch nicht im PMS erfasst werden (Phase 3). Bitte wie bisher abrechnen.</p>
+      <p className="notice">Nach dem Check-out in der Reservierung unter „Rechnungen und Zahlungen“ die Rechnung erstellen und die Zahlung buchen.</p>
     </Dialog>
   );
 }

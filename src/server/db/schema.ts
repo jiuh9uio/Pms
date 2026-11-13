@@ -330,3 +330,69 @@ export const cleaningLog = pgTable('cleaning_log', {
   userName: text('user_name').notNull(),
   doneAt: ts('done_at').notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.taskId, t.date] })]);
+
+// =====================================================================================
+// Abrechnung: Rechnungen, Stornobelege, Zahlungen
+// =====================================================================================
+
+/** Rechnung bzw. Stornobeleg. Nach der Ausstellung unveränderlich (Trigger in Migration 0008). */
+export const invoices = pgTable('invoices', {
+  id: id(),
+  /** Rechnungsnummer – erst bei Ausstellung vergeben, lückenlos je Jahr */
+  number: text('number').unique(),
+  kind: text('kind', { enum: ['invoice', 'cancellation'] }).notNull().default('invoice'),
+  status: text('status', { enum: ['draft', 'issued', 'cancelled'] }).notNull().default('draft'),
+  bookingId: uuid('booking_id').references(() => bookings.id),
+  /** Beim Stornobeleg: die stornierte Rechnung */
+  cancelsId: uuid('cancels_id'),
+  // Empfänger – Kopie, unabhängig von späteren Änderungen am Gast
+  recipientCompany: text('recipient_company').notNull().default(''),
+  recipientName: text('recipient_name').notNull().default(''),
+  recipientStreet: text('recipient_street').notNull().default(''),
+  recipientZip: text('recipient_zip').notNull().default(''),
+  recipientCity: text('recipient_city').notNull().default(''),
+  recipientCountry: text('recipient_country').notNull().default(''),
+  recipientVatId: text('recipient_vat_id').notNull().default(''),
+  serviceFrom: date('service_from', { mode: 'string' }),
+  serviceTo: date('service_to', { mode: 'string' }),
+  issueDate: date('issue_date', { mode: 'string' }),
+  dueDate: date('due_date', { mode: 'string' }),
+  notes: text('notes').notNull().default(''),
+  /** Kopie der Absenderangaben zum Ausstellungszeitpunkt */
+  issuer: jsonb('issuer'),
+  grossCents: integer('gross_cents').notNull().default(0),
+  createdBy: text('created_by').notNull().default(''),
+  issuedBy: text('issued_by').notNull().default(''),
+  issuedAt: ts('issued_at'),
+  cancelReason: text('cancel_reason').notNull().default(''),
+  ...stamps,
+}, (t) => [index('invoices_booking_idx').on(t.bookingId), index('invoices_issue_idx').on(t.issueDate)]);
+
+export const invoiceLines = pgTable('invoice_lines', {
+  id: id(),
+  invoiceId: uuid('invoice_id').notNull().references(() => invoices.id, { onDelete: 'cascade' }),
+  pos: integer('pos').notNull(),
+  description: text('description').notNull(),
+  detail: text('detail').notNull().default(''),
+  quantity: numeric('quantity', { precision: 10, scale: 2, mode: 'number' }).notNull(),
+  /** Bruttopreis je Einheit */
+  unitPriceCents: integer('unit_price_cents').notNull(),
+  taxRatePercent: numeric('tax_rate_percent', { precision: 5, scale: 2, mode: 'number' }).notNull(),
+  totalCents: integer('total_cents').notNull(),
+}, (t) => [index('invoice_lines_invoice_idx').on(t.invoiceId)]);
+
+/** Zahlung (negativer Betrag = Erstattung bzw. Gegenbuchung). Nicht änderbar oder löschbar. */
+export const payments = pgTable('payments', {
+  id: id(),
+  bookingId: uuid('booking_id').references(() => bookings.id),
+  invoiceId: uuid('invoice_id').references(() => invoices.id),
+  amountCents: integer('amount_cents').notNull(),
+  method: text('method').notNull(),
+  date: date('date', { mode: 'string' }).notNull(),
+  payer: text('payer').notNull().default(''),
+  note: text('note').notNull().default(''),
+  /** Bei einer Gegenbuchung: die korrigierte Zahlung */
+  reversesId: uuid('reverses_id'),
+  recordedBy: text('recorded_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+}, (t) => [index('payments_booking_idx').on(t.bookingId), index('payments_invoice_idx').on(t.invoiceId)]);

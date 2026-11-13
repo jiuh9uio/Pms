@@ -9,6 +9,8 @@ import { ControlType } from './pages/ControlType.tsx';
 import { Controls } from './pages/Controls.tsx';
 import { Dashboard } from './pages/Dashboard.tsx';
 import { Guests } from './pages/Guests.tsx';
+import { Invoices } from './pages/Invoices.tsx';
+import { InvoicePrint } from './billing/InvoicePrint.tsx';
 import { Launcher } from './pages/Launcher.tsx';
 import { Login } from './pages/Login.tsx';
 import { Plan } from './pages/Plan.tsx';
@@ -38,6 +40,7 @@ const NAV = [
   { to: '/plan', label: 'Belegungsplan', short: 'Plan', icon: '▦', admin: false, module: 'hotel' },
   { to: '/reservierungen', label: 'Reservierungen', short: 'Buchungen', icon: '☷', admin: false, module: 'hotel' },
   { to: '/gaeste', label: 'Gäste', icon: '☺', admin: false, module: 'hotel' },
+  { to: '/rechnungen', label: 'Rechnungen', icon: '€', admin: false, module: 'hotel' },
   { to: '/zimmer', label: 'Zimmer & Preise', short: 'Zimmer', icon: '⌂', admin: true, more: true, module: 'hotel' },
   { to: '/kontrollen', label: 'Kontrollen', icon: '✓', admin: false, module: 'kontrollen' },
   { to: '/benutzer', label: 'Benutzer', icon: '◉', admin: true, module: 'verwaltung' },
@@ -85,6 +88,7 @@ function Shell({ user }: { user: UserDto }) {
   const hotel = hasModule(user, 'hotel');
   const kontrollen = hasModule(user, 'kontrollen');
   if (pathname === '/') return <Launcher />;
+  if (hotel && pathname.startsWith('/rechnung/')) return <Routes><Route path="/rechnung/:id" element={<InvoicePrint />} /></Routes>;
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -107,6 +111,7 @@ function Shell({ user }: { user: UserDto }) {
           {hotel && <Route path="/plan" element={<Plan />} />}
           {hotel && <Route path="/reservierungen" element={<Reservations />} />}
           {hotel && <Route path="/gaeste" element={<Guests />} />}
+          {hotel && <Route path="/rechnungen" element={<Invoices />} />}
           {isAdmin && <Route path="/zimmer" element={<RoomsPrices />} />}
           {isAdmin && <Route path="/konto" element={<Account />} />}
           {isAdmin && <Route path="/benutzer" element={<Users />} />}

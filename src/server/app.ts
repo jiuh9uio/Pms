@@ -8,11 +8,12 @@ import { z, ZodError } from 'zod';
 import * as S from '../shared/schemas.js';
 import type { Db } from './db/client.js';
 import type { users } from './db/schema.js';
-import { AppError, forbidden, pgCode } from './lib/errors.js';
+import { AppError, forbidden, pgCode, pgMessage } from './lib/errors.js';
 import { listAudit, type Actor } from './modules/audit.js';
 import * as auth from './modules/auth.js';
 import * as settings from './modules/settings.js';
 import * as usersMod from './modules/users.js';
+import { registerBillingRoutes } from './routes-billing.js';
 import { registerControlRoutes } from './routes-controls.js';
 import { registerHotelRoutes } from './routes-hotel.js';
 
@@ -83,6 +84,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     const e = err as { statusCode?: number; code?: string; message?: string };
     const pg = pgCode(err);
     if (pg === '23P01') return reply.status(409).send({ error: { code: 'room_taken', message: 'Das Zimmer ist in diesem Zeitraum bereits belegt oder gesperrt' } });
+    if (pg === 'P0001') return reply.status(409).send({ error: { code: 'protected', message: pgMessage(err) ?? 'Nicht erlaubt' } });
     if (pg === '23505') return reply.status(409).send({ error: { code: 'duplicate', message: 'Dieser Eintrag existiert bereits' } });
     if (pg === '23503') return reply.status(409).send({ error: { code: 'in_use', message: 'Der Eintrag wird noch verwendet oder verweist auf etwas, das es nicht gibt' } });
     if (e.statusCode && e.statusCode < 500) return reply.status(e.statusCode).send({ error: { code: 'bad_request', message: 'Ungültige Anfrage' } });
@@ -149,6 +151,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
 
     registerHotelRoutes(api, { db, requireUser: requireModule('hotel'), requireAdmin, actor });
     registerControlRoutes(api, { db, requireUser: requireModule('kontrollen'), requireAdmin, actor });
+    registerBillingRoutes(api, { db, requireUser: requireModule('hotel'), actor });
 
     api.setNotFoundHandler(() => { throw new AppError(404, 'not_found', 'Unbekannte Adresse'); });
   }, { prefix: '/api/v1' });

@@ -41,7 +41,11 @@ function HotelForm() {
       <div className="formgrid cols3">
         {input('taxNumber', 'Steuernummer')}{input('vatId', 'USt-IdNr.', { hint: 'falls vorhanden' })}{input('bankName', 'Bank')}
         {input('iban', 'IBAN')}{input('bic', 'BIC')}
+        {input('invoicePrefix', 'Kürzel vor der Rechnungsnummer', { hint: `ergibt z. B. ${v.invoicePrefix ? v.invoicePrefix + '-' : ''}${new Date().getFullYear()}-0001` })}
+        <Field label="Zahlungsziel in Tagen" error={f.errors.paymentTermDays}><input inputMode="numeric" value={String(v.paymentTermDays)} onChange={(e) => setV({ ...v, paymentTermDays: e.target.value === '' ? ('' as never) : Number(e.target.value) })} /></Field>
+        <Field label="Fußtext auf Rechnungen" wide error={f.errors.invoiceFooter} hint="z. B. Geschäftsführung, Handelsregister, Grußformel"><textarea rows={2} value={v.invoiceFooter} onChange={(e) => setV({ ...v, invoiceFooter: e.target.value })} /></Field>
       </div>
+      <p className="muted small">Zum Ausstellen von Rechnungen sind Anschrift sowie Steuernummer oder USt-IdNr. Pflicht. Die Angaben werden in jede Rechnung kopiert; spätere Änderungen wirken nur auf neue Rechnungen.</p>
       <div className="formactions"><Button type="submit" variant="primary" busy={f.busy}>Speichern</Button></div>
     </form>
   );

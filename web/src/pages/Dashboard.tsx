@@ -14,6 +14,7 @@ export function Dashboard() {
   const { rev, bump, openBooking, newBooking } = useData();
   const toast = useToast();
   const { data, error, reload } = useLoad(() => api<DashboardDto>('GET', '/dashboard'), [rev]);
+  const open = useLoad(() => api<{ count: number; cents: number; overdue: number }>('GET', '/invoices/summary'), [rev]);
   const [busy, setBusy] = useState<string | null>(null);
   // Kennzahlen aktualisieren sich von selbst
   useEffect(() => {
@@ -49,8 +50,9 @@ export function Dashboard() {
             {kpi('Auslastung heute', `${data.rooms.occupancyPercent} %`, 'gebuchte Zimmer heute Nacht')}
             {kpi('Logisumsatz heute', formatMoney(data.revenueTodayCents), 'gebuchte Übernachtungen')}
             {kpi('Logisumsatz Monat', formatMoney(data.revenueMonthCents), 'laufender Monat, gebucht')}
+            <Link to="/rechnungen" className="card kpicard linkcard"><span>Offene Rechnungen</span><b>{open.data?.count ?? '–'}</b><small>{open.data ? `${formatMoney(open.data.cents)}${open.data.overdue ? ` · ${open.data.overdue} überfällig` : ''}` : ''}</small></Link>
           </div>
-          <p className="muted small">Umsatz = gebuchte Übernachtungspreise (brutto, ohne Zusatzleistungen). Offene Rechnungen erscheinen hier mit der Abrechnung (Phase 3).</p>
+          <p className="muted small">Umsatz = gebuchte Übernachtungspreise (brutto, ohne Zusatzleistungen). Offene Rechnungen = ausgestellt und noch nicht vollständig bezahlt.</p>
 
           <section className="card">
             <h2>Aufgaben heute</h2>
