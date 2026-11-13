@@ -430,3 +430,42 @@ export const companyRates = pgTable('company_rates', {
   categoryId: uuid('category_id').notNull().references(() => roomCategories.id, { onDelete: 'cascade' }),
   priceCents: integer('price_cents').notNull(),
 }, (t) => [primaryKey({ columns: [t.companyId, t.categoryId] })]);
+
+// =====================================================================================
+// E-Rechnung (ZUGFeRD/Factur-X) und E-Mail-Versand
+// =====================================================================================
+const bytea = customType<{ data: Buffer }>({ dataType: () => 'bytea' });
+
+export const einvoices = pgTable('einvoices', {
+  id: id(),
+  /** 'invoice' = aus einer Rechnung des PMS erzeugt, 'upload' = hochgeladene PDF-Datei umgewandelt */
+  source: text('source', { enum: ['upload', 'invoice'] }).notNull(),
+  invoiceId: uuid('invoice_id').references(() => invoices.id),
+  number: text('number').notNull(),
+  issueDate: date('issue_date', { mode: 'string' }).notNull(),
+  buyerName: text('buyer_name').notNull(),
+  buyerEmail: text('buyer_email').notNull().default(''),
+  grossCents: integer('gross_cents').notNull(),
+  originalName: text('original_name').notNull().default(''),
+  /** true, wenn das PMS die PDF-Datei selbst erzeugt hat (Schrift und Farbprofil eingebettet) */
+  generatedPdf: boolean('generated_pdf').notNull().default(false),
+  data: jsonb('data').notNull(),
+  xml: text('xml').notNull(),
+  pdf: bytea('pdf').notNull(),
+  createdBy: text('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  sentAt: ts('sent_at'),
+  sentTo: text('sent_to').notNull().default(''),
+}, (t) => [index('einvoices_created_idx').on(t.createdAt)]);
+
+export const mailLog = pgTable('mail_log', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  at: ts('at').notNull().defaultNow(),
+  toAddr: text('to_addr').notNull(),
+  subject: text('subject').notNull(),
+  attachments: text('attachments').notNull().default(''),
+  status: text('status', { enum: ['sent', 'failed'] }).notNull(),
+  error: text('error').notNull().default(''),
+  userName: text('user_name').notNull(),
+  einvoiceId: uuid('einvoice_id'),
+});

@@ -322,3 +322,12 @@ a.btn.primary { color: var(--accent-ink); }
 
 /* Housekeeping */
 .plabel .hk { color: var(--st-tentative); font-size: 11px; } .plabel.dirty { box-shadow: inset 3px 0 0 var(--st-tentative); }
+
+/* E-Rechnung */
+.dropzone { display: grid; place-items: center; text-align: center; padding: 22px 16px; border: 2px dashed var(--line-strong); border-radius: 12px; cursor: pointer; background: var(--surface-2); }
+.dropzone:hover, .dropzone.has { border-color: var(--accent); background: var(--accent-soft); } .dropzone input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.elines { display: grid; gap: 6px; } .eline { display: flex; gap: 6px; align-items: center; } .eline input:first-child { flex: 1; min-width: 0; } .eline .short { width: 96px; flex: none; }
+.rowactions { display: flex; gap: 6px; justify-content: flex-end; align-items: center; } .rowactions .btn { height: 32px; padding: 0 10px; }
+ol.steps, ul.bullets { margin: 0 0 10px; padding-left: 20px; display: grid; gap: 6px; }
+.testto { max-width: 300px; }
+@media (max-width: 760px) { .eline { flex-wrap: wrap; } .eline input:first-child { flex-basis: 100%; } .rowactions { flex-wrap: wrap; } }

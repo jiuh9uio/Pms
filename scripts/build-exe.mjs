@@ -39,6 +39,7 @@ execFileSync(process.execPath, [postject, target, 'NODE_SEA_BLOB', blob, '--sent
 // 3) Oberfläche, Datenbankschema, PostgreSQL
 cpSync(join('dist', 'web'), join(out, 'app', 'web'), { recursive: true });
 cpSync('migrations', join(out, 'app', 'migrations'), { recursive: true });
+cpSync('assets', join(out, 'app', 'assets'), { recursive: true });
 for (const d of ['bin', 'lib', 'share']) cpSync(join(pgRoot, d), join(out, 'pgsql', d), { recursive: true, dereference: true });
 for (const d of [['share', 'doc'], ['share', 'man'], ['share', 'locale']]) rmSync(join(out, 'pgsql', ...d), { recursive: true, force: true });
 
@@ -66,7 +67,8 @@ Autostart:  "Autostart einrichten.bat" ausführen: PMS startet bei jeder Windows
 Zurückspielen einer Sicherung (ersetzt alle Daten!), in einer Eingabeaufforderung in diesem Ordner, PMS vorher beenden:
             pms.exe --restore backups\\pms-JJJJMMTT-HHMMSS.dump --ja
 
-Alle Daten liegen im Ordner "data". Diesen Ordner nicht löschen. Für ein Update den neuen Programmordner
+Alle Daten liegen im Ordner "data". Diesen Ordner nicht löschen. Darin liegt auch die Datei "secret.key" (Schlüssel für das
+gespeicherte E-Mail-Passwort) – zusammen mit dem Ordner "backups" mitsichern. Für ein Update den neuen Programmordner
 entpacken und die Ordner "data" und "backups" sowie die Datei "pms.env" aus dem alten Ordner hineinkopieren.
 
 Der Zugriff im Hausnetz ist unverschlüsselt (HTTP). Den Port nicht ins Internet freigeben.

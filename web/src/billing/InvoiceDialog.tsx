@@ -5,7 +5,10 @@ import {
 } from '../../../src/shared/billing.js';
 import { formatMoney, moneyInput, parseMoney, todayBerlin, type ServiceDto } from '../../../src/shared/hotel.js';
 import type { TaxRateDto } from '../../../src/shared/schemas.js';
+import { useNavigate } from 'react-router-dom';
+import { hasModule } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
+import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
 import { Badge, Button, Dialog, Field, LoadState, fmtDateTime, useLoad, useSubmit, useToast } from '../ui.tsx';
@@ -21,8 +24,11 @@ export const InvoiceStatus = ({ inv }: { inv: Pick<InvoiceDto, 'status' | 'kind'
 
 /** Rechnung: im Entwurf bearbeiten, dann ausstellen; danach nur noch Zahlungen, Druck und Storno. */
 export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void }) {
-  const { rev, bump, openInvoice, openBooking } = useData();
+  const { rev, bump, openInvoice, openBooking, closeAll } = useData();
   const toast = useToast();
+  const { user } = useAuth();
+  const go = useNavigate();
+  const navigate = (to: string) => { closeAll(); go(to); };
   const { data: inv, error } = useLoad(() => api<InvoiceDto>('GET', `/invoices/${id}`), [id, rev]);
   const [busy, setBusy] = useState(false);
   const [cancel, setCancel] = useState(false);
@@ -34,6 +40,16 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
       const r = await api<InvoiceDto>('POST', `/invoices/${id}/issue`, { version: inv.version });
       toast(`Rechnung ${r.number} ausgestellt`);
       bump();
+    } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+    setBusy(false);
+  };
+  const einvoice = async () => {
+    setBusy(true);
+    try {
+      await api('POST', `/einvoices/from-invoice/${id}`);
+      toast('E-Rechnung erstellt – zum Versenden im Bereich „E-Rechnung“');
+      bump();
+      navigate('/erechnung');
     } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
     setBusy(false);
   };
@@ -49,6 +65,7 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
         {inv.status === 'draft' && <Button variant="danger" className="left" onClick={() => void remove()}>Entwurf verwerfen</Button>}
         {inv.status === 'issued' && inv.kind === 'invoice' && <Button variant="danger" className="left" onClick={() => setCancel(true)}>Stornieren</Button>}
         {inv.bookingId && <Button onClick={() => openBooking(inv.bookingId!)}>Reservierung {inv.bookingNumber}</Button>}
+        {inv.status === 'issued' && inv.kind === 'invoice' && hasModule(user, 'erechnung') && <Button busy={busy} onClick={() => void einvoice()}>E-Rechnung</Button>}
         <a className="btn" href={`/rechnung/${id}`} target="_blank" rel="noopener">{inv.status === 'draft' ? 'Vorschau' : 'Drucken / PDF'}</a>
         {inv.status === 'draft' ? <Button variant="primary" busy={busy} onClick={() => void issue()}>Ausstellen</Button> : <Button onClick={onClose}>Schließen</Button>}
       </>}>

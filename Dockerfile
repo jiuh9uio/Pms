@@ -12,6 +12,7 @@ RUN apk add --no-cache postgresql16-client
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/migrations ./migrations
+COPY --from=build /app/assets ./assets
 COPY --from=build /app/scripts ./scripts
 COPY package.json ./
 USER node

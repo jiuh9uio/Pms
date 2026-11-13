@@ -27,6 +27,8 @@ interface Data {
   openBlock: (preset: BlockPreset) => void;
   openInvoice: (id: string) => void;
   openCompany: (id: string | null) => void;
+  /** alle geöffneten Dialoge schließen (vor einem Seitenwechsel) */
+  closeAll: () => void;
 }
 const Ctx = createContext<Data>(null!);
 export const useData = () => useContext(Ctx);
@@ -45,6 +47,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     openBlock: (preset) => push({ kind: 'block', preset }),
     openInvoice: (id) => push({ kind: 'invoice', id }),
     openCompany: (id) => push({ kind: 'company', id }),
+    closeAll: () => setStack([]),
   }), [rev, push]);
   const close = (i: number) => setStack((s) => s.filter((_, j) => j !== i));
   return (

@@ -7,9 +7,9 @@ export type Role = (typeof ROLES)[number];
 export const ROLE_LABEL: Record<Role, string> = { admin: 'Administrator', user: 'Benutzer' };
 
 /** Bereiche des Programms, die je Benutzer freigegeben werden. Verwaltung und Konto sind dem Administrator vorbehalten. */
-export const MODULES = ['hotel', 'kontrollen'] as const;
+export const MODULES = ['hotel', 'kontrollen', 'erechnung'] as const;
 export type Module = (typeof MODULES)[number];
-export const MODULE_LABEL: Record<Module, string> = { hotel: 'Hotel', kontrollen: 'Kontrollen' };
+export const MODULE_LABEL: Record<Module, string> = { hotel: 'Hotel', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung' };
 const modules = z.array(z.enum(MODULES)).max(MODULES.length);
 export const hasModule = (u: { role: Role; modules: string[] }, m: Module) => u.role === 'admin' || u.modules.includes(m);
 

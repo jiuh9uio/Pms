@@ -8,6 +8,7 @@ import { DataProvider } from './data.tsx';
 import { ControlType } from './pages/ControlType.tsx';
 import { Controls } from './pages/Controls.tsx';
 import { Dashboard } from './pages/Dashboard.tsx';
+import { EInvoice } from './pages/EInvoice.tsx';
 import { Guests } from './pages/Guests.tsx';
 import { Invoices } from './pages/Invoices.tsx';
 import { Companies } from './pages/Companies.tsx';
@@ -45,11 +46,12 @@ const NAV = [
   { to: '/rechnungen', label: 'Rechnungen', icon: '€', admin: false, module: 'hotel' },
   { to: '/zimmer', label: 'Zimmer & Preise', short: 'Zimmer', icon: '⌂', admin: true, more: true, module: 'hotel' },
   { to: '/kontrollen', label: 'Kontrollen', icon: '✓', admin: false, module: 'kontrollen' },
+  { to: '/erechnung', label: 'E-Rechnung', icon: '✉', admin: false, module: 'erechnung' },
   { to: '/benutzer', label: 'Benutzer', icon: '◉', admin: true, module: 'verwaltung' },
   { to: '/protokoll', label: 'Protokoll', icon: '☰', admin: true, module: 'verwaltung' },
   { to: '/einstellungen', label: 'Einstellungen', short: 'Einstell.', icon: '⚙', admin: true, module: 'verwaltung' },
 ] as { to: string; label: string; short?: string; icon: string; admin: boolean; more?: boolean; module: string }[];
-const MODULE_TITLE: Record<string, string> = { hotel: 'Hotel', kontrollen: 'Kontrollen', verwaltung: 'Verwaltung' };
+const MODULE_TITLE: Record<string, string> = { hotel: 'Hotel', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', verwaltung: 'Verwaltung' };
 
 export function App() {
   const [state, setState] = useState<AuthState | null>(null);
@@ -89,6 +91,7 @@ function Shell({ user }: { user: UserDto }) {
   const logout = useLogout();
   const hotel = hasModule(user, 'hotel');
   const kontrollen = hasModule(user, 'kontrollen');
+  const erechnung = hasModule(user, 'erechnung');
   if (pathname === '/') return <Launcher />;
   if (hotel && pathname.startsWith('/rechnung/')) return <Routes><Route path="/rechnung/:id" element={<InvoicePrint />} /></Routes>;
   return (
@@ -108,6 +111,7 @@ function Shell({ user }: { user: UserDto }) {
         <DataProvider>
         <Routes>
           {hotel && <Route path="/hotel" element={<Dashboard />} />}
+          {erechnung && <Route path="/erechnung" element={<EInvoice />} />}
           {kontrollen && <Route path="/kontrollen" element={<Controls />} />}
           {kontrollen && <Route path="/kontrollen/:id" element={<ControlType />} />}
           {hotel && <Route path="/plan" element={<Plan />} />}

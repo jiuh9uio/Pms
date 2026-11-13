@@ -15,6 +15,7 @@ import * as settings from './modules/settings.js';
 import * as usersMod from './modules/users.js';
 import { registerBillingRoutes } from './routes-billing.js';
 import { registerControlRoutes } from './routes-controls.js';
+import { registerEInvoiceRoutes } from './routes-einvoice.js';
 import { registerHotelRoutes } from './routes-hotel.js';
 
 const COOKIE = 'pms_session';
@@ -152,6 +153,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     registerHotelRoutes(api, { db, requireUser: requireModule('hotel'), requireAdmin, actor });
     registerControlRoutes(api, { db, requireUser: requireModule('kontrollen'), requireAdmin, actor });
     registerBillingRoutes(api, { db, requireUser: requireModule('hotel'), actor });
+    registerEInvoiceRoutes(api, { db, requireUser: requireModule('erechnung'), requireAdmin, actor });
 
     api.setNotFoundHandler(() => { throw new AppError(404, 'not_found', 'Unbekannte Adresse'); });
   }, { prefix: '/api/v1' });

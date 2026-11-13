@@ -1,0 +1,3 @@
+Liberation Sans (Regular, Bold) – SIL Open Font License 1.1. Quelle: Liberation Fonts, https://github.com/liberationfonts
+sRGB.icc – mit LittleCMS erzeugtes sRGB-Farbprofil.
+

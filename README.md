@@ -16,7 +16,7 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
 **Noch nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - E-Mail-Versand (GMX) im Neubau; der Prototyp unter `prototype/` kann es weiterhin
-- E-Rechnung, DATEV-Format, Mahnwesen, Kassenfunktion/TSE
+- DATEV-Format, Mahnwesen, Kassenfunktion/TSE
 - Aufpreise für Zusatzpersonen und Kinderpreise (derzeit über Sonderpreis je Nacht)
 - Meldeschein-Druck, Löschen/Anonymisieren von Gästen nach Fristen, Housekeeping
 - TSE/Kassenfunktion, E-Rechnung, Channel-Manager, Onlinebuchung
@@ -40,9 +40,28 @@ Der frühere Prototyp liegt unverändert unter `prototype/`.
   **keine** PDF-Dateien selbst; maßgeblich sind die unveränderlich gespeicherten Rechnungsdaten.
 - **Export:** CSV mit allen Rechnungen und Stornobelegen (Netto und Umsatzsteuer je Satz, Brutto, bezahlt, offen) sowie aller Zahlungen.
   Ein DATEV-Format ist nicht enthalten.
-- Nicht enthalten: E-Rechnung (XRechnung/ZUGFeRD), E-Mail-Versand, Mahnwesen, Firmenprofile mit vereinbarten Preisen, Kassenfunktion/TSE.
+- Nicht enthalten: Mahnwesen, Firmenprofile mit vereinbarten Preisen, Kassenfunktion/TSE.
   **Die Rechnungsvorlage und die Aufbewahrung sind nicht rechtlich geprüft** – bitte einmal mit der Steuerberatung durchsehen
   (u. a. Pflichtangaben nach § 14 UStG, GoBD, ob für Barzahlungen eine TSE nötig ist).
+
+### E-Rechnung (ZUGFeRD)
+
+- Eigener Menüpunkt **E-Rechnung** (je Benutzer freigebbar): eine fertige **PDF-Rechnung hochladen**, Rechnungsdaten eintragen
+  (Nummer, Datum, Empfänger, Positionen als Bruttobeträge je Steuersatz), und das Programm erzeugt eine **ZUGFeRD-Datei**:
+  dieselbe PDF mit eingebetteter XML-Datei `factur-x.xml` (UN/CEFACT CII, Profil EN 16931). Die Angaben des eigenen Betriebs kommen aus den Einstellungen.
+- Rechnungen, die im Bereich Hotel ausgestellt wurden, werden mit dem Knopf **„E-Rechnung“** ohne Eintippen umgewandelt; die PDF erzeugt
+  das Programm dann selbst (eingebettete Schrift, Farbprofil).
+- **Versand per E-Mail** (PDF, XML oder beides) über das in den Einstellungen hinterlegte Postfach (z. B. GMX); jeder Versand wird protokolliert.
+  Das E-Mail-Passwort wird verschlüsselt gespeichert; der Schlüssel liegt in der Datei `secret.key` im Datenordner
+  (`PMS_DATA_DIR`, Standard `./data`; in der Windows-Version der Ordner `data`) und **gehört mit in die Datensicherung** –
+  ohne ihn muss das Passwort neu eingetragen werden.
+- **Grenzen – bitte beachten:**
+  - Die Dateien sind nach den Vorgaben für ZUGFeRD 2 / Factur-X aufgebaut und mit eigenen Tests geprüft (wohlgeformtes XML, stimmige Summen,
+    eingebettete Datei und Kennzeichnung), aber **nicht mit einem offiziellen Validator** (z. B. Mustang, veraPDF, KoSIT) geprüft.
+    Vor dem ersten echten Versand eine Beispieldatei validieren.
+  - Das Programm **liest die hochgeladene PDF nicht aus**: Maßgeblich ist der XML-Teil, der aus den eingetragenen Daten entsteht. PDF und Eingaben müssen übereinstimmen.
+  - Ob eine umgewandelte fremde PDF den Archivstandard PDF/A-3 erfüllt, hängt von der Ausgangsdatei ab (eingebettete Schriften usw.).
+  - Nicht unterstützt: Stornobelege/Gutschriften, Nachlass-Positionen, andere Währungen als Euro, XRechnung für Behörden (Leitweg-ID-Pflichtfelder), Empfang von E-Rechnungen.
 
 ### Firmen
 

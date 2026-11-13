@@ -20,6 +20,7 @@ import { dirname, join, resolve } from 'node:path';
 import postgres from 'postgres';
 import { buildApp } from './app.js';
 import { connect, runMigrations } from './db/client.js';
+import { setAssetsDir } from './einvoice/pdf.js';
 
 const args = process.argv.slice(2);
 const home = resolve(process.env.PMS_HOME ?? dirname(process.execPath));
@@ -104,6 +105,8 @@ function backup(url: string) {
 
 async function main() {
   if (existsSync(join(home, 'pms.env'))) process.loadEnvFile(join(home, 'pms.env'));
+  process.env.PMS_DATA_DIR = dataDir; // Schlüsseldatei für das E-Mail-Passwort
+  setAssetsDir(join(home, 'app', 'assets', 'einvoice'));
   const pg = await startDatabase();
 
   if (args.includes('--backup')) {

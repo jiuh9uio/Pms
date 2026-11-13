@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { hotelSettings, taxRateCreateInput, taxRateUpdateInput, type HotelSettings, type TaxRateDto } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
+import { MailSettings } from './MailSettings.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useToast } from '../ui.tsx';
 
 export function Settings() {
@@ -8,6 +9,7 @@ export function Settings() {
     <>
       <PageHeader title="Einstellungen" sub="Stammdaten des Hauses und Steuersätze" />
       <HotelForm />
+      <MailSettings />
       <TaxRates />
     </>
   );

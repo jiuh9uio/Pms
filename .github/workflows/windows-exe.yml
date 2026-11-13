@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: ['claude/hotel-pms-gmx-0rifkh', 'main']
-    paths: ['src/**', 'web/**', 'migrations/**', 'scripts/build-exe.mjs', 'package*.json', '.github/workflows/windows-exe.yml']
+    paths: ['src/**', 'web/**', 'migrations/**', 'assets/**', 'scripts/build-exe.mjs', 'package*.json', '.github/workflows/windows-exe.yml']
 
 permissions:
   contents: read
@@ -69,6 +69,12 @@ jobs:
           if (-not $issued.number -or $issued.grossCents -ne 29700) { throw "Rechnung falsch ausgestellt: $($issued | ConvertTo-Json -Depth 2)" }
           Post '/payments' @{ invoiceId = $inv.id; amountCents = 29700; method = 'Bar'; date = (Get-Date -Format 'yyyy-MM-dd'); payer = ''; note = '' } $s | Out-Null
           Write-Host "Rechnung $($issued.number) ausgestellt und bezahlt"
+          $e = Invoke-RestMethod -Method Post -Uri "$base/einvoices/from-invoice/$($inv.id)" -WebSession $s
+          Invoke-WebRequest "$base/einvoices/$($e.id)/pdf" -WebSession $s -OutFile "$dir\e-rechnung.pdf"
+          $pdfText = [System.Text.Encoding]::GetEncoding(28591).GetString([System.IO.File]::ReadAllBytes("$dir\e-rechnung.pdf"))
+          if (-not $pdfText.StartsWith('%PDF-') -or -not $pdfText.Contains('factur-x.xml')) { throw 'E-Rechnung enthält keine eingebettete factur-x.xml' }
+          Remove-Item "$dir\e-rechnung.pdf"
+          Write-Host 'E-Rechnung (ZUGFeRD) erzeugt'
           if ((Invoke-WebRequest 'http://127.0.0.1:3000/plan').StatusCode -ne 200) { throw 'Oberfläche wird nicht ausgeliefert' }
 
           & "$dir\pms.exe" --backup
