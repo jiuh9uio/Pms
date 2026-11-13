@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { ROLE_LABEL, type UserDto } from '../../src/shared/schemas.js';
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { ROLE_LABEL, hasModule, type UserDto } from '../../src/shared/schemas.js';
 import { api } from './api.ts';
 import { Account } from './pages/Account.tsx';
 import { Audit } from './pages/Audit.tsx';
@@ -21,6 +21,17 @@ import { ToastProvider } from './ui.tsx';
 interface AuthState { needsSetup: boolean; user: UserDto | null }
 const AuthCtx = createContext<{ user: UserDto; refresh: () => Promise<void> }>(null!);
 export const useAuth = () => useContext(AuthCtx);
+
+/** Abmelden – für alle Benutzer erreichbar, auch ohne die Seite „Mein Konto“. */
+export function useLogout() {
+  const { refresh } = useAuth();
+  const navigate = useNavigate();
+  return async () => {
+    try { await api('POST', '/auth/logout'); } catch { /* Sitzung war bereits beendet */ }
+    await refresh();
+    navigate('/', { replace: true });
+  };
+}
 
 const NAV = [
   { to: '/hotel', label: 'Übersicht', icon: '◧', admin: false, module: 'hotel' },
@@ -70,6 +81,9 @@ function Shell({ user }: { user: UserDto }) {
   // Der Bereich (Hotel, Kontrollen, Verwaltung) ergibt sich aus der Adresse; das Startmenü hat keine Seitenleiste.
   const module = NAV.find((n) => pathname === n.to || pathname.startsWith(n.to + '/'))?.module;
   const nav = NAV.filter((n) => n.module === module && (!n.admin || isAdmin));
+  const logout = useLogout();
+  const hotel = hasModule(user, 'hotel');
+  const kontrollen = hasModule(user, 'kontrollen');
   if (pathname === '/') return <Launcher />;
   return (
     <div className="shell">
@@ -80,21 +94,21 @@ function Shell({ user }: { user: UserDto }) {
           {nav.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.to === '/hotel'} className={n.more ? 'more' : undefined}><span className="ico" aria-hidden>{n.icon}</span><span className="full">{n.label}</span><span className="short">{n.short ?? n.label}</span></NavLink>
           ))}
-          <NavLink to="/konto" className="konto"><span className="ico" aria-hidden>◐</span><span className="full">Mein Konto</span><span className="short">Konto</span></NavLink>
+          {isAdmin && <NavLink to="/konto" className="konto"><span className="ico" aria-hidden>◐</span><span className="full">Mein Konto</span><span className="short">Konto</span></NavLink>}
         </nav>
-        <div className="whoami"><b>{user.name}</b><span>{ROLE_LABEL[user.role]}</span></div>
+        <div className="whoami"><b>{user.name}</b><span>{ROLE_LABEL[user.role]}</span><button type="button" className="linkbtn" onClick={() => void logout()}>Abmelden</button></div>
       </aside>
       <main className="content">
         <DataProvider>
         <Routes>
-          <Route path="/hotel" element={<Dashboard />} />
-          <Route path="/kontrollen" element={<Controls />} />
-          <Route path="/kontrollen/:id" element={<ControlType />} />
-          <Route path="/plan" element={<Plan />} />
-          <Route path="/reservierungen" element={<Reservations />} />
-          <Route path="/gaeste" element={<Guests />} />
+          {hotel && <Route path="/hotel" element={<Dashboard />} />}
+          {kontrollen && <Route path="/kontrollen" element={<Controls />} />}
+          {kontrollen && <Route path="/kontrollen/:id" element={<ControlType />} />}
+          {hotel && <Route path="/plan" element={<Plan />} />}
+          {hotel && <Route path="/reservierungen" element={<Reservations />} />}
+          {hotel && <Route path="/gaeste" element={<Guests />} />}
           {isAdmin && <Route path="/zimmer" element={<RoomsPrices />} />}
-          <Route path="/konto" element={<Account />} />
+          {isAdmin && <Route path="/konto" element={<Account />} />}
           {isAdmin && <Route path="/benutzer" element={<Users />} />}
           {isAdmin && <Route path="/protokoll" element={<Audit />} />}
           {isAdmin && <Route path="/einstellungen" element={<Settings />} />}

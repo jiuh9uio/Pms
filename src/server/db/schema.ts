@@ -25,6 +25,8 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash').notNull(),
   role: userRole('role').notNull().default('user'),
   active: boolean('active').notNull().default(true),
+  /** Bereiche, auf die der Benutzer zugreifen darf (Administratoren dürfen immer alles) */
+  modules: text('modules').array().notNull().default(sql`'{hotel,kontrollen}'`),
   failedLogins: integer('failed_logins').notNull().default(0),
   lockedUntil: ts('locked_until'),
   lastLoginAt: ts('last_login_at'),
@@ -299,7 +301,9 @@ export const hygienePoints = pgTable('hygiene_points', {
 export const hygieneReadings = pgTable('hygiene_readings', {
   pointId: uuid('point_id').notNull().references(() => hygienePoints.id),
   date: date('date', { mode: 'string' }).notNull(),
-  valueC: numeric('value_c', { precision: 5, scale: 1, mode: 'number' }).notNull(),
+  /** Messwert; leer, wenn nur bestätigt wurde, dass die Messstelle im Sollbereich liegt */
+  valueC: numeric('value_c', { precision: 5, scale: 1, mode: 'number' }),
+  confirmed: boolean('confirmed').notNull().default(false),
   /** Bemerkung bzw. ergriffene Maßnahme bei Abweichung */
   note: text('note').notNull().default(''),
   userName: text('user_name').notNull(),

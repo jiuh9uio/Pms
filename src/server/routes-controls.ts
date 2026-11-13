@@ -51,5 +51,7 @@ export function registerControlRoutes(api: FastifyInstance, { db, requireUser, r
     const q = z.object({ from: z.string().refine(isIsoDate), to: z.string().refine(isIsoDate) }).parse(req.query);
     return controls.listReadings(db, q.from, q.to);
   });
+  api.get('/hygiene/open', user, () => controls.openToday(db));
+  api.post('/hygiene/areas/:id/confirm', user, (req) => controls.confirmArea(db, actor(req), idOf(req)));
   api.put('/hygiene/readings', user, (req) => controls.saveReadings(db, actor(req), C.hygieneReadingsInput.parse(req.body).entries));
 }

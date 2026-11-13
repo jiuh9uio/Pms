@@ -26,14 +26,21 @@ Der frühere Prototyp liegt unverändert unter `prototype/` und wird mit Phase 3
 
 ### Kontrollen und Temperaturprotokoll
 
-- Nach der Anmeldung erscheint ein **Startmenü** mit den Bereichen Hotel, Kontrollen, Verwaltung und Mein Konto.
+- Nach der Anmeldung erscheint ein **Startmenü** mit den Bereichen, die das Konto öffnen darf.
+- **Freigaben je Benutzer:** In der Verwaltung legt der Administrator je Benutzer fest, welche Bereiche (Hotel, Kontrollen) er sieht.
+  Der Server prüft die Freigabe bei jeder Anfrage; eine Änderung wirkt sofort. Verwaltung und „Mein Konto“ sind dem Administrator
+  vorbehalten – Benutzer können sich abmelden, ein neues Passwort vergibt der Administrator. Weitere Bereiche (z. B. Kasse) gibt es noch nicht.
 - Unter **Kontrollen** gibt es je Kontrollart (Hygieneamt, Finanzamt; weitere legt der Administrator an) eine Liste der
   bereitzuhaltenden Unterlagen zum Abhaken und ein Verzeichnis der stattgefundenen Kontrollen.
   Die mitgelieferten Unterlagenlisten sind Vorschläge, keine vollständige oder rechtlich geprüfte Aufstellung.
 - Beim **Hygieneamt** steht oben das Temperaturprotokoll: Bereiche (z. B. Küche) als Reiter, darunter eine Tabelle der Messstellen
   (z. B. Kühltruhe) mit Sollbereich, den Werten der letzten Tage und der Eingabe für den gewählten Tag. „Monatsprotokoll“ zeigt den Monat zum Ausdrucken.
-- Werte werden **von Hand eingetragen**. Eine Funktion, die Werte automatisch ausfüllt, gibt es bewusst nicht: Das Protokoll ist der
-  Nachweis, dass gemessen wurde. Liegt ein Wert außerhalb des Sollbereichs, ist die ergriffene Maßnahme einzutragen.
+- **Kurzabfrage:** Beim Öffnen von „Kontrollen“ fragt das Programm je Bereich, in dem heute noch etwas fehlt: „Küche: alles im Sollwert?“
+  Ein Tipp auf „Ja“ speichert für die offenen Messstellen eine Bestätigung mit Namen und Uhrzeit (im Protokoll als ✓, ohne Zahlenwert);
+  „Nein“ führt zur Tabelle, um Werte und Maßnahme einzutragen. Die Bestätigung gibt es nur für den heutigen Tag, nicht im Nachhinein.
+  Ob eine Bestätigung ohne Zahlenwert als Nachweis genügt, bitte mit dem Hygieneamt bzw. im eigenen HACCP-Konzept klären.
+- Zahlenwerte werden **von Hand eingetragen**. Eine Funktion, die Werte erfindet, gibt es bewusst nicht. Liegt ein Wert außerhalb
+  des Sollbereichs, ist die ergriffene Maßnahme einzutragen.
 - Jeder Wert wird mit Namen und Zeitpunkt der Erfassung gespeichert; nachträglich eingetragene Werte sind gekennzeichnet,
   Korrekturen stehen mit altem und neuem Wert im Änderungsprotokoll. Ein Datum in der Zukunft ist nicht möglich.
 - Nicht enthalten: automatische Übernahme aus Funk-Thermometern/Datenloggern, Reinigungspläne zum Abzeichnen, Wareneingangskontrolle.

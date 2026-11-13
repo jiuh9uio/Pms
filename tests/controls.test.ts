@@ -11,7 +11,7 @@ const { db, close } = connect(url);
 let app: FastifyInstance;
 let admin: Record<string, string>;
 let user: Record<string, string>;
-type Method = 'GET' | 'POST' | 'PUT';
+type Method = 'GET' | 'POST' | 'PUT' | 'PATCH';
 const call = (method: Method, path: string, cookies: Record<string, string>, payload?: unknown) =>
   app.inject({ method, url: '/api/v1' + path, cookies, payload: payload as object | undefined });
 const ok = async (method: Method, path: string, cookies: Record<string, string>, payload?: unknown) => {
@@ -111,5 +111,61 @@ describe('Temperaturprotokoll', () => {
     // unveränderter Wert erzeugt keinen weiteren Eintrag
     await ok('PUT', '/hygiene/readings', admin, { entries: [{ pointId: schrank, date: today, valueC: 5, note: 'Ablesefehler korrigiert' }] });
     expect((await ok('GET', '/audit?entity=hygiene_reading&limit=20', admin)).items).toHaveLength(log.length);
+  });
+});
+
+describe('Kurzbestätigung „im Sollbereich“', () => {
+  it('fragt nur nach Bereichen mit offenen Messstellen und speichert die Bestätigung mit Namen', async () => {
+    const areas = await ok('GET', '/hygiene/areas', admin);
+    const lager = areas.find((a: { name: string }) => a.name === 'Lager');
+    const kueche = areas.find((a: { name: string }) => a.name === 'Küche');
+    await ok('POST', '/hygiene/points', admin, { areaId: lager.id, name: 'Getränkekühlung', minC: 2, maxC: 8, active: true });
+    await ok('POST', '/hygiene/points', admin, { areaId: kueche.id, name: 'Salattheke', minC: 0, maxC: 7, active: true });
+
+    let open = await ok('GET', '/hygiene/open', user);
+    expect(open.map((o: { areaName: string; points: { name: string }[] }) => [o.areaName, o.points.map((p) => p.name)])).toEqual([['Küche', ['Salattheke']], ['Lager', ['Getränkekühlung']]]);
+
+    expect((await ok('POST', `/hygiene/areas/${kueche.id}/confirm`, user)).confirmed).toBe(1);
+    expect((await ok('POST', `/hygiene/areas/${kueche.id}/confirm`, user)).confirmed).toBe(0); // zweites Tippen ändert nichts
+    open = await ok('GET', '/hygiene/open', user);
+    expect(open.map((o: { areaName: string }) => o.areaName)).toEqual(['Lager']);
+
+    const list = await ok('GET', `/hygiene/readings?from=${today}&to=${today}`, user);
+    const salat = list.find((r: { confirmed: boolean }) => r.confirmed);
+    expect(salat).toMatchObject({ valueC: null, confirmed: true, userName: 'Küche' });
+    // bereits gemessene Werte bleiben unberührt
+    expect(list.filter((r: { confirmed: boolean }) => !r.confirmed)).toHaveLength(2);
+
+    // ein später gemessener Wert ersetzt die Bestätigung und steht als Korrektur im Protokoll
+    await ok('PUT', '/hygiene/readings', user, { entries: [{ pointId: salat.pointId, date: today, valueC: 5.5, note: '' }] });
+    const after = (await ok('GET', `/hygiene/readings?from=${today}&to=${today}`, user)).find((r: { pointId: string }) => r.pointId === salat.pointId);
+    expect(after).toMatchObject({ valueC: 5.5, confirmed: false });
+    const log = (await ok('GET', '/audit?entity=hygiene_reading&limit=50', admin)).items;
+    expect(log.some((e: { action: string }) => e.action === 'confirm')).toBe(true);
+    expect(log.find((e: { action: string; before: { valueC: unknown } }) => e.action === 'correct' && e.before.valueC === 'im Soll bestätigt')).toBeTruthy();
+  });
+});
+
+describe('Freigabe der Bereiche je Benutzer', () => {
+  it('lässt Benutzer nur in freigegebene Bereiche – vom Server geprüft', async () => {
+    const made = await ok('POST', '/users', admin, { username: 'nurhotel', name: 'Nur Hotel', password: 'nurhotel-123', role: 'user', modules: ['hotel'] });
+    expect(made.modules).toEqual(['hotel']);
+    const h = session(await call('POST', '/auth/login', {}, { username: 'nurhotel', password: 'nurhotel-123' }));
+    expect((await call('GET', '/bookings', h)).statusCode).toBe(200);
+    for (const [m, p] of [['GET', '/inspection-types'], ['GET', '/hygiene/open'], ['PUT', '/hygiene/readings']] as const) {
+      const res = await call(m, p, h, { entries: [] });
+      expect(res.statusCode, p).toBe(403);
+      expect(res.json().error.message).toContain('Kontrollen');
+    }
+    // Freigabe umstellen wirkt sofort, ohne neue Anmeldung
+    await ok('PATCH', `/users/${made.id}`, admin, { modules: ['kontrollen'], version: made.version });
+    expect((await call('GET', '/bookings', h)).statusCode).toBe(403);
+    expect((await call('GET', '/calendar?from=2031-01-01&days=7', h)).statusCode).toBe(403);
+    expect((await call('GET', '/inspection-types', h)).statusCode).toBe(200);
+    expect((await call('GET', '/settings/hotel', h)).statusCode).toBe(200); // Stammdaten bleiben lesbar
+    // Administratoren dürfen unabhängig von der Liste alles; unbekannte Bereiche werden abgelehnt
+    expect((await call('GET', '/bookings', admin)).statusCode).toBe(200);
+    expect((await call('POST', '/users', admin, { username: 'falsch', name: 'X', password: 'falsch-12345', role: 'user', modules: ['kasse'] })).statusCode).toBe(400);
+    expect((await ok('GET', '/auth/state', h)).user.modules).toEqual(['kontrollen']);
   });
 });

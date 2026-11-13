@@ -37,4 +37,6 @@ export interface InspectionVisitDto { id: string; date: string; inspector: strin
 export interface InspectionDetailDto { type: InspectionTypeDto; items: InspectionItemDto[]; visits: InspectionVisitDto[] }
 export interface HygienePointDto { id: string; areaId: string; name: string; minC: number | null; maxC: number | null; active: boolean; version: number }
 export interface HygieneAreaDto { id: string; name: string; active: boolean; version: number; points: HygienePointDto[] }
-export interface HygieneReadingDto { pointId: string; date: string; valueC: number; note: string; userName: string; enteredAt: string }
+export interface HygieneReadingDto { pointId: string; date: string; valueC: number | null; confirmed: boolean; note: string; userName: string; enteredAt: string }
+/** Bereich, in dem heute noch Einträge fehlen */
+export interface HygieneOpenDto { areaId: string; areaName: string; points: { id: string; name: string; minC: number | null; maxC: number | null }[] }

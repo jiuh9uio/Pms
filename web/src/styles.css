@@ -267,3 +267,10 @@ input.bad { border-color: var(--danger); background: var(--danger-soft); }
   .card.hygiene { border: 0; box-shadow: none; padding: 0; } .hide-sm { display: table-cell !important; }
   table.temps td, table.temps th { padding: 4px 6px; border: 1px solid #999; font-size: 11px; } .temp.bad { color: #000; text-decoration: underline; }
 }
+
+/* Freigaben und Kurzbestätigung */
+.whoami .linkbtn { text-align: left; margin-top: 4px; font-size: 13px; }
+.launcher header p { display: flex; align-items: center; gap: 12px; }
+fieldset.checks { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0; display: flex; gap: 20px; flex-wrap: wrap; } fieldset.checks legend { font-size: 13px; font-weight: 500; padding: 0 4px; } fieldset.checks .check { align-items: center; } fieldset.checks .check input { margin: 0; }
+.btn.big { height: 48px; min-width: 110px; font-size: 17px; }
+.temp.ok { color: var(--ok); font-weight: 650; }

@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import {
-  outOfRange, type HygieneAreaDto, type HygieneReadingDto, type InspectionDetailDto, type InspectionTypeDto,
+  outOfRange, type HygieneAreaDto, type HygieneOpenDto, type HygieneReadingDto, type InspectionDetailDto, type InspectionTypeDto,
 } from '../../shared/controls.js';
 import { todayBerlin } from '../../shared/hotel.js';
 import type { Db, Exec } from '../db/client.js';
@@ -126,7 +126,37 @@ export const savePoint = (db: Db, actor: Actor, id: string | null, v: { areaId: 
 
 export async function listReadings(db: Exec, from: string, to: string): Promise<HygieneReadingDto[]> {
   const rows = await db.select().from(hygieneReadings).where(and(gte(hygieneReadings.date, from), lte(hygieneReadings.date, to))).orderBy(asc(hygieneReadings.date));
-  return rows.map((r) => ({ pointId: r.pointId, date: r.date, valueC: r.valueC, note: r.note, userName: r.userName, enteredAt: r.enteredAt.toISOString() }));
+  return rows.map((r) => ({ pointId: r.pointId, date: r.date, valueC: r.valueC, confirmed: r.confirmed, note: r.note, userName: r.userName, enteredAt: r.enteredAt.toISOString() }));
+}
+
+/** Bereiche mit Messstellen, für die heute noch nichts eingetragen ist. */
+export async function openToday(db: Exec): Promise<HygieneOpenDto[]> {
+  const today = todayBerlin();
+  const done = new Set((await db.select({ id: hygieneReadings.pointId }).from(hygieneReadings).where(eq(hygieneReadings.date, today))).map((r) => r.id));
+  return (await listAreas(db)).filter((a) => a.active)
+    .map((a) => ({ areaId: a.id, areaName: a.name, points: a.points.filter((p) => p.active && !done.has(p.id)).map((p) => ({ id: p.id, name: p.name, minC: p.minC, maxC: p.maxC })) }))
+    .filter((a) => a.points.length > 0);
+}
+
+/**
+ * Kurzbestätigung für heute: Der angemeldete Benutzer bestätigt, dass alle noch offenen Messstellen des Bereichs
+ * im Sollbereich liegen. Es wird kein Zahlenwert gespeichert, sondern die Bestätigung mit Namen und Zeitpunkt.
+ * Nur für den heutigen Tag möglich – eine Bestätigung im Nachhinein gibt es nicht.
+ */
+export async function confirmArea(db: Db, actor: Actor, areaId: string) {
+  const today = todayBerlin();
+  return db.transaction(async (tx) => {
+    const [area] = await tx.select().from(hygieneAreas).where(eq(hygieneAreas.id, areaId));
+    if (!area) throw notFound('Bereich');
+    const points = await tx.select().from(hygienePoints).where(and(eq(hygienePoints.areaId, areaId), eq(hygienePoints.active, true)));
+    const done = new Set((await tx.select({ id: hygieneReadings.pointId }).from(hygieneReadings).where(eq(hygieneReadings.date, today))).map((r) => r.id));
+    const open = points.filter((p) => !done.has(p.id));
+    if (open.length) {
+      await tx.insert(hygieneReadings).values(open.map((p) => ({ pointId: p.id, date: today, valueC: null, confirmed: true, userName: actor.userName })));
+      await record(tx, actor, { action: 'confirm', entity: 'hygiene_reading', entityId: areaId, after: { area: area.name, date: today, points: open.map((p) => p.name).join(', ') } });
+    }
+    return { confirmed: open.length };
+  });
 }
 
 /**
@@ -147,12 +177,12 @@ export async function saveReadings(db: Db, actor: Actor, entries: { pointId: str
     if (Object.keys(fields).length) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', fields);
     for (const e of entries) {
       const [before] = await tx.select().from(hygieneReadings).where(and(eq(hygieneReadings.pointId, e.pointId), eq(hygieneReadings.date, e.date))).for('update');
-      if (before && before.valueC === e.valueC && before.note === e.note) continue;
+      if (before && before.valueC === e.valueC && before.note === e.note && !before.confirmed) continue;
       const p = points.get(e.pointId)!;
       if (before) {
-        await tx.update(hygieneReadings).set({ valueC: e.valueC, note: e.note, userName: actor.userName, enteredAt: new Date() })
+        await tx.update(hygieneReadings).set({ valueC: e.valueC, confirmed: false, note: e.note, userName: actor.userName, enteredAt: new Date() })
           .where(and(eq(hygieneReadings.pointId, e.pointId), eq(hygieneReadings.date, e.date)));
-        await record(tx, actor, { action: 'correct', entity: 'hygiene_reading', entityId: e.pointId, before: { point: p.name, date: e.date, valueC: before.valueC, note: before.note, enteredBy: before.userName }, after: { point: p.name, date: e.date, valueC: e.valueC, note: e.note } });
+        await record(tx, actor, { action: 'correct', entity: 'hygiene_reading', entityId: e.pointId, before: { point: p.name, date: e.date, valueC: before.confirmed ? 'im Soll bestätigt' : before.valueC, note: before.note, enteredBy: before.userName }, after: { point: p.name, date: e.date, valueC: e.valueC, note: e.note } });
       } else {
         await tx.insert(hygieneReadings).values({ ...e, userName: actor.userName });
         await record(tx, actor, { action: 'create', entity: 'hygiene_reading', entityId: e.pointId, after: { point: p.name, date: e.date, valueC: e.valueC, note: e.note } });

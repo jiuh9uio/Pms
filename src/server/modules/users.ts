@@ -1,5 +1,5 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
-import type { Role, UserDto } from '../../shared/schemas.js';
+import type { Module, Role, UserDto } from '../../shared/schemas.js';
 import type { Db } from '../db/client.js';
 import { sessions, users } from '../db/schema.js';
 import { conflict, notFound, stale } from '../lib/errors.js';
@@ -10,30 +10,30 @@ type UserRow = typeof users.$inferSelect;
 
 /** Für Antworten und Protokoll – niemals mit Passwort-Hash. */
 export const toUserDto = (u: UserRow): UserDto => ({
-  id: u.id, username: u.username, name: u.name, role: u.role, active: u.active,
+  id: u.id, username: u.username, name: u.name, role: u.role, active: u.active, modules: u.modules as Module[],
   lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
   lockedUntil: u.lockedUntil && u.lockedUntil > new Date() ? u.lockedUntil.toISOString() : null,
   createdAt: u.createdAt.toISOString(), version: u.version,
 });
-const forAudit = (u: UserRow) => ({ username: u.username, name: u.name, role: u.role, active: u.active });
+const forAudit = (u: UserRow) => ({ username: u.username, name: u.name, role: u.role, active: u.active, modules: u.modules.join(', ') });
 
 export async function listUsers(db: Db) {
   return (await db.select().from(users).orderBy(asc(users.name))).map(toUserDto);
 }
 
-export async function createUser(db: Db, actor: Actor, input: { username: string; name: string; password: string; role: Role }) {
+export async function createUser(db: Db, actor: Actor, input: { username: string; name: string; password: string; role: Role; modules: Module[] }) {
   const passwordHash = await hashPassword(input.password);
   return db.transaction(async (tx) => {
     const [dup] = await tx.select({ id: users.id }).from(users).where(eq(users.username, input.username));
     if (dup) throw conflict('Dieser Benutzername ist bereits vergeben', 'username_taken');
-    const [user] = await tx.insert(users).values({ username: input.username, name: input.name, role: input.role, passwordHash }).returning();
+    const [user] = await tx.insert(users).values({ username: input.username, name: input.name, role: input.role, modules: input.modules, passwordHash }).returning();
     await record(tx, actor, { action: 'create', entity: 'user', entityId: user!.id, after: forAudit(user!) });
     return toUserDto(user!);
   });
 }
 
 export async function updateUser(
-  db: Db, actor: Actor, id: string, input: { name?: string; role?: Role; active?: boolean; version: number },
+  db: Db, actor: Actor, id: string, input: { name?: string; role?: Role; active?: boolean; modules?: Module[]; version: number },
 ) {
   return db.transaction(async (tx) => {
     // Alle Administratoren sperren, damit zwei gleichzeitige Änderungen nicht den letzten Administrator entfernen.
@@ -48,7 +48,7 @@ export async function updateUser(
     if (losesAdmin && admins.length <= 1) throw conflict('Es muss mindestens ein aktiver Administrator bestehen bleiben', 'last_admin');
 
     const [after] = await tx.update(users)
-      .set({ name: input.name ?? before.name, role, active, updatedAt: new Date(), version: before.version + 1, ...(active && !before.active ? { failedLogins: 0, lockedUntil: null } : {}) })
+      .set({ name: input.name ?? before.name, role, active, modules: input.modules ?? before.modules, updatedAt: new Date(), version: before.version + 1, ...(active && !before.active ? { failedLogins: 0, lockedUntil: null } : {}) })
       .where(eq(users.id, id)).returning();
     if (!active) await tx.delete(sessions).where(eq(sessions.userId, id));
     await record(tx, actor, { action: 'update', entity: 'user', entityId: id, before: forAudit(before), after: forAudit(after!) });

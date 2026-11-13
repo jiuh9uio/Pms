@@ -62,6 +62,11 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     req.user = s.user;
     req.sessionId = s.sessionId;
   };
+  /** Zugriff auf einen Bereich: Administratoren immer, Benutzer nur mit Freigabe. */
+  const requireModule = (m: S.Module) => async (req: FastifyRequest) => {
+    await requireUser(req);
+    if (!S.hasModule(req.user!, m)) throw new AppError(403, 'forbidden', `Für den Bereich „${S.MODULE_LABEL[m]}“ fehlt die Freigabe`);
+  };
   const requireAdmin = async (req: FastifyRequest) => {
     await requireUser(req);
     if (req.user!.role !== 'admin') throw forbidden();
@@ -142,8 +147,8 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.post('/tax-rates', { preHandler: requireAdmin }, (req) => settings.createTaxRate(db, actor(req), S.taxRateCreateInput.parse(req.body)));
     api.patch('/tax-rates/:id', { preHandler: requireAdmin }, (req) => settings.updateTaxRate(db, actor(req), idParam(req), S.taxRateUpdateInput.parse(req.body)));
 
-    registerHotelRoutes(api, { db, requireUser, requireAdmin, actor });
-    registerControlRoutes(api, { db, requireUser, requireAdmin, actor });
+    registerHotelRoutes(api, { db, requireUser: requireModule('hotel'), requireAdmin, actor });
+    registerControlRoutes(api, { db, requireUser: requireModule('kontrollen'), requireAdmin, actor });
 
     api.setNotFoundHandler(() => { throw new AppError(404, 'not_found', 'Unbekannte Adresse'); });
   }, { prefix: '/api/v1' });

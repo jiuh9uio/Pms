@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   hygieneAreaInput, hygienePointInput, hygieneReadingsInput, outOfRange, rangeLabel,
   type HygieneAreaDto, type HygienePointDto, type HygieneReadingDto,
@@ -27,7 +28,8 @@ export function Hygiene() {
   const toast = useToast();
   const isAdmin = user.role === 'admin';
   const today = todayBerlin();
-  const [areaId, setAreaId] = useState<string | null>(null);
+  const [params] = useSearchParams();
+  const [areaId, setAreaId] = useState<string | null>(params.get('bereich'));
   const [date, setDate] = useState(today);
   const [mode, setMode] = useState<'entry' | 'month'>('entry');
   const [month, setMonth] = useState(today.slice(0, 7));
@@ -52,7 +54,7 @@ export function Hygiene() {
   useEffect(() => {
     if (!readings.data) return;
     const next: typeof draft = {};
-    for (const r of readings.data) if (r.date === date) next[r.pointId] = { value: String(r.valueC).replace('.', ','), note: r.note };
+    for (const r of readings.data) if (r.date === date) next[r.pointId] = { value: r.valueC == null ? '' : String(r.valueC).replace('.', ','), note: r.note };
     setDraft(next);
     setErrors([]);
   }, [readings.data, date]);
@@ -88,6 +90,8 @@ export function Hygiene() {
   const setCell = (id: string, patch: Partial<{ value: string; note: string }>) => setDraft((d) => ({ ...d, [id]: { value: '', note: '', ...d[id], ...patch } }));
   const cell = (r: HygieneReadingDto | undefined, p: HygienePointDto) => {
     if (!r) return <span className="muted">–</span>;
+    const who = `von ${r.userName} um ${new Date(r.enteredAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`;
+    if (r.valueC == null) return <span className="temp ok" title={`Im Sollbereich bestätigt ${who}`}>✓</span>;
     const bad = outOfRange(r.valueC, p);
     const title = [`${num(r.valueC)} °C`, r.note, `eingetragen von ${r.userName}`, late(r) ? `nachgetragen am ${deDate(new Date(r.enteredAt).toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' }))}` : ''].filter(Boolean).join(' · ');
     return <span className={bad ? 'temp bad' : 'temp'} title={title}>{num(r.valueC)}{late(r) && <sup aria-label="nachgetragen">n</sup>}{r.note && <sup aria-label="mit Bemerkung">*</sup>}</span>;
@@ -143,7 +147,7 @@ export function Hygiene() {
                         <tr key={p.id} className={p.active ? '' : 'off'}>
                           <td>{isAdmin ? <button type="button" className="linkbtn strong" onClick={() => editPoint(p)}>{p.name}</button> : <b>{p.name}</b>}<br /><small>Soll: {rangeLabel(p)}</small></td>
                           {days.slice(0, 6).map((day) => <td key={day} className="num hide-sm">{cell(at(p.id, day), p)}</td>)}
-                          <td className="entrycol"><input inputMode="decimal" className={bad ? 'tempinput bad' : 'tempinput'} value={d.value} placeholder="–" aria-label={`${p.name}: Wert in °C`} onChange={(e) => setCell(p.id, { value: e.target.value })} /></td>
+                          <td className="entrycol"><input inputMode="decimal" className={bad ? 'tempinput bad' : 'tempinput'} value={d.value} placeholder={at(p.id, date)?.confirmed ? '✓ bestätigt' : '–'} aria-label={`${p.name}: Wert in °C`} onChange={(e) => setCell(p.id, { value: e.target.value })} /></td>
                           <td><input value={d.note} placeholder={bad ? 'Abweichung: Was wurde unternommen?' : ''} className={bad && !d.note.trim() ? 'bad' : ''} aria-label={`${p.name}: Bemerkung`} onChange={(e) => setCell(p.id, { note: e.target.value })} /></td>
                         </tr>
                       );
@@ -153,7 +157,7 @@ export function Hygiene() {
               </div>
               {errors.length > 0 && <p className="notice danger" role="alert">{errors.join(' · ')}</p>}
               <div className="formactions"><Button type="submit" variant="primary" busy={busy}>Werte speichern</Button></div>
-              <p className="muted small">Rot = außerhalb des Sollbereichs (dann ist eine Bemerkung zur Maßnahme Pflicht). <sup>n</sup> = nachträglich eingetragen, <sup>*</sup> = mit Bemerkung. Jeder Eintrag wird mit Namen und Zeitpunkt gespeichert; Korrekturen stehen im Änderungsprotokoll.</p>
+              <p className="muted small">✓ = im Sollbereich bestätigt (ohne Zahlenwert). Rot = außerhalb des Sollbereichs (dann ist eine Bemerkung zur Maßnahme Pflicht). <sup>n</sup> = nachträglich eingetragen, <sup>*</sup> = mit Bemerkung. Jeder Eintrag wird mit Namen und Zeitpunkt gespeichert; Korrekturen stehen im Änderungsprotokoll.</p>
             </form>
           )}
 

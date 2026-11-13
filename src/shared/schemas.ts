@@ -6,6 +6,13 @@ export const ROLES = ['admin', 'user'] as const;
 export type Role = (typeof ROLES)[number];
 export const ROLE_LABEL: Record<Role, string> = { admin: 'Administrator', user: 'Benutzer' };
 
+/** Bereiche des Programms, die je Benutzer freigegeben werden. Verwaltung und Konto sind dem Administrator vorbehalten. */
+export const MODULES = ['hotel', 'kontrollen'] as const;
+export type Module = (typeof MODULES)[number];
+export const MODULE_LABEL: Record<Module, string> = { hotel: 'Hotel', kontrollen: 'Kontrollen' };
+const modules = z.array(z.enum(MODULES)).max(MODULES.length);
+export const hasModule = (u: { role: Role; modules: string[] }, m: Module) => u.role === 'admin' || u.modules.includes(m);
+
 const text = (max = 200) => z.string().trim().max(max, `Höchstens ${max} Zeichen`);
 const required = (max = 200) => text(max).min(1, 'Pflichtfeld');
 
@@ -18,9 +25,9 @@ export const loginInput = z.object({ username: z.string().trim().toLowerCase().m
 export const setupInput = z.object({ username, name: required(100), password });
 export const changePasswordInput = z.object({ current: z.string().min(1, 'Pflichtfeld').max(200), password });
 
-export const userCreateInput = z.object({ username, name: required(100), password, role: z.enum(ROLES) });
+export const userCreateInput = z.object({ username, name: required(100), password, role: z.enum(ROLES), modules: modules.default([...MODULES]) });
 export const userUpdateInput = z.object({
-  name: required(100).optional(), role: z.enum(ROLES).optional(), active: z.boolean().optional(), version: z.number().int(),
+  name: required(100).optional(), role: z.enum(ROLES).optional(), active: z.boolean().optional(), modules: modules.optional(), version: z.number().int(),
 });
 export const passwordResetInput = z.object({ password });
 
@@ -47,7 +54,7 @@ export const taxRateUpdateInput = z.object({
 
 // ---------- Antworttypen ----------
 export interface UserDto {
-  id: string; username: string; name: string; role: Role; active: boolean;
+  id: string; username: string; name: string; role: Role; active: boolean; modules: Module[];
   lastLoginAt: string | null; lockedUntil: string | null; createdAt: string; version: number;
 }
 export interface TaxRateDto { id: string; name: string; ratePercent: number; defaultFor: 'lodging' | 'services' | null; active: boolean; version: number }

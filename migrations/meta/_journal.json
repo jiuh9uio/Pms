@@ -36,6 +36,13 @@
       "when": 1794521332148,
       "tag": "0004_kontrollen_start",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794526094286,
+      "tag": "0005_freigaben",
+      "breakpoints": true
     }
   ]
 }

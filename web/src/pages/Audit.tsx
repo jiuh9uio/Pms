@@ -10,12 +10,12 @@ const ENTITY: Record<string, string> = {
 };
 const ACTION: Record<string, string> = {
   setup: 'Ersteinrichtung', create: 'angelegt', update: 'geändert', password_reset: 'Passwort zurückgesetzt', password_changed: 'Passwort geändert',
-  remove: 'entfernt', correct: 'korrigiert', create_many: 'mehrere angelegt', status: 'Status geändert', room_add: 'Zimmer hinzugefügt', room_update: 'Zimmerbuchung geändert',
+  remove: 'entfernt', correct: 'korrigiert', confirm: 'im Sollbereich bestätigt', create_many: 'mehrere angelegt', status: 'Status geändert', room_add: 'Zimmer hinzugefügt', room_update: 'Zimmerbuchung geändert',
   charge_add: 'Leistung hinzugefügt', charge_remove: 'Leistung entfernt',
   login: 'Anmeldung', logout: 'Abmeldung', login_failed: 'Fehlgeschlagene Anmeldung', login_locked: 'Konto nach Fehlversuchen gesperrt',
 };
 const FIELD: Record<string, string> = {
-  valueC: 'Wert in °C', point: 'Messstelle', date: 'Datum', note: 'Bemerkung', enteredBy: 'Eingetragen von', text: 'Unterlage', ready: 'Liegt bereit', inspector: 'Prüfer', result: 'Ergebnis',
+  modules: 'Bereiche', area: 'Bereich', points: 'Messstellen', valueC: 'Wert in °C', point: 'Messstelle', date: 'Datum', note: 'Bemerkung', enteredBy: 'Eingetragen von', text: 'Unterlage', ready: 'Liegt bereit', inspector: 'Prüfer', result: 'Ergebnis',
   name: 'Name', username: 'Benutzername', role: 'Rolle', active: 'Aktiv', ratePercent: 'Satz in %', defaultFor: 'Standard für',
   street: 'Straße', zip: 'PLZ', city: 'Ort', country: 'Land', phone: 'Telefon', email: 'E-Mail', website: 'Website', taxNumber: 'Steuernummer',
   vatId: 'USt-IdNr.', bankName: 'Bank', iban: 'IBAN', bic: 'BIC', checkinTime: 'Check-in ab', checkoutTime: 'Check-out bis',
