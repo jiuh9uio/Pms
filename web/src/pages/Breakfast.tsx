@@ -41,6 +41,7 @@ export function Breakfast() {
         <>
           <h2 className="printhead">Frühstück {weekday(date)}, {deDate(date)}</h2>
           {!data.printerReady && <p className="notice noprint">Der Küchendrucker ist noch nicht eingerichtet. {user.role === 'admin' ? 'Das geht unter Verwaltung → Einstellungen → Küchendrucker.' : 'Das richtet der Administrator ein.'} Die Liste lässt sich solange über „Drucken“ auf einem normalen Drucker ausgeben.</p>}
+          {data.autoTime && <p className="muted noprint">Die Liste des Tages wird täglich um {data.autoTime} Uhr von selbst in der Küche gedruckt{data.autoLast ? ` (zuletzt für den ${deDate(data.autoLast)})` : ''}.</p>}
           <div className="kpis">
             <div className="card kpicard printable"><span>Frühstücksgäste</span><b>{persons}</b><small>{data.total.adults} Erwachsene{data.total.children ? `, ${data.total.children} ${data.total.children === 1 ? 'Kind' : 'Kinder'}` : ''}</small></div>
             <div className="card kpicard printable"><span>Zimmer mit Frühstück</span><b>{data.total.rooms}</b><small>{data.total.without ? `${data.total.without} belegt ohne Frühstück` : 'alle belegten Zimmer'}</small></div>

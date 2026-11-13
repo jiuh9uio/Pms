@@ -4,12 +4,12 @@ import type { Db, Exec } from '../db/client.js';
 import { settings } from '../db/schema.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { buildJob, columns, isPrivateIp, sendToPrinter, type Line } from '../lib/escpos.js';
-import { record, type Actor } from './audit.js';
+import { record, SYSTEM, type Actor } from './audit.js';
 import { getHotel } from './settings.js';
 
 /** Frühstücksliste des Hotels und Druck auf dem Bondrucker in der Küche. */
 
-const PRINTER_DEFAULT: KitchenPrinter = { enabled: false, host: '', port: 9100, width: 48 };
+const PRINTER_DEFAULT: KitchenPrinter = { enabled: false, host: '', port: 9100, width: 48, autoBreakfastTime: '' };
 export async function getPrinter(db: Exec): Promise<KitchenPrinter> {
   const [row] = await db.select().from(settings).where(eq(settings.key, 'kitchen_printer'));
   return { ...PRINTER_DEFAULT, ...((row?.value as Partial<KitchenPrinter>) ?? {}) };
@@ -21,8 +21,11 @@ export async function savePrinter(db: Db, actor: Actor, v: KitchenPrinter) {
   return v;
 }
 const ready = (p: KitchenPrinter) => p.enabled && !!p.host;
+export const printerReady = async (db: Exec) => ready(await getPrinter(db));
+export const printerWidth = async (db: Exec) => (await getPrinter(db)).width;
 
-async function print(db: Exec, lines: Line[]) {
+/** Druckt Zeilen auf dem Küchendrucker – auch für andere Bereiche (z. B. Tischreservierungen). */
+export async function print(db: Exec, lines: Line[]) {
   const p = await getPrinter(db);
   if (!ready(p)) throw conflict('Der Küchendrucker ist noch nicht eingerichtet (Verwaltung → Einstellungen → Küchendrucker)', 'printer_not_configured');
   try { await sendToPrinter(p.host, p.port, buildJob(lines, p.width)); }
@@ -54,8 +57,9 @@ export async function breakfastList(db: Exec, date: string): Promise<BreakfastDt
     notes: x.notes as string, departing: x.departing as boolean, breakfast: x.breakfast as boolean, arrived: x.status !== 'confirmed',
   }));
   const with_ = list.filter((r) => r.breakfast);
+  const printer = await getPrinter(db);
   return {
-    date, rooms: list, printerReady: ready(await getPrinter(db)),
+    date, rooms: list, printerReady: ready(printer), autoTime: ready(printer) ? printer.autoBreakfastTime : '', autoLast: await lastAuto(db),
     total: { rooms: with_.length, adults: with_.reduce((s, r) => s + r.adults, 0), children: with_.reduce((s, r) => s + r.children, 0), without: list.length - with_.length },
   };
 }
@@ -82,6 +86,40 @@ export function breakfastLines(d: BreakfastDto, hotelName: string, width: number
   if (d.total.without) lines.push({ text: `${d.total.without} belegte${d.total.without === 1 ? 's' : ''} Zimmer ohne Frühstück` });
   lines.push({ feed: 1 }, { text: `Gedruckt ${new Date().toLocaleString('de-DE', { timeZone: 'Europe/Berlin', dateStyle: 'short', timeStyle: 'short' })}`, align: 'center' });
   return lines;
+}
+
+// ---------- Automatischer Druck der Frühstücksliste ----------
+const LAST_KEY = 'kitchen_printer_auto_last';
+async function lastAuto(db: Exec): Promise<string | null> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, LAST_KEY));
+  return (row?.value as { date?: string } | undefined)?.date ?? null;
+}
+const berlin = (now: Date) => ({
+  date: now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' }),
+  minutes: (() => { const [h, m] = now.toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', hour12: false }).split(':').map(Number); return h! * 60 + m!; })(),
+});
+
+/**
+ * Einmal je Tag zur eingestellten Uhrzeit: Frühstücksliste des Tages drucken. Lief das Programm zu der Zeit nicht,
+ * wird bis drei Stunden danach nachgeholt; schlägt der Druck fehl, wird er im selben Zeitfenster jede Minute neu versucht.
+ * Ohne belegtes Zimmer wird nichts gedruckt.
+ */
+export async function autoBreakfastTick(db: Db, now = new Date()): Promise<'printed' | 'skipped' | 'idle'> {
+  const p = await getPrinter(db);
+  if (!ready(p) || !p.autoBreakfastTime) return 'idle';
+  const { date, minutes } = berlin(now);
+  const due = Number(p.autoBreakfastTime.slice(0, 2)) * 60 + Number(p.autoBreakfastTime.slice(3, 5));
+  if (minutes < due || minutes > due + 180 || (await lastAuto(db)) === date) return 'idle';
+  const d = await breakfastList(db, date);
+  const mark = () => db.insert(settings).values({ key: LAST_KEY, value: { date } }).onConflictDoUpdate({ target: settings.key, set: { value: { date }, updatedAt: new Date() } });
+  if (d.rooms.length === 0) { await mark(); return 'skipped'; }
+  await print(db, breakfastLines(d, (await getHotel(db)).name, p.width));
+  await mark();
+  await record(db, SYSTEM, { action: 'print', entity: 'breakfast', entityId: date, after: { rooms: d.total.rooms, persons: d.total.adults + d.total.children, automatic: true } });
+  return 'printed';
+}
+export function startBreakfastScheduler(db: Db) {
+  setInterval(() => void autoBreakfastTick(db).catch((e) => console.error('Automatischer Frühstücksdruck:', e instanceof Error ? e.message : e)), 60_000).unref();
 }
 
 export async function printBreakfast(db: Db, actor: Actor, date: string) {

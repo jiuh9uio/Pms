@@ -1,9 +1,12 @@
 import { and, asc, eq, ne } from 'drizzle-orm';
-import { holdsTable, overlaps, type RestaurantTableDto, type TableReservationDto, type TableStatus } from '../../shared/restaurant.js';
+import { endTime, holdsTable, overlaps, type RestaurantTableDto, type TableReservationDto, type TableStatus } from '../../shared/restaurant.js';
 import type { Db, Exec } from '../db/client.js';
 import { restaurantTables, tableReservations } from '../db/schema.js';
 import { conflict, notFound, stale } from '../lib/errors.js';
+import { columns, type Line } from '../lib/escpos.js';
 import { record, type Actor } from './audit.js';
+import { print, printerWidth } from './breakfast.js';
+import { getHotel } from './settings.js';
 
 /** Restaurant: Tische und Tischreservierungen. Ein Tisch kann zur selben Zeit nur einmal reserviert sein. */
 
@@ -88,4 +91,28 @@ export async function setStatus(db: Db, actor: Actor, id: string, status: TableS
     await record(tx, actor, { action: 'status', entity: 'table_reservation', entityId: id, before: { status: before.status }, after: { status, name: before.name } });
     return { id };
   });
+}
+
+const WEEKDAY = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+const de = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
+
+/** Tagesliste der Tischreservierungen auf dem Küchendrucker (nur reservierte und anwesende Gäste). */
+export async function printReservations(db: Db, actor: Actor, date: string) {
+  const [list, h, width] = [(await listReservations(db, date)).filter((r) => holdsTable(r.status)), await getHotel(db), await printerWidth(db)];
+  const persons = list.reduce((s, r) => s + r.persons, 0);
+  const lines: Line[] = [
+    { text: h.name, align: 'center' }, { text: 'RESERVIERUNGEN', align: 'center', bold: true, big: true },
+    { text: `${WEEKDAY[new Date(`${date}T12:00:00Z`).getUTCDay()]}, ${de(date)}`, align: 'center', bold: true }, { rule: true },
+  ];
+  if (list.length === 0) lines.push({ text: 'Keine Tischreservierungen.' });
+  for (const r of list) {
+    lines.push({ text: columns(`${r.time}  ${r.name}`, `${r.persons} Pers.`, width), bold: true });
+    lines.push({ text: `  bis ${endTime(r.time, r.durationMin)} · ${r.tableName ?? 'Tisch offen'}${r.status === 'seated' ? ' · am Tisch' : ''}` });
+    if (r.note) lines.push({ text: `  ${r.note}`.slice(0, width * 2) });
+  }
+  lines.push({ rule: true }, { text: columns(`${list.length} ${list.length === 1 ? 'Reservierung' : 'Reservierungen'}`, `${persons} Personen`, width), bold: true });
+  lines.push({ feed: 1 }, { text: `Gedruckt ${new Date().toLocaleString('de-DE', { timeZone: 'Europe/Berlin', dateStyle: 'short', timeStyle: 'short' })}`, align: 'center' });
+  await print(db, lines);
+  await record(db, actor, { action: 'print', entity: 'table_reservation', entityId: date, after: { reservations: list.length, persons } });
+  return { ok: true };
 }

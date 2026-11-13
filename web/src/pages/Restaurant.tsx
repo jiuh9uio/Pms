@@ -29,6 +29,14 @@ export function Restaurant() {
     const [tables, list] = await Promise.all([api<RestaurantTableDto[]>('GET', '/restaurant/tables'), api<TableReservationDto[]>('GET', `/restaurant/reservations?date=${date}`)]);
     return { tables, list };
   }, [date, rev]);
+  const printer = useLoad(() => api<{ ready: boolean }>('GET', '/restaurant/printer')).data;
+  const [sending, setSending] = useState(false);
+  const sendKitchen = async () => {
+    setSending(true);
+    try { await api('POST', '/restaurant/reservations/print', { date }); toast('Reservierungen an die Küche gesendet'); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+    setSending(false);
+  };
   const close = () => setDlg(null);
 
   const setStatus = async (r: TableReservationDto, status: TableStatus, ask?: string) => {
@@ -56,6 +64,7 @@ export function Restaurant() {
           <Button onClick={() => setDate(addDays(date, 1))} aria-label="Nächster Tag">›</Button>
           {date !== today && <Button onClick={() => setDate(today)}>Heute</Button>}
           <Button onClick={() => window.print()}>Drucken</Button>
+          {printer?.ready && <Button busy={sending} onClick={() => void sendKitchen()}>An Küche senden</Button>}
           <Button variant="primary" onClick={() => data && setDlg(<ReservationDialog date={date} tables={data.tables} list={data.list} res={null} onClose={close} />)}>Neue Reservierung</Button>
         </>} />
       <LoadState error={error} loading={!data} />

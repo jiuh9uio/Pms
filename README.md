@@ -116,7 +116,9 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
 - **Küchendrucker:** Epson-Bondrucker im Netzwerk über ESC/POS auf TCP-Port 9100 (Zeichentabelle CP858, Teilschnitt).
   Nur private IPv4-Adressen. **Mit keinem echten Epson-Drucker erprobt** – der Druckauftrag ist automatisiert gegen einen
   simulierten Drucker geprüft (Befehlsfolge, Umlaute). Es gibt keine Rückmeldung vom Drucker (Papierende, Deckel offen), keine
-  Druckwarteschlange und keinen automatischen Druck zu einer festen Uhrzeit. Drucker anderer Hersteller funktionieren nur, wenn sie
+  Druckwarteschlange. Seit 1.11.0: täglicher automatischer Druck der Frühstücksliste zur eingestellten Uhrzeit (nur bei
+  laufendem Programm, Nachholen bis drei Stunden danach, kein Druck ohne belegtes Zimmer) und Druck der Tischreservierungen
+  des Tages aus dem Bereich Restaurant. Vom Betreiber mit einem Epson-Drucker als funktionierend gemeldet (13.11.2026). Drucker anderer Hersteller funktionieren nur, wenn sie
   ESC/POS verstehen.
 
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):

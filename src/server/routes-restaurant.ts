@@ -4,6 +4,7 @@ import { isIsoDate } from '../shared/hotel.js';
 import * as R from '../shared/restaurant.js';
 import type { Db } from './db/client.js';
 import type { Actor } from './modules/audit.js';
+import { printerReady } from './modules/breakfast.js';
 import * as restaurant from './modules/restaurant.js';
 
 interface Ctx { db: Db; requireUser: (req: FastifyRequest) => Promise<void>; requireAdmin: (req: FastifyRequest) => Promise<void>; actor: (req: FastifyRequest) => Actor }
@@ -18,6 +19,8 @@ export function registerRestaurantRoutes(api: FastifyInstance, { db, requireUser
   api.put('/restaurant/tables/:id', admin, (req) =>
     restaurant.saveTable(db, actor(req), idOf(req), R.restaurantTableInput.parse(req.body), z.object({ version: z.number().int() }).parse(req.body).version));
   api.get('/restaurant/reservations', user, (req) => restaurant.listReservations(db, z.object({ date: z.string().refine(isIsoDate) }).parse(req.query).date));
+  api.get('/restaurant/printer', user, async () => ({ ready: await printerReady(db) }));
+  api.post('/restaurant/reservations/print', user, (req) => restaurant.printReservations(db, actor(req), z.object({ date: z.string().refine(isIsoDate) }).parse(req.body).date));
   api.post('/restaurant/reservations', user, (req) => restaurant.createReservation(db, actor(req), R.tableReservationInput.parse(req.body)));
   api.put('/restaurant/reservations/:id', user, (req) => restaurant.updateReservation(db, actor(req), idOf(req), R.tableReservationUpdateInput.parse(req.body)));
   api.post('/restaurant/reservations/:id/status', user, (req) => {

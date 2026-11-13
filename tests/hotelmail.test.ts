@@ -102,7 +102,7 @@ describe('E-Mail an den Gast', () => {
     expect((await call('GET', `/invoices/${inv.id}/mail?kind=reminder`, admin)).statusCode).toBe(409);
   });
 
-  it('führt die Frühstücksliste und druckt sie auf dem Küchendrucker', async () => {
+  it('führt die Frühstücksliste und druckt sie auf dem Küchendrucker', { timeout: 30_000 }, async () => {
     const { createServer } = await import('node:net');
     // Buchung 08.–10.05.2031 ohne Frühstück: an beiden Morgen belegt, aber nichts gebucht
     let list = await ok('GET', '/breakfast?date=2031-05-09', admin);
@@ -136,6 +136,29 @@ describe('E-Mail an den Gast', () => {
     expect(text).toContain('Zi. 101  Erika Beispiel');
     expect(text).toContain('2 Personen');
     expect([...job.subarray(-4)]).toEqual([0x1d, 0x56, 66, 0]); // Schnitt
+    // täglicher automatischer Druck: einmal je Tag im Zeitfenster nach der eingestellten Uhrzeit
+    const { autoBreakfastTick } = await import('../src/server/modules/breakfast.js');
+    await ok('PUT', '/settings/kitchen-printer', admin, { enabled: true, host: '127.0.0.1', port, width: 48, autoBreakfastTime: '06:00' });
+    got.length = 0;
+    expect(await autoBreakfastTick(db, new Date('2031-05-09T03:30:00Z'))).toBe('idle'); // 05:30 Uhr in Berlin – zu früh
+    expect(await autoBreakfastTick(db, new Date('2031-05-09T04:20:00Z'))).toBe('printed'); // 06:20 Uhr – nachgeholt
+    expect(await autoBreakfastTick(db, new Date('2031-05-09T04:21:00Z'))).toBe('idle'); // nicht doppelt
+    expect(await autoBreakfastTick(db, new Date('2031-05-12T04:05:00Z'))).toBe('skipped'); // kein Zimmer belegt
+    expect(await autoBreakfastTick(db, new Date('2031-05-10T08:30:00Z'))).toBe('idle'); // 10:30 Uhr – Zeitfenster vorbei
+    await new Promise((r) => setTimeout(r, 100));
+    expect(Buffer.concat(got).toString('latin1')).toContain('Zi. 101  Erika Beispiel');
+    expect((await ok('GET', '/breakfast?date=2031-05-09', admin))).toMatchObject({ autoTime: '06:00', autoLast: '2031-05-12' });
+
+    // Tischreservierungen des Tages an die Küche
+    got.length = 0;
+    await ok('POST', '/restaurant/reservations', admin, { date: '2031-05-09', time: '18:30', durationMin: 120, persons: 6, name: 'Kegelclub', phone: '', note: 'Geburtstag', tableId: null });
+    expect((await ok('GET', '/restaurant/printer', admin)).ready).toBe(true);
+    await ok('POST', '/restaurant/reservations/print', admin, { date: '2031-05-09' });
+    await new Promise((r) => setTimeout(r, 100));
+    const bon = Buffer.concat(got).toString('latin1');
+    expect(bon).toContain('RESERVIERUNGEN');
+    expect(bon).toContain('18:30  Kegelclub');
+    expect(bon).toContain('6 Personen');
     server.close();
     await new Promise((r) => setTimeout(r, 2200)); // offene Verbindung wird vom Programm selbst abgebaut
     const down = await call('POST', '/breakfast/print', admin, { date: '2031-05-09' });

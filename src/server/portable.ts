@@ -20,6 +20,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, 
 import { dirname, join, resolve } from 'node:path';
 import postgres from 'postgres';
 import { buildApp } from './app.js';
+import { startBreakfastScheduler } from './modules/breakfast.js';
 import { startOutageMonitor } from './modules/network.js';
 import { connect, runMigrations } from './db/client.js';
 import { setAssetsDir } from './einvoice/pdf.js';
@@ -176,6 +177,7 @@ async function main() {
 
   initBackup({ dir: backupDir, run: () => backup(pg.url) });
   startOutageMonitor(db);
+  startBreakfastScheduler(db);
 
   // Programm-Update: Version des Pakets und der mitgelieferten Datenbank
   const versionFile = join(home, 'app', 'version.json');
