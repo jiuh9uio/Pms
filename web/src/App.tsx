@@ -4,6 +4,7 @@ import { ROLE_LABEL, hasModule, type UserDto } from '../../src/shared/schemas.js
 import { api } from './api.ts';
 import { Account } from './pages/Account.tsx';
 import { Audit } from './pages/Audit.tsx';
+import { Breakfast } from './pages/Breakfast.tsx';
 import { Report } from './pages/Report.tsx';
 import { DataProvider } from './data.tsx';
 import { ControlType } from './pages/ControlType.tsx';
@@ -45,6 +46,7 @@ const NAV = [
   { to: '/hotel', label: 'Übersicht', icon: '◧', admin: false, module: 'hotel' },
   { to: '/plan', label: 'Belegungsplan', short: 'Plan', icon: '▦', admin: false, module: 'hotel' },
   { to: '/reservierungen', label: 'Reservierungen', short: 'Buchungen', icon: '☷', admin: false, module: 'hotel' },
+  { to: '/fruehstueck', label: 'Frühstück', icon: '☕', admin: false, module: 'hotel' },
   { to: '/gaeste', label: 'Gäste', icon: '☺', admin: false, module: 'hotel' },
   { to: '/firmen', label: 'Firmen', icon: '⌘', admin: false, module: 'hotel', more: true },
   { to: '/rechnungen', label: 'Rechnungen', icon: '€', admin: false, module: 'hotel' },
@@ -125,6 +127,7 @@ function Shell({ user }: { user: UserDto }) {
           {kontrollen && <Route path="/kontrollen/:id" element={<ControlType />} />}
           {hotel && <Route path="/plan" element={<Plan />} />}
           {hotel && <Route path="/reservierungen" element={<Reservations />} />}
+          {hotel && <Route path="/fruehstueck" element={<Breakfast />} />}
           {hotel && <Route path="/gaeste" element={<Guests />} />}
           {hotel && <Route path="/rechnungen" element={<Invoices />} />}
           {hotel && <Route path="/firmen" element={<Companies />} />}

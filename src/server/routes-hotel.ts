@@ -4,6 +4,7 @@ import * as H from '../shared/hotel.js';
 import type { Db } from './db/client.js';
 import { listAudit, type Actor } from './modules/audit.js';
 import * as bookings from './modules/bookings.js';
+import * as breakfast from './modules/breakfast.js';
 import * as companies from './modules/companies.js';
 import { networkInterfaces } from 'node:os';
 import * as guestforms from './modules/guestforms.js';
@@ -131,6 +132,14 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
     return bookings.listBookings(db, q);
   });
   api.get('/bookings/:id', user, (req) => bookings.getBooking(db, idOf(req)));
+  // ---------- Frühstücksliste und Küchendrucker ----------
+  const dateOf = (v: unknown) => z.object({ date: z.string().refine(H.isIsoDate) }).parse(v).date;
+  api.get('/breakfast', user, (req) => breakfast.breakfastList(db, dateOf(req.query)));
+  api.post('/breakfast/print', user, (req) => breakfast.printBreakfast(db, actor(req), dateOf(req.body)));
+  api.get('/settings/kitchen-printer', admin, () => breakfast.getPrinter(db));
+  api.put('/settings/kitchen-printer', admin, (req) => breakfast.savePrinter(db, actor(req), H.kitchenPrinterInput.parse(req.body)));
+  api.post('/settings/kitchen-printer/test', admin, async () => { await breakfast.testPrint(db); return { ok: true }; });
+
   api.get('/reports/year', user, (req) => yearReport(db, z.object({ year: z.coerce.number().int().min(2000).max(2100) }).parse(req.query).year));
   api.get('/bookings/:id/guest-form', user, (req) => guestforms.formStatus(db, idOf(req)));
   api.post('/bookings/:id/guest-form', user, (req) => {

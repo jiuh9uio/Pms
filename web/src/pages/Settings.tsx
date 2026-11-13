@@ -3,6 +3,7 @@ import { hotelSettings, taxRateCreateInput, taxRateUpdateInput, type HotelSettin
 import { api } from '../api.ts';
 import { MailSettings } from './MailSettings.tsx';
 import { BackupCard } from './BackupCard.tsx';
+import { KitchenPrinterCard } from './KitchenPrinterCard.tsx';
 import { UpdateCard } from './UpdateCard.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useToast } from '../ui.tsx';
 
@@ -13,6 +14,7 @@ export function Settings() {
       <HotelForm />
       <MailSettings />
       <TaxRates />
+      <KitchenPrinterCard />
       <NetworkCard />
       <BackupCard />
       <UpdateCard />

@@ -107,6 +107,18 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
 - **Geräte:** benannte, nicht gefundene Geräte werden als „nicht erreichbar“ gezeigt; die Router-Adresse stammt aus der
   Routentabelle (`route print` unter Windows).
 
+**Seit Version 1.10.0 zusätzlich:**
+
+- **Frühstücksliste** (Hotel → Frühstück): alle Zimmer, die in der Nacht auf den gewählten Tag belegt sind (Status bestätigt,
+  eingecheckt oder ausgecheckt), mit der Angabe, ob eine Leistung mit dem Kennzeichen „Frühstück“ an der Reservierung hängt.
+  Ab 12 Uhr zeigt die Seite zunächst den Folgetag. Sonderwünsche, Uhrzeiten und Allergien werden nicht eigens erfasst –
+  gedruckt werden die internen Bemerkungen der Reservierung.
+- **Küchendrucker:** Epson-Bondrucker im Netzwerk über ESC/POS auf TCP-Port 9100 (Zeichentabelle CP858, Teilschnitt).
+  Nur private IPv4-Adressen. **Mit keinem echten Epson-Drucker erprobt** – der Druckauftrag ist automatisiert gegen einen
+  simulierten Drucker geprüft (Befehlsfolge, Umlaute). Es gibt keine Rückmeldung vom Drucker (Papierende, Deckel offen), keine
+  Druckwarteschlange und keinen automatischen Druck zu einer festen Uhrzeit. Drucker anderer Hersteller funktionieren nur, wenn sie
+  ESC/POS verstehen.
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

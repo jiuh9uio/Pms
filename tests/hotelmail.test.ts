@@ -102,6 +102,45 @@ describe('E-Mail an den Gast', () => {
     expect((await call('GET', `/invoices/${inv.id}/mail?kind=reminder`, admin)).statusCode).toBe(409);
   });
 
+  it('führt die Frühstücksliste und druckt sie auf dem Küchendrucker', async () => {
+    const { createServer } = await import('node:net');
+    // Buchung 08.–10.05.2031 ohne Frühstück: an beiden Morgen belegt, aber nichts gebucht
+    let list = await ok('GET', '/breakfast?date=2031-05-09', admin);
+    expect(list.rooms).toHaveLength(1);
+    expect(list.total).toEqual({ rooms: 0, adults: 0, children: 0, without: 1 });
+    expect((await ok('GET', '/breakfast?date=2031-05-08', admin)).rooms).toHaveLength(0); // Anreisetag: noch kein Frühstück
+    expect((await ok('GET', '/breakfast?date=2031-05-10', admin)).rooms[0].departing).toBe(true);
+    const tax = (await ok('GET', '/tax-rates', admin)).find((t: { ratePercent: number }) => t.ratePercent === 19);
+    const svc = await ok('POST', '/services', admin, { name: 'Frühstück', priceCents: 1200, per: 'person_night', taxRateId: tax.id, isBreakfast: true, active: true });
+    const b = await ok('GET', `/bookings/${bookingId}`, admin);
+    await ok('POST', `/bookings/${bookingId}/charges`, admin, { serviceId: svc.id, bookingRoomId: b.rooms[0].id });
+    list = await ok('GET', '/breakfast?date=2031-05-09', admin);
+    expect(list.total).toEqual({ rooms: 1, adults: 2, children: 0, without: 0 });
+    expect(list.printerReady).toBe(false);
+    expect((await call('POST', '/breakfast/print', admin, { date: '2031-05-09' })).json().error.code).toBe('printer_not_configured');
+
+    // Drucker: nur Adressen im eigenen Netz; hier ein Test-Drucker auf diesem Rechner
+    expect((await call('PUT', '/settings/kitchen-printer', admin, { enabled: true, host: '8.8.8.8', port: 9100, width: 48 })).statusCode).toBe(400);
+    const got: Buffer[] = [];
+    const server = createServer((sock) => { sock.on('data', (d) => got.push(d)); });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const port = (server.address() as { port: number }).port;
+    await ok('PUT', '/settings/kitchen-printer', admin, { enabled: true, host: '127.0.0.1', port, width: 48 });
+    await ok('POST', '/breakfast/print', admin, { date: '2031-05-09' });
+    await new Promise((r) => setTimeout(r, 100));
+    const job = Buffer.concat(got);
+    expect([...job.subarray(0, 5)]).toEqual([0x1b, 0x40, 0x1b, 0x74, 19]); // initialisieren, Zeichentabelle CP858
+    const text = job.toString('latin1');
+    expect(text).toContain('FR\x9aHST\x9aCK'); // Ü in CP858
+    expect(text).toContain('Zi. 101  Erika Beispiel');
+    expect(text).toContain('2 Personen');
+    expect([...job.subarray(-4)]).toEqual([0x1d, 0x56, 66, 0]); // Schnitt
+    await new Promise((r) => server.close(() => r(null)));
+    const down = await call('POST', '/breakfast/print', admin, { date: '2031-05-09' });
+    expect(down.statusCode).toBe(502);
+    expect(down.json().error.message).toContain('keine Verbindung');
+  });
+
   it('wertet das Jahr je Monat aus', async () => {
     const r = await ok('GET', '/reports/year?year=2031', admin);
     expect(r.rooms).toBe(1);

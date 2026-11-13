@@ -99,6 +99,14 @@ jobs:
           $twice = $false
           try { Post '/restaurant/reservations' $tr $s | Out-Null } catch { $twice = $_.Exception.Response.StatusCode.value__ -eq 409 }
           if (-not $twice) { throw 'Doppelte Tischreservierung wurde nicht abgelehnt' }
+          $bf = Invoke-RestMethod "$base/breakfast?date=2031-05-09" -WebSession $s
+          if (@($bf.rooms).Count -ne 1) { throw "Frühstücksliste falsch: $($bf | ConvertTo-Json -Depth 4)" }
+          $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 9101); $listener.Start()
+          Invoke-RestMethod -Method Put -Uri "$base/settings/kitchen-printer" -ContentType 'application/json' -Body (@{ enabled = $true; host = '127.0.0.1'; port = 9101; width = 48 } | ConvertTo-Json) -WebSession $s | Out-Null
+          Post '/breakfast/print' @{ date = '2031-05-09' } $s | Out-Null
+          $client = $listener.AcceptTcpClient(); $buf = New-Object byte[] 4096; $n = $client.GetStream().Read($buf, 0, 4096); $client.Close(); $listener.Stop()
+          if ($n -lt 20 -or $buf[0] -ne 0x1b -or $buf[1] -ne 0x40) { throw "Druckauftrag an den Küchendrucker fehlerhaft ($n Bytes)" }
+          Write-Host "Küchendrucker: $n Bytes empfangen"
           $gr = Post '/goods-receipts' @{ supplier = 'Test'; goods = 'Ware'; tempC = 3.5; ok = $true; note = '' } $s
           if (-not $gr.id) { throw 'Wareneingang wurde nicht gespeichert' }
           $rep = Invoke-RestMethod "$base/reports/year?year=2031" -WebSession $s

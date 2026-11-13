@@ -204,3 +204,12 @@ export type GuestFormInput = z.infer<typeof guestFormInput>;
 /** Öffentliche Ansicht für den Gast – bewusst ohne gespeicherte Adress- oder Ausweisdaten. */
 export interface GuestFormPublic { hotelName: string; number: string; from: string; to: string; firstName: string; lastName: string; submitted: boolean }
 export interface GuestFormLink { exists: boolean; url: string | null; qr: string | null; expiresAt: string | null; submittedAt: string | null; localOnly: boolean }
+
+// ---------- Frühstücksliste und Küchendrucker ----------
+export interface BreakfastRow { bookingId: string; room: string; guest: string; adults: number; children: number; bookingNumber: string; notes: string; departing: boolean; breakfast: boolean; arrived: boolean }
+export interface BreakfastDto { date: string; rooms: BreakfastRow[]; printerReady: boolean; total: { rooms: number; adults: number; children: number; without: number } }
+export const kitchenPrinterInput = z.object({
+  enabled: z.boolean(), host: z.string().trim().max(15).regex(/^(\d{1,3}(\.\d{1,3}){3})?$/, 'IP-Adresse im Format 192.168.1.50'),
+  port: count(1, 65535), width: z.union([z.literal(32), z.literal(42), z.literal(48)]),
+});
+export type KitchenPrinter = z.infer<typeof kitchenPrinterInput>;
