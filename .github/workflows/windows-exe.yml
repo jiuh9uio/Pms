@@ -60,6 +60,15 @@ jobs:
           $clash = $false
           try { Post '/bookings' $booking $s | Out-Null } catch { $clash = $_.Exception.Response.StatusCode.value__ -eq 409 }
           if (-not $clash) { throw 'Doppelbuchung wurde nicht abgelehnt' }
+          $hotel = Invoke-RestMethod "$base/settings/hotel" -WebSession $s
+          $hotel.street = 'Teststr. 1'; $hotel.zip = '12345'; $hotel.city = 'Teststadt'; $hotel.taxNumber = '12/345/67890'
+          Invoke-RestMethod -Method Put -Uri "$base/settings/hotel" -ContentType 'application/json' -Body ($hotel | ConvertTo-Json -Depth 4) -WebSession $s | Out-Null
+          $inv = Post '/invoices' @{ bookingId = $b.id; include = 'all' } $s
+          $draft = Invoke-RestMethod "$base/invoices/$($inv.id)" -WebSession $s
+          $issued = Post "/invoices/$($inv.id)/issue" @{ version = $draft.version } $s
+          if (-not $issued.number -or $issued.grossCents -ne 29700) { throw "Rechnung falsch ausgestellt: $($issued | ConvertTo-Json -Depth 2)" }
+          Post '/payments' @{ invoiceId = $inv.id; amountCents = 29700; method = 'Bar'; date = (Get-Date -Format 'yyyy-MM-dd'); payer = ''; note = '' } $s | Out-Null
+          Write-Host "Rechnung $($issued.number) ausgestellt und bezahlt"
           if ((Invoke-WebRequest 'http://127.0.0.1:3000/plan').StatusCode -ne 200) { throw 'Oberfläche wird nicht ausgeliefert' }
 
           & "$dir\pms.exe" --backup
@@ -71,6 +80,8 @@ jobs:
           Post '/auth/login' @{ username = 'chef'; password = 'sehr-geheim-123' } $s2 | Out-Null
           $list = Invoke-RestMethod "$base/bookings?status=active" -WebSession $s2
           if ($list.Count -ne 1) { throw 'Daten nach Neustart nicht vorhanden' }
+          $invs = Invoke-RestMethod "$base/invoices" -WebSession $s2
+          if ($invs.Count -ne 1 -or $invs[0].openCents -ne 0) { throw 'Rechnung nach Neustart nicht vorhanden oder nicht bezahlt' }
           Stop-Pms $p
 
           $dump = (Get-ChildItem "$dir\backups\*.dump")[0].FullName

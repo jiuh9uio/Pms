@@ -4,6 +4,7 @@ import * as H from '../shared/hotel.js';
 import type { Db } from './db/client.js';
 import { listAudit, type Actor } from './modules/audit.js';
 import * as bookings from './modules/bookings.js';
+import * as companies from './modules/companies.js';
 import * as guests from './modules/guests.js';
 import * as rooms from './modules/rooms.js';
 
@@ -47,11 +48,11 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
     return bookings.calendar(db, q.from, q.days);
   });
   api.get('/availability', user, async (req) => {
-    const q = range.and(z.object({ exclude: z.uuid().optional() })).parse(req.query);
+    const q = range.and(z.object({ exclude: z.uuid().optional(), companyId: z.uuid().optional() })).parse(req.query);
     const free = await rooms.freeRooms(db, q.from, q.to, q.exclude);
     // mit Preis für den angefragten Zeitraum, damit die Auswahl ohne weitere Anfragen auskommt
     return Promise.all(free.map(async (r) => ({
-      ...r, quoteCents: (await rooms.priceNights(db, r.id, r.categoryId, q.from, q.to)).reduce((s, n) => s + n.priceCents, 0),
+      ...r, quoteCents: (await bookings.nightsFor(db, q.companyId ?? null, r.id, r.categoryId, q.from, q.to)).reduce((s, n) => s + n.priceCents, 0),
     })));
   });
   api.get('/quote', user, async (req) => {
@@ -75,6 +76,12 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   api.get('/guests/:id', user, async (req) => ({ guest: await guests.getGuest(db, idOf(req)), bookings: await bookings.guestBookings(db, idOf(req)) }));
   api.post('/guests', user, (req) => db.transaction((tx) => guests.createGuest(tx, actor(req), H.guestInput.parse(req.body))));
   api.put('/guests/:id', user, (req) => guests.updateGuest(db, actor(req), idOf(req), H.guestInput.parse(req.body), versionOf(req)));
+
+  // ---------- Firmen ----------
+  api.get('/companies', user, (req) => companies.listCompanies(db, z.object({ q: z.string().max(100).default('') }).parse(req.query).q.trim()));
+  api.get('/companies/:id', user, (req) => companies.getCompany(db, idOf(req)));
+  api.post('/companies', user, (req) => companies.saveCompany(db, actor(req), null, H.companyInput.parse(req.body)));
+  api.put('/companies/:id', user, (req) => companies.saveCompany(db, actor(req), idOf(req), H.companyInput.parse(req.body), versionOf(req)));
 
   // ---------- Reservierungen ----------
   api.get('/bookings', user, (req) => {

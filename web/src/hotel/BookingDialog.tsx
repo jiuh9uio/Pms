@@ -7,6 +7,7 @@ import {
 } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
 import { BookingBilling } from '../billing/BookingBilling.tsx';
+import { CompanySelect } from './CompanySelect.tsx';
 import { useData } from '../data.tsx';
 import { Button, Dialog, Field, LoadState, fmtDateTime, useLoad, useSubmit, useToast } from '../ui.tsx';
 import { GuestFields, StatusBadge, deDate, deShort, persons, toDraft, type GuestDraft } from './common.tsx';
@@ -322,16 +323,17 @@ function Charges({ booking }: { booking: BookingDto }) {
 function Meta({ booking }: { booking: BookingDto }) {
   const { bump } = useData();
   const toast = useToast();
-  const init = { source: booking.source, paymentMethod: booking.paymentMethod, groupName: booking.groupName, notes: booking.notes };
+  const init = { companyId: booking.companyId ?? '', source: booking.source, paymentMethod: booking.paymentMethod, groupName: booking.groupName, notes: booking.notes };
   const [v, setV] = useState(init);
   useEffect(() => setV(init), [booking.version]); // eslint-disable-line react-hooks/exhaustive-deps
   const dirty = JSON.stringify(v) !== JSON.stringify(init);
   const f = useSubmit(bookingUpdateInput, async (d) => { await api('PATCH', `/bookings/${booking.id}`, d); toast('Angaben gespeichert'); bump(); });
   const opts = (list: string[], cur: string) => (cur && !list.includes(cur) ? [cur, ...list] : list);
   return (
-    <form onSubmit={(e) => void f.submit({ ...v, version: booking.version }, e)} noValidate>
+    <form onSubmit={(e) => void f.submit({ ...v, companyId: v.companyId || null, version: booking.version }, e)} noValidate>
       <h3>Angaben</h3>
       <div className="formgrid">
+        <div className="wide"><CompanySelect value={v.companyId} onChange={(cid) => setV({ ...v, companyId: cid })} hint={v.companyId !== (booking.companyId ?? '') ? 'Gilt für neu hinzukommende Nächte und neue Rechnungen; gebuchte Preise bleiben.' : undefined} /></div>
         <Field label="Buchungsquelle"><select value={v.source} onChange={(e) => setV({ ...v, source: e.target.value })}><option value="">–</option>{opts(SOURCES, v.source).map((s) => <option key={s}>{s}</option>)}</select></Field>
         <Field label="Zahlungsart"><select value={v.paymentMethod} onChange={(e) => setV({ ...v, paymentMethod: e.target.value })}><option value="">offen</option>{opts(PAYMENT_METHODS, v.paymentMethod).map((s) => <option key={s}>{s}</option>)}</select></Field>
         {(booking.rooms.length > 1 || v.groupName) && <Field label="Gruppenname" wide><input value={v.groupName} onChange={(e) => setV({ ...v, groupName: e.target.value })} /></Field>}

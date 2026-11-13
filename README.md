@@ -10,12 +10,11 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
 | 1 Fundament | Anmeldung, Benutzer und Rollen, Änderungsprotokoll, Stammdaten, Steuersätze, Grundlayout (hell/dunkel, mobil), Datensicherung | **fertig** |
 | 2 Hotelbetrieb | Zimmer, Kategorien, Preisregeln, Leistungen, Belegungsplan (Tag/Woche/Monat, Drag-and-drop, Sperren), Reservierungen (auch mehrere Zimmer), Check-in/-out, Gäste, Übersicht mit Kennzahlen und Aufgaben | **fertig** |
 | Kontrollen | Startmenü mit Bereichen; Kontrollarten (Hygieneamt, Finanzamt, eigene), Unterlagenlisten, Kontrollbesuche, Temperaturprotokoll je Bereich und Messstelle mit Monatsausdruck | **fertig** |
-| 3 Abrechnung | Rechnungen mit lückenloser Nummer, Druck/PDF, Storno per Stornobeleg, Zahlungen (bar/Karte/Überweisung …), Anzahlungen, offene Posten, CSV-Export | **fertig** (ohne Firmenprofile, E-Mail-Versand) |
+| 3 Abrechnung | Rechnungen mit lückenloser Nummer, Druck/PDF, Storno per Stornobeleg, Zahlungen (bar/Karte/Überweisung …), Anzahlungen, offene Posten, CSV-Export | **fertig** (ohne E-Mail-Versand) |
 | 4 Qualität | Browser-Tests, Sicherheitsprüfung, Bedienung mobil, Anwenderdokumentation | offen |
 
 **Noch nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
-- Firmenprofile mit vereinbarten Preisen und Zahlungsbedingungen (bis dahin: Firmenname am Gast bzw. als Rechnungsempfänger, Sonderpreis je Buchung)
 - E-Mail-Versand (GMX) im Neubau; der Prototyp unter `prototype/` kann es weiterhin
 - E-Rechnung, DATEV-Format, Mahnwesen, Kassenfunktion/TSE
 - Aufpreise für Zusatzpersonen und Kinderpreise (derzeit über Sonderpreis je Nacht)
@@ -44,6 +43,14 @@ Der frühere Prototyp liegt unverändert unter `prototype/`.
 - Nicht enthalten: E-Rechnung (XRechnung/ZUGFeRD), E-Mail-Versand, Mahnwesen, Firmenprofile mit vereinbarten Preisen, Kassenfunktion/TSE.
   **Die Rechnungsvorlage und die Aufbewahrung sind nicht rechtlich geprüft** – bitte einmal mit der Steuerberatung durchsehen
   (u. a. Pflichtangaben nach § 14 UStG, GoBD, ob für Barzahlungen eine TSE nötig ist).
+
+### Firmen
+
+- Seite **Firmen** (Bereich Hotel): Rechnungsanschrift, USt-IdNr., Ansprechpartner, eigenes Zahlungsziel, interne Bemerkungen,
+  **vereinbarte Preise je Zimmerkategorie**, Buchungshistorie und berechneter Umsatz.
+- **Erneut buchen:** „Buchen“ in der Firmenliste bzw. „Neue Reservierung für diese Firma“ öffnet die Buchung mit vorgewählter Firma.
+- Bei einer **Firmenbuchung** gilt je Nacht der vereinbarte Preis (statt Saison-/Wochenendregeln), die Rechnung geht an die Firma
+  („z. Hd.“ Ansprechpartner) mit deren Zahlungsziel. Spätere Preisänderungen bei der Firma wirken nicht auf gebuchte Nächte.
 
 ### Kontrollen und Temperaturprotokoll
 

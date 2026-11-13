@@ -99,13 +99,13 @@ const bookingRoomBase = z.object({
 });
 export const bookingRoomInput = bookingRoomBase.extend({ status: z.enum(['tentative', 'confirmed']) }).refine(period, PERIOD_MSG);
 export const bookingCreateInput = z.object({
-  guestId: z.uuid().optional(), guest: guestInput.optional(),
+  guestId: z.uuid().optional(), guest: guestInput.optional(), companyId: z.uuid().optional(),
   groupName: text(120), source: text(60), paymentMethod: text(60), notes: text(2000),
   rooms: z.array(bookingRoomInput).min(1, 'Mindestens ein Zimmer').max(30),
   breakfast: z.boolean(),
 }).refine((v) => !!v.guestId || !!v.guest, { message: 'Bitte einen Gast wählen oder anlegen', path: ['guest'] });
 export const bookingUpdateInput = z.object({
-  guestId: z.uuid().optional(), groupName: text(120).optional(), source: text(60).optional(), paymentMethod: text(60).optional(), notes: text(2000).optional(), version,
+  guestId: z.uuid().optional(), companyId: z.uuid().nullable().optional(), groupName: text(120).optional(), source: text(60).optional(), paymentMethod: text(60).optional(), notes: text(2000).optional(), version,
 });
 export const bookingRoomUpdateInput = z.object({
   roomId: z.uuid().optional(), from: isoDate.optional(), to: isoDate.optional(), adults: count(1, 20).optional(), children: count(0, 20).optional(),
@@ -135,6 +135,7 @@ export interface BookingRoomDto {
 export interface ChargeDto { id: string; bookingRoomId: string | null; name: string; quantity: number; unitPriceCents: number; taxRatePercent: number; totalCents: number }
 export interface BookingDto {
   id: string; number: string; groupName: string; source: string; paymentMethod: string; notes: string; version: number; createdAt: string;
+  companyId: string | null; companyName: string | null;
   guest: GuestDto; rooms: BookingRoomDto[]; charges: ChargeDto[];
   lodgingCents: number; chargesCents: number; totalCents: number;
 }
@@ -151,3 +152,15 @@ export interface DashboardDto {
   arrivals: BookingListRow[]; departures: BookingListRow[]; inHouse: number;
   revenueTodayCents: number; revenueMonthCents: number; tasks: TaskDto[];
 }
+
+// ---------- Firmen ----------
+export const companyInput = z.object({
+  name: required(160), street: text(), zip: text(20), city: text(), country: text(80), vatId: text(40),
+  contactName: text(120), email: z.union([z.literal(''), z.email('Ungültige E-Mail-Adresse')]), phone: text(60),
+  paymentTermDays: z.number('Bitte eine Zahl eingeben').int().min(0, 'Mindestens 0').max(120, 'Höchstens 120').nullable(),
+  notes: text(2000), active: z.boolean(),
+  /** vereinbarte Preise je Kategorie (brutto je Nacht); nicht aufgeführte Kategorien zum normalen Preis */
+  rates: z.array(z.object({ categoryId: z.uuid(), priceCents: cents })).max(50),
+});
+export type CompanyInput = z.infer<typeof companyInput>;
+export interface CompanyDto extends CompanyInput { id: string; version: number; bookingCount: number; lastStay: string | null; revenueCents: number }

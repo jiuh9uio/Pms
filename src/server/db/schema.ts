@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
-  bigserial, boolean, customType, date, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, uuid,
+  type AnyPgColumn, bigserial, boolean, customType, date, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, uuid,
 } from 'drizzle-orm/pg-core';
 
 const id = () => uuid('id').primaryKey().default(sql`gen_random_uuid()`);
@@ -192,6 +192,8 @@ export const bookings = pgTable('bookings', {
   id: id(),
   number: text('number').notNull().unique(),
   guestId: uuid('guest_id').notNull().references(() => guests.id),
+  /** Firmenbuchung: vereinbarte Preise und Rechnung an die Firma */
+  companyId: uuid('company_id').references((): AnyPgColumn => companies.id),
   groupName: text('group_name').notNull().default(''),
   source: text('source').notNull().default(''),
   paymentMethod: text('payment_method').notNull().default(''),
@@ -358,6 +360,8 @@ export const invoices = pgTable('invoices', {
   issueDate: date('issue_date', { mode: 'string' }),
   dueDate: date('due_date', { mode: 'string' }),
   notes: text('notes').notNull().default(''),
+  /** Zahlungsziel dieser Rechnung; leer = aus den Einstellungen */
+  paymentTermDays: integer('payment_term_days'),
   /** Kopie der Absenderangaben zum Ausstellungszeitpunkt */
   issuer: jsonb('issuer'),
   grossCents: integer('gross_cents').notNull().default(0),
@@ -396,3 +400,31 @@ export const payments = pgTable('payments', {
   recordedBy: text('recorded_by').notNull(),
   createdAt: ts('created_at').notNull().defaultNow(),
 }, (t) => [index('payments_booking_idx').on(t.bookingId), index('payments_invoice_idx').on(t.invoiceId)]);
+
+// =====================================================================================
+// Firmen: Rechnungsanschrift, Ansprechpartner, vereinbarte Preise, Zahlungsbedingungen
+// =====================================================================================
+export const companies = pgTable('companies', {
+  id: id(),
+  name: text('name').notNull(),
+  street: text('street').notNull().default(''),
+  zip: text('zip').notNull().default(''),
+  city: text('city').notNull().default(''),
+  country: text('country').notNull().default('Deutschland'),
+  vatId: text('vat_id').notNull().default(''),
+  contactName: text('contact_name').notNull().default(''),
+  email: text('email').notNull().default(''),
+  phone: text('phone').notNull().default(''),
+  /** leer = Zahlungsziel aus den Einstellungen */
+  paymentTermDays: integer('payment_term_days'),
+  notes: text('notes').notNull().default(''),
+  active: boolean('active').notNull().default(true),
+  ...stamps,
+}, (t) => [index('companies_name_idx').on(t.name)]);
+
+/** Vereinbarter Preis je Nacht für eine Zimmerkategorie */
+export const companyRates = pgTable('company_rates', {
+  companyId: uuid('company_id').notNull().references(() => companies.id, { onDelete: 'cascade' }),
+  categoryId: uuid('category_id').notNull().references(() => roomCategories.id, { onDelete: 'cascade' }),
+  priceCents: integer('price_cents').notNull(),
+}, (t) => [primaryKey({ columns: [t.companyId, t.categoryId] })]);

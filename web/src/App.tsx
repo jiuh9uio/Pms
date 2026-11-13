@@ -10,6 +10,7 @@ import { Controls } from './pages/Controls.tsx';
 import { Dashboard } from './pages/Dashboard.tsx';
 import { Guests } from './pages/Guests.tsx';
 import { Invoices } from './pages/Invoices.tsx';
+import { Companies } from './pages/Companies.tsx';
 import { InvoicePrint } from './billing/InvoicePrint.tsx';
 import { Launcher } from './pages/Launcher.tsx';
 import { Login } from './pages/Login.tsx';
@@ -40,6 +41,7 @@ const NAV = [
   { to: '/plan', label: 'Belegungsplan', short: 'Plan', icon: '▦', admin: false, module: 'hotel' },
   { to: '/reservierungen', label: 'Reservierungen', short: 'Buchungen', icon: '☷', admin: false, module: 'hotel' },
   { to: '/gaeste', label: 'Gäste', icon: '☺', admin: false, module: 'hotel' },
+  { to: '/firmen', label: 'Firmen', icon: '⌘', admin: false, module: 'hotel', more: true },
   { to: '/rechnungen', label: 'Rechnungen', icon: '€', admin: false, module: 'hotel' },
   { to: '/zimmer', label: 'Zimmer & Preise', short: 'Zimmer', icon: '⌂', admin: true, more: true, module: 'hotel' },
   { to: '/kontrollen', label: 'Kontrollen', icon: '✓', admin: false, module: 'kontrollen' },
@@ -112,6 +114,7 @@ function Shell({ user }: { user: UserDto }) {
           {hotel && <Route path="/reservierungen" element={<Reservations />} />}
           {hotel && <Route path="/gaeste" element={<Guests />} />}
           {hotel && <Route path="/rechnungen" element={<Invoices />} />}
+          {hotel && <Route path="/firmen" element={<Companies />} />}
           {isAdmin && <Route path="/zimmer" element={<RoomsPrices />} />}
           {isAdmin && <Route path="/konto" element={<Account />} />}
           {isAdmin && <Route path="/benutzer" element={<Users />} />}

@@ -7,6 +7,7 @@ import { api } from '../api.ts';
 import { useData, type NewPreset } from '../data.tsx';
 import { Button, Dialog, Field, useLoad, useSubmit, useToast } from '../ui.tsx';
 import { GuestFields, toDraft, type GuestDraft } from './common.tsx';
+import { CompanySelect } from './CompanySelect.tsx';
 
 interface Pick { adults: string; children: string; price: string }
 
@@ -23,12 +24,13 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
   const [draft, setDraft] = useState<GuestDraft>(toDraft({}));
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<GuestDto[]>([]);
-  const [meta, setMeta] = useState({ source: 'Telefon', paymentMethod: '', groupName: '', notes: '' });
+  const [meta, setMeta] = useState({ source: preset.companyId ? 'Firma' : 'Telefon', paymentMethod: preset.companyId ? 'Rechnung an Firma' : '', groupName: '', notes: '' });
+  const [companyId, setCompanyId] = useState(preset.companyId ?? '');
   const [breakfast, setBreakfast] = useState(false);
 
   const valid = isIsoDate(from) && isIsoDate(to) && from < to;
   const nights = valid ? diffDays(from, to) : 0;
-  const free = useLoad(async () => (valid ? api<FreeRoomDto[]>('GET', `/availability?from=${from}&to=${to}`) : []), [from, to]);
+  const free = useLoad(async () => (valid ? api<FreeRoomDto[]>('GET', `/availability?from=${from}&to=${to}${companyId ? `&companyId=${companyId}` : ''}`) : []), [from, to, companyId]);
   const base = useLoad(async () => {
     const [cats, services] = await Promise.all([api<CategoryDto[]>('GET', '/categories'), api<ServiceDto[]>('GET', '/services')]);
     return { cats, breakfast: services.find((s) => s.isBreakfast && s.active) ?? null };
@@ -70,7 +72,7 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
   });
   const submit = (e?: React.FormEvent) => void f.submit({
     ...(guest ? { guestId: guest.id } : draft.lastName.trim() ? { guest: draft } : {}),
-    ...meta, breakfast,
+    ...meta, breakfast, ...(companyId ? { companyId } : {}),
     rooms: selected.map((r) => {
       const p = picks[r.id]!;
       return { roomId: r.id, from, to, status, adults: Number(p.adults), children: Number(p.children), pricePerNightCents: p.price.trim() === '' ? null : parseMoney(p.price) };
@@ -148,6 +150,7 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
             </>
           )}
           <h3>Angaben</h3>
+          <CompanySelect value={companyId} onChange={(cid) => { setCompanyId(cid); if (cid) setMeta({ ...meta, source: 'Firma', paymentMethod: 'Rechnung an Firma' }); }} />
           <div className="formgrid">
             <Field label="Buchungsquelle"><select value={meta.source} onChange={(e) => setMeta({ ...meta, source: e.target.value })}>{SOURCES.map((s) => <option key={s}>{s}</option>)}</select></Field>
             <Field label="Zahlungsart"><select value={meta.paymentMethod} onChange={(e) => setMeta({ ...meta, paymentMethod: e.target.value })}><option value="">offen</option>{PAYMENT_METHODS.map((s) => <option key={s}>{s}</option>)}</select></Field>

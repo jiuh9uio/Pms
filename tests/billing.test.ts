@@ -162,3 +162,42 @@ describe('Rechnungen', () => {
     expect((await call('GET', '/invoices', k)).statusCode).toBe(403);
   });
 });
+
+describe('Firmen', () => {
+  it('bucht mit vereinbartem Firmenpreis und stellt die Rechnung an die Firma', async () => {
+    const [cat] = await ok('GET', '/categories', user);
+    const company = { name: 'Muster Bau GmbH', street: 'Industriestr. 5', zip: '54321', city: 'Beispielstadt', country: 'Deutschland', vatId: 'DE999999999',
+      contactName: 'Frau Buchhaltung', email: 'rechnung@example.com', phone: '', paymentTermDays: 30, notes: '', active: true, rates: [{ categoryId: cat.id, priceCents: 8500 }] };
+    const c = await ok('POST', '/companies', user, company);
+    expect((await call('POST', '/companies', user, { ...company, email: 'keine-mail' })).statusCode).toBe(400);
+
+    const room = (await ok('GET', '/rooms', user))[0];
+    const free = await ok('GET', `/availability?from=2031-03-02&to=2031-03-04&companyId=${c.id}`, user);
+    expect(free[0].quoteCents).toBe(17000);
+    const guest = { salutation: 'Herr', firstName: 'Max', lastName: 'Monteur', company: '', email: '', phone: '', street: '', zip: '', city: '', country: '', birthdate: '', nationality: '', idNumber: '', notes: '' };
+    const created = await ok('POST', '/bookings', user, {
+      guest, companyId: c.id, groupName: '', source: 'Firma', paymentMethod: 'Rechnung an Firma', notes: '', breakfast: false,
+      rooms: [{ roomId: room.id, from: '2031-03-02', to: '2031-03-04', adults: 1, children: 0, status: 'confirmed', pricePerNightCents: null }],
+    });
+    let b = await ok('GET', `/bookings/${created.id}`, user);
+    expect(b).toMatchObject({ companyName: 'Muster Bau GmbH', lodgingCents: 17000 });
+    expect(b.rooms[0].nightly[0].source).toBe('Firmenpreis Muster Bau GmbH');
+
+    // Verlängerung: neue Nacht ebenfalls zum Firmenpreis
+    b = await ok('PATCH', `/booking-rooms/${b.rooms[0].id}`, user, { to: '2031-03-05', version: b.rooms[0].version });
+    expect(b.lodgingCents).toBe(25500);
+
+    const inv = (await ok('POST', '/invoices', user, { bookingId: created.id, include: 'all' })).id;
+    const d = await ok('GET', `/invoices/${inv}`, user);
+    expect(d).toMatchObject({ recipientCompany: 'Muster Bau GmbH', recipientName: 'z. Hd. Frau Buchhaltung', recipientVatId: 'DE999999999' });
+    const issued = await ok('POST', `/invoices/${inv}/issue`, user, { version: d.version });
+    expect(issued.dueDate).toBe(addDays(today, 30));
+
+    const detail = await ok('GET', `/companies/${c.id}`, user);
+    expect(detail.company).toMatchObject({ bookingCount: 1, revenueCents: 25500 });
+    expect(detail.bookings).toHaveLength(1);
+    // Preisänderung bei der Firma wirkt nicht auf gebuchte Nächte
+    await ok('PUT', `/companies/${c.id}`, user, { ...company, rates: [{ categoryId: cat.id, priceCents: 9000 }], version: detail.company.version });
+    expect((await ok('GET', `/bookings/${created.id}`, user)).lodgingCents).toBe(25500);
+  });
+});

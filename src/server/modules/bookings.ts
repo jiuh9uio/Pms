@@ -5,7 +5,7 @@ import {
   type GuestInput, type RoomStatus, type TaskDto,
 } from '../../shared/hotel.js';
 import type { Db, Exec, Tx } from '../db/client.js';
-import { bookingRoomNights, bookingRooms, bookings, charges, guests, numberSequences, roomAllocations, rooms, services, taxRates } from '../db/schema.js';
+import { bookingRoomNights, bookingRooms, bookings, charges, companies, companyRates, guests, numberSequences, roomAllocations, rooms, services, taxRates } from '../db/schema.js';
 import { AppError, conflict, notFound, stale } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 import { createGuest, toGuestDto } from './guests.js';
@@ -38,7 +38,7 @@ const toRow = (x: Raw): BookingListRow => ({
   source: x.source as string, roomCount: x.room_count as number,
 });
 
-async function selectRooms(db: Exec, where: SQL, order: SQL = sql`lower(a.period), r.number`, limit = 500) {
+export async function selectRooms(db: Exec, where: SQL, order: SQL = sql`lower(a.period), r.number`, limit = 500) {
   const rows = await db.execute(sql`${ROOM_SELECT} where ${where} order by ${order} limit ${limit}`);
   return Array.from(rows).map((r) => toRow(r as Raw));
 }
@@ -60,6 +60,7 @@ export async function getBooking(db: Exec, id: string): Promise<BookingDto> {
   const [b] = await db.select().from(bookings).where(eq(bookings.id, id));
   if (!b) throw notFound('Reservierung');
   const [g] = await db.select().from(guests).where(eq(guests.id, b.guestId));
+  const [company] = b.companyId ? await db.select({ name: companies.name }).from(companies).where(eq(companies.id, b.companyId)) : [];
   const roomRows = await selectRooms(db, sql`br.booking_id = ${id}`);
   const nights = await db.select().from(bookingRoomNights)
     .where(sql`${bookingRoomNights.bookingRoomId} in (select id from booking_rooms where booking_id = ${id})`).orderBy(bookingRoomNights.date);
@@ -75,7 +76,7 @@ export async function getBooking(db: Exec, id: string): Promise<BookingDto> {
   const chargesCents = chargeDtos.reduce((s, c) => s + c.totalCents, 0);
   return {
     id: b.id, number: b.number, groupName: b.groupName, source: b.source, paymentMethod: b.paymentMethod, notes: b.notes, version: b.version,
-    createdAt: b.createdAt.toISOString(), guest: toGuestDto(g!), rooms: roomDtos, charges: chargeDtos,
+    createdAt: b.createdAt.toISOString(), companyId: b.companyId, companyName: company?.name ?? null, guest: toGuestDto(g!), rooms: roomDtos, charges: chargeDtos,
     lodgingCents, chargesCents, totalCents: lodgingCents + chargesCents,
   };
 }
@@ -117,9 +118,23 @@ async function nextNumber(tx: Tx, key: string, prefix: string) {
   return `${prefix}${String(year).slice(2)}-${String(row!.last).padStart(5, '0')}`;
 }
 
+/**
+ * Preise je Nacht: Bei Firmenbuchungen gilt der mit der Firma vereinbarte Preis der Zimmerkategorie,
+ * sonst Zimmer-/Kategoriepreis mit Preisregeln.
+ */
+export async function nightsFor(tx: Exec, companyId: string | null, roomId: string, categoryId: string, from: string, to: string) {
+  if (companyId) {
+    const [rate] = await tx.select({ price: companyRates.priceCents, name: companies.name }).from(companyRates)
+      .innerJoin(companies, eq(companies.id, companyRates.companyId))
+      .where(and(eq(companyRates.companyId, companyId), eq(companyRates.categoryId, categoryId)));
+    if (rate) return eachNight(from, to).map((date) => ({ date, priceCents: rate.price, source: `Firmenpreis ${rate.name}` }));
+  }
+  return priceNights(tx, roomId, categoryId, from, to);
+}
+
 interface RoomIn { roomId: string; from: string; to: string; adults: number; children: number; status: 'tentative' | 'confirmed'; pricePerNightCents: number | null }
 
-async function insertRoom(tx: Tx, bookingId: string, r: RoomIn) {
+async function insertRoom(tx: Tx, bookingId: string, r: RoomIn, companyId: string | null) {
   const [room] = await tx.select().from(rooms).where(eq(rooms.id, r.roomId));
   if (!room) throw notFound('Zimmer');
   if (!room.active) throw conflict(`Zimmer ${room.number} ist nicht buchbar`);
@@ -132,7 +147,7 @@ async function insertRoom(tx: Tx, bookingId: string, r: RoomIn) {
   }).returning();
   const nightly = manual
     ? eachNight(r.from, r.to).map((date) => ({ date, priceCents: r.pricePerNightCents!, source: 'manuell' }))
-    : await priceNights(tx, r.roomId, room.categoryId, r.from, r.to);
+    : await nightsFor(tx, companyId, r.roomId, room.categoryId, r.from, r.to);
   await tx.insert(bookingRoomNights).values(nightly.map((n) => ({ bookingRoomId: br!.id, date: n.date, priceCents: n.priceCents, taxRatePercent: tax, source: n.source })));
   return { br: br!, room, lodgingCents: nightly.reduce((s, n) => s + n.priceCents, 0) };
 }
@@ -146,7 +161,7 @@ async function addServiceCharge(tx: Tx, bookingId: string, bookingRoomId: string
 }
 
 export async function createBooking(db: Db, actor: Actor, input: {
-  guestId?: string; guest?: GuestInput; groupName: string; source: string; paymentMethod: string; notes: string; rooms: RoomIn[]; breakfast: boolean;
+  guestId?: string; guest?: GuestInput; companyId?: string; groupName: string; source: string; paymentMethod: string; notes: string; rooms: RoomIn[]; breakfast: boolean;
 }) {
   return db.transaction(async (tx) => {
     let guestId = input.guestId;
@@ -156,12 +171,13 @@ export async function createBooking(db: Db, actor: Actor, input: {
     } else guestId = (await createGuest(tx, actor, input.guest!)).id;
 
     const number = await nextNumber(tx, 'booking', 'B');
-    const [b] = await tx.insert(bookings).values({ number, guestId, groupName: input.groupName, source: input.source, paymentMethod: input.paymentMethod, notes: input.notes }).returning();
+    if (input.companyId && !(await tx.select({ id: companies.id }).from(companies).where(eq(companies.id, input.companyId))).length) throw notFound('Firma');
+    const [b] = await tx.insert(bookings).values({ number, guestId, companyId: input.companyId ?? null, groupName: input.groupName, source: input.source, paymentMethod: input.paymentMethod, notes: input.notes }).returning();
     const summary: unknown[] = [];
     const [breakfast] = input.breakfast ? await tx.select().from(services).where(and(eq(services.isBreakfast, true), eq(services.active, true))).limit(1) : [];
     if (input.breakfast && !breakfast) throw conflict('Es ist keine aktive Frühstücksleistung angelegt (Zimmer & Preise → Leistungen)');
     for (const r of input.rooms) {
-      const { br, room, lodgingCents } = await insertRoom(tx, b!.id, r);
+      const { br, room, lodgingCents } = await insertRoom(tx, b!.id, r, input.companyId ?? null);
       if (breakfast) await addServiceCharge(tx, b!.id, br.id, breakfast.id, diffDays(r.from, r.to), r.adults + r.children);
       summary.push({ room: room.number, from: r.from, to: r.to, status: r.status, adults: r.adults, children: r.children, lodgingCents });
     }
@@ -170,17 +186,18 @@ export async function createBooking(db: Db, actor: Actor, input: {
   });
 }
 
-export async function updateBooking(db: Db, actor: Actor, id: string, v: { guestId?: string; groupName?: string; source?: string; paymentMethod?: string; notes?: string; version: number }) {
+export async function updateBooking(db: Db, actor: Actor, id: string, v: { guestId?: string; companyId?: string | null; groupName?: string; source?: string; paymentMethod?: string; notes?: string; version: number }) {
   await db.transaction(async (tx) => {
     const [before] = await tx.select().from(bookings).where(eq(bookings.id, id)).for('update');
     if (!before) throw notFound('Reservierung');
     if (before.version !== v.version) throw stale();
     if (v.guestId && !(await tx.select({ id: guests.id }).from(guests).where(eq(guests.id, v.guestId))).length) throw notFound('Gast');
-    const set = { guestId: v.guestId ?? before.guestId, groupName: v.groupName ?? before.groupName, source: v.source ?? before.source, paymentMethod: v.paymentMethod ?? before.paymentMethod, notes: v.notes ?? before.notes };
+    if (v.companyId && !(await tx.select({ id: companies.id }).from(companies).where(eq(companies.id, v.companyId))).length) throw notFound('Firma');
+    const set = { guestId: v.guestId ?? before.guestId, companyId: v.companyId === undefined ? before.companyId : v.companyId, groupName: v.groupName ?? before.groupName, source: v.source ?? before.source, paymentMethod: v.paymentMethod ?? before.paymentMethod, notes: v.notes ?? before.notes };
     await tx.update(bookings).set({ ...set, version: before.version + 1, updatedAt: new Date() }).where(eq(bookings.id, id));
     await record(tx, actor, {
       action: 'update', entity: 'booking', entityId: id,
-      before: { guestId: before.guestId, groupName: before.groupName, source: before.source, paymentMethod: before.paymentMethod, notes: before.notes }, after: set,
+      before: { guestId: before.guestId, companyId: before.companyId, groupName: before.groupName, source: before.source, paymentMethod: before.paymentMethod, notes: before.notes }, after: set,
     });
   });
 }
@@ -189,10 +206,13 @@ export async function addRoom(db: Db, actor: Actor, bookingId: string, r: RoomIn
   await db.transaction(async (tx) => {
     const [b] = await tx.select().from(bookings).where(eq(bookings.id, bookingId)).for('update');
     if (!b) throw notFound('Reservierung');
-    const { room, lodgingCents } = await insertRoom(tx, bookingId, r);
+    const { room, lodgingCents } = await insertRoom(tx, bookingId, r, b.companyId);
     await record(tx, actor, { action: 'room_add', entity: 'booking', entityId: bookingId, after: { room: room.number, from: r.from, to: r.to, status: r.status, lodgingCents } });
   });
 }
+
+const companyOf = async (tx: Exec, bookingId: string) =>
+  (await tx.select({ c: bookings.companyId }).from(bookings).where(eq(bookings.id, bookingId)))[0]?.c ?? null;
 
 async function lockRoom(tx: Tx, id: string) {
   const [br] = await tx.select().from(bookingRooms).where(eq(bookingRooms.id, id)).for('update');
@@ -234,9 +254,9 @@ export async function updateBookingRoom(db: Db, actor: Actor, id: string, v: {
       nightly = dates.map((date) => ({ date, priceCents: v.pricePerNightCents as number, source: 'manuell' }));
     } else if (v.pricePerNightCents === null) {
       manual = false;
-      nightly = await priceNights(tx, next.roomId, br.categoryId, next.from, next.to);
+      nightly = await nightsFor(tx, await companyOf(tx, br.bookingId), next.roomId, br.categoryId, next.from, next.to);
     } else {
-      const fresh = dates.some((d) => !oldByDate.has(d)) && !manual ? new Map((await priceNights(tx, next.roomId, br.categoryId, next.from, next.to)).map((n) => [n.date, n])) : null;
+      const fresh = dates.some((d) => !oldByDate.has(d)) && !manual ? new Map((await nightsFor(tx, await companyOf(tx, br.bookingId), next.roomId, br.categoryId, next.from, next.to)).map((n) => [n.date, n])) : null;
       nightly = dates.map((date) => {
         const o = oldByDate.get(date);
         if (o) return { date, priceCents: o.priceCents, source: o.source };

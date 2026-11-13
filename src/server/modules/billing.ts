@@ -4,7 +4,7 @@ import {
 } from '../../shared/billing.js';
 import { addDays, isActiveStatus, todayBerlin } from '../../shared/hotel.js';
 import type { Db, Exec, Tx } from '../db/client.js';
-import { bookings, invoiceLines, invoices, numberSequences, payments } from '../db/schema.js';
+import { bookings, companies, invoiceLines, invoices, numberSequences, payments } from '../db/schema.js';
 import { AppError, conflict, notFound, stale } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 import { getBooking } from './bookings.js';
@@ -129,6 +129,14 @@ export async function createInvoice(db: Db, actor: Actor, v: { bookingId?: strin
       recipient = {
         recipientCompany: g.company, recipientName: person, recipientStreet: g.street, recipientZip: g.zip, recipientCity: g.city, recipientCountry: g.country,
       };
+      // Firmenbuchung: Rechnung an die Firma (Rechnungsanschrift, USt-IdNr., Zahlungsziel der Firma)
+      if (b.companyId) {
+        const [c] = await tx.select().from(companies).where(eq(companies.id, b.companyId));
+        if (c) recipient = {
+          recipientCompany: c.name, recipientName: c.contactName ? `z. Hd. ${c.contactName}` : '', recipientStreet: c.street, recipientZip: c.zip,
+          recipientCity: c.city, recipientCountry: c.country, recipientVatId: c.vatId, paymentTermDays: c.paymentTermDays,
+        };
+      }
       const rooms = b.rooms.filter((r) => isActiveStatus(r.status));
       if (rooms.length) {
         serviceFrom = rooms.map((r) => r.from).sort()[0]!;
@@ -235,7 +243,7 @@ export async function issueInvoice(db: Db, actor: Actor, id: string, version: nu
     const number = await nextInvoiceNumber(tx, h.invoicePrefix, Number(today.slice(0, 4)));
     const gross = lines.reduce((s, l) => s + l.totalCents, 0);
     await tx.update(invoices).set({
-      number, status: 'issued', issueDate: today, dueDate: addDays(today, h.paymentTermDays), issuer, grossCents: gross,
+      number, status: 'issued', issueDate: today, dueDate: addDays(today, inv.paymentTermDays ?? h.paymentTermDays), issuer, grossCents: gross,
       serviceFrom: inv.serviceFrom ?? today, serviceTo: inv.serviceTo ?? today,
       issuedBy: actor.userName, issuedAt: new Date(), version: inv.version + 1, updatedAt: new Date(),
     }).where(eq(invoices.id, id));
