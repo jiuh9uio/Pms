@@ -379,6 +379,12 @@ Grenzen – bitte beachten:
   lokalen Test-Server. Nicht getestet: Update auf einem Rechner mit Virenscanner/gesperrten Dateien und
   mit als geplanter Aufgabe (Autostart) laufendem PMS.
 
+## Betrieb auf einem gemieteten Linux-Server
+
+Siehe [`docs/server-installation.md`](docs/server-installation.md): Installationsskript `deploy/server/install.sh` (PostgreSQL, Dienst,
+Caddy mit HTTPS, tägliche Sicherung) und `pms-update`. **Nicht auf einem echten Server erprobt.** Drucker, EC-Gerät und TSE im Haus
+sind von dort aus nicht erreichbar.
+
 ## Installation aus dem Quelltext (Alternative)
 
 Die folgenden Schritte sind für Windows 10/11 geschrieben. **Sie sind auf Windows noch nicht praktisch erprobt** –

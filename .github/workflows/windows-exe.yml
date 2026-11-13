@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: ['claude/hotel-pms-gmx-0rifkh', 'main']
-    paths: ['src/**', 'web/**', 'migrations/**', 'assets/**', 'scripts/**', 'CHANGELOG.md', 'package*.json', '.github/workflows/windows-exe.yml']
+    paths: ['src/**', 'web/**', 'migrations/**', 'assets/**', 'scripts/**', 'deploy/**', 'CHANGELOG.md', 'package*.json', '.github/workflows/windows-exe.yml']
 
 permissions:
   contents: write # für die Veröffentlichung neuer Versionen (GitHub Release)

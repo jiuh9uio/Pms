@@ -197,6 +197,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
       const port = new URL(`http://${req.headers.host ?? 'localhost'}`).port;
       const addresses = Object.values(networkInterfaces()).flat()
         .filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => `${req.protocol}://${i!.address}${port ? `:${port}` : ''}`);
+      if (process.env.PMS_HOSTED === 'true') return { addresses: [(process.env.PUBLIC_URL ?? '').trim()].filter(Boolean), localOnly: false };
       return { addresses, localOnly: (process.env.HOST ?? '') === '127.0.0.1' };
     });
 

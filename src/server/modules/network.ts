@@ -79,6 +79,8 @@ export function scan(db: Exec): Promise<NetScanDto> {
 }
 
 async function doScan(db: Exec): Promise<NetScanDto> {
+  // Auf einem gemieteten Server gehört das umgebende Netz dem Rechenzentrum – dort wird nicht gesucht.
+  if (process.env.PMS_HOSTED === 'true') return { scannedAt: new Date().toISOString(), networks: [], devices: [], note: 'Das Programm läuft auf einem Server im Internet. Die Gerätesuche gibt es nur, wenn es auf einem Rechner im Haus läuft.', gateway: null };
   const nets = localNets();
   if (nets.length === 0) return { scannedAt: new Date().toISOString(), networks: [], devices: [], note: 'Dieser Rechner hat gerade keine Netzwerkverbindung.', gateway: null };
   await probe(nets);
