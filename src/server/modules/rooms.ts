@@ -1,6 +1,6 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
-import { eachNight, weekdayOf, type CategoryDto, type RateRuleDto, type RoomDto, type ServiceDto } from '../../shared/hotel.js';
+import { eachNight, personAdjust, weekdayOf, type CategoryDto, type RateRuleDto, type RoomDto, type ServiceDto } from '../../shared/hotel.js';
 import type { Db, Exec } from '../db/client.js';
 import { rateRules, roomAllocations, roomBlocks, roomCategories, rooms, services, taxRates } from '../db/schema.js';
 import { AppError, conflict, notFound, stale } from '../lib/errors.js';
@@ -93,7 +93,7 @@ export async function lodgingTaxPercent(db: Exec) {
 }
 
 /** Preis je Nacht: Zimmer- bzw. Kategoriepreis, darauf die Preisregeln in Reihenfolge der Priorität. */
-export async function priceNights(db: Exec, roomId: string, categoryId: string, from: string, to: string): Promise<NightPrice[]> {
+export async function priceNights(db: Exec, roomId: string, categoryId: string, from: string, to: string, persons?: { adults: number; children: number }): Promise<NightPrice[]> {
   const [room] = await db.select().from(rooms).where(eq(rooms.id, roomId));
   const [cat] = await db.select().from(roomCategories).where(eq(roomCategories.id, categoryId));
   if (!room || !cat) throw notFound('Zimmer');
@@ -102,6 +102,8 @@ export async function priceNights(db: Exec, roomId: string, categoryId: string, 
   const rules = await db.select().from(rateRules)
     .where(and(eq(rateRules.active, true), sql`${rateRules.startDate} < ${to}`, sql`${rateRules.endDate} >= ${from}`))
     .orderBy(asc(rateRules.priority), asc(rateRules.createdAt));
+  // ohne Personenangabe gilt die Standardbelegung (kein Zu- oder Abschlag)
+  const adj = persons ? personAdjust(cat, persons.adults, persons.children) : { cents: 0, label: '' };
   return eachNight(from, to).map((date) => {
     let price = base;
     const names: string[] = [];
@@ -114,7 +116,8 @@ export async function priceNights(db: Exec, roomId: string, categoryId: string, 
       else price = Math.round(price * (1 + r.value / 100));
       names.push(r.name);
     }
-    return { date, priceCents: Math.max(0, price), source: names.join(', ') || (own ? 'Zimmerpreis' : 'Grundpreis') };
+    const label = names.join(', ') || (own ? 'Zimmerpreis' : 'Grundpreis');
+    return { date, priceCents: Math.max(0, price + adj.cents), source: adj.label ? `${label}, ${adj.label}` : label };
   });
 }
 

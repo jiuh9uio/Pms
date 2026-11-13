@@ -119,9 +119,12 @@ export function RoomsPrices() {
       { key: 'name', label: 'Name', type: 'text' }, { key: 'basePriceCents', label: 'Grundpreis je Nacht (brutto)', type: 'money' },
       { key: 'description', label: 'Beschreibung', type: 'text', wide: true },
       { key: 'stdOccupancy', label: 'Standardbelegung', type: 'int' }, { key: 'maxPersons', label: 'Höchstbelegung', type: 'int' },
+      { key: 'singleDiscountCents', label: 'Nachlass bei Einzelbelegung (je Nacht)', type: 'money', hint: 'eine Person allein im Zimmer; 0 = kein Nachlass' },
+      { key: 'extraAdultCents', label: 'Aufpreis je zusätzlichem Erwachsenen (je Nacht)', type: 'money', hint: 'über der Standardbelegung' },
+      { key: 'extraChildCents', label: 'Aufpreis je zusätzlichem Kind (je Nacht)', type: 'money', hint: 'über der Standardbelegung' },
       { key: 'sort', label: 'Reihenfolge', type: 'int', hint: 'kleine Zahl zuerst' },
     ]}
-    initial={{ name: c?.name ?? '', basePriceCents: moneyInput(c?.basePriceCents), description: c?.description ?? '', stdOccupancy: String(c?.stdOccupancy ?? 2), maxPersons: String(c?.maxPersons ?? 2), sort: String(c?.sort ?? cats.length + 1) }} />);
+    initial={{ name: c?.name ?? '', basePriceCents: moneyInput(c?.basePriceCents), singleDiscountCents: moneyInput(c?.singleDiscountCents ?? 0), extraAdultCents: moneyInput(c?.extraAdultCents ?? 0), extraChildCents: moneyInput(c?.extraChildCents ?? 0), description: c?.description ?? '', stdOccupancy: String(c?.stdOccupancy ?? 2), maxPersons: String(c?.maxPersons ?? 2), sort: String(c?.sort ?? cats.length + 1) }} />);
 
   const editRoom = (r?: RoomDto) => setDlg(<MasterDialog title={r ? `Zimmer ${r.number} bearbeiten` : 'Zimmer anlegen'} path="/rooms" id={r?.id ?? null} version={r?.version} schema={roomInput} onClose={close}
     fields={[
@@ -178,7 +181,7 @@ export function RoomsPrices() {
             <thead><tr><th>Kategorie</th><th className="num">Grundpreis</th><th className="num">Belegung</th><th className="num">Zimmer</th></tr></thead>
             <tbody>{cats.map((c) => (
               <tr key={c.id} {...rowProps(() => editCat(c))}><td><b>{c.name}</b>{c.description && <><br /><small>{c.description}</small></>}</td>
-                <td className="num">{formatMoney(c.basePriceCents)}</td><td className="num">{c.stdOccupancy} (max. {c.maxPersons})</td><td className="num">{rooms.filter((r) => r.categoryId === c.id).length}</td></tr>
+                <td className="num">{formatMoney(c.basePriceCents)}{(c.singleDiscountCents > 0 || c.extraAdultCents > 0 || c.extraChildCents > 0) && <><br /><small className="muted">{[c.singleDiscountCents > 0 && `allein −${formatMoney(c.singleDiscountCents)}`, c.extraAdultCents > 0 && `Erw. +${formatMoney(c.extraAdultCents)}`, c.extraChildCents > 0 && `Kind +${formatMoney(c.extraChildCents)}`].filter(Boolean).join(' · ')}</small></>}</td><td className="num">{c.stdOccupancy} (max. {c.maxPersons})</td><td className="num">{rooms.filter((r) => r.categoryId === c.id).length}</td></tr>
             ))}</tbody>
           </table></div>
         )}

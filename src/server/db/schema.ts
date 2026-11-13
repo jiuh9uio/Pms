@@ -85,6 +85,10 @@ export const roomCategories = pgTable('room_categories', {
   maxPersons: integer('max_persons').notNull().default(2),
   /** Grundpreis je Nacht in Cent (brutto) */
   basePriceCents: integer('base_price_cents').notNull().default(0),
+  /** Personenabhängige Preise je Nacht (brutto): Nachlass bei Einzelbelegung, Aufpreis je Person über der Standardbelegung */
+  singleDiscountCents: integer('single_discount_cents').notNull().default(0),
+  extraAdultCents: integer('extra_adult_cents').notNull().default(0),
+  extraChildCents: integer('extra_child_cents').notNull().default(0),
   sort: integer('sort').notNull().default(0),
   ...stamps,
 });

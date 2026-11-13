@@ -106,6 +106,13 @@
       "when": 1794580724526,
       "tag": "0014_online_meldeschein",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794582208073,
+      "tag": "0015_personenpreise",
+      "breakpoints": true
     }
   ]
 }

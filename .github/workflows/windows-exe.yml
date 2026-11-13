@@ -84,6 +84,8 @@ jobs:
           if ((Invoke-RestMethod $pub).number -ne $b.number) { throw 'Online-Meldeschein nicht erreichbar' }
           Invoke-RestMethod -Method Post -Uri $pub -ContentType 'application/json' -Body (@{ firstName = 'Test'; lastName = 'Gast'; birthdate = '1980-02-03'; nationality = 'deutsch'; street = 'Weg 1'; zip = '11111'; city = 'Ort'; country = 'Deutschland'; idNumber = ''; companions = 1 } | ConvertTo-Json) | Out-Null
           if ((Invoke-RestMethod "$base/bookings/$($b.id)" -WebSession $s).guest.city -ne 'Ort') { throw 'Angaben des Gastes wurden nicht übernommen' }
+          $net = Invoke-RestMethod "$base/system/network" -WebSession $s
+          Write-Host "Adressen im Netz: $($net.addresses -join ', ')"
           $gr = Post '/goods-receipts' @{ supplier = 'Test'; goods = 'Ware'; tempC = 3.5; ok = $true; note = '' } $s
           if (-not $gr.id) { throw 'Wareneingang wurde nicht gespeichert' }
           $rep = Invoke-RestMethod "$base/reports/year?year=2031" -WebSession $s

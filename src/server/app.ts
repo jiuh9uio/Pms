@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { networkInterfaces } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
@@ -182,6 +183,14 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
       const r = await installUpdate();
       await record(db, actor(req), { action: 'update', entity: 'program', after: { version: r.version } });
       return r;
+    });
+
+    // ---------- Adressen im Hausnetz (nur Administrator) ----------
+    api.get('/system/network', { preHandler: requireAdmin }, async (req) => {
+      const port = new URL(`http://${req.headers.host ?? 'localhost'}`).port;
+      const addresses = Object.values(networkInterfaces()).flat()
+        .filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => `${req.protocol}://${i!.address}${port ? `:${port}` : ''}`);
+      return { addresses, localOnly: (process.env.HOST ?? '') === '127.0.0.1' };
     });
 
     // ---------- Datensicherung (nur Administrator) ----------

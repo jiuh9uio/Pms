@@ -60,7 +60,8 @@ const PERIOD_MSG = { message: 'Abreise muss nach der Anreise liegen (höchstens 
 
 export const categoryInput = z.object({
   name: required(80), description: text(300), stdOccupancy: count(1, 20), maxPersons: count(1, 20), basePriceCents: cents, sort: count(0, 999),
-}).refine((v) => v.maxPersons >= v.stdOccupancy, { message: 'Darf nicht kleiner als die Standardbelegung sein', path: ['maxPersons'] });
+  singleDiscountCents: cents.default(0), extraAdultCents: cents.default(0), extraChildCents: cents.default(0),
+}).refine((v) => v.singleDiscountCents <= v.basePriceCents, { message: 'Darf nicht höher als der Grundpreis sein', path: ['singleDiscountCents'] }).refine((v) => v.maxPersons >= v.stdOccupancy, { message: 'Darf nicht kleiner als die Standardbelegung sein', path: ['maxPersons'] });
 export const roomInput = z.object({
   number: required(20), categoryId: z.uuid('Bitte wählen'), floor: text(20), note: text(300), active: z.boolean(), priceOverrideCents: cents.nullable(),
 });
@@ -120,9 +121,24 @@ export const chargeInput = z.object({
 }).refine((v) => !!v.serviceId || (!!v.name && v.unitPriceCents !== undefined && !!v.taxRateId), { message: 'Leistung wählen oder Bezeichnung, Preis und Steuersatz angeben', path: ['name'] });
 
 // ---------- Antworttypen ----------
-export interface CategoryDto { id: string; name: string; description: string; stdOccupancy: number; maxPersons: number; basePriceCents: number; sort: number; version: number }
+export interface CategoryDto extends PersonPricing { id: string; name: string; description: string; maxPersons: number; basePriceCents: number; sort: number; version: number }
+/** Personenabhängige Preisbestandteile einer Kategorie, je Nacht in Cent (brutto). */
+export interface PersonPricing { stdOccupancy: number; singleDiscountCents: number; extraAdultCents: number; extraChildCents: number }
+/**
+ * Auf- oder Abschlag je Nacht nach Personenzahl: eine Person allein in einem Mehrbettzimmer erhält den Einzelbelegungs-Nachlass;
+ * jede Person über der Standardbelegung kostet den Aufpreis – dabei zählen zuerst die Kinder als zusätzliche Personen.
+ */
+export function personAdjust(c: PersonPricing, adults: number, children: number): { cents: number; label: string } {
+  const persons = adults + children;
+  if (persons === 1 && c.stdOccupancy > 1 && c.singleDiscountCents > 0) return { cents: -c.singleDiscountCents, label: 'Einzelbelegung' };
+  const extra = Math.max(0, persons - c.stdOccupancy);
+  const kids = Math.min(children, extra);
+  const cents = (extra - kids) * c.extraAdultCents + kids * c.extraChildCents;
+  return { cents, label: cents > 0 ? (extra === 1 ? 'Zusatzperson' : `${extra} Zusatzpersonen`) : '' };
+}
 export interface RoomDto { id: string; number: string; categoryId: string; categoryName: string; floor: string; note: string; active: boolean; priceOverrideCents: number | null; priceCents: number; housekeeping: 'clean' | 'dirty'; version: number }
-export interface FreeRoomDto extends RoomDto { quoteCents: number }
+/** quoteCents gilt für die Standardbelegung; pricing = Zu-/Abschläge der Kategorie (null bei Firmenpreis: fester Preis). */
+export interface FreeRoomDto extends RoomDto { quoteCents: number; pricing: PersonPricing | null }
 export interface RateRuleDto { id: string; name: string; startDate: string; endDate: string; weekdays: number[]; categoryId: string | null; mode: 'percent' | 'amount' | 'fixed'; value: number; priority: number; active: boolean; version: number }
 export interface ServiceDto { id: string; name: string; priceCents: number; per: ServicePer; taxRateId: string; taxRatePercent: number; isBreakfast: boolean; active: boolean; version: number }
 export interface GuestDto extends Omit<GuestInput, 'birthdate'> { id: string; birthdate: string | null; version: number; stays?: number; lastStay?: string | null }

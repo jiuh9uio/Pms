@@ -54,10 +54,20 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
   - Mit `PUBLIC_URL=…` in `pms.env` lässt sich die Adresse im QR-Code fest vorgeben (z. B. bei Betrieb hinter einem HTTPS-Proxy).
   - Getestet automatisiert und im Browser mit Handy-Ansicht; **nicht mit einem echten Handy in einem echten Hausnetz.**
 
+**Seit Version 1.4.0 zusätzlich:**
+
+- **Preise nach Personenzahl:** je Kategorie ein Nachlass bei Einzelbelegung (eine Person in einem Zimmer mit Standardbelegung ≥ 2)
+  und Aufpreise je Person über der Standardbelegung, getrennt für Erwachsene und Kinder (Kinder zählen zuerst als Zusatzpersonen).
+  Die Beträge gelten je Nacht und werden nach den Preisregeln addiert. Firmenpreise und Sonderpreise bleiben feste Preise.
+  Ändert sich später die Personenzahl so, dass sich der Zu-/Abschlag ändert, werden die Nächte dieser Zimmerbuchung zu aktuellen
+  Preisen neu berechnet; sonst behalten gebuchte Nächte ihren Preis. Ein Kindesalter wird nicht erfasst.
+- **Zugriff im Hausnetz:** Die Einstellungen zeigen die Netzwerkadressen des Rechners. `Firewall freigeben.bat` legt eine
+  Windows-Firewall-Regel für Port 3000 (private Netze) an – **auf Windows nicht erprobt**; bei geändertem Port die Datei anpassen.
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE
-- Aufpreise für Zusatzpersonen und Kinderpreise (derzeit über Sonderpreis je Nacht)
+- Kinderpreise nach Alter, Preise je Person statt je Zimmer
 - Unterschrift am Bildschirm, automatische Löschfristen für Gästedaten
 - Channel-Manager, Onlinebuchung, automatischer E-Mail-Versand (z. B. Erinnerung vor Anreise)
 

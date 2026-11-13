@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  PAYMENT_METHODS, SOURCES, addDays, bookingCreateInput, diffDays, formatMoney, isIsoDate, parseMoney, todayBerlin,
+  PAYMENT_METHODS, SOURCES, addDays, bookingCreateInput, diffDays, formatMoney, isIsoDate, parseMoney, personAdjust, todayBerlin,
   type CategoryDto, type FreeRoomDto, type GuestDto, type ServiceDto,
 } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
@@ -58,10 +58,15 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
     return () => clearTimeout(t);
   }, [q]);
 
+  // Preis des Zimmers für die gewählte Personenzahl (Nachlass bei Einzelbelegung, Aufpreis für Zusatzpersonen)
+  const quoteFor = (r: FreeRoomDto, p: Pick) => {
+    const adj = r.pricing ? personAdjust(r.pricing, Number(p.adults) || 0, Number(p.children) || 0).cents : 0;
+    return Math.max(0, r.quoteCents + adj * nights);
+  };
   const selected = (free.data ?? []).filter((r) => picks[r.id]);
   const total = useMemo(() => selected.reduce((s, r) => {
     const manual = parseMoney(picks[r.id]!.price);
-    return s + (Number.isNaN(manual) ? r.quoteCents : manual * nights);
+    return s + (Number.isNaN(manual) ? quoteFor(r, picks[r.id]!) : manual * nights);
   }, 0), [selected, picks, nights]);
 
   const f = useSubmit(bookingCreateInput, async (d) => {
@@ -118,14 +123,14 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
                     <div className="pickedit">
                       <label><small>Erw.</small><input type="number" min={1} value={p.adults} onChange={(e) => setPick(r.id, { adults: e.target.value })} /></label>
                       <label><small>Kinder</small><input type="number" min={0} value={p.children} onChange={(e) => setPick(r.id, { children: e.target.value })} /></label>
-                      <label><small>Preis/Nacht</small><input inputMode="decimal" value={p.price} placeholder={(r.quoteCents / nights / 100).toFixed(2).replace('.', ',')} onChange={(e) => setPick(r.id, { price: e.target.value })} /></label>
+                      <label><small>Preis/Nacht</small><input inputMode="decimal" value={p.price} placeholder={(quoteFor(r, p) / nights / 100).toFixed(2).replace('.', ',')} onChange={(e) => setPick(r.id, { price: e.target.value })} /></label>
                     </div>
                   )}
                 </div>
               );
             })}
           </div>
-          <p className="muted small">Preis/Nacht leer lassen = Preis nach Preisregeln. Ein eingetragener Betrag gilt als Sonderpreis für alle Nächte.</p>
+          <p className="muted small">Preis/Nacht leer lassen = Preis nach Preisregeln und Personenzahl. Ein eingetragener Betrag gilt als Sonderpreis für alle Nächte.</p>
         </div>
         <aside>
           <h3 className="first">Gast</h3>

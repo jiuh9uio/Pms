@@ -234,3 +234,48 @@ describe('Check-in, Check-out und Übersicht', () => {
     expect(upd.phone).toBe('0123 456');
   });
 });
+
+describe('Personenabhängige Preise', () => {
+  const D = ['2032-03-02', '2032-03-03'] as const;
+  let rooms: { id: string }[];
+  const price = async (id: string) => (await ok('GET', `/bookings/${id}`, user)).rooms[0];
+
+  it('gibt Nachlass bei Einzelbelegung und berechnet Zusatzpersonen', async () => {
+    const [cat] = await ok('GET', '/categories', admin);
+    const fam = await ok('POST', '/categories', admin, { ...cat, name: 'Familienzimmer', basePriceCents: 10000, stdOccupancy: 2, maxPersons: 4, singleDiscountCents: 2000, extraAdultCents: 3000, extraChildCents: 1500 });
+    expect((await call('POST', '/categories', admin, { ...cat, name: 'Unsinn', basePriceCents: 5000, singleDiscountCents: 6000 })).statusCode).toBe(400);
+    await ok('POST', '/rooms/bulk', admin, { categoryId: fam.id, count: 4, firstNumber: 401, floor: '4' });
+    const free = (await ok('GET', `/availability?from=${D[0]}&to=${D[1]}`, user)).filter((r: { categoryId: string }) => r.categoryId === fam.id);
+    expect(free).toHaveLength(4);
+    expect(free[0].pricing).toEqual({ stdOccupancy: 2, singleDiscountCents: 2000, extraAdultCents: 3000, extraChildCents: 1500 });
+    rooms = free;
+    const std = free[0].quoteCents as number; // Preis bei Standardbelegung inklusive etwaiger Preisregeln
+    const mk = async (i: number, adults: number, children: number, extra: object = {}) =>
+      (await ok('POST', '/bookings', user, booking([room(rooms[i]!.id, D[0], D[1], { adults, children, ...extra })]))).id as string;
+    const two = await mk(0, 2, 0), one = await mk(1, 1, 0), four = await mk(2, 3, 1), manual = await mk(3, 1, 0, { pricePerNightCents: 5000 });
+    expect((await price(two)).lodgingCents).toBe(std);
+    const single = await price(one);
+    expect(single.lodgingCents).toBe(std - 2000);
+    expect(single.nightly![0]!.source).toContain('Einzelbelegung');
+    expect((await price(four)).lodgingCents).toBe(std + 3000 + 1500); // ein Erwachsener und ein Kind über der Standardbelegung
+    expect((await price(manual)).lodgingCents).toBe(5000);
+
+    // Personenzahl ändern: Preis folgt, Sonderpreis bleibt
+    await ok('PATCH', `/booking-rooms/${single.id}`, user, { adults: 2, version: single.version });
+    expect((await price(one)).lodgingCents).toBe(std);
+    const m = await price(manual);
+    await ok('PATCH', `/booking-rooms/${m.id}`, user, { adults: 2, version: m.version });
+    expect((await price(manual)).lodgingCents).toBe(5000);
+  });
+
+  it('lässt Preise ohne Zu- und Abschläge unverändert, wenn sich die Personenzahl ändert', async () => {
+    const [cat] = await ok('GET', '/categories', admin);
+    expect(cat.singleDiscountCents).toBe(0);
+    const r = (await ok('GET', '/availability?from=2032-04-06&to=2032-04-07', user)).find((x: { categoryId: string }) => x.categoryId === cat.id);
+    const id = (await ok('POST', '/bookings', user, booking([room(r.id, '2032-04-06', '2032-04-07', { adults: 1 })]))).id;
+    const before = await price(id);
+    await ok('PUT', `/categories/${cat.id}`, admin, { ...cat, basePriceCents: cat.basePriceCents + 5000 });
+    await ok('PATCH', `/booking-rooms/${before.id}`, user, { adults: 2, version: before.version });
+    expect((await price(id)).lodgingCents).toBe(before.lodgingCents); // gebuchter Preis bleibt trotz späterer Preiserhöhung
+  });
+});

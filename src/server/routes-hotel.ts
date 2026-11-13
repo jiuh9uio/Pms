@@ -75,9 +75,16 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
     const q = range.and(z.object({ exclude: z.uuid().optional(), companyId: z.uuid().optional() })).parse(req.query);
     const free = await rooms.freeRooms(db, q.from, q.to, q.exclude);
     // mit Preis für den angefragten Zeitraum, damit die Auswahl ohne weitere Anfragen auskommt
-    return Promise.all(free.map(async (r) => ({
-      ...r, quoteCents: (await bookings.nightsFor(db, q.companyId ?? null, r.id, r.categoryId, q.from, q.to)).reduce((s, n) => s + n.priceCents, 0),
-    })));
+    const cats = new Map((await rooms.listCategories(db)).map((c) => [c.id, c]));
+    return Promise.all(free.map(async (r) => {
+      const nightly = await bookings.nightsFor(db, q.companyId ?? null, r.id, r.categoryId, q.from, q.to);
+      const c = cats.get(r.categoryId);
+      const fixed = nightly.some((n) => n.source.startsWith('Firmenpreis'));
+      return {
+        ...r, quoteCents: nightly.reduce((s, n) => s + n.priceCents, 0),
+        pricing: fixed || !c ? null : { stdOccupancy: c.stdOccupancy, singleDiscountCents: c.singleDiscountCents, extraAdultCents: c.extraAdultCents, extraChildCents: c.extraChildCents },
+      };
+    }));
   });
   api.get('/quote', user, async (req) => {
     const q = range.and(z.object({ roomId: z.uuid() })).parse(req.query);

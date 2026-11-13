@@ -1,11 +1,11 @@
 import { and, eq, sql, type SQL } from 'drizzle-orm';
 import {
-  TRANSITIONS, addDays, diffDays, eachNight, isActiveStatus, perFactor, todayBerlin,
+  TRANSITIONS, addDays, diffDays, eachNight, isActiveStatus, perFactor, personAdjust, todayBerlin,
   type BookingDto, type BookingListRow, type BookingRoomDto, type CalendarDto, type CalendarEntry, type ChargeDto, type DashboardDto,
   type GuestInput, type RoomStatus, type TaskDto,
 } from '../../shared/hotel.js';
 import type { Db, Exec, Tx } from '../db/client.js';
-import { bookingRoomNights, bookingRooms, bookings, charges, companies, companyRates, guests, numberSequences, roomAllocations, rooms, services, taxRates } from '../db/schema.js';
+import { bookingRoomNights, bookingRooms, bookings, charges, companies, companyRates, guests, numberSequences, roomAllocations, roomCategories, rooms, services, taxRates } from '../db/schema.js';
 import { AppError, conflict, notFound, stale } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 import { createGuest, toGuestDto } from './guests.js';
@@ -122,14 +122,15 @@ async function nextNumber(tx: Tx, key: string, prefix: string) {
  * Preise je Nacht: Bei Firmenbuchungen gilt der mit der Firma vereinbarte Preis der Zimmerkategorie,
  * sonst Zimmer-/Kategoriepreis mit Preisregeln.
  */
-export async function nightsFor(tx: Exec, companyId: string | null, roomId: string, categoryId: string, from: string, to: string) {
+/** Preise je Nacht; persons = Belegung für Zu-/Abschläge (ohne Angabe: Standardbelegung). Firmenpreise sind feste Preise ohne Zuschläge. */
+export async function nightsFor(tx: Exec, companyId: string | null, roomId: string, categoryId: string, from: string, to: string, persons?: { adults: number; children: number }) {
   if (companyId) {
     const [rate] = await tx.select({ price: companyRates.priceCents, name: companies.name }).from(companyRates)
       .innerJoin(companies, eq(companies.id, companyRates.companyId))
       .where(and(eq(companyRates.companyId, companyId), eq(companyRates.categoryId, categoryId)));
     if (rate) return eachNight(from, to).map((date) => ({ date, priceCents: rate.price, source: `Firmenpreis ${rate.name}` }));
   }
-  return priceNights(tx, roomId, categoryId, from, to);
+  return priceNights(tx, roomId, categoryId, from, to, persons);
 }
 
 interface RoomIn { roomId: string; from: string; to: string; adults: number; children: number; status: 'tentative' | 'confirmed'; pricePerNightCents: number | null }
@@ -147,7 +148,7 @@ async function insertRoom(tx: Tx, bookingId: string, r: RoomIn, companyId: strin
   }).returning();
   const nightly = manual
     ? eachNight(r.from, r.to).map((date) => ({ date, priceCents: r.pricePerNightCents!, source: 'manuell' }))
-    : await nightsFor(tx, companyId, r.roomId, room.categoryId, r.from, r.to);
+    : await nightsFor(tx, companyId, r.roomId, room.categoryId, r.from, r.to, { adults: r.adults, children: r.children });
   await tx.insert(bookingRoomNights).values(nightly.map((n) => ({ bookingRoomId: br!.id, date: n.date, priceCents: n.priceCents, taxRatePercent: tax, source: n.source })));
   return { br: br!, room, lodgingCents: nightly.reduce((s, n) => s + n.priceCents, 0) };
 }
@@ -249,14 +250,19 @@ export async function updateBookingRoom(db: Db, actor: Actor, id: string, v: {
     let manual = br.priceManual;
     let nightly: { date: string; priceCents: number; source: string }[];
     const dates = eachNight(next.from, next.to);
+    const persons = { adults: v.adults ?? br.adults, children: v.children ?? br.children };
+    // Ändert die neue Personenzahl den Zu-/Abschlag der Kategorie, werden alle Nächte neu berechnet (nicht bei Sonderpreis).
+    const [cat] = await tx.select().from(roomCategories).where(eq(roomCategories.id, br.categoryId));
+    const repriced = !manual && v.pricePerNightCents === undefined && !!cat
+      && personAdjust(cat, persons.adults, persons.children).cents !== personAdjust(cat, br.adults, br.children).cents;
     if (typeof v.pricePerNightCents === 'number') {
       manual = true;
       nightly = dates.map((date) => ({ date, priceCents: v.pricePerNightCents as number, source: 'manuell' }));
-    } else if (v.pricePerNightCents === null) {
+    } else if (v.pricePerNightCents === null || repriced) {
       manual = false;
-      nightly = await nightsFor(tx, await companyOf(tx, br.bookingId), next.roomId, br.categoryId, next.from, next.to);
+      nightly = await nightsFor(tx, await companyOf(tx, br.bookingId), next.roomId, br.categoryId, next.from, next.to, persons);
     } else {
-      const fresh = dates.some((d) => !oldByDate.has(d)) && !manual ? new Map((await nightsFor(tx, await companyOf(tx, br.bookingId), next.roomId, br.categoryId, next.from, next.to)).map((n) => [n.date, n])) : null;
+      const fresh = dates.some((d) => !oldByDate.has(d)) && !manual ? new Map((await nightsFor(tx, await companyOf(tx, br.bookingId), next.roomId, br.categoryId, next.from, next.to, persons)).map((n) => [n.date, n])) : null;
       nightly = dates.map((date) => {
         const o = oldByDate.get(date);
         if (o) return { date, priceCents: o.priceCents, source: o.source };
@@ -266,8 +272,7 @@ export async function updateBookingRoom(db: Db, actor: Actor, id: string, v: {
     await tx.delete(bookingRoomNights).where(eq(bookingRoomNights.bookingRoomId, id));
     await tx.insert(bookingRoomNights).values(nightly.map((n) => ({ bookingRoomId: id, date: n.date, priceCents: n.priceCents, taxRatePercent: tax, source: n.source })));
 
-    const adults = v.adults ?? br.adults;
-    const children = v.children ?? br.children;
+    const { adults, children } = persons;
     await tx.update(bookingRooms).set({ adults, children, priceManual: manual, version: br.version + 1, updatedAt: new Date() }).where(eq(bookingRooms.id, id));
     const [oldRoom] = await tx.select({ number: rooms.number }).from(rooms).where(eq(rooms.id, alloc.roomId));
     const sum = (list: { priceCents: number }[]) => list.reduce((s, n) => s + n.priceCents, 0);

@@ -55,6 +55,10 @@ writeFileSync(join(out, 'Autostart einrichten.bat'), crlf(
   '@echo off\nrem Startet das PMS bei jeder Anmeldung an Windows und sichert taeglich um 02:00 Uhr.\n' +
   'schtasks /Create /F /TN "PMS Start" /SC ONLOGON /TR "\\"%~dp0pms.exe\\" --no-browser"\n' +
   'schtasks /Create /F /TN "PMS Sicherung" /SC DAILY /ST 02:00 /TR "\\"%~dp0pms.exe\\" --backup"\npause\n'));
+writeFileSync(join(out, 'Firewall freigeben.bat'), crlf('@echo off\nrem Erlaubt anderen Geraeten im privaten Netz den Zugriff auf das PMS (Port 3000). Als Administrator ausfuehren.\n' +
+  'netsh advfirewall firewall delete rule name="Schuetzenhaus PMS" >nul 2>&1\n' +
+  'netsh advfirewall firewall add rule name="Schuetzenhaus PMS" dir=in action=allow protocol=TCP localport=3000 profile=private,domain\n' +
+  'if errorlevel 1 echo Das hat nicht geklappt - bitte mit Rechtsklick "Als Administrator ausfuehren" starten.\npause\n'));
 writeFileSync(join(out, 'pms.env'), crlf(
   '# Einstellungen fuer das Schuetzenhaus PMS (Zeilen mit # sind Kommentare)\n' +
   '# Port, unter dem das PMS im Browser erreichbar ist\nPORT=3000\n' +

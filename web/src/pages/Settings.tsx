@@ -13,6 +13,7 @@ export function Settings() {
       <HotelForm />
       <MailSettings />
       <TaxRates />
+      <NetworkCard />
       <BackupCard />
       <UpdateCard />
     </>
@@ -123,5 +124,30 @@ function TaxRateDialog({ rate, onClose, onDone }: { rate: TaxRateDto | null; onC
         <button type="submit" hidden />
       </form>
     </Dialog>
+  );
+}
+
+/** Unter welcher Adresse Tablets, weitere Rechner und Gäste-Handys (Meldeschein per QR) das Programm erreichen. */
+function NetworkCard() {
+  const { data, error } = useLoad(() => api<{ addresses: string[]; localOnly: boolean }>('GET', '/system/network'));
+  return (
+    <section className="card">
+      <h2>Zugriff im Hausnetz</h2>
+      {!data ? <LoadState error={error} loading /> : data.localOnly ? (
+        <p className="notice warn">Das Programm ist nur an diesem Rechner erreichbar (HOST=127.0.0.1 in pms.env). Für Tablets, weitere Rechner und den Meldeschein per QR-Code dort HOST=0.0.0.0 eintragen und neu starten.</p>
+      ) : data.addresses.length === 0 ? (
+        <p className="notice warn">Dieser Rechner hat gerade keine Netzwerkverbindung.</p>
+      ) : (
+        <>
+          <p>Andere Geräte im selben Netz öffnen das Programm im Browser unter:</p>
+          <ul>{data.addresses.map((a) => <li key={a}><b>{a}</b></li>)}</ul>
+          <p className="muted small">
+            Geht die Seite auf einem anderen Gerät nicht auf, blockiert meist die Windows-Firewall: im Programmordner „Firewall freigeben.bat“ mit Rechtsklick → „Als Administrator ausführen“ starten.
+            Die Adresse kann sich ändern, wenn der Router dem Rechner eine neue vergibt – am besten im Router eine feste Adresse für diesen Rechner einstellen.
+            Die Verbindung im Hausnetz ist nicht verschlüsselt; das Programm nicht aus dem Internet erreichbar machen.
+          </p>
+        </>
+      )}
+    </section>
   );
 }
