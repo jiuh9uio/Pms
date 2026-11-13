@@ -156,9 +156,39 @@ describe('E-Mail an den Gast', () => {
     await call('PATCH' as never, `/users/${created.id}`, admin, { modules: ['internet'], version: created.version });
     const tech = session(await call('POST', '/auth/login', {}, { username: 'technik', password: 'sehr-geheim-000' }));
     expect((await call('GET', '/network/devices', tech)).statusCode).toBe(200);
+    // Gäste-WLAN: lesen mit Freigabe, ändern nur der Administrator
+    expect((await ok('GET', '/network/wifi', tech)).qr).toBeNull();
+    const wifi = { ssid: 'Schuetzenhaus-Gast', password: 'willkommen-2031', open: false, note: 'Kostenlos für unsere Gäste' };
+    expect((await call('PUT', '/network/wifi', tech, wifi)).statusCode).toBe(403);
+    expect((await call('PUT', '/network/wifi', admin, { ...wifi, password: 'kurz' })).statusCode).toBe(400);
+    const saved = await ok('PUT', '/network/wifi', admin, wifi);
+    expect(saved.qr).toMatch(/^data:image\/svg\+xml;base64,/);
+    expect(await ok('GET', '/network/wifi', tech)).toMatchObject({ ssid: 'Schuetzenhaus-Gast', password: 'willkommen-2031' });
+    const audit = await ok('GET', '/audit?entity=settings&limit=5', admin);
+    expect(JSON.stringify(audit)).not.toContain('willkommen-2031');
+
+    // Ausfallprotokoll: erst die zweite fehlgeschlagene Prüfung trägt ein, die nächste erfolgreiche schließt
+    const { startOutageMonitor } = await import('../src/server/modules/network.js');
+    let up = true;
+    const tick = startOutageMonitor(db, async () => up, 0);
+    await tick();
+    up = false; await tick();
+    expect((await ok('GET', '/network/outages', admin)).outages).toHaveLength(0);
+    await tick(); await tick();
+    let log = await ok('GET', '/network/outages', admin);
+    expect(log.outages).toHaveLength(1);
+    expect(log.outages[0].endedAt).toBeNull();
+    up = true; await tick();
+    log = await ok('GET', '/network/outages', admin);
+    expect(log.outages[0]).toMatchObject({ uncertain: false });
+    expect(log.outages[0].endedAt).toBeTruthy();
+    // benanntes Gerät, das nicht antwortet, erscheint als nicht erreichbar
+    await ok('PUT', '/network/devices/aa:bb:cc:dd:ee:ff', admin, { name: 'Drucker' });
+    const again = await ok('GET', '/network/devices', admin);
+    expect(again.devices.find((x: { mac: string }) => x.mac === 'aa:bb:cc:dd:ee:ff')).toMatchObject({ name: 'Drucker', online: false });
     const st = await ok('GET', '/network/status', admin);
     expect(typeof st.online).toBe('boolean');
-  }, 40_000);
+  }, 60_000);
 
   it('verlangt die Freigabe für den Bereich Hotel', async () => {
     await ok('POST', '/users', admin, { username: 'kueche', name: 'Küche', password: 'sehr-geheim-456', role: 'user', modules: ['kontrollen'] });

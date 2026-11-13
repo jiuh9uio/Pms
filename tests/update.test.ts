@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseNeighbors } from '../src/server/modules/network.js';
+import { parseGateway, parseNeighbors, wifiQrText } from '../src/server/modules/network.js';
 import { getUpdateStatus, installUpdate, isNewer } from '../src/server/update.js';
 
 describe('Programm-Update', () => {
@@ -34,5 +34,23 @@ Schnittstelle: 192.168.178.20 --- 0x5
 `;
     expect(parseNeighbors(linux)).toEqual([{ ip: '10.0.0.1', mac: '02:fc:00:00:00:05' }]);
     expect(parseNeighbors('? (192.168.1.7) at 0:1b:2:aa:bb:c on en0 ifscope [ethernet]')).toEqual([{ ip: '192.168.1.7', mac: '00:1b:02:aa:bb:0c' }]);
+  });
+});
+
+describe('Internet: Router-Adresse und WLAN-QR-Code', () => {
+  it('liest das Standardgateway aus Windows- und Linux-Routentabellen', () => {
+    const win = `
+Aktive Routen:
+     Netzwerkziel    Netzwerkmaske          Gateway    Schnittstelle Metrik
+          0.0.0.0          0.0.0.0    192.168.178.1   192.168.178.20     25
+`;
+    expect(parseGateway(win, false)).toBe('192.168.178.1');
+    expect(parseGateway('Iface\tDestination\tGateway\neth0\t00000000\t010200C0\t0003\neth0\t000200C0\t00000000\t0001', true)).toBe('192.0.2.1');
+    expect(parseGateway('nichts', false)).toBeNull();
+  });
+  it('erzeugt den WLAN-Text mit maskierten Sonderzeichen', () => {
+    expect(wifiQrText({ ssid: 'Schuetzenhaus-Gast', password: 'geheim1234', open: false, note: '' })).toBe('WIFI:T:WPA;S:Schuetzenhaus-Gast;P:geheim1234;;');
+    expect(wifiQrText({ ssid: 'Gast;WLAN', password: 'a:b,c"d\\e', open: false, note: '' })).toBe('WIFI:T:WPA;S:Gast\\;WLAN;P:a\\:b\\,c\\"d\\\\e;;');
+    expect(wifiQrText({ ssid: 'Offen', password: '', open: true, note: '' })).toBe('WIFI:T:nopass;S:Offen;;');
   });
 });

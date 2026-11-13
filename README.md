@@ -94,6 +94,19 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
   „System“). Ohne Benutzernamen wird der einzige Administrator genommen. **Wer Zugriff auf den Programmordner hat, kann sich damit
   Zugang verschaffen** – den Rechner und sein Windows-Konto entsprechend schützen. Auf Windows nicht erprobt (unter Linux getestet).
 
+**Seit Version 1.9.0 zusätzlich (Bereich „Internet“):**
+
+- **Gäste-WLAN-Aushang:** WLAN-Name, Passwort und Hinweistext (ändern: nur Administrator); daraus QR-Code im üblichen
+  `WIFI:`-Format und Druckansicht. Das Passwort liegt im Klartext in der Datenbank und in Sicherungen, steht aber nicht im
+  Änderungsprotokoll – nur für das Gäste-WLAN gedacht. Nur WPA/WPA2/WPA3-Passwort oder offenes Netz, kein WPA-Enterprise.
+  Der QR-Code wurde nicht mit echten Handys getestet.
+- **Ausfallprotokoll:** Prüfung alle zwei Minuten gegen `api.github.com` und `www.cloudflare.com` (online, wenn eine antwortet;
+  es werden keine Daten übermittelt). Ein Ausfall wird ab der zweiten fehlgeschlagenen Prüfung eingetragen; kürzere Aussetzer
+  fehlen, Zeiten sind auf etwa zwei Minuten genau. Aufgezeichnet wird nur, solange das Programm läuft; wird es während eines
+  Ausfalls beendet, gilt das Ende als unbekannt. Einträge älter als 400 Tage werden gelöscht. Abschalten lässt es sich nicht einzeln.
+- **Geräte:** benannte, nicht gefundene Geräte werden als „nicht erreichbar“ gezeigt; die Router-Adresse stammt aus der
+  Routentabelle (`route print` unter Windows).
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

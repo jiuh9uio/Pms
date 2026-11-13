@@ -3,10 +3,12 @@ import { createSocket } from 'node:dgram';
 import { reverse } from 'node:dns/promises';
 import { readFile } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
-import { eq } from 'drizzle-orm';
-import type { InternetStatusDto, NetDeviceDto, NetScanDto } from '../../shared/schemas.js';
+import { desc, eq, isNull, lt } from 'drizzle-orm';
+import QRCode from 'qrcode';
+import type { InternetStatusDto, NetDeviceDto, NetOutagesDto, NetScanDto, WifiDto, WifiSettings } from '../../shared/schemas.js';
 import type { Db, Exec } from '../db/client.js';
-import { netDevices } from '../db/schema.js';
+import { netDevices, netOutages, settings } from '../db/schema.js';
+import { getHotel } from './settings.js';
 import { AppError } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 
@@ -78,7 +80,7 @@ export function scan(db: Exec): Promise<NetScanDto> {
 
 async function doScan(db: Exec): Promise<NetScanDto> {
   const nets = localNets();
-  if (nets.length === 0) return { scannedAt: new Date().toISOString(), networks: [], devices: [], note: 'Dieser Rechner hat gerade keine Netzwerkverbindung.' };
+  if (nets.length === 0) return { scannedAt: new Date().toISOString(), networks: [], devices: [], note: 'Dieser Rechner hat gerade keine Netzwerkverbindung.', gateway: null };
   await probe(nets);
   const inNet = (ip: string) => nets.some((n) => { const a = ipToInt(ip); return a > n.net && a < n.net + n.size - 1; });
   const found = parseNeighbors(await neighborTable()).filter((d) => inNet(d.ip));
@@ -86,11 +88,15 @@ async function doScan(db: Exec): Promise<NetScanDto> {
   const names = new Map((await db.select().from(netDevices)).map((d) => [d.mac, d.name]));
   const devices: NetDeviceDto[] = await Promise.all(found.map(async (d) => ({
     ...d, hostname: (await withTimeout(reverse(d.ip), 1500, [] as string[]))[0] ?? '', name: names.get(d.mac) ?? '',
-    self: nets.some((n) => n.mac === d.mac), randomMac: (parseInt(d.mac.slice(0, 2), 16) & 2) === 2,
+    self: nets.some((n) => n.mac === d.mac), online: true, randomMac: (parseInt(d.mac.slice(0, 2), 16) & 2) === 2,
   })));
   devices.sort((a, b) => ipToInt(a.ip) - ipToInt(b.ip));
+  // benannte Geräte, die gerade nicht antworten (z. B. ausgeschalteter Drucker), ans Ende
+  for (const [mac, name] of names) if (!devices.some((d) => d.mac === mac))
+    devices.push({ ip: '', mac, hostname: '', name, self: false, online: false, randomMac: (parseInt(mac.slice(0, 2), 16) & 2) === 2 });
+  const gw = await gateway();
   const big = nets.some((n) => n.size - 2 > MAX_HOSTS);
-  return { scannedAt: new Date().toISOString(), networks: nets.map((n) => n.cidr), devices, note: big ? `Das Netz ist sehr groß – geprüft wurden je Netz die ersten ${MAX_HOSTS} Adressen.` : null };
+  return { scannedAt: new Date().toISOString(), networks: nets.map((n) => n.cidr), devices, note: big ? `Das Netz ist sehr groß – geprüft wurden je Netz die ersten ${MAX_HOSTS} Adressen.` : null, gateway: gw && inNet(gw) ? gw : null };
 }
 
 export async function nameDevice(db: Db, actor: Actor, mac: string, name: string) {
@@ -104,11 +110,78 @@ export async function nameDevice(db: Db, actor: Actor, mac: string, name: string
 export async function internetStatus(): Promise<InternetStatusDto> {
   const addresses = localNets().map((n) => n.address);
   const start = Date.now();
-  try {
-    await fetch(process.env.PMS_ONLINE_CHECK_URL || 'https://api.github.com/zen', { method: 'GET', signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'pms' } });
-    return { online: true, ms: Date.now() - start, checkedAt: new Date().toISOString(), addresses, error: null };
-  } catch (e) {
-    const c = (e as { cause?: { code?: string } }).cause?.code;
-    return { online: false, ms: null, checkedAt: new Date().toISOString(), addresses, error: c === 'ENOTFOUND' || c === 'EAI_AGAIN' ? 'Namensauflösung fehlgeschlagen (kein Internet oder DNS-Störung)' : 'Keine Antwort aus dem Internet innerhalb von 8 Sekunden' };
+  if (await online()) return { online: true, ms: Date.now() - start, checkedAt: new Date().toISOString(), addresses, error: null };
+  return { online: false, ms: null, checkedAt: new Date().toISOString(), addresses, error: 'Keine Antwort aus dem Internet innerhalb von 8 Sekunden' };
+}
+
+/** Adresse des Routers (Standardgateway) aus der Routentabelle des Betriebssystems. */
+export function parseGateway(text: string, linux: boolean): string | null {
+  for (const line of text.split(/\r?\n/)) {
+    const c = line.trim().split(/\s+/);
+    if (linux) {
+      // /proc/net/route: Iface Destination Gateway … (hexadezimal, Bytes in umgekehrter Reihenfolge)
+      if (c[1] === '00000000' && c[2] && c[2] !== '00000000') return c[2].match(/../g)!.reverse().map((h) => parseInt(h, 16)).join('.');
+    } else if (c[0] === '0.0.0.0' && c[1] === '0.0.0.0' && /^\d+(\.\d+){3}$/.test(c[2] ?? '')) return c[2]!;
   }
+  return null;
+}
+async function gateway(): Promise<string | null> {
+  if (process.platform === 'linux') return parseGateway(await readFile('/proc/net/route', 'utf8').catch(() => ''), true);
+  return new Promise((resolve) => execFile('route', ['print', '-4', '0.0.0.0'], { windowsHide: true, timeout: 10_000 }, (_e, out) => resolve(parseGateway(String(out ?? ''), false))));
+}
+
+// ---------- Gäste-WLAN: Zugangsdaten als QR-Code zum Aushängen ----------
+const WIFI_DEFAULT: WifiSettings = { ssid: '', password: '', open: false, note: '' };
+const wifiEscape = (v: string) => v.replace(/([\\;,:"])/g, '\\$1');
+/** Inhalt des WLAN-QR-Codes, wie ihn Handy-Kameras verstehen. */
+export const wifiQrText = (w: WifiSettings) => `WIFI:T:${w.open ? 'nopass' : 'WPA'};S:${wifiEscape(w.ssid)};${w.open ? '' : `P:${wifiEscape(w.password)};`};`;
+
+export async function getWifi(db: Exec): Promise<WifiDto> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'wifi'));
+  const w = { ...WIFI_DEFAULT, ...((row?.value as Partial<WifiSettings>) ?? {}) };
+  const ready = !!w.ssid && (w.open || !!w.password);
+  const qr = ready ? `data:image/svg+xml;base64,${Buffer.from(await QRCode.toString(wifiQrText(w), { type: 'svg', margin: 2, errorCorrectionLevel: 'M' })).toString('base64')}` : null;
+  return { ...w, qr, hotelName: (await getHotel(db)).name };
+}
+export async function saveWifi(db: Db, actor: Actor, v: WifiSettings) {
+  await db.insert(settings).values({ key: 'wifi', value: v }).onConflictDoUpdate({ target: settings.key, set: { value: v, updatedAt: new Date() } });
+  // das Passwort selbst gehört nicht ins Änderungsprotokoll
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: 'wifi', after: { ssid: v.ssid, open: v.open, note: v.note } });
+  return getWifi(db);
+}
+
+// ---------- Ausfallprotokoll der Internetverbindung ----------
+const CHECK_URLS = ['https://api.github.com/zen', 'https://www.cloudflare.com/cdn-cgi/trace'];
+const reachable = (url: string) => fetch(url, { signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'pms' } }).then(() => true, () => false);
+/** Internet gilt als erreichbar, wenn mindestens eine von zwei unabhängigen Adressen antwortet. */
+export const online = async () => (await Promise.all((process.env.PMS_ONLINE_CHECK_URL ? [process.env.PMS_ONLINE_CHECK_URL] : CHECK_URLS).map(reachable))).some(Boolean);
+
+let monitoring = false;
+/** Prüft alle zwei Minuten; ein Ausfall wird ab der zweiten fehlgeschlagenen Prüfung in Folge eingetragen (Beginn = erste). */
+export function startOutageMonitor(db: Db, check: () => Promise<boolean> = online, everyMs = 120_000) {
+  let firstFail: Date | null = null;
+  let open: string | null = null;
+  const tick = async () => {
+    try {
+      if (await check()) {
+        if (open) await db.update(netOutages).set({ endedAt: new Date() }).where(eq(netOutages.id, open));
+        open = null; firstFail = null;
+      } else if (!firstFail) firstFail = new Date();
+      else if (!open) open = (await db.insert(netOutages).values({ startedAt: firstFail }).returning({ id: netOutages.id }))[0]!.id;
+    } catch (e) { console.error('Ausfallprotokoll:', e instanceof Error ? e.message : e); }
+  };
+  const init = async () => {
+    // offene Einträge aus einem früheren Lauf: Ende wurde nicht beobachtet
+    await db.update(netOutages).set({ endedAt: new Date(), uncertain: true }).where(isNull(netOutages.endedAt));
+    await db.delete(netOutages).where(lt(netOutages.startedAt, new Date(Date.now() - 400 * 86_400_000)));
+    monitoring = true;
+  };
+  void init().catch((e) => console.error('Ausfallprotokoll:', e instanceof Error ? e.message : e));
+  if (everyMs > 0) setInterval(() => void tick(), everyMs).unref();
+  return tick;
+}
+
+export async function listOutages(db: Exec): Promise<NetOutagesDto> {
+  const rows = await db.select().from(netOutages).orderBy(desc(netOutages.startedAt)).limit(50);
+  return { monitoring, outages: rows.map((r) => ({ id: r.id, startedAt: r.startedAt.toISOString(), endedAt: r.endedAt?.toISOString() ?? null, uncertain: r.uncertain })) };
 }

@@ -129,7 +129,7 @@ export function useSubmit<T>(schema: ZodType<T>, send: (value: T) => Promise<voi
   return { errors, busy, submit };
 }
 
-export function printOnly(which: 'temp' | 'cleaning' | 'goods') {
+export function printOnly(which: 'temp' | 'cleaning' | 'goods' | 'wifi') {
   document.body.dataset.print = which;
   window.print();
   delete document.body.dataset.print;

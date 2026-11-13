@@ -199,6 +199,9 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     // ---------- Bereich „Internet“: Verbindung und Geräte im Hausnetz (Administrator oder Freigabe) ----------
     const internet = { preHandler: requireModule('internet') };
     api.get('/network/status', internet, () => network.internetStatus());
+    api.get('/network/outages', internet, () => network.listOutages(db));
+    api.get('/network/wifi', internet, () => network.getWifi(db));
+    api.put('/network/wifi', { preHandler: requireAdmin }, (req) => network.saveWifi(db, actor(req), S.wifiSettingsInput.parse(req.body)));
     api.get('/network/devices', internet, () => network.scan(db));
     api.put('/network/devices/:mac', internet, async (req) => {
       const mac = network.normMac(z.object({ mac: z.string().max(17) }).parse(req.params).mac);

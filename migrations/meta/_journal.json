@@ -127,6 +127,13 @@
       "when": 1794583666718,
       "tag": "0017_restaurant",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794586471543,
+      "tag": "0018_internet_ausfaelle",
+      "breakpoints": true
     }
   ]
 }

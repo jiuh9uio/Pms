@@ -88,6 +88,10 @@ jobs:
           Write-Host "Adressen im Netz: $($net.addresses -join ', ')"
           $scan = Invoke-RestMethod "$base/network/devices" -WebSession $s -TimeoutSec 60
           Write-Host "Geräte im Netz: $(($scan.devices | ForEach-Object { $_.ip }) -join ', ') in $($scan.networks -join ', ')"
+          Write-Host "Router laut Routentabelle: $($scan.gateway)"
+          $wifi = Invoke-RestMethod -Method Put -Uri "$base/network/wifi" -ContentType 'application/json' -Body (@{ ssid = 'Test-Gast'; password = 'testpasswort'; open = $false; note = '' } | ConvertTo-Json) -WebSession $s
+          if (-not $wifi.qr) { throw 'WLAN-QR-Code wurde nicht erzeugt' }
+          if (-not (Invoke-RestMethod "$base/network/outages" -WebSession $s).monitoring) { throw 'Ausfallprotokoll läuft nicht' }
           if (@($scan.devices).Count -lt 1) { throw 'Netzwerksuche hat nicht einmal den eigenen Rechner gefunden' }
           $tb = Post '/restaurant/tables' @{ name = 'Tisch 1'; seats = 4; area = ''; sort = 1 } $s
           $tr = @{ date = '2031-05-08'; time = '18:00'; durationMin = 120; persons = 4; name = 'Test'; phone = ''; note = ''; tableId = $tb.id }

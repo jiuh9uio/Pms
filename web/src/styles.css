@@ -355,3 +355,15 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--border); }
 tr.faded td { opacity: .55; } .rowactions { text-align: right; white-space: nowrap; } .rowactions .btn { margin-left: 6px; padding: 5px 10px; }
 @media (max-width: 900px) { .rowactions { white-space: normal; } .rowactions .btn { margin: 2px 0 2px 6px; } }
 .pagehead .actions input[type='date'], .pagehead .actions input[type='month'] { width: auto; }
+
+/* Internet: Gäste-WLAN-Aushang */
+.wificard { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; } .wificard img { background: #fff; border-radius: 8px; border: 1px solid var(--line); }
+.wificard dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; } .wificard dt { color: var(--ink-2); } .wificard dd { margin: 0; font-weight: 600; word-break: break-all; }
+.wifi-title { display: none; }
+@media print {
+  body[data-print='wifi'] .content > *:not(.wifi-print) { display: none !important; }
+  body[data-print='wifi'] .wifi-print { border: 0; box-shadow: none; text-align: center; padding-top: 60px; }
+  body[data-print='wifi'] .wifi-print > :not(.wificard):not(.wifi-title) { display: none !important; }
+  body[data-print='wifi'] .wifi-title { display: block; font-size: 30px; margin: 0 0 6px; } body[data-print='wifi'] .wificard { flex-direction: column; font-size: 20px; }
+  body[data-print='wifi'] .wificard img { width: 320px; height: 320px; border: 0; }
+}

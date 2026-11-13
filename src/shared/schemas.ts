@@ -75,7 +75,17 @@ export const netDeviceNameInput = z.object({ name: text(60) });
 export interface NetDeviceDto {
   ip: string; mac: string; hostname: string; name: string;
   /** dieser Rechner */ self: boolean;
+  /** false = benanntes Gerät, das bei dieser Suche nicht gefunden wurde */ online: boolean;
   /** zufällige (private) Geräteadresse, wie sie Handys je WLAN verwenden */ randomMac: boolean;
 }
-export interface NetScanDto { scannedAt: string; networks: string[]; devices: NetDeviceDto[]; note: string | null }
+export interface NetScanDto { scannedAt: string; networks: string[]; devices: NetDeviceDto[]; note: string | null; /** Adresse des Routers, falls ermittelbar */ gateway: string | null }
 export interface InternetStatusDto { online: boolean; ms: number | null; checkedAt: string; addresses: string[]; error: string | null }
+
+// ---------- Gäste-WLAN (Aushang mit QR-Code) und Ausfallprotokoll ----------
+export const wifiSettingsInput = z.object({
+  ssid: text(32), password: z.string().max(63, 'Höchstens 63 Zeichen'), open: z.boolean(), note: text(200),
+}).refine((v) => v.open || v.password.length === 0 || v.password.length >= 8, { path: ['password'], message: 'WLAN-Passwörter haben mindestens 8 Zeichen' });
+export type WifiSettings = z.infer<typeof wifiSettingsInput>;
+export interface WifiDto extends WifiSettings { /** QR-Code als Bild-Adresse; null, solange kein WLAN-Name eingetragen ist */ qr: string | null; hotelName: string }
+export interface NetOutageDto { id: string; startedAt: string; endedAt: string | null; uncertain: boolean }
+export interface NetOutagesDto { monitoring: boolean; outages: NetOutageDto[] }

@@ -339,6 +339,15 @@ export const cleaningLog = pgTable('cleaning_log', {
   doneAt: ts('done_at').notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.taskId, t.date] })]);
 
+/** Ausfälle der Internetverbindung des PMS-Rechners (nur Beginn und Ende, erfasst solange das Programm läuft). */
+export const netOutages = pgTable('net_outages', {
+  id: id(),
+  startedAt: ts('started_at').notNull(),
+  endedAt: ts('ended_at'),
+  /** Ende nicht beobachtet, weil das Programm währenddessen beendet wurde */
+  uncertain: boolean('uncertain').notNull().default(false),
+});
+
 // ---------- Restaurant: Tische und Tischreservierungen ----------
 export const restaurantTables = pgTable('restaurant_tables', {
   id: id(),
