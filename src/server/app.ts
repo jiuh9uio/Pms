@@ -178,7 +178,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     registerHotelRoutes(api, { db, requireUser: requireModule('hotel'), requireAdmin, actor });
     registerRestaurantRoutes(api, { db, requireUser: requireModule('restaurant'), requireAdmin, actor });
     registerControlRoutes(api, { db, requireUser: requireModule('kontrollen'), requireAdmin, actor });
-    registerBillingRoutes(api, { db, requireUser: requireModule('hotel'), actor });
+    registerBillingRoutes(api, { db, requireUser: requireModule('hotel'), requireAdmin, actor });
     registerEInvoiceRoutes(api, { db, requireUser: requireModule('erechnung'), requireAdmin, actor });
 
     // ---------- Programm-Update (nur Administrator) ----------

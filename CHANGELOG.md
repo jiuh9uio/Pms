@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.16.0
+
+- EC-Gerät (Testbetrieb): Kartenzahlungen im Hotel lassen sich an ein EC-Gerät mit Kassenschnittstelle (ZVT über Netzwerk) senden – z. B. Geräte von VR Payment. Einrichten unter Einstellungen → EC-Gerät (IP-Adresse, Port, Passwort, „Verbindung prüfen“). Bei Zahlungen mit „Karte“ erscheint dann „Mit EC-Gerät kassieren“; bei Erfolg wird die Zahlung automatisch gebucht.
+- Wichtig: Die Anbindung ist noch mit keinem echten EC-Gerät erprobt. Bitte zuerst mit einem kleinen Betrag testen; maßgeblich ist immer der Beleg des EC-Geräts.
+
 ## 1.15.0
 
 - Übersichtlicher: Volle Seiten sind jetzt in Reiter aufgeteilt – Einstellungen (Haus, E-Mail, Drucker, Steuersätze, Hausnetz, Datensicherung, Programm-Update), Zimmer & Preise, Kontrollen (Temperatur, Reinigung, Wareneingang, Unterlagen, Kontrollbesuche) und Internet.

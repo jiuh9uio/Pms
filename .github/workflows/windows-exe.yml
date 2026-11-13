@@ -113,6 +113,7 @@ jobs:
           $client = $listener.AcceptTcpClient(); Start-Sleep -Milliseconds 300; $n = $client.GetStream().Read($buf, 0, 4096); $client.Close(); $listener.Stop()
           if ($n -lt 50) { throw "Schnelldruck fehlerhaft ($n Bytes)" }
           Write-Host "Schnelldruck WLAN-Zettel: $n Bytes empfangen"
+          if ((Invoke-RestMethod "$base/terminal/status" -WebSession $s).ready) { throw 'EC-Gerät ist ohne Einrichtung als bereit gemeldet' }
           $gr = Post '/goods-receipts' @{ supplier = 'Test'; goods = 'Ware'; tempC = 3.5; ok = $true; note = '' } $s
           if (-not $gr.id) { throw 'Wareneingang wurde nicht gespeichert' }
           $rep = Invoke-RestMethod "$base/reports/year?year=2031" -WebSession $s

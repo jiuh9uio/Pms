@@ -62,3 +62,17 @@ export interface InvoiceDto {
 }
 export type InvoiceListRow = Omit<InvoiceDto, 'lines' | 'payments' | 'taxes' | 'issuer'>;
 export interface BookingBillingDto { invoices: InvoiceListRow[]; payments: PaymentDto[]; invoicedCents: number; paidCents: number; unassignedPaidCents: number }
+
+// ---------- EC-Gerät (Kassenschnittstelle ZVT) ----------
+export const terminalSettingsInput = z.object({
+  enabled: z.boolean(), host: z.string().trim().max(15).regex(/^(\d{1,3}(\.\d{1,3}){3})?$/, 'IP-Adresse im Format 192.168.1.60'),
+  port: z.number('Bitte eine Zahl eingeben').int().min(1).max(65535),
+  password: z.string().regex(/^\d{6}$/, 'Genau 6 Ziffern, meist 000000'),
+});
+export type TerminalSettings = z.infer<typeof terminalSettingsInput>;
+export const terminalPayInput = z.object({
+  bookingId: z.uuid().optional(), invoiceId: z.uuid().optional(),
+  amountCents: z.number('Bitte einen Betrag eingeben').int('Ungültiger Betrag').min(1, 'Betrag muss größer als 0 sein').max(10_000_000, 'Betrag zu hoch'),
+  payer: text(160), note: text(300),
+}).refine((v) => !!v.bookingId || !!v.invoiceId, { message: 'Reservierung oder Rechnung angeben', path: ['bookingId'] });
+export interface TerminalLogDto { id: string; at: string; amountCents: number; outcome: 'approved' | 'unrecorded' | 'declined' | 'unknown'; message: string; trace: string; receiptNo: string; cardName: string; userName: string }

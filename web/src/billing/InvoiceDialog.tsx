@@ -209,6 +209,24 @@ export function PaymentForm({ bookingId, invoiceId, suggestCents, onDone }: { bo
     bump();
     onDone?.();
   });
+  // Kartenzahlung über das EC-Gerät: Betrag ans Gerät senden, bei Erfolg wird die Zahlung gebucht
+  const terminal = useLoad(() => api<{ ready: boolean }>('GET', '/terminal/status')).data;
+  const [card, setCard] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
+  const payByCard = async () => {
+    const amountCents = parseMoney(v.amount);
+    if (!Number.isInteger(amountCents) || amountCents <= 0) { setCard({ busy: false, error: 'Bitte einen Betrag größer als 0 eintragen' }); return; }
+    setCard({ busy: true, error: null });
+    try {
+      const r = await api<{ message: string }>('POST', '/payments/terminal', { bookingId, invoiceId, amountCents, payer: v.payer, note: v.note });
+      toast(`${formatMoney(amountCents)}: ${r.message}`);
+      setCard({ busy: false, error: null });
+      bump();
+      onDone?.();
+    } catch (e) {
+      setCard({ busy: false, error: e instanceof Error ? e.message : 'Fehler' });
+      bump();
+    }
+  };
   return (
     <form className="payform" noValidate onSubmit={(e) => void f.submit({ bookingId, invoiceId, amountCents: parseMoney(v.amount), method: v.method, date: v.date, payer: v.payer, note: v.note }, e)}>
       <div className="segmented" role="radiogroup" aria-label="Zahlungsart">
@@ -224,7 +242,12 @@ export function PaymentForm({ bookingId, invoiceId, suggestCents, onDone }: { bo
       <input value={v.payer} onChange={(e) => setV({ ...v, payer: e.target.value })} placeholder="Zahler (falls abweichend)" aria-label="Zahler" />
       <input value={v.note} onChange={(e) => setV({ ...v, note: e.target.value })} placeholder="Bemerkung" aria-label="Bemerkung" />
       {Object.keys(f.errors).length > 0 && <p className="error">{[...new Set(Object.values(f.errors))].join(' · ')}</p>}
-      <Button type="submit" variant="primary" busy={f.busy}>Zahlung buchen</Button>
+      {card.busy && <p className="notice">Der Betrag steht am EC-Gerät – bitte den Gast dort mit Karte zahlen lassen. Dieses Fenster geöffnet lassen.</p>}
+      {card.error && <p className="notice danger">{card.error}</p>}
+      <div className="formactions">
+        {terminal?.ready && v.method === 'Karte' && <Button variant="primary" busy={card.busy} disabled={f.busy} onClick={() => void payByCard()}>Mit EC-Gerät kassieren</Button>}
+        <Button type="submit" variant={terminal?.ready && v.method === 'Karte' ? 'default' : 'primary'} busy={f.busy} disabled={card.busy}>{terminal?.ready && v.method === 'Karte' ? 'Nur buchen (ohne Gerät)' : 'Zahlung buchen'}</Button>
+      </div>
     </form>
   );
 }

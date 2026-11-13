@@ -339,6 +339,23 @@ export const cleaningLog = pgTable('cleaning_log', {
   doneAt: ts('done_at').notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.taskId, t.date] })]);
 
+/** EC-Gerät: jeder Zahlungsversuch über die Kassenschnittstelle mit Ausgang – auch abgelehnte und ungeklärte. */
+export const cardTerminalLog = pgTable('card_terminal_log', {
+  id: id(),
+  at: ts('at').notNull().defaultNow(),
+  amountCents: integer('amount_cents').notNull(),
+  /** approved = gezahlt und gebucht, unrecorded = gezahlt, aber nicht gebucht, declined = nicht gezahlt, unknown = ungeklärt */
+  outcome: text('outcome', { enum: ['approved', 'unrecorded', 'declined', 'unknown'] }).notNull(),
+  message: text('message').notNull().default(''),
+  trace: text('trace').notNull().default(''),
+  receiptNo: text('receipt_no').notNull().default(''),
+  cardName: text('card_name').notNull().default(''),
+  bookingId: uuid('booking_id'),
+  invoiceId: uuid('invoice_id'),
+  paymentId: uuid('payment_id'),
+  userName: text('user_name').notNull(),
+}, (t) => [index('card_terminal_log_at_idx').on(t.at)]);
+
 /** Schnelldruck: eigene Info-Zettel (Titel und Text) für den Bondrucker. */
 export const printTemplates = pgTable('print_templates', {
   id: id(),

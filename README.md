@@ -145,6 +145,23 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
   Benutzer freigegeben sind. Nicht durchsucht werden Protokolle (Temperatur, Reinigung, Wareneingang), E-Rechnungen,
   Schnelldruck-Zettel und das Änderungsprotokoll. Je Art werden höchstens sechs Treffer gezeigt.
 
+**Seit Version 1.16.0 zusätzlich – EC-Gerät (Testbetrieb):**
+
+- **Anbindung:** ZVT-Kassenschnittstelle über TCP (Standardport 20007, nur private IPv4-Adressen). Ablauf: Anmeldung `06 00`
+  (Passwort, Konfigurationsbyte `08`, Währung EUR) → Autorisierung `06 01` mit Betrag → Zwischenstatus `04 FF`,
+  Statusinformation `04 0F`, Abschluss `06 0F` oder Abbruch `06 1E`; jede Nachricht des Geräts wird mit `80 00 00` bestätigt.
+  Umgesetzt nach öffentlich zugänglichen Beschreibungen des Protokolls (u. a. dem ZVT-Dissector von Wireshark), nicht nach der
+  offiziellen Spezifikation geprüft.
+- **Wann eine Zahlung gebucht wird:** nur bei Ergebniscode `00` **und** Abschluss, und nur wenn der gemeldete Betrag dem
+  angeforderten entspricht. Vorher prüft das Programm in einer zurückgerollten Transaktion, dass sich die Zahlung buchen lässt.
+  Reißt die Verbindung ab, nachdem der Betrag gesendet wurde, gilt der Ausgang als „ungeklärt“: es wird nichts gebucht und der
+  Benutzer aufgefordert, am Gerät nachzusehen. Alle Versuche stehen unter Einstellungen → EC-Gerät.
+- **Grenzen:** **mit keinem echten EC-Gerät erprobt** – nur automatisiert gegen ein simuliertes Gerät (Erfolg, Ablehnung,
+  Verbindungsabbruch, falscher Betrag, keine Antwort, falsches Passwort). Ob ein bestimmtes VR-Payment-Gerät ZVT über Netzwerk
+  anbietet und freigeschaltet ist, klärt VR Payment. Nicht enthalten: Storno/Gutschrift über das Gerät, Trinkgeld, Kassenschnitt,
+  Belegdruck durch das PMS (das Gerät druckt selbst), andere Währungen als Euro, serielle/USB-Anbindung. Die Anbindung ändert
+  nichts an der offenen Frage, ob für Bar- und Kartenzahlungen eine TSE nötig ist (siehe Konzept).
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

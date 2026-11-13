@@ -5,16 +5,18 @@ import { isIsoDate } from '../shared/hotel.js';
 import type { Db } from './db/client.js';
 import type { Actor } from './modules/audit.js';
 import * as billing from './modules/billing.js';
+import * as terminal from './modules/terminal.js';
 
-interface Ctx { db: Db; requireUser: (req: FastifyRequest) => Promise<void>; actor: (req: FastifyRequest) => Actor }
+interface Ctx { db: Db; requireUser: (req: FastifyRequest) => Promise<void>; requireAdmin: (req: FastifyRequest) => Promise<void>; actor: (req: FastifyRequest) => Actor }
 const idOf = (req: FastifyRequest) => z.object({ id: z.uuid() }).parse(req.params).id;
 const range = z.object({ from: z.string().refine(isIsoDate, 'Ungültiges Datum'), to: z.string().refine(isIsoDate, 'Ungültiges Datum') });
 const csv = (reply: FastifyReply, name: string, body: string) =>
   reply.header('Content-Type', 'text/csv; charset=utf-8').header('Content-Disposition', `attachment; filename="${name}"`).send(body);
 
 /** Abrechnung – gehört zum Bereich „Hotel“. */
-export function registerBillingRoutes(api: FastifyInstance, { db, requireUser, actor }: Ctx) {
+export function registerBillingRoutes(api: FastifyInstance, { db, requireUser, requireAdmin, actor }: Ctx) {
   const user = { preHandler: requireUser };
+  const admin = { preHandler: requireAdmin };
 
   api.get('/invoices', user, (req) => {
     const q = z.object({
@@ -54,6 +56,14 @@ export function registerBillingRoutes(api: FastifyInstance, { db, requireUser, a
   api.post('/invoices/:id/cancel', user, (req) => billing.cancelInvoice(db, actor(req), idOf(req), B.cancelInput.parse(req.body).reason));
 
   api.get('/bookings/:id/billing', user, (req) => billing.bookingBilling(db, idOf(req)));
+  // ---------- EC-Gerät ----------
+  api.get('/terminal/status', user, async () => ({ ready: await terminal.terminalReady(db) }));
+  api.post('/payments/terminal', user, (req) => terminal.payByTerminal(db, actor(req), B.terminalPayInput.parse(req.body)));
+  api.get('/settings/terminal', admin, () => terminal.getTerminal(db));
+  api.put('/settings/terminal', admin, (req) => terminal.saveTerminal(db, actor(req), B.terminalSettingsInput.parse(req.body)));
+  api.post('/settings/terminal/test', admin, () => terminal.testTerminal(db));
+  api.get('/terminal/log', admin, () => terminal.terminalLog(db));
+
   api.post('/payments', user, (req) => billing.addPayment(db, actor(req), B.paymentInput.parse(req.body)));
   api.post('/payments/:id/reverse', user, (req) => billing.reversePayment(db, actor(req), idOf(req), B.reverseInput.parse(req.body).note));
 }
