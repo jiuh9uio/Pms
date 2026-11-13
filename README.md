@@ -86,6 +86,14 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
   ohne Tisch sind erlaubt. Bestehende Benutzer erhalten den Bereich erst nach Freigabe. Nicht enthalten: grafischer Tischplan,
   Zusammenstellen mehrerer Tische, Online-Reservierung durch Gäste, Erinnerungen, Verknüpfung mit Hotelgästen oder Kasse.
 
+**Seit Version 1.8.0 zusätzlich:**
+
+- **Benutzername ändern** (Verwaltung → Benutzer): eindeutig, das Passwort bleibt; die Änderung steht im Änderungsprotokoll.
+- **Passwort vergessen:** `Passwort vergessen.bat` bzw. `pms.exe --reset-password [Benutzername]` setzt am PMS-Rechner ein
+  Zufallspasswort, hebt Sperre und Deaktivierung auf und beendet alle Sitzungen des Benutzers (Eintrag im Änderungsprotokoll als
+  „System“). Ohne Benutzernamen wird der einzige Administrator genommen. **Wer Zugriff auf den Programmordner hat, kann sich damit
+  Zugang verschaffen** – den Rechner und sein Windows-Konto entsprechend schützen. Auf Windows nicht erprobt (unter Linux getestet).
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

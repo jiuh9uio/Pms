@@ -29,7 +29,7 @@ export const changePasswordInput = z.object({ current: z.string().min(1, 'Pflich
 
 export const userCreateInput = z.object({ username, name: required(100), password, role: z.enum(ROLES), modules: modules.default([...DEFAULT_MODULES]) });
 export const userUpdateInput = z.object({
-  name: required(100).optional(), role: z.enum(ROLES).optional(), active: z.boolean().optional(), modules: modules.optional(), version: z.number().int(),
+  name: required(100).optional(), username: username.optional(), role: z.enum(ROLES).optional(), active: z.boolean().optional(), modules: modules.optional(), version: z.number().int(),
 });
 export const passwordResetInput = z.object({ password });
 

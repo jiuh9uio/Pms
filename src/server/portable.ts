@@ -11,6 +11,7 @@
  * Aufrufe:  pms.exe                      PMS starten
  *           pms.exe --no-browser         starten, ohne den Browser zu öffnen (Autostart)
  *           pms.exe --backup             Datensicherung schreiben
+ *           pms.exe --reset-password [Benutzername]   neues Zufallspasswort (Passwort vergessen)
  *           pms.exe --restore DATEI --ja Sicherung zurückspielen (PMS muss beendet sein)
  */
 import { execFileSync, spawn } from 'node:child_process';
@@ -22,6 +23,7 @@ import { buildApp } from './app.js';
 import { connect, runMigrations } from './db/client.js';
 import { setAssetsDir } from './einvoice/pdf.js';
 import { initBackup } from './backup.js';
+import { emergencyReset } from './modules/users.js';
 import { initUpdater } from './update.js';
 
 const args = process.argv.slice(2);
@@ -114,6 +116,18 @@ async function main() {
 
   if (args.includes('--backup')) {
     try { backup(pg.url); } finally { await pg.stop(); }
+    return;
+  }
+  if (args.includes('--reset-password')) {
+    // Notfall: Passwort vergessen. Wer an diesem Rechner sitzt, darf ein neues Passwort erzeugen.
+    const name = args[args.indexOf('--reset-password') + 1];
+    const { db, close } = connect(pg.url);
+    try {
+      await runMigrations(db, join(home, 'app', 'migrations'));
+      const r = await emergencyReset(db, name && !name.startsWith('--') ? name : null);
+      if (r.ok) console.log(`\nNeues Passwort für „${r.name}“\n\n  Benutzername: ${r.username}\n  Passwort:     ${r.password}\n\nBitte gleich anmelden und unter „Mein Konto“ ein eigenes Passwort vergeben.`);
+      else console.log(`\nBitte den Benutzernamen angeben. Vorhandene Benutzer:\n  ${r.usernames.join('\n  ') || '(noch keiner – das PMS ist noch nicht eingerichtet)'}`);
+    } finally { await close(); await pg.stop(); }
     return;
   }
   if (args.includes('--restore')) {

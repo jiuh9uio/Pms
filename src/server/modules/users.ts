@@ -1,10 +1,11 @@
+import { randomBytes } from 'node:crypto';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import type { Module, Role, UserDto } from '../../shared/schemas.js';
 import type { Db } from '../db/client.js';
 import { sessions, users } from '../db/schema.js';
 import { conflict, notFound, stale } from '../lib/errors.js';
 import { hashPassword } from '../lib/password.js';
-import { record, type Actor } from './audit.js';
+import { record, SYSTEM, type Actor } from './audit.js';
 
 type UserRow = typeof users.$inferSelect;
 
@@ -33,7 +34,7 @@ export async function createUser(db: Db, actor: Actor, input: { username: string
 }
 
 export async function updateUser(
-  db: Db, actor: Actor, id: string, input: { name?: string; role?: Role; active?: boolean; modules?: Module[]; version: number },
+  db: Db, actor: Actor, id: string, input: { name?: string; username?: string; role?: Role; active?: boolean; modules?: Module[]; version: number },
 ) {
   return db.transaction(async (tx) => {
     // Alle Administratoren sperren, damit zwei gleichzeitige Änderungen nicht den letzten Administrator entfernen.
@@ -42,13 +43,18 @@ export async function updateUser(
     if (!before) throw notFound('Benutzer');
     if (before.version !== input.version) throw stale();
 
+    const username = input.username ?? before.username;
+    if (username !== before.username) {
+      const [dup] = await tx.select({ id: users.id }).from(users).where(eq(users.username, username));
+      if (dup) throw conflict('Dieser Benutzername ist bereits vergeben', 'username_taken');
+    }
     const role = input.role ?? before.role;
     const active = input.active ?? before.active;
     const losesAdmin = before.role === 'admin' && before.active && (role !== 'admin' || !active);
     if (losesAdmin && admins.length <= 1) throw conflict('Es muss mindestens ein aktiver Administrator bestehen bleiben', 'last_admin');
 
     const [after] = await tx.update(users)
-      .set({ name: input.name ?? before.name, role, active, modules: input.modules ?? before.modules, updatedAt: new Date(), version: before.version + 1, ...(active && !before.active ? { failedLogins: 0, lockedUntil: null } : {}) })
+      .set({ name: input.name ?? before.name, username, role, active, modules: input.modules ?? before.modules, updatedAt: new Date(), version: before.version + 1, ...(active && !before.active ? { failedLogins: 0, lockedUntil: null } : {}) })
       .where(eq(users.id, id)).returning();
     if (!active) await tx.delete(sessions).where(eq(sessions.userId, id));
     await record(tx, actor, { action: 'update', entity: 'user', entityId: id, before: forAudit(before), after: forAudit(after!) });
@@ -67,4 +73,23 @@ export async function resetPassword(db: Db, actor: Actor, id: string, password: 
     await tx.delete(sessions).where(eq(sessions.userId, id));
     await record(tx, actor, { action: 'password_reset', entity: 'user', entityId: id });
   });
+}
+
+/**
+ * Notfall-Zurücksetzung am PMS-Rechner (pms.exe --reset-password): neues Zufallspasswort, Sperre aufgehoben, Konto aktiviert,
+ * alle Sitzungen beendet. Ohne Benutzernamen wird der einzige aktive Administrator genommen.
+ */
+export async function emergencyReset(db: Db, username: string | null) {
+  const all = await db.select().from(users).orderBy(asc(users.username));
+  const admins = all.filter((u) => u.role === 'admin');
+  const user = username ? all.find((u) => u.username.toLowerCase() === username.toLowerCase()) : admins.length === 1 ? admins[0] : undefined;
+  if (!user) return { ok: false as const, usernames: all.map((u) => `${u.username} (${u.role === 'admin' ? 'Administrator' : 'Benutzer'})`) };
+  const password = randomBytes(9).toString('base64url');
+  const passwordHash = await hashPassword(password);
+  await db.transaction(async (tx) => {
+    await tx.update(users).set({ passwordHash, failedLogins: 0, lockedUntil: null, active: true, updatedAt: new Date(), version: sql`${users.version} + 1` }).where(eq(users.id, user.id));
+    await tx.delete(sessions).where(eq(sessions.userId, user.id));
+    await record(tx, SYSTEM, { action: 'password_reset', entity: 'user', entityId: user.id, after: { via: 'Notfall-Zurücksetzung am PMS-Rechner' } });
+  });
+  return { ok: true as const, username: user.username, name: user.name, password };
 }

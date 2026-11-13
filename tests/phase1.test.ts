@@ -210,3 +210,31 @@ describe('Doppelbuchungsschutz in der Datenbank', () => {
     await expect(alloc('[2031-06-01,2031-06-01)')).rejects.toThrow();
   });
 });
+
+describe('Benutzername ändern und Notfall-Zurücksetzung', () => {
+  it('ändert den Benutzernamen, lehnt vergebene und ungültige Namen ab', async () => {
+    const created = (await call('POST', '/users', admin, { username: 'aushilfe', name: 'Aushilfe', password: 'aushilfe-12345', role: 'user' })).json();
+    expect((await call('PATCH', `/users/${created.id}`, admin, { username: ADMIN.username, version: created.version })).statusCode).toBe(409);
+    expect((await call('PATCH', `/users/${created.id}`, admin, { username: 'x y', version: created.version })).statusCode).toBe(400);
+    const res = await call('PATCH', `/users/${created.id}`, admin, { username: 'service', version: created.version });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().username).toBe('service');
+    expect((await call('POST', '/auth/login', {}, { username: 'aushilfe', password: 'aushilfe-12345' })).statusCode).toBe(401);
+    expect((await call('POST', '/auth/login', {}, { username: 'service', password: 'aushilfe-12345' })).statusCode).toBe(200);
+  });
+
+  it('setzt am PMS-Rechner ein Zufallspasswort und beendet alle Sitzungen', async () => {
+    const { emergencyReset } = await import('../src/server/modules/users.js');
+    const unknown = await emergencyReset(db, 'gibt-es-nicht');
+    expect(unknown.ok).toBe(false);
+    if (!unknown.ok) expect(unknown.usernames.join(' ')).toContain('service (Benutzer)');
+    const before = cookieOf(await call('POST', '/auth/login', {}, { username: 'service', password: 'aushilfe-12345' }));
+    const r = await emergencyReset(db, 'SERVICE');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.password.length).toBeGreaterThanOrEqual(12);
+    expect((await call('GET', '/settings/hotel', before)).statusCode).toBe(401);
+    expect((await call('POST', '/auth/login', {}, { username: 'service', password: 'aushilfe-12345' })).statusCode).toBe(401);
+    expect((await call('POST', '/auth/login', {}, { username: 'service', password: r.password })).statusCode).toBe(200);
+  });
+});

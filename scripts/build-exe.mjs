@@ -55,6 +55,8 @@ writeFileSync(join(out, 'Autostart einrichten.bat'), crlf(
   '@echo off\nrem Startet das PMS bei jeder Anmeldung an Windows und sichert taeglich um 02:00 Uhr.\n' +
   'schtasks /Create /F /TN "PMS Start" /SC ONLOGON /TR "\\"%~dp0pms.exe\\" --no-browser"\n' +
   'schtasks /Create /F /TN "PMS Sicherung" /SC DAILY /ST 02:00 /TR "\\"%~dp0pms.exe\\" --backup"\npause\n'));
+writeFileSync(join(out, 'Passwort vergessen.bat'), crlf('@echo off\ncd /d "%~dp0"\necho Setzt fuer einen Benutzer ein neues Zufallspasswort und zeigt es an.\n' +
+  'set /p PMSUSER=Benutzername (leer lassen = einziger Administrator): \npms.exe --reset-password %PMSUSER%\npause\n'));
 writeFileSync(join(out, 'Firewall freigeben.bat'), crlf('@echo off\nrem Erlaubt anderen Geraeten im privaten Netz den Zugriff auf das PMS (Port 3000). Als Administrator ausfuehren.\n' +
   'netsh advfirewall firewall delete rule name="Schuetzenhaus PMS" >nul 2>&1\n' +
   'netsh advfirewall firewall add rule name="Schuetzenhaus PMS" dir=in action=allow protocol=TCP localport=3000 profile=private,domain\n' +
@@ -76,6 +78,8 @@ Sicherung:  Läuft das PMS, sichert es einmal täglich von selbst (Stand: Einste
             Für eine Kopie auf USB-Festplatte oder Netzlaufwerk in pms.env BACKUP_COPY_DIR eintragen.
             Von Hand: "Sicherung.bat" doppelt anklicken. Die Sicherungen liegen im Ordner "backups" – diesen Ordner
             regelmäßig auf einen zweiten Datenträger (USB-Platte, NAS) kopieren.
+Passwort vergessen: "Passwort vergessen.bat" doppelt anklicken – erzeugt ein neues Passwort und zeigt es an.
+            Das geht nur an diesem Rechner; wer Zugang zu diesem Ordner hat, kann sich so Zugang verschaffen.
 Update:     Im PMS unter Verwaltung - Einstellungen - "Programm-Update". Das Programm sichert die Daten, lädt die neue
             Version herunter, tauscht die Programmdateien aus und startet neu. Die bisherigen Programmdateien liegen
             danach im Ordner "update\\previous", das Protokoll in "update\\update.log".

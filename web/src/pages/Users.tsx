@@ -87,7 +87,7 @@ function CreateUser({ onClose, onDone }: { onClose: () => void; onDone: () => vo
 function EditUser({ user, onClose, onDone }: { user: UserDto; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const me = useAuth();
-  const [v, setV] = useState({ name: user.name, role: user.role, active: user.active, modules: user.modules });
+  const [v, setV] = useState({ name: user.name, username: user.username, role: user.role, active: user.active, modules: user.modules });
   const [pw, setPw] = useState('');
   const f = useSubmit(userUpdateInput, async (d) => {
     await api('PATCH', `/users/${user.id}`, d);
@@ -105,7 +105,7 @@ function EditUser({ user, onClose, onDone }: { user: UserDto; onClose: () => voi
       footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={f.busy} onClick={() => void f.submit({ ...v, version: user.version })}>Speichern</Button></>}>
       <form className="formgrid" onSubmit={(e) => void f.submit({ ...v, version: user.version }, e)} noValidate>
         <Field label="Name" error={f.errors.name}><input value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} /></Field>
-        <Field label="Benutzername" hint="Kann nicht geändert werden"><input value={user.username} disabled /></Field>
+        <Field label="Benutzername" error={f.errors.username} hint="Damit meldet sich der Benutzer an. Das Passwort bleibt beim Ändern gleich."><input value={v.username} onChange={(e) => setV({ ...v, username: e.target.value })} autoCapitalize="none" spellCheck={false} /></Field>
         <Field label="Rolle" error={f.errors.role} hint={ROLE_HINT}><RoleSelect value={v.role} onChange={(role) => setV({ ...v, role })} /></Field>
         <ModuleChecks role={v.role} value={v.modules} onChange={(modules) => setV({ ...v, modules })} />
         <label className="check wide">

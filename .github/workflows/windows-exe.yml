@@ -116,6 +116,8 @@ jobs:
           $dump = (Get-ChildItem "$dir\backups\*.dump")[0].FullName
           & "$dir\pms.exe" --restore $dump --ja
           if ($LASTEXITCODE -ne 0) { throw 'Wiederherstellung fehlgeschlagen' }
+          $reset = (& "$dir\pms.exe" --reset-password chef) -join "`n"
+          if ($LASTEXITCODE -ne 0 -or $reset -notmatch 'Benutzername: chef') { throw "Passwort-Zurücksetzung fehlgeschlagen: $($reset -replace 'Passwort:.*', 'Passwort: ...')" }
           Write-Host 'Funktionstest bestanden'
 
       - name: Testdaten entfernen
