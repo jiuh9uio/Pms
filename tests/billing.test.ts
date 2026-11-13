@@ -201,3 +201,38 @@ describe('Firmen', () => {
     expect((await ok('GET', `/bookings/${created.id}`, user)).lodgingCents).toBe(25500);
   });
 });
+
+describe('Datenschutz', () => {
+  it('erteilt Datenauskunft und anonymisiert Gäste samt Protokolleinträgen – Rechnungen bleiben', async () => {
+    const [g] = await ok('GET', '/guests?q=Beispiel', admin);
+    expect((await call('GET', `/guests/${g.id}/export.json`, user)).statusCode).toBe(403);
+    const exp = await ok('GET', `/guests/${g.id}/export.json`, admin);
+    expect(exp.gast.lastName).toBe('Beispiel');
+    expect(exp.rechnungen.length).toBeGreaterThan(0);
+
+    // Gast mit künftiger Buchung kann nicht anonymisiert werden
+    const monteur = (await ok('GET', '/guests?q=Monteur', admin))[0];
+    expect((await call('POST', `/guests/${monteur.id}/anonymize`, admin)).statusCode).toBe(409);
+
+    expect((await call('POST', `/guests/${g.id}/anonymize`, user)).statusCode).toBe(403);
+    // Buchung von Frau Beispiel ist abgeschlossen? Die Testbuchung liegt in der Vergangenheit und ist noch „bestätigt“ → erst abschließen
+    const res = await call('POST', `/guests/${g.id}/anonymize`, admin);
+    if (res.statusCode === 409) {
+      const b = await ok('GET', `/bookings/${bookingId}`, admin);
+      for (const r of b.rooms.filter((x: { status: string }) => ['tentative', 'confirmed', 'checked_in'].includes(x.status)))
+        await ok('POST', `/booking-rooms/${r.id}/status`, admin, { status: 'no_show', version: r.version });
+      await ok('POST', `/guests/${g.id}/anonymize`, admin);
+    }
+    const anon = (await ok('GET', `/guests/${g.id}`, admin)).guest;
+    expect(anon).toMatchObject({ lastName: 'Anonymisiert', firstName: '', city: '', email: '' });
+    const log = (await ok('GET', `/audit?entity=guest&limit=200`, admin)).items.filter((e: { entityId: string }) => e.entityId === g.id);
+    expect(JSON.stringify(log)).not.toMatch(/Erika|Musterstadt|Hauptstr/);
+    expect(log[0].action).toBe('anonymize');
+    // ausgestellte Rechnungen sind unverändert
+    const invs = await ok('GET', `/invoices?q=Beispiel`, admin);
+    expect(invs.some((i: { recipientName: string }) => i.recipientName === 'Frau Erika Beispiel')).toBe(true);
+    // das Protokoll bleibt ansonsten gesperrt
+    expect(await refused(db.execute(sql`update audit_log set before = '{"anonymisiert": true}' where entity = 'guest'`))).toMatch(/nicht geändert/);
+    expect(await refused(db.execute(sql`truncate audit_log`))).toMatch(/nicht geändert/);
+  });
+});

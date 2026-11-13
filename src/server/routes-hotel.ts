@@ -75,6 +75,14 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   api.get('/guests', user, (req) => guests.listGuests(db, z.object({ q: z.string().max(100).default('') }).parse(req.query).q.trim()));
   api.get('/guests/:id', user, async (req) => ({ guest: await guests.getGuest(db, idOf(req)), bookings: await bookings.guestBookings(db, idOf(req)) }));
   api.post('/guests', user, (req) => db.transaction((tx) => guests.createGuest(tx, actor(req), H.guestInput.parse(req.body))));
+  api.get('/guests/:id/export.json', admin, async (req, reply) => {
+    reply.header('Content-Disposition', `attachment; filename="datenauskunft-${idOf(req).slice(0, 8)}.json"`);
+    return guests.exportGuest(db, idOf(req));
+  });
+  api.post('/guests/:id/anonymize', admin, async (req) => {
+    await guests.anonymizeGuest(db, actor(req), idOf(req));
+    return { ok: true };
+  });
   api.put('/guests/:id', user, (req) => guests.updateGuest(db, actor(req), idOf(req), H.guestInput.parse(req.body), versionOf(req)));
 
   // ---------- Firmen ----------

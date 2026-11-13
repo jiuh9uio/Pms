@@ -71,6 +71,13 @@
       "when": 1794537159875,
       "tag": "0009_firmen",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794537403656,
+      "tag": "0010_datenschutz",
+      "breakpoints": true
     }
   ]
 }

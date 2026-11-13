@@ -1,8 +1,8 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { GuestDto, GuestInput } from '../../shared/hotel.js';
 import type { Db, Exec } from '../db/client.js';
-import { guests } from '../db/schema.js';
-import { notFound, stale } from '../lib/errors.js';
+import { auditLog, bookingRooms, bookings as bookingsTable, guests, invoices } from '../db/schema.js';
+import { conflict, notFound, stale } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 
 type Row = typeof guests.$inferSelect;
@@ -53,5 +53,46 @@ export async function updateGuest(db: Db, actor: Actor, id: string, v: GuestInpu
     const [g] = await tx.update(guests).set({ ...v, version: before.version + 1, updatedAt: new Date() }).where(eq(guests.id, id)).returning();
     await record(tx, actor, { action: 'update', entity: 'guest', entityId: id, before: toGuestDto(before), after: toGuestDto(g!) });
     return toGuestDto(g!);
+  });
+}
+
+// ---------- Datenschutz ----------
+
+/** Datenauskunft (Art. 15 DSGVO): alle gespeicherten Angaben zum Gast, seine Reservierungen und Rechnungen. */
+export async function exportGuest(db: Exec, id: string) {
+  const guest = await getGuest(db, id);
+  const stays = await db.execute(sql`
+    select b.number, lower(a.period)::text as "from", upper(a.period)::text as "to", br.status, r.number as room
+    from bookings b join booking_rooms br on br.booking_id = b.id join room_allocations a on a.id = br.allocation_id join rooms r on r.id = a.room_id
+    where b.guest_id = ${id} order by lower(a.period)`);
+  const inv = await db.select({ number: invoices.number, issueDate: invoices.issueDate, grossCents: invoices.grossCents, recipientName: invoices.recipientName, recipientCompany: invoices.recipientCompany })
+    .from(invoices).innerJoin(bookingsTable, eq(bookingsTable.id, invoices.bookingId)).where(and(eq(bookingsTable.guestId, id), sql`${invoices.status} <> 'draft'`));
+  return { erstellt: new Date().toISOString(), gast: guest, aufenthalte: Array.from(stays), rechnungen: inv };
+}
+
+/**
+ * Anonymisieren: Personenbezogene Angaben werden entfernt, Reservierungen bleiben als statistische Daten erhalten.
+ * Ausgestellte Rechnungen bleiben unverändert – sie unterliegen der gesetzlichen Aufbewahrung.
+ * Nicht möglich, solange der Gast eine laufende oder künftige Reservierung hat.
+ */
+export async function anonymizeGuest(db: Db, actor: Actor, id: string) {
+  await db.transaction(async (tx) => {
+    const [g] = await tx.select().from(guests).where(eq(guests.id, id)).for('update');
+    if (!g) throw notFound('Gast');
+    const [open] = await tx.select({ id: bookingRooms.id }).from(bookingRooms).innerJoin(bookingsTable, eq(bookingsTable.id, bookingRooms.bookingId))
+      .where(and(eq(bookingsTable.guestId, id), inArray(bookingRooms.status, ['tentative', 'confirmed', 'checked_in'])));
+    if (open) throw conflict('Der Gast hat noch eine offene, laufende oder künftige Reservierung. Bitte erst abschließen oder stornieren.');
+    await tx.update(guests).set({
+      salutation: '', firstName: '', lastName: 'Anonymisiert', company: '', email: '', phone: '', street: '', zip: '', city: '', country: '',
+      birthdate: null, nationality: '', idNumber: '', notes: '', version: g.version + 1, updatedAt: new Date(),
+    }).where(eq(guests.id, id));
+    // Personenbezogene Inhalte in den Protokolleinträgen dieses Gastes ersetzen (vom Trigger nur so erlaubt)
+    await tx.execute(sql`select set_config('pms.audit_scrub', ${id}, true)`);
+    await tx.update(auditLog).set({
+      before: sql`case when ${auditLog.before} is null then null else '{"anonymisiert": true}'::jsonb end`,
+      after: sql`case when ${auditLog.after} is null then null else '{"anonymisiert": true}'::jsonb end`,
+    }).where(and(eq(auditLog.entity, 'guest'), eq(auditLog.entityId, id)));
+    await tx.execute(sql`select set_config('pms.audit_scrub', '', true)`);
+    await record(tx, actor, { action: 'anonymize', entity: 'guest', entityId: id });
   });
 }

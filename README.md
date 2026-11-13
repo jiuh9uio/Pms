@@ -52,6 +52,16 @@ Der frühere Prototyp liegt unverändert unter `prototype/`.
 - Bei einer **Firmenbuchung** gilt je Nacht der vereinbarte Preis (statt Saison-/Wochenendregeln), die Rechnung geht an die Firma
   („z. Hd.“ Ansprechpartner) mit deren Zahlungsziel. Spätere Preisänderungen bei der Firma wirken nicht auf gebuchte Nächte.
 
+### Datenschutz
+
+- **Datenauskunft** (Administrator, Gästeprofil): lädt alle gespeicherten Angaben zum Gast, seine Aufenthalte und Rechnungen als JSON-Datei.
+- **Anonymisieren** (Administrator): entfernt Name, Kontakt-, Adress- und Ausweisdaten sowie Bemerkungen. Reservierungen bleiben ohne Namen
+  für die Statistik erhalten. Personenbezogene Inhalte in den Protokolleinträgen des Gastes werden ersetzt – das ist die einzige Änderung,
+  die die Datenbank am Protokoll zulässt. Ausgestellte Rechnungen und erfasste Zahlungen bleiben wegen der gesetzlichen Aufbewahrung unverändert.
+  Nicht möglich, solange eine offene, laufende oder künftige Reservierung besteht.
+- **Nicht enthalten:** automatische Löschfristen. Wann Gästedaten zu löschen sind (z. B. Meldedaten, Werbe-Einwilligungen), legt der Betrieb
+  in seinem Löschkonzept fest; die Anonymisierung erfolgt derzeit von Hand.
+
 ### Kontrollen und Temperaturprotokoll
 
 - Nach der Anmeldung erscheint ein **Startmenü** mit den Bereichen, die das Konto öffnen darf.
