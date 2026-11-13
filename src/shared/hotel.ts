@@ -121,7 +121,7 @@ export const chargeInput = z.object({
 
 // ---------- Antworttypen ----------
 export interface CategoryDto { id: string; name: string; description: string; stdOccupancy: number; maxPersons: number; basePriceCents: number; sort: number; version: number }
-export interface RoomDto { id: string; number: string; categoryId: string; categoryName: string; floor: string; note: string; active: boolean; priceOverrideCents: number | null; priceCents: number; version: number }
+export interface RoomDto { id: string; number: string; categoryId: string; categoryName: string; floor: string; note: string; active: boolean; priceOverrideCents: number | null; priceCents: number; housekeeping: 'clean' | 'dirty'; version: number }
 export interface FreeRoomDto extends RoomDto { quoteCents: number }
 export interface RateRuleDto { id: string; name: string; startDate: string; endDate: string; weekdays: number[]; categoryId: string | null; mode: 'percent' | 'amount' | 'fixed'; value: number; priority: number; active: boolean; version: number }
 export interface ServiceDto { id: string; name: string; priceCents: number; per: ServicePer; taxRateId: string; taxRatePercent: number; isBreakfast: boolean; active: boolean; version: number }
@@ -146,11 +146,13 @@ export interface CalendarEntry {
   blockId?: string; reason?: string;
 }
 export interface CalendarDto { from: string; days: number; rooms: RoomDto[]; entries: CalendarEntry[] }
-export interface TaskDto { kind: 'arrival' | 'departure' | 'overdue_arrival' | 'overdue_departure' | 'tentative'; text: string; bookingId: string; bookingRoomId: string }
+export interface TaskDto { kind: 'arrival' | 'departure' | 'overdue_arrival' | 'overdue_departure' | 'tentative' | 'cleaning'; text: string; bookingId: string; bookingRoomId: string }
+export interface HousekeepingRow { roomId: string; number: string; categoryName: string; arrivalToday: string | null; occupied: boolean }
 export interface DashboardDto {
   today: string; rooms: { total: number; occupied: number; free: number; blocked: number; occupancyPercent: number };
   arrivals: BookingListRow[]; departures: BookingListRow[]; inHouse: number;
   revenueTodayCents: number; revenueMonthCents: number; tasks: TaskDto[];
+  dirty: HousekeepingRow[];
 }
 
 // ---------- Firmen ----------

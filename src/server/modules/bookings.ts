@@ -298,6 +298,8 @@ export async function setRoomStatus(db: Db, actor: Actor, id: string, v: { statu
     if (v.status === 'confirmed' && br.status === 'checked_in') set.checkedInAt = null;
     if (v.status === 'checked_out') {
       set.checkedOutAt = new Date();
+      // Nach der Abreise ist das Zimmer zu reinigen
+      await tx.update(rooms).set({ housekeeping: 'dirty', updatedAt: new Date() }).where(eq(rooms.id, alloc.roomId));
       // Vorzeitige Abreise: Zeitraum endet heute, das Zimmer ist ab heute wieder frei, spätere Nächte entfallen.
       const end = today < alloc.from ? addDays(alloc.from, 1) : today === alloc.from ? addDays(today, 1) : today;
       if (end < alloc.to) {
@@ -383,10 +385,21 @@ export async function dashboard(db: Exec): Promise<DashboardDto> {
   const booked = x.booked_tonight as number;
   const de = (s: string) => `${s.slice(8)}.${s.slice(5, 7)}.`;
   const task = (kind: TaskDto['kind'], r: BookingListRow, text: string): TaskDto => ({ kind, text, bookingId: r.bookingId, bookingRoomId: r.id });
+  const dirtyRows = await db.execute(sql`
+    select r.id, r.number, c.name as category_name,
+      (select trim(g.first_name || ' ' || g.last_name) from room_allocations a join booking_rooms br on br.allocation_id = a.id join bookings b on b.id = br.booking_id
+        join guests g on g.id = b.guest_id where a.room_id = r.id and a.active and lower(a.period) = ${today}::date and br.status in ('confirmed','tentative') limit 1) as arrival,
+      exists(select 1 from room_allocations a join booking_rooms br on br.allocation_id = a.id where a.room_id = r.id and a.active and br.status = 'checked_in') as occupied
+    from rooms r join room_categories c on c.id = r.category_id where r.active and r.housekeeping = 'dirty'`);
+  const dirty = Array.from(dirtyRows).map((x) => {
+    const y = x as Raw;
+    return { roomId: y.id as string, number: y.number as string, categoryName: y.category_name as string, arrivalToday: (y.arrival as string) ?? null, occupied: y.occupied as boolean };
+  }).sort((a, b) => Number(!!b.arrivalToday) - Number(!!a.arrivalToday) || a.number.localeCompare(b.number, 'de', { numeric: true }));
   const tasks: TaskDto[] = [
     ...overdueDep.map((r) => task('overdue_departure', r, `Abreise überfällig: ${r.guestName}, Zimmer ${r.roomNumber} (geplant ${de(r.to)})`)),
     ...overdueArr.map((r) => task('overdue_arrival', r, `Nicht angereist seit ${de(r.from)}: ${r.guestName}, Zimmer ${r.roomNumber} – einchecken oder als nicht angereist markieren`)),
     ...departures.map((r) => task('departure', r, `Check-out: ${r.guestName}, Zimmer ${r.roomNumber}`)),
+    ...dirty.filter((d) => d.arrivalToday).map((d): TaskDto => ({ kind: 'cleaning', text: `Zimmer ${d.number} reinigen – heute Anreise ${d.arrivalToday}`, bookingId: '', bookingRoomId: d.roomId })),
     ...arrivals.map((r) => task('arrival', r, `Check-in: ${r.guestName}, Zimmer ${r.roomNumber}${r.status === 'tentative' ? ' (noch vorläufig)' : ''}`)),
     ...tentative.map((r) => task('tentative', r, `Vorläufige Reservierung bestätigen: ${r.guestName}, Anreise ${de(r.from)}`)),
   ];
@@ -394,6 +407,6 @@ export async function dashboard(db: Exec): Promise<DashboardDto> {
     today,
     rooms: { total, occupied: x.in_house as number, blocked, free: Math.max(0, total - blocked - booked), occupancyPercent: total ? Math.round((booked / total) * 100) : 0 },
     arrivals, departures, inHouse: x.in_house as number,
-    revenueTodayCents: x.rev_today as number, revenueMonthCents: x.rev_month as number, tasks,
+    revenueTodayCents: x.rev_today as number, revenueMonthCents: x.rev_month as number, tasks, dirty,
   };
 }

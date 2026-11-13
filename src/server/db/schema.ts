@@ -96,6 +96,8 @@ export const rooms = pgTable('rooms', {
   floor: text('floor').notNull().default(''),
   /** Abweichender Preis nur für dieses Zimmer; leer = Preis der Kategorie */
   priceOverrideCents: integer('price_override_cents'),
+  /** Housekeeping: sauber oder zu reinigen */
+  housekeeping: text('housekeeping', { enum: ['clean', 'dirty'] }).notNull().default('clean'),
   active: boolean('active').notNull().default(true),
   note: text('note').notNull().default(''),
   ...stamps,

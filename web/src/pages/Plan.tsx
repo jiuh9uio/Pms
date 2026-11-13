@@ -133,7 +133,7 @@ export function Plan() {
           </div>
           {data.rooms.map((room) => (
             <div key={room.id} className="prow" style={{ gridTemplateColumns: cols, height: ROW_H }}>
-              <div className="plabel"><b>{room.number}</b><small>{room.categoryName}</small></div>
+              <div className={`plabel${room.housekeeping === 'dirty' ? ' dirty' : ''}`} title={room.housekeeping === 'dirty' ? 'Zu reinigen' : undefined}><b>{room.number}{room.housekeeping === 'dirty' && <span className="hk" aria-label="zu reinigen"> ●</span>}</b><small>{room.categoryName}</small></div>
               {days.map((d, i) => (
                 <button key={d} type="button" className={`pcell${dayCls(d)}`} style={{ gridColumn: `${2 + i * 2} / span 2` }}
                   aria-label={`Zimmer ${room.number}, ${deDate(d)}: neue Reservierung`} onClick={() => newBooking({ roomId: room.id, from: d })} />

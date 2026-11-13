@@ -1,0 +1,1 @@
+ALTER TABLE "rooms" ADD COLUMN "housekeeping" text DEFAULT 'clean' NOT NULL;

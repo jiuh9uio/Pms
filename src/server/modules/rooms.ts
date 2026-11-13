@@ -44,7 +44,7 @@ export async function listRooms(db: Exec, onlyActive = false): Promise<RoomDto[]
     .where(onlyActive ? eq(rooms.active, true) : undefined);
   return rows
     .map(({ r, categoryName, base }) => ({
-      id: r.id, number: r.number, categoryId: r.categoryId, categoryName, floor: r.floor, note: r.note, active: r.active,
+      id: r.id, number: r.number, categoryId: r.categoryId, categoryName, floor: r.floor, note: r.note, active: r.active, housekeeping: r.housekeeping,
       priceOverrideCents: r.priceOverrideCents, priceCents: r.priceOverrideCents ?? base, version: r.version,
     }))
     .sort((a, b) => a.number.localeCompare(b.number, 'de', { numeric: true }));
@@ -172,3 +172,12 @@ export async function removeBlock(db: Db, actor: Actor, id: string) {
 }
 
 export { period };
+
+/** Housekeeping-Status setzen (sauber / zu reinigen). */
+export async function setHousekeeping(db: Db, actor: Actor, id: string, status: 'clean' | 'dirty') {
+  await db.transaction(async (tx) => {
+    const [r] = await tx.update(rooms).set({ housekeeping: status, updatedAt: new Date() }).where(eq(rooms.id, id)).returning({ number: rooms.number });
+    if (!r) throw notFound('Zimmer');
+    await record(tx, actor, { action: status === 'clean' ? 'cleaned' : 'dirty', entity: 'room', entityId: id, after: { room: r.number, housekeeping: status } });
+  });
+}

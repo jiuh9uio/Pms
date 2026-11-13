@@ -319,3 +319,6 @@ ul.payments li.struck b, ul.payments li.struck > span { text-decoration: line-th
 .invoice tfoot .total td { color: #111; }
 a.btn { display: inline-flex; align-items: center; color: var(--ink); } a.btn:hover { text-decoration: none; }
 a.btn.primary { color: var(--accent-ink); }
+
+/* Housekeeping */
+.plabel .hk { color: var(--st-tentative); font-size: 11px; } .plabel.dirty { box-shadow: inset 3px 0 0 var(--st-tentative); }

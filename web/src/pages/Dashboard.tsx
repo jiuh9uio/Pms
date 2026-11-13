@@ -7,7 +7,7 @@ import { useData } from '../data.tsx';
 import { Button, LoadState, PageHeader, useLoad, useToast } from '../ui.tsx';
 import { BookingTable } from './Reservations.tsx';
 
-const TASK_TONE: Record<string, string> = { overdue_arrival: 'warn', overdue_departure: 'warn', arrival: 'in', departure: 'out', tentative: 'info' };
+const TASK_TONE: Record<string, string> = { cleaning: 'warn',  overdue_arrival: 'warn', overdue_departure: 'warn', arrival: 'in', departure: 'out', tentative: 'info' };
 
 export function Dashboard() {
   const { user } = useAuth();
@@ -23,6 +23,12 @@ export function Dashboard() {
   }, [reload]);
 
   const today = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const clean = async (roomId: string) => {
+    setBusy(roomId);
+    try { await api('POST', `/rooms/${roomId}/housekeeping`, { status: 'clean' }); toast('Zimmer als sauber gemeldet'); bump(); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+    setBusy(null);
+  };
   const checkout = async (r: BookingListRow) => {
     setBusy(r.id);
     try {
@@ -60,12 +66,28 @@ export function Dashboard() {
               <ul className="tasks">
                 {data.tasks.map((t) => (
                   <li key={t.kind + t.bookingRoomId} className={`task ${TASK_TONE[t.kind]}`}>
-                    <button type="button" onClick={() => openBooking(t.bookingId)}>{t.text}</button>
+                    {t.kind === 'cleaning'
+                      ? <button type="button" onClick={() => void clean(t.bookingRoomId)}>{t.text} – <u>als sauber melden</u></button>
+                      : <button type="button" onClick={() => openBooking(t.bookingId)}>{t.text}</button>}
                   </li>
                 ))}
               </ul>
             )}
           </section>
+          {data.dirty.length > 0 && (
+            <section className="card">
+              <h2>Zu reinigen ({data.dirty.length})</h2>
+              <ul className="plain">
+                {data.dirty.map((d) => (
+                  <li key={d.roomId}>
+                    <span><b>Zimmer {d.number}</b> <small className="inl">{d.categoryName}</small><br />
+                      <small>{d.arrivalToday ? `heute Anreise: ${d.arrivalToday}` : d.occupied ? 'Gast im Haus' : 'frei'}</small></span>
+                    <Button variant={d.arrivalToday ? 'primary' : 'default'} busy={busy === d.roomId} onClick={() => void clean(d.roomId)}>Sauber</Button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           <div className="cards two">
             <section className="card flush">
               <h2 className="pad">Anreisen heute</h2>

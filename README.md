@@ -52,6 +52,11 @@ Der frühere Prototyp liegt unverändert unter `prototype/`.
 - Bei einer **Firmenbuchung** gilt je Nacht der vereinbarte Preis (statt Saison-/Wochenendregeln), die Rechnung geht an die Firma
   („z. Hd.“ Ansprechpartner) mit deren Zahlungsziel. Spätere Preisänderungen bei der Firma wirken nicht auf gebuchte Nächte.
 
+### Housekeeping
+
+- Beim Check-out wird das Zimmer automatisch „zu reinigen“. Die Übersicht listet diese Zimmer – solche mit heutiger Anreise zuerst und
+  zusätzlich als Aufgabe –, ein Tipp auf „Sauber“ meldet das Zimmer fertig. Im Belegungsplan sind sie mit ● markiert.
+
 ### Datenschutz
 
 - **Datenauskunft** (Administrator, Gästeprofil): lädt alle gespeicherten Angaben zum Gast, seine Aufenthalte und Rechnungen als JSON-Datei.

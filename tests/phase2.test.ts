@@ -199,6 +199,14 @@ describe('Check-in, Check-out und Übersicht', () => {
     expect(x.rooms[0]!.nightly).toHaveLength(1);
     await ok('POST', '/bookings', user, booking([room(r1, today, addDays(today, 1))]));
     expect((await ok('GET', '/dashboard', user)).arrivals).toHaveLength(1);
+    // Housekeeping: Zimmer nach Abreise zu reinigen, mit heutiger Anreise als Aufgabe oben
+    let hk = await ok('GET', '/dashboard', user);
+    expect(hk.dirty).toEqual([expect.objectContaining({ number: '1', occupied: false, arrivalToday: expect.stringContaining('Beispiel') })]);
+    expect(hk.tasks.find((t: { kind: string }) => t.kind === 'cleaning').text).toContain('Zimmer 1 reinigen');
+    await ok('POST', `/rooms/${r1}/housekeeping`, user, { status: 'clean' });
+    hk = await ok('GET', '/dashboard', user);
+    expect(hk.dirty).toEqual([]);
+    expect((await call('POST', `/rooms/${r1}/housekeeping`, user, { status: 'kaputt' })).statusCode).toBe(400);
     // abgeschlossene Zimmerbuchung kann nicht mehr verschoben werden
     expect((await call('PATCH', `/booking-rooms/${x.rooms[0]!.id}`, user, { to: addDays(today, 2), version: x.rooms[0]!.version })).statusCode).toBe(409);
 

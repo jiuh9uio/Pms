@@ -34,6 +34,11 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   api.post('/rooms', admin, (req) => rooms.saveRoom(db, actor(req), null, H.roomInput.parse(req.body)));
   api.put('/rooms/:id', admin, (req) => rooms.saveRoom(db, actor(req), idOf(req), H.roomInput.parse(req.body), versionOf(req)));
 
+  api.post('/rooms/:id/housekeeping', user, async (req) => {
+    await rooms.setHousekeeping(db, actor(req), idOf(req), z.object({ status: z.enum(['clean', 'dirty']) }).parse(req.body).status);
+    return { ok: true };
+  });
+
   api.get('/rate-rules', user, () => rooms.listRateRules(db));
   api.post('/rate-rules', admin, (req) => rooms.saveRateRule(db, actor(req), null, H.rateRuleInput.parse(req.body)));
   api.put('/rate-rules/:id', admin, (req) => rooms.saveRateRule(db, actor(req), idOf(req), H.rateRuleInput.parse(req.body), versionOf(req)));
