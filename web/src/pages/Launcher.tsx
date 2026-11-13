@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ROLE_LABEL, hasModule, type Module, type OverviewItem } from '../../../src/shared/schemas.js';
 import { useAuth, useLogout } from '../App.tsx';
@@ -27,7 +28,10 @@ export function Launcher() {
   const upd = useLoad(() => (user.role === 'admin' ? api<UpdateStatus>('GET', '/update/status') : Promise.resolve(null))).data;
   const bak = useLoad(() => (user.role === 'admin' ? api<BackupStatus>('GET', '/backup/status') : Promise.resolve(null))).data;
   const bakWarn = bak ? backupWarning(bak) : null;
-  const today = useLoad(() => api<OverviewItem[]>('GET', '/overview')).data;
+  // „Heute im Haus“ ist von Haus aus ausgeblendet; die Wahl merkt sich dieser Browser
+  const [showToday, setShowToday] = useState(() => { try { return localStorage.getItem('pms.heute') === 'an'; } catch { return false; } });
+  const toggleToday = () => { const next = !showToday; setShowToday(next); try { localStorage.setItem('pms.heute', next ? 'an' : 'aus'); } catch { /* ohne Speicher gilt die Wahl bis zum Neuladen */ } };
+  const today = useLoad(() => (showToday ? api<OverviewItem[]>('GET', '/overview') : Promise.resolve(null)), [showToday]).data;
   const tiles = TILES.filter((t) => (!t.admin || user.role === 'admin') && (!t.module || hasModule(user, t.module)));
   return (
     <div className="launcher">
@@ -38,7 +42,8 @@ export function Launcher() {
       <Search variant="big" />
       {upd?.available && <p className="notice warn">Programm-Update verfügbar: Version {upd.latest}. <Link to="/einstellungen?ansicht=update">Jetzt ansehen und einspielen</Link></p>}
       {bakWarn && <p className="notice danger">{bakWarn} <Link to="/einstellungen?ansicht=sicherung">Zur Datensicherung</Link></p>}
-      {today && today.length > 0 && (
+      <p className="todaytoggle"><button type="button" className="linkbtn" aria-expanded={showToday} onClick={toggleToday}>{showToday ? 'Heute im Haus ausblenden' : 'Heute im Haus anzeigen'}</button></p>
+      {showToday && today && today.length > 0 && (
         <section className="todaystrip" aria-label="Heute im Haus">
           {today.map((t) => (
             <Link key={t.key} to={t.to} className={`todayitem ${t.tone}`}><span>{t.label}</span><b>{t.value}</b><small>{t.sub}</small></Link>

@@ -402,3 +402,4 @@ tr.faded td { opacity: .55; } .rowactions { text-align: right; white-space: nowr
 /* Was ist neu */
 .changelog { border-top: 1px solid var(--line); padding: 8px 0; } .changelog:first-of-type { border-top: 0; }
 .changelog summary { cursor: pointer; font-weight: 600; padding: 4px 0; } .changelog ul { margin: 6px 0 4px; padding-left: 20px; color: var(--ink-2); } .changelog li { margin: 4px 0; } .changelog li.plain { list-style: none; margin-left: -20px; color: var(--ink); }
+.todaytoggle { margin: -8px 0 12px; text-align: right; font-size: 13px; } @media print { .todaytoggle { display: none !important; } }
