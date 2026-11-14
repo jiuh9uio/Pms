@@ -21,6 +21,15 @@ export function registerEInvoiceRoutes(api: FastifyInstance, { db, requireUser, 
 
   api.get('/einvoices', user, () => einv.listEInvoices(db));
   api.get('/einvoices/defaults', user, () => einv.defaults(db));
+  // Archiv: suchen, filtern, als Liste (CSV) oder als Paket (ZIP mit PDF und XML) herunterladen
+  api.get('/einvoices/archive', user, (req) => einv.archive(db, E.einvoiceArchiveQuery.parse(req.query)));
+  api.get('/einvoices/archive.csv', user, async (req, reply) =>
+    reply.header('Content-Type', 'text/csv; charset=utf-8').header('Content-Disposition', 'attachment; filename="E-Rechnungen.csv"').send(await einv.archiveCsv(db, E.einvoiceArchiveQuery.parse(req.query))));
+  api.get('/einvoices/archive.zip', user, async (req, reply) => {
+    const q = E.einvoiceArchiveQuery.parse(req.query);
+    const zip = await einv.archiveZip(db, actor(req), q);
+    return reply.header('Content-Type', 'application/zip').header('Content-Disposition', `attachment; filename="E-Rechnungen${q.year ? `_${q.year}${q.month ? `-${String(q.month).padStart(2, '0')}` : ''}` : ''}.zip"`).send(zip);
+  });
   api.post('/einvoices/from-invoice/:id', user, (req) => einv.fromInvoice(db, actor(req), idOf(req)));
   // PDF-Datei kommt Base64-kodiert im JSON – daher eine höhere Größengrenze nur für diese Adresse
   api.post('/einvoices/extract', { ...user, bodyLimit: 15 * 1024 * 1024 }, (req) => einv.extractFromPdf(db, E.einvoiceExtractInput.parse(req.body).pdfBase64));

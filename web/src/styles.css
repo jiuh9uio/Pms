@@ -460,3 +460,6 @@ a.btn { display: inline-flex; align-items: center; padding: 8px 14px; border: 1p
 ul.plain { list-style: none; padding: 0; margin: 0 0 10px; } ul.plain li { padding: 6px 0; border-bottom: 1px solid var(--line); }
 
 a.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+/* E-Rechnungs-Archiv */
+.archivefilter { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; } .archivefilter input { flex: 1 1 240px; } .archivefilter select { width: auto; flex: 0 1 auto; }

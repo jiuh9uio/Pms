@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  COUNTRIES, PAYMENT_MEANS, computeEInvoice, einvoiceSendInput, einvoiceUploadInput, type EInvoiceExtract, type EInvoiceRow,
+  COUNTRIES, PAYMENT_MEANS, computeEInvoice, einvoiceSendInput, einvoiceUploadInput, type EInvoiceArchive, type EInvoiceExtract, type EInvoiceRow,
 } from '../../../src/shared/einvoice.js';
 import { addDays, formatMoney, parseMoney, todayBerlin } from '../../../src/shared/hotel.js';
 import type { TaxRateDto } from '../../../src/shared/schemas.js';
@@ -9,7 +9,7 @@ import { ApiFailure, api } from '../api.ts';
 import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
-import { Badge, Button, Dialog, Field, LoadState, PageHeader, fmtDateTime, useLoad, useSubmit, useToast } from '../ui.tsx';
+import { Badge, Button, Dialog, Field, LoadState, PageHeader, fmtDateTime, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
 
 interface Defaults { seller: { name: string; street: string; zip: string; city: string; country: string; vatId: string; taxNumber: string; email: string; phone: string; contactName: string }; iban: string; bic: string; paymentTermDays: number }
 
@@ -22,6 +22,7 @@ export function EInvoice() {
   const mail = useLoad(() => api<{ ready: boolean; from: string }>('GET', '/mail/status'), [rev]);
   const [upload, setUpload] = useState(false);
   const [send, setSend] = useState<EInvoiceRow | null>(null);
+  const { current, bar } = useTabs(EINVOICE_TABS);
   const remove = async (r: EInvoiceRow) => {
     if (!window.confirm(`E-Rechnung ${r.number} löschen?`)) return;
     try { await api('POST', `/einvoices/${r.id}/remove`); bump(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
@@ -33,8 +34,10 @@ export function EInvoice() {
       {mail.data && !mail.data.ready && (
         <p className="notice warn">Der E-Mail-Versand ist noch nicht eingerichtet. {user.role === 'admin' ? <Link to="/einstellungen?ansicht=email">Jetzt in den Einstellungen eintragen</Link> : 'Bitte den Administrator ansprechen.'} Herunterladen geht auch ohne.</p>
       )}
-      <LoadState error={error} loading={!data} />
-      {data && (data.length === 0 ? (
+      {bar}
+      {current === 'archiv' && <Archive onSend={setSend} />}
+      {current === 'aktuell' && <LoadState error={error} loading={!data} />}
+      {current === 'aktuell' && data && (data.length === 0 ? (
         <section className="card">
           <h2>So funktioniert es</h2>
           <ol className="steps">
@@ -72,6 +75,59 @@ export function EInvoice() {
       </section>
       {upload && <UploadDialog onClose={() => setUpload(false)} />}
       {send && <SendDialog row={send} ready={!!mail.data?.ready} from={mail.data?.from ?? ''} onClose={() => setSend(null)} />}
+    </>
+  );
+}
+
+export const EINVOICE_TABS = [['aktuell', 'Aktuell'], ['archiv', 'Archiv']] as const;
+const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+
+/** Archiv aller erzeugten E-Rechnungen: suchen, filtern, einzeln oder als Paket herunterladen. */
+function Archive({ onSend }: { onSend: (r: EInvoiceRow) => void }) {
+  const { rev } = useData();
+  const [f, setF] = useState({ q: '', year: '', month: '', sent: 'all', source: 'all' });
+  const query = new URLSearchParams(Object.entries({ q: f.q.trim(), year: f.year, month: f.year ? f.month : '', sent: f.sent, source: f.source }).filter(([, v]) => v !== '' && v !== 'all')).toString();
+  const { data, error } = useLoad(() => api<EInvoiceArchive>('GET', `/einvoices/archive${query ? `?${query}` : ''}`), [query, rev]);
+  const tooMany = (data?.total.count ?? 0) > 300;
+  return (
+    <>
+      <div className="archivefilter">
+        <input type="search" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} placeholder="Nummer, Empfänger, Datei, E-Mail-Adresse" aria-label="Suchen" />
+        <select value={f.year} onChange={(e) => setF({ ...f, year: e.target.value, month: e.target.value ? f.month : '' })} aria-label="Jahr"><option value="">alle Jahre</option>{data?.years.map((y) => <option key={y} value={y}>{y}</option>)}</select>
+        <select value={f.month} disabled={!f.year} onChange={(e) => setF({ ...f, month: e.target.value })} aria-label="Monat"><option value="">alle Monate</option>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select>
+        <select value={f.sent} onChange={(e) => setF({ ...f, sent: e.target.value })} aria-label="Versand"><option value="all">versendet und nicht versendet</option><option value="yes">nur versendete</option><option value="no">nur nicht versendete</option></select>
+        <select value={f.source} onChange={(e) => setF({ ...f, source: e.target.value })} aria-label="Herkunft"><option value="all">jede Herkunft</option><option value="invoice">aus dem PMS</option><option value="upload">hochgeladen</option></select>
+      </div>
+      <LoadState error={error} loading={!data} />
+      {data && (
+        <>
+          <div className="kpis">
+            <div className="card kpicard"><span>E-Rechnungen</span><b>{data.total.count}</b><small>{data.total.sent} versendet</small></div>
+            <div className="card kpicard"><span>Summe brutto</span><b>{formatMoney(data.total.grossCents)}</b><small>der Auswahl</small></div>
+          </div>
+          <div className="formactions">
+            <a className="btn" href={`/api/v1/einvoices/archive.csv${query ? `?${query}` : ''}`}>Liste herunterladen (CSV)</a>
+            {data.total.count > 0 && !tooMany && <a className="btn" href={`/api/v1/einvoices/archive.zip${query ? `?${query}` : ''}`}>Alle als Paket herunterladen (ZIP)</a>}
+            {tooMany && <span className="muted small">Für ein Paket bitte auf höchstens 300 E-Rechnungen eingrenzen (z. B. ein Jahr oder einen Monat).</span>}
+          </div>
+          {data.rows.length === 0 ? <p className="card muted">Keine E-Rechnung in dieser Auswahl.</p> : (
+            <div className="tablewrap card flush"><table>
+              <thead><tr><th>Nummer</th><th>Datum</th><th>Empfänger</th><th className="num">Betrag</th><th className="hide-sm">Herkunft</th><th>Versand</th><th /></tr></thead>
+              <tbody>{data.rows.map((r) => (
+                <tr key={r.id}>
+                  <td className="strong nowrap">{r.number}</td><td className="nowrap">{deDate(r.issueDate)}</td><td>{r.buyerName}</td><td className="num">{formatMoney(r.grossCents)}</td>
+                  <td className="hide-sm">{r.source === 'invoice' ? <Badge tone="accent">aus dem PMS</Badge> : <><Badge>hochgeladen</Badge><br /><small>{r.originalName}</small></>}</td>
+                  <td>{r.sentAt ? <><Badge tone="ok">versendet</Badge><br /><small>{fmtDateTime(r.sentAt)} an {r.sentTo}</small></> : <span className="muted">noch nicht</span>}</td>
+                  <td className="num nowrap rowactions"><a className="btn" href={`/api/v1/einvoices/${r.id}/pdf`}>PDF</a><a className="btn" href={`/api/v1/einvoices/${r.id}/xml`}>XML</a><Button onClick={() => onSend(r)}>{r.sentAt ? 'Erneut senden' : 'Senden'}</Button></td>
+                </tr>
+              ))}</tbody>
+            </table></div>
+          )}
+          {data.truncated && <p className="muted small">Gezeigt werden die ersten 1000 Einträge – bitte die Auswahl eingrenzen.</p>}
+          <p className="muted small">Das Archiv enthält jede erzeugte E-Rechnung so, wie sie erstellt wurde: die PDF mit eingebetteter XML und die XML einzeln. Gefiltert wird nach dem Rechnungsdatum. Versendete E-Rechnungen lassen sich nicht löschen.
+            Das Paket enthält alle Dateien der Auswahl und die Liste dazu – zum Beispiel für die Steuerberatung. Ob dieses Archiv Ihre Aufbewahrungspflichten erfüllt (unveränderbar, vollständig, mit Verfahrensdokumentation), ist nicht geprüft; die Datensicherung des Programms gehört in jedem Fall dazu.</p>
+        </>
+      )}
     </>
   );
 }

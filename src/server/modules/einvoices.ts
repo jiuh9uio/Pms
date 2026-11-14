@@ -1,11 +1,12 @@
-import { desc, eq } from 'drizzle-orm';
-import { computeEInvoice, countryCode, type EInvoiceData, type EInvoiceExtract, type EInvoiceRow } from '../../shared/einvoice.js';
+import { and, desc, eq, ilike, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { computeEInvoice, countryCode, type EInvoiceArchive, type EInvoiceArchiveQuery, type EInvoiceData, type EInvoiceExtract, type EInvoiceRow } from '../../shared/einvoice.js';
 import { extractInvoice } from '../../shared/invoiceextract.js';
 import type { Db, Exec } from '../db/client.js';
 import { einvoices } from '../db/schema.js';
 import { embedXml, loadPdf } from '../einvoice/pdf.js';
 import { buildXml } from '../einvoice/xml.js';
 import { AppError, conflict, notFound } from '../lib/errors.js';
+import { zipStore } from '../lib/zip.js';
 import { record, type Actor } from './audit.js';
 import { getInvoice, invoicePdf } from './billing.js';
 import { sendMail } from './mail.js';
@@ -139,4 +140,52 @@ export async function extractFromPdf(db: Exec, pdfBase64: string): Promise<EInvo
   if (text.replace(/\s/g, '').length < 40) return { hasText: false, pages, suggestion: null };
   const h = await getHotel(db);
   return { hasText: true, pages, suggestion: extractInvoice(text, { name: h.name, zip: h.zip, vatId: h.vatId }) };
+}
+
+// ---------- Archiv ----------
+const MAX_ARCHIVE = 1000, MAX_ZIP = 300;
+function archiveWhere(f: EInvoiceArchiveQuery) {
+  const like = `%${f.q.replace(/[%_\\]/g, '')}%`;
+  const from = f.year ? `${f.year}-${String(f.month ?? 1).padStart(2, '0')}-01` : null;
+  const to = f.year ? (f.month ? (f.month === 12 ? `${f.year + 1}-01-01` : `${f.year}-${String(f.month + 1).padStart(2, '0')}-01`) : `${f.year + 1}-01-01`) : null;
+  return and(
+    f.q ? or(ilike(einvoices.number, like), ilike(einvoices.buyerName, like), ilike(einvoices.originalName, like), ilike(einvoices.sentTo, like)) : undefined,
+    from ? sql`${einvoices.issueDate} >= ${from}::date and ${einvoices.issueDate} < ${to}::date` : undefined,
+    f.sent === 'yes' ? isNotNull(einvoices.sentAt) : f.sent === 'no' ? isNull(einvoices.sentAt) : undefined,
+    f.source === 'all' ? undefined : eq(einvoices.source, f.source),
+  );
+}
+/** Archiv der erzeugten E-Rechnungen: suchen und filtern nach Rechnungsdatum, Versand und Herkunft; mit Summen. */
+export async function archive(db: Exec, f: EInvoiceArchiveQuery): Promise<EInvoiceArchive> {
+  const where = archiveWhere(f);
+  const rows = (await db.select(COLS).from(einvoices).where(where).orderBy(desc(einvoices.issueDate), desc(einvoices.createdAt)).limit(MAX_ARCHIVE + 1)).map(toRow);
+  const [t] = await db.select({ count: sql<number>`count(*)::int`, gross: sql<number>`coalesce(sum(${einvoices.grossCents}), 0)::int`, sent: sql<number>`count(${einvoices.sentAt})::int` }).from(einvoices).where(where);
+  const years = await db.execute(sql`select distinct extract(year from issue_date)::int as y from einvoices order by 1 desc`);
+  return { rows: rows.slice(0, MAX_ARCHIVE), total: { count: t!.count, grossCents: t!.gross, sent: t!.sent }, years: Array.from(years).map((r) => Number(r.y)), truncated: rows.length > MAX_ARCHIVE };
+}
+const csvCell = (v: string) => `"${v.replace(/"/g, '""')}"`;
+function archiveCsvText(rows: EInvoiceRow[]) {
+  const head = ['Rechnungsnummer', 'Rechnungsdatum', 'Empfänger', 'Betrag brutto', 'Herkunft', 'Ursprungsdatei', 'Erstellt am', 'Erstellt von', 'Versendet am', 'Versendet an'];
+  const at = (iso: string | null) => (iso ? new Date(iso).toLocaleString('de-DE', { timeZone: 'Europe/Berlin', dateStyle: 'short', timeStyle: 'short' }) : '');
+  const lines = rows.map((r) => [r.number, de(r.issueDate), r.buyerName, (r.grossCents / 100).toFixed(2).replace('.', ','), r.source === 'invoice' ? 'aus dem PMS' : 'hochgeladen', r.originalName, at(r.createdAt), r.createdBy, at(r.sentAt), r.sentTo].map(csvCell).join(';'));
+  return '\uFEFF' + [head.map(csvCell).join(';'), ...lines].join('\r\n') + '\r\n'; // mit BOM, damit Excel die Umlaute richtig liest
+}
+/** Liste der gefilterten E-Rechnungen als CSV (für Excel). */
+export const archiveCsv = async (db: Exec, f: EInvoiceArchiveQuery) => archiveCsvText((await archive(db, f)).rows);
+
+/** Paket für die Steuerberatung: PDF (mit eingebetteter XML) und XML jeder gefilterten E-Rechnung plus die Liste als CSV. */
+export async function archiveZip(db: Db, actor: Actor, f: EInvoiceArchiveQuery) {
+  const a = await archive(db, f);
+  if (a.total.count === 0) throw conflict('Für diese Auswahl gibt es keine E-Rechnungen');
+  if (a.total.count > MAX_ZIP) throw conflict(`Die Auswahl enthält ${a.total.count} E-Rechnungen – ein Paket fasst höchstens ${MAX_ZIP}. Bitte auf einen Monat oder ein Jahr eingrenzen.`, 'too_many');
+  const used = new Set<string>();
+  const unique = (name: string) => { let n = name, i = 2; while (used.has(n)) n = name.replace(/(\.[a-z]+)$/, `_${i++}$1`); used.add(n); return n; };
+  const files: { name: string; data: Buffer }[] = [{ name: 'E-Rechnungen.csv', data: Buffer.from(archiveCsvText(a.rows), 'utf8') }];
+  for (const r of a.rows) {
+    const [x] = await db.select({ xml: einvoices.xml, pdf: einvoices.pdf }).from(einvoices).where(eq(einvoices.id, r.id));
+    if (!x) continue;
+    files.push({ name: unique(`${safe(r.number)}_zugferd.pdf`), data: Buffer.from(x.pdf) }, { name: unique(`${safe(r.number)}_factur-x.xml`), data: Buffer.from(x.xml, 'utf8') });
+  }
+  await record(db, actor, { action: 'export', entity: 'einvoice', after: { count: a.rows.length, year: f.year ?? null, month: f.month ?? null } });
+  return zipStore(files);
 }

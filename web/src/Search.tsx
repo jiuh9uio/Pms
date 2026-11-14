@@ -42,6 +42,7 @@ const PAGES: Page[] = [
   { to: '/tagesabschluss', title: 'Tagesabschluss', area: 'Hotel', words: 'tagesabschluss kasse zahlungen bar karte abrechnung tag kassensturz', module: 'hotel' },
   { to: '/internet', title: 'FRITZ!Box neu starten', area: 'Internet', words: 'fritzbox fritz router neustart reset internet weg verbindung neu aufbauen', module: 'internet' },
   { to: '/einstellungen?ansicht=haus', title: 'Digitale Gästemappe', area: 'Einstellungen', words: 'gästemappe gastfreund digital mappe qr hausinformation', admin: true },
+  { to: '/erechnung?ansicht=archiv', title: 'E-Rechnungs-Archiv', area: 'E-Rechnung', words: 'archiv erechnung zugferd xml steuerberater export paket zip liste', module: 'erechnung' },
   { to: '/einstellungen?ansicht=tse', title: 'TSE', area: 'Einstellungen', words: 'tse epson stick kassensicherung selbsttest zertifikat seriennummer finanzamt', admin: true },
   { to: '/einstellungen?ansicht=steuern', title: 'Steuersätze', area: 'Einstellungen', words: 'mehrwertsteuer umsatzsteuer mwst 7 19', admin: true },
   { to: '/einstellungen?ansicht=netz', title: 'Zugriff im Hausnetz', area: 'Einstellungen', words: 'tablet adresse firewall netzwerk', admin: true },

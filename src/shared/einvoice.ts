@@ -96,3 +96,14 @@ export interface EInvoiceExtract {
   hasText: boolean; pages: number;
   suggestion: import('./invoiceextract.js').InvoiceSuggestion | null;
 }
+
+// ---------- Archiv ----------
+export const einvoiceArchiveQuery = z.object({
+  q: z.string().trim().max(100).default(''),
+  year: z.coerce.number().int().min(2000).max(2100).optional(),
+  month: z.coerce.number().int().min(1).max(12).optional(),
+  sent: z.enum(['all', 'yes', 'no']).default('all'),
+  source: z.enum(['all', 'upload', 'invoice']).default('all'),
+});
+export type EInvoiceArchiveQuery = z.infer<typeof einvoiceArchiveQuery>;
+export interface EInvoiceArchive { rows: EInvoiceRow[]; total: { count: number; grossCents: number; sent: number }; years: number[]; /** true = Liste auf 1000 Einträge gekürzt */ truncated: boolean }

@@ -315,6 +315,15 @@ rechtlich geprüft ist, steht dort ausdrücklich.
   übliche deutsche Rechnungen ausgelegt; ungewöhnliche Layouts, mehrspaltige Adressfelder, Rabatte und Fremdwährungen werden
   nicht oder falsch gelesen. Maßgeblich bleibt, was der Benutzer bestätigt.
 
+**Seit Version 1.36.0 zusätzlich – E-Rechnungs-Archiv:**
+
+- `GET /einvoices/archive` (Filter `q`, `year`, `month`, `sent`, `source`; höchstens 1000 Zeilen, Summen über die ganze Auswahl),
+  `archive.csv` (Semikolon, UTF-8 mit BOM) und `archive.zip` (höchstens 300 E-Rechnungen; `src/server/lib/zip.ts` schreibt ohne
+  Komprimierung). Der Paket-Abruf wird im Protokoll vermerkt.
+- **Grenzen:** Das Archiv umfasst nur selbst erzeugte (ausgehende) E-Rechnungen; **eingehende** E-Rechnungen von Lieferanten
+  werden nicht angenommen oder ausgelesen. Die Tabelle `einvoices` ist nicht per Datenbank-Trigger gegen Änderung geschützt
+  (anders als `invoices`); nicht versendete Einträge lassen sich löschen. Eine Aussage zur GoBD-Konformität wird nicht getroffen.
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

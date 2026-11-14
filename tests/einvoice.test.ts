@@ -205,4 +205,43 @@ describe('Umwandeln und Versenden', () => {
     expect(await ok('POST', '/einvoices/extract', admin, { pdfBase64: await make([]) })).toEqual({ hasText: false, pages: 1, suggestion: null }); // leere Seite = wie ein Scan
     expect((await call('POST', '/einvoices/extract', admin, { pdfBase64: Buffer.from('x'.repeat(200)).toString('base64') })).statusCode).toBe(400);
   });
+
+  it('führt ein Archiv mit Suche, Filtern, Summen sowie Liste und Paket zum Herunterladen', async () => {
+    const all = await ok('GET', '/einvoices/archive', admin);
+    expect(all.total.count).toBe(all.rows.length);
+    expect(all.total.count).toBeGreaterThan(0);
+    expect(all.total.grossCents).toBe(all.rows.reduce((s: number, r: { grossCents: number }) => s + r.grossCents, 0));
+    const first = all.rows[0];
+    const year = Number(first.issueDate.slice(0, 4)), month = Number(first.issueDate.slice(5, 7));
+    expect(all.years).toContain(year);
+    // Filter: Suchtext, Jahr/Monat, Versand
+    expect((await ok('GET', `/einvoices/archive?q=${encodeURIComponent(first.number)}`, admin)).rows.map((r: { id: string }) => r.id)).toContain(first.id);
+    expect((await ok('GET', '/einvoices/archive?q=gibt-es-nicht-xyz', admin)).total.count).toBe(0);
+    expect((await ok('GET', `/einvoices/archive?year=${year}&month=${month}`, admin)).rows.some((r: { id: string }) => r.id === first.id)).toBe(true);
+    expect((await ok('GET', `/einvoices/archive?year=${year - 5}`, admin)).total.count).toBe(0);
+    const sent = await ok('GET', '/einvoices/archive?sent=yes', admin), unsent = await ok('GET', '/einvoices/archive?sent=no', admin);
+    expect(sent.total.count + unsent.total.count).toBe(all.total.count);
+    expect(sent.rows.every((r: { sentAt: string | null }) => r.sentAt)).toBe(true);
+    expect((await call('GET', '/einvoices/archive?year=abc', admin)).statusCode).toBe(400);
+    // Liste für Excel
+    const csv = await call('GET', '/einvoices/archive.csv', admin);
+    expect(csv.headers['content-type']).toContain('text/csv');
+    expect(csv.body.charCodeAt(0)).toBe(0xfeff);
+    expect(csv.body).toContain('"Rechnungsnummer";"Rechnungsdatum"');
+    expect(csv.body).toContain(`"${first.number}"`);
+    // Paket: gültige ZIP-Datei mit Liste, PDF und XML je Rechnung
+    const zip = await call('GET', `/einvoices/archive.zip?year=${year}`, admin);
+    expect(zip.statusCode).toBe(200);
+    const buf = zip.rawPayload;
+    expect(buf.readUInt32LE(0)).toBe(0x04034b50);
+    const end = buf.subarray(buf.length - 22);
+    expect(end.readUInt32LE(0)).toBe(0x06054b50);
+    const inYear = (await ok('GET', `/einvoices/archive?year=${year}`, admin)).total.count;
+    expect(end.readUInt16LE(10)).toBe(1 + 2 * inYear);
+    const names = buf.toString('latin1');
+    expect(names).toContain('E-Rechnungen.csv');
+    expect(names).toContain('_zugferd.pdf');
+    expect(names).toContain('_factur-x.xml');
+    expect((await call('GET', `/einvoices/archive.zip?year=${year - 5}`, admin)).statusCode).toBe(409); // nichts in der Auswahl
+  });
 });

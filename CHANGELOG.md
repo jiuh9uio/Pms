@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.36.0
+
+- E-Rechnung → neuer Reiter „Archiv“: alle erzeugten E-Rechnungen mit Suche (Nummer, Empfänger, Datei, E-Mail-Adresse) und Filtern nach Jahr, Monat, Versand und Herkunft; dazu Anzahl und Summe der Auswahl.
+- Herunterladen: die Liste als CSV für Excel und alle Dateien der Auswahl als ein Paket (ZIP mit PDF, XML und Liste) – zum Beispiel für die Steuerberatung.
+
 ## 1.35.0
 
 - E-Rechnung: Beim Hochladen liest das Programm die PDF jetzt selbst und füllt die Felder vor – Rechnungsnummer, Rechnungsdatum, Leistungszeitraum, Fälligkeit, Empfänger mit Anschrift und USt-IdNr., Positionen bzw. Beträge je Steuersatz, bereits Bezahltes. Angezeigt wird, was gefunden wurde und worauf zu achten ist.
