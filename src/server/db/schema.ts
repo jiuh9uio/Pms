@@ -532,6 +532,26 @@ export const payments = pgTable('payments', {
   createdAt: ts('created_at').notNull().defaultNow(),
 }, (t) => [index('payments_booking_idx').on(t.bookingId), index('payments_invoice_idx').on(t.invoiceId)]);
 
+/** TSE-Aufzeichnung einer Zahlung (Kassenbeleg-V1). Eine Barzahlung, die auf mehrere Rechnungen verteilt wurde, teilt sich einen Vorgang. */
+export const tseRecords = pgTable('tse_records', {
+  id: id(),
+  paymentId: uuid('payment_id').notNull().unique().references(() => payments.id, { onDelete: 'cascade' }),
+  status: text('status', { enum: ['signed', 'failed'] }).notNull(),
+  clientId: text('client_id').notNull().default(''),
+  serialHex: text('serial_hex').notNull().default(''),
+  transactionNumber: integer('transaction_number'),
+  signatureCounter: integer('signature_counter'),
+  startTime: text('start_time').notNull().default(''),
+  finishTime: text('finish_time').notNull().default(''),
+  signature: text('signature').notNull().default(''),
+  processType: text('process_type').notNull().default(''),
+  processData: text('process_data').notNull().default(''),
+  publicKey: text('public_key').notNull().default(''),
+  algorithm: text('algorithm').notNull().default(''),
+  error: text('error').notNull().default(''),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});
+
 // =====================================================================================
 // Firmen: Rechnungsanschrift, Ansprechpartner, vereinbarte Preise, Zahlungsbedingungen
 // =====================================================================================

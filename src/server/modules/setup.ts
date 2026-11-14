@@ -13,6 +13,7 @@ import { getFrontPrinter } from './quickprint.js';
 import { getHotel, listTaxRates } from './settings.js';
 import { getTerminal } from './terminal.js';
 import { getTse } from './tse.js';
+import { getUse } from './tsesign.js';
 
 /**
  * Start-Checkliste: Was ist eingerichtet, was fehlt noch vor dem echten Betrieb? Reine Auswertung der vorhandenen Einstellungen.
@@ -28,6 +29,7 @@ export async function checklist(db: Exec): Promise<SetupChecklist> {
     (select count(*) from bookings)::int as bookings, (select count(*) from invoices where number is not null)::int as invoices,
     (select count(*) from settings where key = 'logo')::int as logo`);
   const n = c as Record<string, number>;
+  const sign = await getUse(db);
   const year = Number(todayBerlin().slice(0, 4));
   const num = await invoiceNumberState(db, year);
   const it = (key: string, title: string, state: SetupItem['state'], detail: string, to: string): SetupItem => ({ key, title, state, detail, to });
@@ -58,7 +60,7 @@ export async function checklist(db: Exec): Promise<SetupChecklist> {
       it('kitchen', 'Bondrucker Küche', kitchen.enabled && kitchen.host ? 'check' : 'optional', kitchen.enabled && kitchen.host ? `eingetragen: ${kitchen.host} – bitte einen Testdruck machen` : 'Nicht eingerichtet. Die Frühstücksliste lässt sich solange auf einem normalen Drucker ausgeben.', '/einstellungen?ansicht=drucker'),
       it('front', 'Bondrucker Rezeption (Schnelldruck)', front.enabled && front.host ? 'check' : 'optional', front.enabled && front.host ? `eingetragen: ${front.host} – bitte einen Testdruck machen` : 'Nicht eingerichtet.', '/einstellungen?ansicht=drucker'),
       it('terminal', 'EC-Gerät', terminal.enabled && terminal.host ? 'check' : 'optional', terminal.enabled && terminal.host ? `eingetragen: ${terminal.host} – mit echtem Gerät noch nicht erprobt; zuerst mit kleinem Betrag testen` : 'Nicht eingerichtet. Kartenzahlungen werden solange von Hand als Zahlung erfasst.', '/einstellungen?ansicht=ecgeraet'),
-      it('tse', 'TSE', tse.enabled ? 'check' : 'optional', tse.enabled ? 'eingetragen – bitte „TSE-Daten lesen“ und „Selbsttest“. Zahlungen im Programm werden nicht mit der TSE signiert; ob das nötig ist, klärt die Steuerberatung.' : 'Nicht eingerichtet. Zahlungen im Programm werden nicht mit einer TSE signiert; ob das für Sie nötig ist, klärt die Steuerberatung.', '/einstellungen?ansicht=tse'),
+      it('tse', 'TSE', tse.enabled ? 'check' : 'optional', tse.enabled ? (sign.enabled ? (sign.pausedReason ? 'Aufzeichnung der Zahlungen ist PAUSIERT – bitte unter TSE prüfen.' : `Zahlungen werden in der TSE aufgezeichnet (${sign.methods === 'cash' ? 'nur Barzahlungen' : 'alle Zahlungsarten'}) – bitte eine Probezahlung prüfen. Ob das so genügt, klärt die Steuerberatung.`) : 'eingetragen – bitte „TSE-Daten lesen“ und „Selbsttest“. Zahlungen werden noch nicht in der TSE aufgezeichnet (einschaltbar unter TSE); ob das nötig ist, klärt die Steuerberatung.') : 'Nicht eingerichtet. Zahlungen im Programm werden nicht mit einer TSE signiert; ob das für Sie nötig ist, klärt die Steuerberatung.', '/einstellungen?ansicht=tse'),
       it('fritz', 'FRITZ!Box', fritz.enabled && fritz.hasPassword ? 'check' : 'optional', fritz.enabled && fritz.hasPassword ? `eingetragen: ${fritz.host} – bitte einmal „Zustand abfragen“` : 'Nicht eingerichtet.', '/internet'),
       it('public', 'Erreichbarkeit aus dem Internet', policy.publicUrl ? 'check' : 'optional', policy.publicUrl ? `Adresse ${policy.publicUrl} – bitte von außerhalb (z. B. Handy ohne WLAN) aufrufen` : 'Nicht eingerichtet. Gäste-Link, Online-Meldeschein und Online-Anfrage funktionieren solange nur im Hausnetz.', '/einstellungen?ansicht=algorithmen'),
     ] },

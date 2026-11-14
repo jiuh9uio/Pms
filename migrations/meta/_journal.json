@@ -218,6 +218,13 @@
       "when": 1794658114089,
       "tag": "0030_link_sperre",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794671193412,
+      "tag": "0031_tse_aufzeichnung",
+      "breakpoints": true
     }
   ]
 }

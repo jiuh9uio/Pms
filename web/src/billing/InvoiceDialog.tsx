@@ -266,7 +266,7 @@ export function PaymentList({ list }: { list: PaymentDto[] }) {
       <ul className="payments">
         {list.map((p) => (
           <li key={p.id} className={p.reversed || p.reversesId ? 'struck' : ''}>
-            <span>{deDate(p.date)} · {p.method}{p.invoiceNumber ? ` · ${p.invoiceNumber}` : ' · Anzahlung'}<br /><small>{[p.payer, p.note, p.recordedBy].filter(Boolean).join(' · ')}</small></span>
+            <span>{deDate(p.date)} · {p.method}{p.invoiceNumber ? ` · ${p.invoiceNumber}` : ' · Anzahlung'}<br /><small>{[p.payer, p.note, p.recordedBy, p.tse ? (p.tse.status === 'signed' ? `TSE Nr. ${p.tse.transactionNumber}` : 'TSE-Ausfall') : ''].filter(Boolean).join(' · ')}</small></span>
             <b className="num">{formatMoney(p.amountCents)}</b>
             {isAdmin && !p.reversed && !p.reversesId && <button type="button" className="linkbtn" onClick={() => { setNote(''); setReverse(p); }}>Gegenbuchen</button>}
           </li>

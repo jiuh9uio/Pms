@@ -18,6 +18,7 @@ import * as quickprint from './modules/quickprint.js';
 import { overview } from './modules/overview.js';
 import { search } from './modules/search.js';
 import * as tse from './modules/tse.js';
+import * as tsesign from './modules/tsesign.js';
 import { guestFormInput } from '../shared/hotel.js';
 import * as settings from './modules/settings.js';
 import * as usersMod from './modules/users.js';
@@ -311,6 +312,9 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.post('/tse/selftest', { preHandler: requireAdmin }, (req) => tse.tseSelfTest(db, actor(req)));
     api.post('/tse/print', { preHandler: requireAdmin }, (req) => tse.printTseSheet(db, actor(req)));
     api.post('/tse/register-client', { preHandler: requireAdmin }, (req) => tse.tseRegisterClient(db, actor(req), S.tseRegisterInput.parse(req.body)));
+    api.get('/settings/tse-sign', { preHandler: requireAdmin }, () => tsesign.getUse(db));
+    api.put('/settings/tse-sign', { preHandler: requireAdmin }, (req) => tsesign.saveUse(db, actor(req), S.tseUseInput.parse(req.body)));
+    api.get('/tse/records', { preHandler: requireAdmin }, () => tsesign.listRecords(db));
     api.post('/tse/test-signature', { preHandler: requireAdmin }, (req) => tse.tseTestSignature(db, actor(req), S.tseSignInput.parse(req.body)));
 
     // ---------- Datensicherung (nur Administrator) ----------

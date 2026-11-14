@@ -52,6 +52,8 @@ export interface InvoiceLineDto { id: string; pos: number; description: string; 
 export interface PaymentDto {
   id: string; bookingId: string | null; invoiceId: string | null; invoiceNumber: string | null; amountCents: number; method: string; date: string;
   payer: string; note: string; reversesId: string | null; reversed: boolean; recordedBy: string; createdAt: string;
+  /** TSE-Aufzeichnung dieser Zahlung; null = nicht mit der TSE aufgezeichnet */
+  tse: { status: 'signed' | 'failed'; transactionNumber: number | null; signatureCounter: number | null } | null;
 }
 export interface IssuerDto { name: string; street: string; zip: string; city: string; country: string; phone: string; email: string; website: string; taxNumber: string; vatId: string; bankName: string; iban: string; bic: string; footer: string }
 export interface InvoiceDto {

@@ -70,14 +70,16 @@ export async function listInvoices(db: Exec, f: { status?: string; q?: string; f
 
 async function paymentsWhere(db: Exec, where: SQL): Promise<PaymentDto[]> {
   const rows = await db.execute(sql`
-    select p.*, i.number as invoice_number, exists(select 1 from payments r where r.reverses_id = p.id) as reversed
-    from payments p left join invoices i on i.id = p.invoice_id where ${where} order by p.date, p.created_at`);
+    select p.*, i.number as invoice_number, exists(select 1 from payments r where r.reverses_id = p.id) as reversed,
+      t.status as tse_status, t.transaction_number as tse_txn, t.signature_counter as tse_counter
+    from payments p left join invoices i on i.id = p.invoice_id left join tse_records t on t.payment_id = p.id where ${where} order by p.date, p.created_at`);
   return Array.from(rows).map((r) => {
     const x = r as Raw;
     return {
       id: x.id as string, bookingId: (x.booking_id as string) ?? null, invoiceId: (x.invoice_id as string) ?? null, invoiceNumber: (x.invoice_number as string) ?? null,
       amountCents: x.amount_cents as number, method: x.method as string, date: String(x.date).slice(0, 10), payer: x.payer as string, note: x.note as string,
       reversesId: (x.reverses_id as string) ?? null, reversed: x.reversed as boolean, recordedBy: x.recorded_by as string, createdAt: iso(x.created_at)!,
+      tse: x.tse_status ? { status: x.tse_status as 'signed' | 'failed', transactionNumber: (x.tse_txn as number) ?? null, signatureCounter: (x.tse_counter as number) ?? null } : null,
     };
   });
 }
@@ -472,8 +474,8 @@ export async function exportPaymentsCsv(db: Exec, from: string, to: string) {
   const list = await paymentsWhere(db, sql`p.date >= ${from}::date and p.date <= ${to}::date`);
   const bookingNumbers = new Map(Array.from(await db.execute(sql`select id, number from bookings`)).map((r) => [(r as Raw).id as string, (r as Raw).number as string]));
   const cell = (v: string) => '"' + v.replace(/"/g, '""') + '"';
-  const head = ['Datum', 'Betrag', 'Zahlungsart', 'Rechnung', 'Reservierung', 'Zahler', 'Bemerkung', 'Erfasst von'];
-  const body = list.map((p) => [de(p.date), (p.amountCents / 100).toFixed(2).replace('.', ','), p.method, p.invoiceNumber ?? '', p.bookingId ? bookingNumbers.get(p.bookingId) ?? '' : '', p.payer, p.note, p.recordedBy].map(cell).join(';'));
+  const head = ['Datum', 'Betrag', 'Zahlungsart', 'Rechnung', 'Reservierung', 'Zahler', 'Bemerkung', 'Erfasst von', 'TSE', 'TSE-Transaktion', 'TSE-Signaturzähler'];
+  const body = list.map((p) => [de(p.date), (p.amountCents / 100).toFixed(2).replace('.', ','), p.method, p.invoiceNumber ?? '', p.bookingId ? bookingNumbers.get(p.bookingId) ?? '' : '', p.payer, p.note, p.recordedBy, p.tse ? (p.tse.status === 'signed' ? 'signiert' : 'Ausfall') : '', String(p.tse?.transactionNumber ?? ''), String(p.tse?.signatureCounter ?? '')].map(cell).join(';'));
   return '﻿' + [head.map(cell).join(';'), ...body].join('\r\n');
 }
 

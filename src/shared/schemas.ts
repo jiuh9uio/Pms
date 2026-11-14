@@ -179,6 +179,22 @@ export interface TseRegisterResult {
   clients: string[] | null;
 }
 
+// ---------- TSE: Zahlungen aufzeichnen ----------
+export const tseUseInput = z.object({
+  enabled: z.boolean(),
+  clientId: z.string().trim().max(30).regex(/^[A-Za-z0-9'()+,\-./:=? ]*$/, 'Nur Buchstaben ohne Umlaute, Ziffern und einfache Zeichen'),
+  /** leer = gespeicherte PIN behalten */
+  pin: z.string().regex(/^(.{5})?$/, 'Die PIN hat genau 5 Zeichen'),
+  /** leer = gespeicherten Schlüssel behalten */
+  secretKey: z.string().regex(/^(.{8})?$/, 'Der Schlüssel hat genau 8 Zeichen'),
+  methods: z.enum(['cash', 'all']),
+}).refine((v) => !v.enabled || v.clientId !== '', { message: 'Bitte die Kassen-Kennung eintragen', path: ['clientId'] });
+export interface TseUseDto { enabled: boolean; clientId: string; methods: 'cash' | 'all'; pinSet: boolean; since: string | null; pausedReason: string }
+export interface TseRecordDto {
+  id: string; createdAt: string; status: 'signed' | 'failed'; amountCents: number; method: string; invoiceNumber: string | null; bookingNumber: string | null;
+  transactionNumber: number | null; signatureCounter: number | null; startTime: string; finishTime: string; processData: string; error: string;
+}
+
 // ---------- FRITZ!Box (Internet → Internetverbindung) ----------
 export const fritzSettingsInput = z.object({
   enabled: z.boolean(),

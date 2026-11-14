@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { tseRegisterInput, tseSettingsInput, tseSignInput, type TseInfoDto, type TseRegisterResult, type TseSettings, type TseSignResult } from '../../../src/shared/schemas.js';
+import { tseRegisterInput, tseSettingsInput, tseSignInput, tseUseInput, type TseInfoDto, type TseRecordDto, type TseRegisterResult, type TseUseDto, type TseSettings, type TseSignResult } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
+import { formatMoney } from '../../../src/shared/hotel.js';
 import { Badge, Button, Field, LoadState, fmtDateTime, useLoad, useSubmit, useToast } from '../ui.tsx';
 
 const yesNo = (v: boolean | null, yes: string, no: string) => (v == null ? <Badge>unbekannt</Badge> : v ? <Badge tone="ok">{yes}</Badge> : <Badge tone="warn">{no}</Badge>);
@@ -44,7 +45,7 @@ export function TseCard() {
     <>
       <form className="card" onSubmit={(e) => void f.submit(payload(), e)} noValidate>
         <h2>TSE (Epson)</h2>
-        <p className="notice warn"><b>Lesen, Selbsttest und Datenblatt zeichnen nichts in der TSE auf</b> – nur die Test-Signatur weiter unten schreibt einen Eintrag. Zahlungen im Programm werden weiterhin nicht mit der TSE signiert. Umgesetzt nach Epsons Handbüchern und nur gegen eine nachgebaute Schnittstelle getestet, noch nicht mit einem echten Stick.</p>
+        <p className="notice warn"><b>Lesen, Selbsttest und Datenblatt zeichnen nichts in der TSE auf</b> – nur die Test-Signatur weiter unten schreibt einen Eintrag. Zahlungen werden nur aufgezeichnet, wenn Sie das ganz unten unter „Zahlungen in der TSE aufzeichnen“ einschalten. Umgesetzt nach Epsons Handbüchern und nur gegen eine nachgebaute Schnittstelle getestet, noch nicht mit einem echten Stick.</p>
         <p className="muted">Voraussetzung: Auf dem Rechner, an dem der Stick steckt, ist der „Epson TSE Driver“ (für Windows) installiert und läuft. Steckt der Stick an diesem Rechner, bleibt die Adresse 127.0.0.1.</p>
         <div className="formgrid cols3">
           <Field label="Adresse des Rechners mit der TSE" error={f.errors.host} hint="dieser Rechner: 127.0.0.1"><input value={v.host} onChange={(e) => setV({ ...v, host: e.target.value })} inputMode="decimal" /></Field>
@@ -85,6 +86,7 @@ export function TseCard() {
       )}
       <RegisterCard onDone={() => void act('read')} />
       <SignCard onDone={() => void act('read')} />
+      <UseCard />
     </>
   );
 }
@@ -166,5 +168,57 @@ function RegisterCard({ onDone }: { onDone: () => void }) {
       <div className="formactions"><Button type="submit" variant="primary" busy={f.busy}>Kennung anmelden</Button></div>
       {res && <p className="notice"><b>Die Kennung „{res.clientId}“ ist angemeldet.</b>{res.clients ? ` In der TSE angemeldet: ${res.clients.join(', ')}.` : ''} Sie können jetzt die Test-Signatur mit dieser Kennung ausführen.</p>}
     </form>
+  );
+}
+
+/** Zahlungen in der TSE aufzeichnen: einschalten, Zugangsdaten hinterlegen, letzte Aufzeichnungen ansehen. */
+function UseCard() {
+  const toast = useToast();
+  const { data, error, reload } = useLoad(() => api<TseUseDto>('GET', '/settings/tse-sign'));
+  const recs = useLoad(() => api<TseRecordDto[]>('GET', '/tse/records'));
+  const [v, setV] = useState<{ enabled: boolean; clientId: string; pin: string; secretKey: string; methods: 'cash' | 'all' } | null>(null);
+  useEffect(() => { if (data) setV({ enabled: data.enabled, clientId: data.clientId, pin: '', secretKey: '', methods: data.methods }); }, [data]);
+  const f = useSubmit(tseUseInput, async (d) => {
+    if (d.enabled && !data?.enabled && !window.confirm('Aufzeichnung einschalten?\n\nAb jetzt wird jede passende Zahlung dauerhaft in der TSE gespeichert. Die Zeit-PIN wird verschlüsselt auf diesem Rechner hinterlegt.')) return;
+    await api('PUT', '/settings/tse-sign', d); toast('Gespeichert'); reload(); recs.reload();
+  });
+  if (!v || !data) return <section className="card"><h2>Zahlungen in der TSE aufzeichnen</h2><LoadState error={error} loading /></section>;
+  return (
+    <>
+      <form className="card" onSubmit={(e) => void f.submit(v, e)} noValidate>
+        <h2>Zahlungen in der TSE aufzeichnen</h2>
+        <p className="notice warn"><b>Mit einem echten Stick noch nicht erprobt und steuerlich nicht geprüft.</b> Ist das eingeschaltet, wird nach jeder gebuchten Zahlung (und jeder Gegenbuchung) ein Vorgang „Kassenbeleg-V1“ in der TSE aufgezeichnet und das Ergebnis zur Zahlung gespeichert. <b>Nicht enthalten</b> sind ein Kassenbeleg mit QR-Code, der DSFinV-K-Export und der Export der TSE-Daten für eine Kassenprüfung. Ob das Programm damit als Kasse genügt, muss Ihre Steuerberatung beurteilen.</p>
+        {data.pausedReason && <p className="notice danger" role="alert"><b>Die Aufzeichnung ist pausiert.</b> {data.pausedReason} Zahlungen werden bis dahin als „TSE-Ausfall“ vermerkt. Zum Fortsetzen die Zeit-PIN neu eintragen und speichern.</p>}
+        <div className="formgrid cols3">
+          <label className="check wide"><input type="checkbox" checked={v.enabled} onChange={(e) => setV({ ...v, enabled: e.target.checked })} /><span>Zahlungen in der TSE aufzeichnen</span></label>
+          {f.errors.enabled && <p className="notice danger wide">{f.errors.enabled}</p>}
+          <Field label="Kassen-Kennung (Client-ID)" error={f.errors.clientId} hint="muss in der TSE angemeldet sein"><input value={v.clientId} onChange={(e) => setV({ ...v, clientId: e.target.value })} autoComplete="off" maxLength={30} /></Field>
+          <Field label="Zeit-PIN (TimeAdmin)" error={f.errors.pin} hint={data.pinSet ? 'hinterlegt – leer lassen, um sie zu behalten' : '5 Zeichen'}><input type="password" value={v.pin} onChange={(e) => setV({ ...v, pin: e.target.value })} autoComplete="new-password" maxLength={5} /></Field>
+          <Field label="Geheimer Schlüssel" error={f.errors.secretKey} hint="leer = EPSONKEY bzw. der hinterlegte"><input value={v.secretKey} onChange={(e) => setV({ ...v, secretKey: e.target.value })} autoComplete="off" maxLength={8} /></Field>
+          <Field label="Welche Zahlungen" hint="Überweisungen sind in der Regel keine Kassenvorgänge">
+            <select value={v.methods} onChange={(e) => setV({ ...v, methods: e.target.value as 'cash' | 'all' })}><option value="cash">nur Barzahlungen</option><option value="all">alle Zahlungsarten</option></select>
+          </Field>
+        </div>
+        <div className="formactions"><Button type="submit" variant="primary" busy={f.busy}>Speichern</Button></div>
+        <p className="muted small">Machen Sie vorher eine Test-Signatur mit derselben Kennung und PIN. Lehnt die TSE die Anmeldung ab, pausiert das Programm die Aufzeichnung sofort, damit keine weiteren PIN-Versuche verbraucht werden. Ist die TSE nicht erreichbar, bleibt die Zahlung gebucht und wird als „TSE-Ausfall“ vermerkt; nachträglich signiert wird nicht.{data.since ? ` Eingeschaltet seit ${fmtDateTime(data.since)}.` : ''}</p>
+      </form>
+      {recs.data && recs.data.length > 0 && (
+        <section className="card">
+          <div className="cardhead"><h2>Letzte Aufzeichnungen</h2><Button onClick={recs.reload}>Aktualisieren</Button></div>
+          <div className="tablewrap"><table className="table">
+            <thead><tr><th>Zeit</th><th>Zahlung</th><th className="num">Betrag</th><th>Ergebnis</th><th className="hide-sm">Inhalt</th></tr></thead>
+            <tbody>{recs.data.map((r) => (
+              <tr key={r.id}>
+                <td className="nowrap">{fmtDateTime(r.createdAt)}</td>
+                <td>{r.method}{r.invoiceNumber ? ` · ${r.invoiceNumber}` : r.bookingNumber ? ` · ${r.bookingNumber}` : ''}</td>
+                <td className="num">{formatMoney(r.amountCents)}</td>
+                <td>{r.status === 'signed' ? <><Badge tone="ok">signiert</Badge> Nr. {r.transactionNumber} · Zähler {r.signatureCounter}</> : <><Badge tone="danger">TSE-Ausfall</Badge><br /><small>{r.error}</small></>}</td>
+                <td className="hide-sm"><code className="wrapcode">{r.processData}</code></td>
+              </tr>
+            ))}</tbody>
+          </table></div>
+        </section>
+      )}
+    </>
   );
 }

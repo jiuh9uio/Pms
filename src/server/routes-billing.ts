@@ -6,6 +6,7 @@ import type { Db } from './db/client.js';
 import type { Actor } from './modules/audit.js';
 import * as billing from './modules/billing.js';
 import * as terminal from './modules/terminal.js';
+import * as tsesign from './modules/tsesign.js';
 
 interface Ctx { db: Db; requireUser: (req: FastifyRequest) => Promise<void>; requireAdmin: (req: FastifyRequest) => Promise<void>; actor: (req: FastifyRequest) => Actor }
 const idOf = (req: FastifyRequest) => z.object({ id: z.uuid() }).parse(req.params).id;
@@ -83,13 +84,15 @@ export function registerBillingRoutes(api: FastifyInstance, { db, requireUser, r
   // ---------- EC-Gerät ----------
   api.get('/terminal/status', user, async () => ({ ready: await terminal.terminalReady(db) }));
   api.get('/terminal/progress', user, () => terminal.terminalProgress());
-  api.post('/payments/terminal', user, (req) => terminal.payByTerminal(db, actor(req), B.terminalPayInput.parse(req.body)));
+  /** nach dem Buchen in der TSE aufzeichnen (wenn eingeschaltet); die Zahlung scheitert daran nie */
+  const signed = async <T,>(r: T) => { await tsesign.signPending(db); return r; };
+  api.post('/payments/terminal', user, async (req) => signed(await terminal.payByTerminal(db, actor(req), B.terminalPayInput.parse(req.body))));
   api.get('/settings/terminal', admin, () => terminal.getTerminal(db));
   api.put('/settings/terminal', admin, (req) => terminal.saveTerminal(db, actor(req), B.terminalSettingsInput.parse(req.body)));
   api.post('/settings/terminal/test', admin, () => terminal.testTerminal(db));
   api.get('/terminal/log', admin, () => terminal.terminalLog(db));
 
-  api.post('/payments', user, (req) => billing.addPayment(db, actor(req), B.paymentInput.parse(req.body)));
+  api.post('/payments', user, async (req) => signed(await billing.addPayment(db, actor(req), B.paymentInput.parse(req.body))));
   // Gegenbuchungen (Storno einer Zahlung) darf nur der Administrator
-  api.post('/payments/:id/reverse', admin, (req) => billing.reversePayment(db, actor(req), idOf(req), B.reverseInput.parse(req.body).note));
+  api.post('/payments/:id/reverse', admin, async (req) => signed(await billing.reversePayment(db, actor(req), idOf(req), B.reverseInput.parse(req.body).note)));
 }

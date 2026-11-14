@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.39.0
+
+- Einstellungen → TSE: „Zahlungen in der TSE aufzeichnen“. Eingeschaltet wird nach jeder gebuchten Zahlung und jeder Gegenbuchung ein Vorgang „Kassenbeleg-V1“ in der TSE aufgezeichnet (wahlweise nur Barzahlungen oder alle Zahlungsarten); Transaktionsnummer, Signaturzähler, Zeiten und Signatur werden zur Zahlung gespeichert und stehen in der Zahlungsliste, in „Letzte Aufzeichnungen“ und im Zahlungs-Export.
+- Ist die TSE nicht erreichbar, bleibt die Zahlung gebucht und wird als „TSE-Ausfall“ vermerkt. Lehnt die TSE die Anmeldung ab, pausiert die Aufzeichnung sofort, damit keine weiteren PIN-Versuche verbraucht werden.
+- Nicht enthalten: Kassenbeleg mit QR-Code, DSFinV-K-Export, Export der TSE-Daten. Mit einem echten Stick noch nicht erprobt, steuerlich nicht geprüft.
+
 ## 1.38.1
 
 - Einstellungen → TSE: neue Karte „Kassen-Kennung anmelden“. Meldet die Test-Signatur „TSE1_ERROR_CLIENT_NOT_REGISTERED“, lässt sich die Kennung hier mit der Admin-PIN in der TSE anmelden; danach funktioniert die Test-Signatur mit dieser Kennung. Mit einem echten Stick noch nicht erprobt.

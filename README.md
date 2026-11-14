@@ -349,6 +349,15 @@ rechtlich geprüft ist, steht dort ausdrücklich.
 - `PUT /settings/invoice-number`: setzt `number_sequences` für das Jahr auf `next − 1`; nur größer als der bisherige Stand, damit
   keine vom Programm vergebene Nummer wiederkehrt. Lücken zu früheren, anderswo vergebenen Nummern entstehen dabei bewusst.
 
+**Seit Version 1.39.0 zusätzlich – Zahlungen in der TSE aufzeichnen (abschaltbar, Standard: aus):**
+
+- `src/server/modules/tsesign.ts`, Tabelle `tse_records`, Einstellung `tse_sign` (Zeit-PIN und Schlüssel verschlüsselt). Nach den Routen
+  `POST /payments`, `/payments/terminal`, `/payments/:id/reverse` läuft `signPending`: alle Zahlungen seit dem Einschalten ohne Aufzeichnung
+  werden als „Kassenbeleg-V1“ signiert (`src/shared/kassenbeleg.ts`; Brutto je Steuersatz anteilig aus den Rechnungspositionen, Anzahlungen
+  mit dem Steuersatz der Übernachtung). Fehler → Eintrag `failed` („TSE-Ausfall“), kein Nachsignieren; abgelehnte Anmeldung → Pause.
+- Grenzen: Feldnamen und Aufbau der Prozessdaten aus dem Gedächtnis, nur gegen die nachgebaute Schnittstelle getestet. Kein Belegdruck mit
+  QR-Code, kein DSFinV-K-Export, kein TAR-Export. Keine Aussage zur Konformität mit KassenSichV/AO § 146a.
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

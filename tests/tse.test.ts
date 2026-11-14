@@ -250,6 +250,62 @@ describe('TSE (Epson) prüfen', () => {
     expect(sig.json()).toMatchObject({ clientId: 'PMS1' });
   });
 
+  it('zeichnet Zahlungen in der TSE auf, vermerkt Ausfälle und pausiert bei abgelehnter Anmeldung', async () => {
+    const { signPending } = await import('../src/server/modules/tsesign.js');
+    const { kassenbelegData, splitByParts } = await import('../src/shared/kassenbeleg.js');
+    expect(kassenbelegData([{ rate: 7, cents: 10000 }, { rate: 19, cents: 1550 }], 11550, true)).toBe('Beleg^15.50_100.00_0.00_0.00_0.00^115.50:Bar');
+    expect(splitByParts(1000, [{ rate: 7, cents: 2 }, { rate: 19, cents: 1 }])).toEqual([{ rate: 7, cents: 667 }, { rate: 19, cents: 333 }]);
+    expect(splitByParts(-1000, [{ rate: 7, cents: 1 }, { rate: 19, cents: 1 }]).reduce((x, y) => x + y.cents, 0)).toBe(-1000);
+
+    const put = (body: object) => call('PUT', '/settings/tse-sign', admin, { enabled: true, clientId: 'KASSE1', pin: '54321', secretKey: '', methods: 'cash', ...body });
+    expect((await put({ pin: '' })).statusCode).toBe(400); // ohne PIN nicht einschaltbar
+    expect((await put({})).json()).toMatchObject({ enabled: true, pinSet: true, pausedReason: '' });
+    const stored = await db.execute(sql`select value::text as v from settings where key = 'tse_sign'`);
+    expect(String(stored[0]!.v)).not.toContain('54321'); // PIN nur verschlüsselt
+    const pay = async (cents: number, method = 'Bar') => String((await db.execute(sql`insert into payments (amount_cents, method, date, recorded_by) values (${cents}, ${method}, current_date, 'test') returning id`))[0]!.id);
+    const rec = async (id: string) => (await db.execute(sql`select * from tse_records where payment_id = ${id}`))[0] as Record<string, unknown> | undefined;
+
+    inputs.length = 0;
+    const a = await pay(8000), b = await pay(5000, 'Überweisung');
+    await signPending(db);
+    expect(await rec(a)).toMatchObject({ status: 'signed', client_id: 'KASSE1', process_type: 'Kassenbeleg-V1', process_data: 'Beleg^0.00_80.00_0.00_0.00_0.00^80.00:Bar', signature: 'RklOSVNI' });
+    expect((await rec(a))!.transaction_number).toBe(txn);
+    expect(await rec(b)).toBeUndefined(); // nur Barzahlungen
+    expect(inputs.find((x) => x.fn === 'FinishTransaction')).toMatchObject({ processType: 'Kassenbeleg-V1', processData: Buffer.from('Beleg^0.00_80.00_0.00_0.00_0.00^80.00:Bar').toString('base64') });
+    await signPending(db); // nichts doppelt
+    expect((await db.execute(sql`select count(*)::int as n from tse_records`))[0]!.n).toBe(1);
+    expect((await call('GET', '/tse/records', admin)).json()[0]).toMatchObject({ status: 'signed', amountCents: 8000, method: 'Bar' });
+
+    // TSE nicht erreichbar: Zahlung bleibt, Ausfall wird vermerkt, keine Pause
+    mode = 'no-stick';
+    const c = await pay(1000);
+    await signPending(db);
+    expect(await rec(c)).toMatchObject({ status: 'failed' });
+    expect((await call('GET', '/settings/tse-sign', admin)).json().pausedReason).toBe('');
+    mode = 'ok';
+
+    // falsche PIN: genau ein Versuch, dann Pause – weitere Zahlungen verbrauchen keinen Versuch mehr
+    await put({ pin: '00000' });
+    retries = 3;
+    const d = await pay(2000);
+    await signPending(db);
+    const e = await pay(3000);
+    await signPending(db);
+    expect(retries).toBe(2);
+    expect(await rec(d)).toMatchObject({ status: 'failed' });
+    expect(String((await rec(e))!.error)).toContain('pausiert');
+    expect((await call('GET', '/settings/tse-sign', admin)).json().pausedReason).toContain('abgelehnt');
+    // richtige PIN neu gespeichert: Pause aufgehoben, es geht ab jetzt weiter
+    expect((await put({})).json().pausedReason).toBe('');
+    const g = await pay(4000);
+    await signPending(db);
+    expect(await rec(g)).toMatchObject({ status: 'signed' });
+    await put({ enabled: false, pin: '' });
+    const h = await pay(100);
+    await signPending(db);
+    expect(await rec(h)).toBeUndefined();
+  });
+
   it('druckt das Datenblatt auf dem Bondrucker', async () => {
     expect((await call('POST', '/tse/print', admin, {})).json().error.code).toBe('printer_not_configured');
     await ok('PUT', '/settings/front-printer', admin, { enabled: true, host: '127.0.0.1', port: (printer.address() as { port: number }).port, width: 48 });
