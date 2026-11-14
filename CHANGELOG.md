@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.39.1
+
+- Reservierung → Rechnungen und Zahlungen: Ist alles berechnet und bezahlt, werden „Bezahlen / Abrechnen“ und „Einzelne Zahlung“ nicht mehr angeboten; stattdessen steht dort ein Hinweis. (Der Server hat eine zweite Zahlung auch bisher schon abgelehnt.)
+
 ## 1.39.0
 
 - Einstellungen → TSE: „Zahlungen in der TSE aufzeichnen“. Eingeschaltet wird nach jeder gebuchten Zahlung und jeder Gegenbuchung ein Vorgang „Kassenbeleg-V1“ in der TSE aufgezeichnet (wahlweise nur Barzahlungen oder alle Zahlungsarten); Transaktionsnummer, Signaturzähler, Zeiten und Signatur werden zur Zahlung gespeichert und stehen in der Zahlungsliste, in „Letzte Aufzeichnungen“ und im Zahlungs-Export.

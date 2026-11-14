@@ -29,6 +29,11 @@ export function BookingBilling({ booking }: { booking: BookingDto }) {
   const balance = booking.totalCents - data.paidCents;
   const notInvoiced = booking.totalCents - data.invoicedCents;
   const drafts = data.invoices.filter((i) => i.status === 'draft');
+  // offen ist, was die Reservierung noch kostet – oder was auf ausgestellten Rechnungen noch fehlt
+  const openOnInvoices = data.invoices.filter((i) => i.status === 'issued' && i.kind === 'invoice').reduce((x, i) => x + Math.max(0, i.openCents), 0);
+  const toPay = Math.max(balance, openOnInvoices, 0);
+  // alles berechnet und bezahlt: kein weiterer Bezahlvorgang möglich
+  const settled = toPay === 0 && data.uninvoicedCents <= 0 && data.invoices.some((i) => i.status === 'issued');
   return (
     <>
       <h3>Rechnungen und Zahlungen</h3>
@@ -48,16 +53,17 @@ export function BookingBilling({ booking }: { booking: BookingDto }) {
         </ul>
       )}
       <div className="btnrow">
-        <Button variant="primary" onClick={() => setSettle(true)}>Bezahlen / Abrechnen</Button>
+        {!settled && <Button variant="primary" onClick={() => setSettle(true)}>Bezahlen / Abrechnen</Button>}
         {drafts.length === 0 && data.uninvoicedCents > 0 && booking.chargesCents > 0 && <>
           <Button busy={busy === 'lodging'} onClick={() => void create('lodging')}>Rechnung nur Übernachtung</Button>
           <Button busy={busy === 'extras'} onClick={() => void create('extras')}>Rechnung nur Extras</Button>
         </>}
         {drafts.length === 0 && data.uninvoicedCents > 0 && <Button busy={busy === 'all'} onClick={() => void create('all')}>Rechnungsentwurf</Button>}
-        <Button onClick={() => setPay(!pay)} aria-expanded={pay}>{pay ? 'Zahlung schließen' : 'Einzelne Zahlung'}</Button>
+        {toPay > 0 && <Button onClick={() => setPay(!pay)} aria-expanded={pay}>{pay ? 'Zahlung schließen' : 'Einzelne Zahlung'}</Button>}
       </div>
+      {settled && <p className="notice">Alles berechnet und bezahlt – es ist nichts mehr zu kassieren. Eine falsch gebuchte Zahlung korrigiert der Administrator in der Rechnung über „Gegenbuchen“.</p>}
       {settle && <SettleDialog booking={booking} onClose={() => setSettle(false)} />}
-      {pay && <PaymentForm bookingId={booking.id} suggestCents={Math.max(0, balance)} onDone={() => setPay(false)} />}
+      {pay && toPay > 0 && <PaymentForm bookingId={booking.id} suggestCents={toPay} onDone={() => setPay(false)} />}
       {data.payments.length > 0 && <><h3>Zahlungen</h3><PaymentList list={data.payments} /></>}
       {data.unassignedPaidCents !== 0 && <p className="muted small">{formatMoney(data.unassignedPaidCents)} Anzahlung ohne Rechnung – wird beim Ausstellen der nächsten Rechnung verrechnet.</p>}
     </>
