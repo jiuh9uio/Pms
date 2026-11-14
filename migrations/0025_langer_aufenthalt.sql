@@ -1,0 +1,2 @@
+ALTER TABLE "room_categories" ADD COLUMN "long_stay_nights" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "room_categories" ADD COLUMN "long_stay_discount_cents" integer DEFAULT 0 NOT NULL;

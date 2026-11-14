@@ -401,4 +401,34 @@ describe('E-Mail an den Gast', () => {
     server.close();
     await new Promise((r) => setTimeout(r, 2200));
   }, 60_000);
+
+  it('schickt die Nachricht vor der Anreise einmalig, zur eingestellten Zeit und nur wenn eingeschaltet', async () => {
+    const { prearrivalTick } = await import('../src/server/modules/prearrival.js');
+    const room = (await ok('GET', '/rooms', admin))[0];
+    const guest = { salutation: 'Herr', firstName: 'Paul', lastName: 'Vorab', company: '', email: 'paul@example.com', phone: '', street: '', zip: '', city: '', country: 'Deutschland', birthdate: '', nationality: '', idNumber: '', notes: '' };
+    const mk = async (g: object, from: string, to: string) => (await ok('POST', '/bookings', admin, { guest: g, groupName: '', source: 'Telefon', paymentMethod: '', notes: '', breakfast: false,
+      rooms: [{ roomId: room.id, from, to, adults: 2, children: 0, status: 'confirmed', pricePerNightCents: null }] })).id as string;
+    const id = await mk(guest, '2035-03-10', '2035-03-12');
+    await mk({ ...guest, lastName: 'Ohnemail', email: '' }, '2035-03-12', '2035-03-13');
+    await db.execute(sql`update bookings set created_at = now() - interval '2 days'`);
+    const at = (iso: string) => new Date(iso);
+    const before = sent.length;
+    expect(await prearrivalTick(db, at('2035-03-08T10:00:00Z'))).toEqual({ sent: 0, failed: 0 }); // ausgeschaltet
+    expect((await call('PUT', '/settings/prearrival', admin, { enabled: true, daysBefore: 0, time: '10:00', extraText: '' })).statusCode).toBe(400);
+    await ok('PUT', '/settings/prearrival', admin, { enabled: true, daysBefore: 3, time: '10:00', extraText: 'Parkplätze finden Sie hinter dem Haus.' });
+    const state = await ok('GET', '/settings/prearrival', admin);
+    expect(state).toMatchObject({ mailReady: true, sentTotal: 0 });
+    expect(state.sample.text).toContain('Sehr geehrte Frau Beispiel,');
+    expect(state.sample.text).toContain('Parkplätze finden Sie hinter dem Haus.');
+    expect(await prearrivalTick(db, at('2035-03-06T12:00:00Z'))).toEqual({ sent: 0, failed: 0 }); // vier Tage vorher: zu früh
+    expect(await prearrivalTick(db, at('2035-03-07T07:00:00Z'))).toEqual({ sent: 0, failed: 0 }); // 8 Uhr in Berlin: vor der eingestellten Zeit
+    expect(await prearrivalTick(db, at('2035-03-07T10:00:00Z'))).toEqual({ sent: 1, failed: 0 });
+    expect(sent.length).toBe(before + 1); // der Gast ohne E-Mail-Adresse bekommt nichts
+    expect(sent.at(-1)).toMatchObject({ to: 'paul@example.com', subject: expect.stringContaining('Ihre Anreise am 10.03.2035') });
+    expect(sent.at(-1)!.text).toContain('Sehr geehrter Herr Vorab,');
+    expect(sent.at(-1)!.text).toContain('Samstag, 10.03.2035, ab 15:00 Uhr');
+    expect(await prearrivalTick(db, at('2035-03-08T10:00:00Z'))).toEqual({ sent: 0, failed: 0 }); // nicht doppelt
+    expect((await ok('GET', '/settings/prearrival', admin)).sentTotal).toBe(1);
+    expect(id).toBeTruthy();
+  });
 });

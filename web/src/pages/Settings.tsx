@@ -6,10 +6,12 @@ import { MailSettings } from './MailSettings.tsx';
 import { BackupCard } from './BackupCard.tsx';
 import { KitchenPrinterCard } from './KitchenPrinterCard.tsx';
 import { TerminalCard } from './TerminalCard.tsx';
+import { PrearrivalCard } from './PrearrivalCard.tsx';
 import { PurgeCard } from './PurgeCard.tsx';
 import { MailRulesCard } from './MailRulesCard.tsx';
 import { RulesCard } from './RulesCard.tsx';
 import { TseCard } from './TseCard.tsx';
+import { WebRequestCard } from './WebRequestCard.tsx';
 import { Changelog, UpdateCard } from './UpdateCard.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
 
@@ -25,7 +27,7 @@ export function Settings() {
       <PageHeader title="Einstellungen" sub="Angaben zum Haus, E-Mail, Drucker, EC-Gerät, TSE, Steuersätze, Algorithmen, Hausnetz, Datensicherung und Programm-Update" />
       {bar}
       {current === 'haus' && <><HotelForm /><LogoCard /></>}
-      {current === 'email' && <><MailSettings /><InboxSettings /></>}
+      {current === 'email' && <><MailSettings /><InboxSettings /><WebRequestCard /></>}
       {current === 'drucker' && <><KitchenPrinterCard kind="kitchen" /><KitchenPrinterCard kind="front" /></>}
       {current === 'ecgeraet' && <TerminalCard />}
       {current === 'tse' && <TseCard />}
@@ -41,15 +43,15 @@ export function Settings() {
 
 /** Algorithmen: Regeln, die das Programm selbst auswertet – nach Bereichen getrennt. */
 function Algorithms() {
-  const [cat, setCat] = useState<'fruehstueck' | 'email'>('fruehstueck');
+  const [cat, setCat] = useState<'fruehstueck' | 'email' | 'gast'>('fruehstueck');
   return (
     <>
       <div className="segmented" role="tablist" aria-label="Bereich">
-        {([['fruehstueck', 'Frühstück'], ['email', 'E-Mail']] as const).map(([k, l]) => (
+        {([['fruehstueck', 'Frühstück'], ['email', 'E-Mail'], ['gast', 'Gäste-E-Mail']] as const).map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={cat === k} className={cat === k ? 'on' : ''} onClick={() => setCat(k)}>{l}</button>
         ))}
       </div>
-      {cat === 'fruehstueck' ? <RulesCard /> : <MailRulesCard />}
+      {cat === 'fruehstueck' ? <RulesCard /> : cat === 'email' ? <MailRulesCard /> : <PrearrivalCard />}
     </>
   );
 }

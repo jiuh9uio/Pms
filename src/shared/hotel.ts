@@ -61,7 +61,10 @@ const PERIOD_MSG = { message: 'Abreise muss nach der Anreise liegen (höchstens 
 export const categoryInput = z.object({
   name: required(80), description: text(300), stdOccupancy: count(1, 20), maxPersons: count(1, 20), basePriceCents: cents, sort: count(0, 999),
   singleDiscountCents: cents.default(0), extraAdultCents: cents.default(0), extraChildCents: cents.default(0),
-}).refine((v) => v.singleDiscountCents <= v.basePriceCents, { message: 'Darf nicht höher als der Grundpreis sein', path: ['singleDiscountCents'] }).refine((v) => v.maxPersons >= v.stdOccupancy, { message: 'Darf nicht kleiner als die Standardbelegung sein', path: ['maxPersons'] });
+  /** Nachlass je Nacht ab so vielen Nächten; 0 = aus */
+  longStayNights: z.number('Bitte eine Zahl eingeben').int().min(0).max(60).default(0), longStayDiscountCents: cents.default(0),
+}).refine((v) => v.longStayNights !== 1, { message: 'Bitte mindestens 2 Nächte (oder 0 für keinen Nachlass)', path: ['longStayNights'] })
+  .refine((v) => v.longStayDiscountCents <= v.basePriceCents, { message: 'Darf nicht höher als der Grundpreis sein', path: ['longStayDiscountCents'] }).refine((v) => v.singleDiscountCents <= v.basePriceCents, { message: 'Darf nicht höher als der Grundpreis sein', path: ['singleDiscountCents'] }).refine((v) => v.maxPersons >= v.stdOccupancy, { message: 'Darf nicht kleiner als die Standardbelegung sein', path: ['maxPersons'] });
 export const roomInput = z.object({
   number: required(20), categoryId: z.uuid('Bitte wählen'), floor: text(20), note: text(300), active: z.boolean(), priceOverrideCents: cents.nullable(),
 });
@@ -121,7 +124,7 @@ export const chargeInput = z.object({
 }).refine((v) => !!v.serviceId || (!!v.name && v.unitPriceCents !== undefined && !!v.taxRateId), { message: 'Leistung wählen oder Bezeichnung, Preis und Steuersatz angeben', path: ['name'] });
 
 // ---------- Antworttypen ----------
-export interface CategoryDto extends PersonPricing { id: string; name: string; description: string; maxPersons: number; basePriceCents: number; sort: number; version: number }
+export interface CategoryDto extends PersonPricing { longStayNights: number; longStayDiscountCents: number; id: string; name: string; description: string; maxPersons: number; basePriceCents: number; sort: number; version: number }
 /** Personenabhängige Preisbestandteile einer Kategorie, je Nacht in Cent (brutto). */
 export interface PersonPricing { stdOccupancy: number; singleDiscountCents: number; extraAdultCents: number; extraChildCents: number }
 /**
@@ -244,3 +247,16 @@ export const kitchenPrinterInput = z.object({
   autoBreakfastTime: z.string().regex(/^(([01]\d|2[0-3]):[0-5]\d)?$/, 'Uhrzeit im Format HH:MM').default(''),
 });
 export type KitchenPrinter = z.infer<typeof kitchenPrinterInput>;
+
+// ---------- Nachricht vor der Anreise (Einstellungen → Algorithmen → Gäste-E-Mail) ----------
+export const prearrivalInput = z.object({
+  enabled: z.boolean(),
+  /** so viele Tage vor der Anreise */
+  daysBefore: z.number('Bitte eine Zahl eingeben').int().min(1).max(14),
+  /** frühestens zu dieser Uhrzeit */
+  time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Uhrzeit im Format HH:MM'),
+  /** eigener Zusatztext, z. B. Anfahrt, Parken, Schlüsselübergabe bei später Anreise */
+  extraText: z.string().trim().max(2000),
+});
+export type PrearrivalSettings = z.infer<typeof prearrivalInput>;
+export interface PrearrivalState { settings: PrearrivalSettings; mailReady: boolean; /** Beispieltext mit erfundenen Angaben */ sample: { subject: string; text: string }; lastRun: string | null; sentTotal: number; dueNow: number }

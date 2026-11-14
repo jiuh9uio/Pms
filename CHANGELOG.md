@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.28.0
+
+- Zimmer & Preise: Je Kategorie lässt sich ein Nachlass je Nacht ab einer Zahl von Nächten einstellen (z. B. ab 2 Nächten 10 € weniger je Nacht). Er gilt für neue Reservierungen und steht bei den Nachtpreisen als „ab 2 Nächten“.
+- Einstellungen → Algorithmen → „Gäste-E-Mail“: Nachricht vor der Anreise. Einige Tage vorher bekommt der Gast von selbst eine E-Mail mit Anreisetag, Check-in-Zeit, Anschrift und eigenem Zusatztext – einmal je Reservierung. Von Haus aus ausgeschaltet.
+- Team: wiederkehrende Aufgaben (täglich, wöchentlich, monatlich), die am fälligen Tag von selbst als Aufgabe erscheinen.
+- Vorbereitung Online-Buchung: öffentliche Seite „Zimmeranfrage“ (/anfrage). Anfragen landen als Zimmeranfrage im Modul E-Mail; gebucht wird dabei nichts. Einzuschalten unter Einstellungen → E-Mail. Für Gäste im Internet erst nutzbar, wenn das Programm von außen erreichbar ist.
+
 ## 1.27.0
 
 - Neuer Bereich „Team“ (für alle Benutzer): Übergabebuch, Aufgaben und Reparaturmeldungen mit Lesebestätigung, Fälligkeit und Erledigt-Vermerk. Die Kachel im Startmenü zeigt die Zahl der ungelesenen Einträge.

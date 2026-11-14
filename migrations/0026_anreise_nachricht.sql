@@ -1,0 +1,1 @@
+ALTER TABLE "bookings" ADD COLUMN "prearrival_sent_at" timestamp with time zone;

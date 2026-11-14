@@ -1,10 +1,10 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { todayBerlin } from '../../shared/hotel.js';
-import type { CleanList, CleanRow, DayReport, NoteKind, TeamNoteDto, TeamState } from '../../shared/team.js';
+import type { CleanList, CleanRow, DayReport, NoteKind, RecurringDto, TeamNoteDto, TeamState } from '../../shared/team.js';
 import type { Db, Exec } from '../db/client.js';
-import { teamNoteReads, teamNotes } from '../db/schema.js';
+import { teamNoteReads, teamNotes, teamRecurring } from '../db/schema.js';
 import { notFound } from '../lib/errors.js';
-import { record, type Actor } from './audit.js';
+import { record, SYSTEM, type Actor } from './audit.js';
 
 /** Übergabebuch, Aufgaben und Reparaturmeldungen. Alle angemeldeten Benutzer sehen und schreiben alles; nichts wird gelöscht. */
 export async function listNotes(db: Exec, actor: Actor, view: 'open' | NoteKind | 'done'): Promise<TeamNoteDto[]> {
@@ -52,6 +52,43 @@ export async function setDone(db: Db, actor: Actor, id: string, done: boolean, n
   if (!r) throw notFound('Eintrag');
   await record(db, actor, { action: done ? 'done' : 'reopen', entity: 'team_note', entityId: id, after: { kind: r.kind, text: r.text.slice(0, 120), note } });
   return { ok: true };
+}
+
+// ---------- Wiederkehrende Aufgaben ----------
+export const listRecurring = async (db: Exec): Promise<RecurringDto[]> =>
+  (await db.select().from(teamRecurring).orderBy(teamRecurring.createdAt)).map((r) => ({ id: r.id, text: r.text, place: r.place, repeat: r.repeat, day: r.day, lastCreated: r.lastCreated }));
+export async function createRecurring(db: Db, actor: Actor, v: { text: string; place: string; repeat: 'daily' | 'weekly' | 'monthly'; day: number }) {
+  const [r] = await db.insert(teamRecurring).values({ ...v, createdBy: actor.userName }).returning();
+  await record(db, actor, { action: 'create', entity: 'team_recurring', entityId: r!.id, after: v });
+  await recurringTick(db);
+  return { id: r!.id };
+}
+export async function deleteRecurring(db: Db, actor: Actor, id: string) {
+  const [r] = await db.delete(teamRecurring).where(eq(teamRecurring.id, id)).returning();
+  if (!r) throw notFound('Aufgabe');
+  await record(db, actor, { action: 'delete', entity: 'team_recurring', entityId: id, before: { text: r.text, repeat: r.repeat } });
+  return { ok: true };
+}
+/** Legt für jede heute fällige wiederkehrende Aufgabe einmal eine Aufgabe an (auch wenn das Programm erst später am Tag startet). */
+export async function recurringTick(db: Db, today = todayBerlin()): Promise<number> {
+  const wd = new Date(`${today}T12:00:00Z`).getUTCDay(), dom = Number(today.slice(8, 10));
+  let made = 0;
+  for (const r of await db.select().from(teamRecurring)) {
+    const due = r.repeat === 'daily' || (r.repeat === 'weekly' && r.day === wd) || (r.repeat === 'monthly' && r.day === dom);
+    if (!due || r.lastCreated === today) continue;
+    // erst merken, dann anlegen: zwei gleichzeitige Läufe erzeugen keine doppelte Aufgabe
+    const [hit] = await db.update(teamRecurring).set({ lastCreated: today }).where(and(eq(teamRecurring.id, r.id), sql`${teamRecurring.lastCreated} is distinct from ${today}`)).returning({ id: teamRecurring.id });
+    if (!hit) continue;
+    await db.insert(teamNotes).values({ kind: 'task', text: r.text, place: r.place, dueDate: today, createdBy: 'Automatisch', createdById: null });
+    made++;
+  }
+  if (made) await record(db, SYSTEM, { action: 'create_many', entity: 'team_note', after: { automatic: made, date: today } });
+  return made;
+}
+export function startRecurringScheduler(db: Db) {
+  const run = () => void recurringTick(db).catch((e) => console.error('Wiederkehrende Aufgaben:', e instanceof Error ? e.message : e));
+  setTimeout(run, 20_000).unref();
+  setInterval(run, 10 * 60_000).unref();
 }
 
 // ---------- Reinigungsliste ----------

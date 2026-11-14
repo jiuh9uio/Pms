@@ -5,6 +5,7 @@ import type { Db } from './db/client.js';
 import { listAudit, type Actor } from './modules/audit.js';
 import * as bookings from './modules/bookings.js';
 import * as breakfast from './modules/breakfast.js';
+import * as prearrival from './modules/prearrival.js';
 import { cleanList, dayReport } from './modules/team.js';
 import * as companies from './modules/companies.js';
 import { networkInterfaces } from 'node:os';
@@ -144,6 +145,8 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   api.get('/reports/day', user, (req) => dayReport(db, dateOf(req.query)));
   api.get('/breakfast/week', user, (req) => breakfast.breakfastWeek(db, dateOf(req.query)));
   api.post('/breakfast/print', user, (req) => breakfast.printBreakfast(db, actor(req), dateOf(req.body)));
+  api.get('/settings/prearrival', admin, () => prearrival.prearrivalState(db));
+  api.put('/settings/prearrival', admin, (req) => prearrival.savePrearrival(db, actor(req), H.prearrivalInput.parse(req.body)));
   api.get('/settings/breakfast-rules', admin, () => breakfast.getRules(db));
   api.put('/settings/breakfast-rules', admin, (req) => breakfast.saveRules(db, actor(req), H.breakfastRulesInput.parse(req.body)));
   api.get('/settings/kitchen-printer', admin, () => breakfast.getPrinter(db));

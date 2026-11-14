@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { NOTE_KINDS, NOTE_KIND_LABEL, teamNoteInput, type NoteKind, type TeamNoteDto } from '../../../src/shared/team.js';
+import { NOTE_KINDS, NOTE_KIND_LABEL, REPEATS, REPEAT_LABEL, recurringInput, teamNoteInput, type NoteKind, type RecurringDto, type TeamNoteDto } from '../../../src/shared/team.js';
+import { useAuth } from '../App.tsx';
 import { api } from '../api.ts';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
@@ -59,7 +60,51 @@ export function Team() {
           </div>
         </section>
       ))}
+      <Recurring />
       <p className="muted small">Einträge lassen sich nicht löschen oder nachträglich ändern – so bleibt nachvollziehbar, was übergeben wurde. Erledigtes steht unter „Erledigt“.</p>
     </>
+  );
+}
+
+const WD = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+const when = (r: RecurringDto) => (r.repeat === 'daily' ? 'täglich' : r.repeat === 'weekly' ? `jeden ${WD[r.day]}` : `am ${r.day}. jedes Monats`);
+
+/** Wiederkehrende Aufgaben: erscheinen am fälligen Tag von selbst unter „Aufgaben“. Anlegen und Entfernen nur für Administratoren. */
+function Recurring() {
+  const { user } = useAuth();
+  const toast = useToast();
+  const { rev, bump } = useData();
+  const { data } = useLoad(() => api<RecurringDto[]>('GET', '/team/recurring'), [rev]);
+  const [v, setV] = useState({ text: '', place: '', repeat: 'weekly' as (typeof REPEATS)[number], day: '1' });
+  const f = useSubmit(recurringInput, async (d) => { await api('POST', '/team/recurring', d); toast('Wiederkehrende Aufgabe angelegt'); setV({ ...v, text: '', place: '' }); bump(); });
+  const remove = async (r: RecurringDto) => {
+    if (!window.confirm(`„${r.text}“ nicht mehr automatisch anlegen? Bereits angelegte Aufgaben bleiben.`)) return;
+    try { await api('DELETE', `/team/recurring/${r.id}`); toast('Entfernt'); bump(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+  };
+  const admin = user.role === 'admin';
+  if (!admin && !data?.length) return null;
+  return (
+    <section className="card">
+      <h2>Wiederkehrende Aufgaben</h2>
+      <p className="muted">Diese Aufgaben legt das Programm am fälligen Tag von selbst an – sie stehen dann oben unter „Aufgaben“, bis jemand sie erledigt.</p>
+      {data && data.length > 0 && (
+        <div className="tablewrap"><table>
+          <thead><tr><th>Aufgabe</th><th>Ort</th><th>Wann</th>{admin && <th />}</tr></thead>
+          <tbody>{data.map((r) => <tr key={r.id}><td>{r.text}</td><td>{r.place || '–'}</td><td>{when(r)}</td>{admin && <td><Button variant="danger" onClick={() => void remove(r)}>Entfernen</Button></td>}</tr>)}</tbody>
+        </table></div>
+      )}
+      {admin && (
+        <form onSubmit={(e) => void f.submit({ ...v, day: v.repeat === 'daily' ? 0 : Number(v.day) }, e)} noValidate>
+          <div className="formgrid cols3">
+            <Field label="Was ist zu tun?" error={f.errors.text} wide><input value={v.text} onChange={(e) => setV({ ...v, text: e.target.value })} placeholder="z. B. Getränke bestellen" /></Field>
+            <Field label="Ort" error={f.errors.place} hint="optional"><input value={v.place} onChange={(e) => setV({ ...v, place: e.target.value })} /></Field>
+            <Field label="Wiederholung"><select value={v.repeat} onChange={(e) => setV({ ...v, repeat: e.target.value as (typeof REPEATS)[number], day: e.target.value === 'monthly' ? '1' : '1' })}>{REPEATS.map((r) => <option key={r} value={r}>{REPEAT_LABEL[r]}</option>)}</select></Field>
+            {v.repeat === 'weekly' && <Field label="Wochentag" error={f.errors.day}><select value={v.day} onChange={(e) => setV({ ...v, day: e.target.value })}>{[1, 2, 3, 4, 5, 6, 0].map((n) => <option key={n} value={n}>{WD[n]}</option>)}</select></Field>}
+            {v.repeat === 'monthly' && <Field label="Tag im Monat" error={f.errors.day} hint="1 bis 28"><input inputMode="numeric" value={v.day} onChange={(e) => setV({ ...v, day: e.target.value })} /></Field>}
+          </div>
+          <div className="formactions"><Button type="submit" busy={f.busy}>Wiederkehrende Aufgabe anlegen</Button></div>
+        </form>
+      )}
+    </section>
   );
 }

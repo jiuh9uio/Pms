@@ -48,3 +48,21 @@ export const mailRulesInput = z.object({
   ignoreSenders: words,
 });
 export type MailRules = z.infer<typeof mailRulesInput>;
+
+// ---------- Online-Buchungsanfrage (öffentliche Seite /anfrage) ----------
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Bitte ein Datum wählen');
+export const webRequestInput = z.object({
+  name: z.string().trim().min(2, 'Bitte Ihren Namen eintragen').max(120),
+  email: z.email('Bitte eine gültige E-Mail-Adresse eintragen'),
+  phone: z.string().trim().max(60).default(''),
+  from: day, to: day,
+  adults: z.number('Bitte eine Zahl eintragen').int().min(1).max(30), children: z.number().int().min(0).max(30).default(0),
+  message: z.string().trim().max(1500).default(''),
+  /** Datenschutzhinweis gelesen */
+  consent: z.literal(true, 'Bitte den Hinweis zum Datenschutz bestätigen'),
+  /** unsichtbares Feld gegen automatische Einträge – muss leer bleiben */
+  website: z.string().max(200).default(''),
+}).refine((v) => v.from < v.to, { message: 'Die Abreise muss nach der Anreise liegen', path: ['to'] });
+export const webRequestSettingsInput = z.object({ enabled: z.boolean(), intro: z.string().trim().max(600), privacy: z.string().trim().max(1200) });
+export type WebRequestSettings = z.infer<typeof webRequestSettingsInput>;
+export interface WebRequestPublic { enabled: boolean; hotelName: string; intro: string; privacy: string }

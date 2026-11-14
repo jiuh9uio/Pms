@@ -135,9 +135,11 @@ export function RoomsPrices() {
       { key: 'singleDiscountCents', label: 'Nachlass bei Einzelbelegung (je Nacht)', type: 'money', hint: 'eine Person allein im Zimmer; 0 = kein Nachlass' },
       { key: 'extraAdultCents', label: 'Aufpreis je zusätzlichem Erwachsenen (je Nacht)', type: 'money', hint: 'über der Standardbelegung' },
       { key: 'extraChildCents', label: 'Aufpreis je zusätzlichem Kind (je Nacht)', type: 'money', hint: 'über der Standardbelegung' },
+      { key: 'longStayNights', label: 'Nachlass ab … Nächten', type: 'int', hint: 'z. B. 2; 0 = kein Nachlass' },
+      { key: 'longStayDiscountCents', label: 'Nachlass je Nacht bei längerem Aufenthalt', type: 'money', hint: 'wird von jeder Nacht abgezogen' },
       { key: 'sort', label: 'Reihenfolge', type: 'int', hint: 'kleine Zahl zuerst' },
     ]}
-    initial={{ name: c?.name ?? '', basePriceCents: moneyInput(c?.basePriceCents), singleDiscountCents: moneyInput(c?.singleDiscountCents ?? 0), extraAdultCents: moneyInput(c?.extraAdultCents ?? 0), extraChildCents: moneyInput(c?.extraChildCents ?? 0), description: c?.description ?? '', stdOccupancy: String(c?.stdOccupancy ?? 2), maxPersons: String(c?.maxPersons ?? 2), sort: String(c?.sort ?? cats.length + 1) }} />);
+    initial={{ name: c?.name ?? '', basePriceCents: moneyInput(c?.basePriceCents), singleDiscountCents: moneyInput(c?.singleDiscountCents ?? 0), extraAdultCents: moneyInput(c?.extraAdultCents ?? 0), extraChildCents: moneyInput(c?.extraChildCents ?? 0), longStayNights: String(c?.longStayNights ?? 0), longStayDiscountCents: moneyInput(c?.longStayDiscountCents ?? 0), description: c?.description ?? '', stdOccupancy: String(c?.stdOccupancy ?? 2), maxPersons: String(c?.maxPersons ?? 2), sort: String(c?.sort ?? cats.length + 1) }} />);
 
   const editRoom = (r?: RoomDto) => setDlg(<MasterDialog title={r ? `Zimmer ${r.number} bearbeiten` : 'Zimmer anlegen'} del={r && `Zimmer ${r.number} endgültig löschen?`} path="/rooms" id={r?.id ?? null} version={r?.version} schema={roomInput} onClose={close}
     fields={[
@@ -195,7 +197,7 @@ export function RoomsPrices() {
             <thead><tr><th>Kategorie</th><th className="num">Grundpreis</th><th className="num">Belegung</th><th className="num">Zimmer</th></tr></thead>
             <tbody>{cats.map((c) => (
               <tr key={c.id} {...rowProps(() => editCat(c))}><td><b>{c.name}</b>{c.description && <><br /><small>{c.description}</small></>}</td>
-                <td className="num">{formatMoney(c.basePriceCents)}{(c.singleDiscountCents > 0 || c.extraAdultCents > 0 || c.extraChildCents > 0) && <><br /><small className="muted">{[c.singleDiscountCents > 0 && `allein −${formatMoney(c.singleDiscountCents)}`, c.extraAdultCents > 0 && `Erw. +${formatMoney(c.extraAdultCents)}`, c.extraChildCents > 0 && `Kind +${formatMoney(c.extraChildCents)}`].filter(Boolean).join(' · ')}</small></>}</td><td className="num">{c.stdOccupancy} (max. {c.maxPersons})</td><td className="num">{rooms.filter((r) => r.categoryId === c.id).length}</td></tr>
+                <td className="num">{formatMoney(c.basePriceCents)}{(c.singleDiscountCents > 0 || c.extraAdultCents > 0 || c.extraChildCents > 0 || (c.longStayNights >= 2 && c.longStayDiscountCents > 0)) && <><br /><small className="muted">{[c.singleDiscountCents > 0 && `allein −${formatMoney(c.singleDiscountCents)}`, c.extraAdultCents > 0 && `Erw. +${formatMoney(c.extraAdultCents)}`, c.extraChildCents > 0 && `Kind +${formatMoney(c.extraChildCents)}`, c.longStayNights >= 2 && c.longStayDiscountCents > 0 && `ab ${c.longStayNights} Nächten −${formatMoney(c.longStayDiscountCents)}`].filter(Boolean).join(' · ')}</small></>}</td><td className="num">{c.stdOccupancy} (max. {c.maxPersons})</td><td className="num">{rooms.filter((r) => r.categoryId === c.id).length}</td></tr>
             ))}</tbody>
           </table></div>
         )}

@@ -2,7 +2,7 @@ import { and, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import type { MailDraft } from '../../shared/hotel.js';
-import type { InboxMailDto, InboxSettingsDto, InboxState, InboxStatus, MailRules, ReplyTemplate } from '../../shared/inbox.js';
+import type { InboxMailDto, InboxSettingsDto, InboxState, InboxStatus, MailRules, ReplyTemplate, WebRequestPublic, WebRequestSettings } from '../../shared/inbox.js';
 import { extract, type MailExtract, type MailKind } from '../../shared/mailextract.js';
 import type { Db, Exec } from '../db/client.js';
 import { inboxMails, restaurantTables, settings, tableReservations } from '../db/schema.js';
@@ -262,3 +262,40 @@ export async function sendReply(db: Db, actor: Actor, id: string, v: { to: strin
   await record(db, actor, { action: 'mail', entity: 'inbox', entityId: id, after: { to: v.to, subject: v.subject.slice(0, 120) } });
   return { ok: true };
 }
+
+// ---------- Online-Buchungsanfrage ----------
+const WEB0: WebRequestSettings = { enabled: false, intro: '', privacy: '' };
+export const getWebRequest = (db: Exec) => read(db, 'web_request', WEB0);
+export async function saveWebRequest(db: Db, actor: Actor, v: WebRequestSettings) {
+  await write(db, 'web_request', v);
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: 'web_request', after: v });
+  return v;
+}
+export async function webRequestPublic(db: Exec): Promise<WebRequestPublic> {
+  const [s, h] = [await getWebRequest(db), await getHotel(db)];
+  return { enabled: s.enabled, hotelName: h.name, intro: s.intro, privacy: s.privacy };
+}
+/**
+ * Anfrage von der öffentlichen Seite: Es wird nichts gebucht und nichts zugesagt – die Anfrage landet als Nachricht der Art
+ * „Zimmer“ im E-Mail-Posteingang und wird dort wie eine E-Mail geprüft, übernommen und beantwortet.
+ */
+export async function submitWebRequest(db: Db, v: { name: string; email: string; phone: string; from: string; to: string; adults: number; children: number; message: string; website: string }, ip: string | null) {
+  const s = await getWebRequest(db);
+  if (!s.enabled) throw conflict('Online-Anfragen sind derzeit nicht möglich', 'web_request_off');
+  if (v.website) return { ok: true }; // automatischer Eintrag: still verwerfen
+  if (v.from < todayOf(new Date())) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { from: 'Die Anreise liegt in der Vergangenheit' });
+  const body = [`Online-Anfrage über die Website`, '', `Name: ${v.name}`, `E-Mail: ${v.email}`, ...(v.phone ? [`Telefon: ${v.phone}`] : []),
+    `Anreise: ${deDay(v.from)}`, `Abreise: ${deDay(v.to)}`, `Personen: ${v.adults} Erwachsene${v.children ? `, ${v.children} Kinder` : ''}`, ...(v.message ? ['', 'Nachricht:', v.message] : [])].join('\n');
+  const ex: MailExtract = { kind: 'hotel', dates: [v.from, v.to], from: v.from, to: v.to, time: null, persons: v.adults, children: v.children || null, phone: v.phone };
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(4712)`);
+    const [m] = await tx.execute(sql`select coalesce(max(uid), 0) + 1 as n from inbox_mails where uid_validity = 'web'`);
+    await tx.insert(inboxMails).values({
+      uidValidity: 'web', uid: Number(m!.n), fromName: v.name, fromAddr: v.email, subject: `Online-Anfrage ${deDay(v.from)} bis ${deDay(v.to)}`,
+      receivedAt: new Date(), body, kind: 'hotel', extract: ex,
+    });
+    await record(tx, { userId: null, userName: 'Online-Anfrage', ip }, { action: 'create', entity: 'inbox', after: { from: v.from, to: v.to } });
+  });
+  return { ok: true };
+}
+const todayOf = (d: Date) => d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });

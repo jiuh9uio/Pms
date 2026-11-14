@@ -128,6 +128,7 @@ jobs:
           if (-not $tn.id) { throw 'Team-Eintrag wurde nicht gespeichert' }
           $day = Invoke-RestMethod "$base/reports/day?date=$(Get-Date -Format 'yyyy-MM-dd')" -WebSession $s
           if ($null -eq $day.totalCents) { throw 'Tagesabschluss fehlerhaft' }
+          if ((Invoke-RestMethod "$base/public/booking-request").enabled) { throw 'Online-Anfrage ist ohne Einschalten aktiv' }
           $gr = Post '/goods-receipts' @{ supplier = 'Test'; goods = 'Ware'; tempC = 3.5; ok = $true; note = '' } $s
           if (-not $gr.id) { throw 'Wareneingang wurde nicht gespeichert' }
           $rep = Invoke-RestMethod "$base/reports/year?year=2031" -WebSession $s

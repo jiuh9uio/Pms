@@ -325,4 +325,19 @@ describe('Personenabhängige Preise', () => {
     await ok('DELETE', `/categories/${empty}`, admin);
     expect((await ok('GET', '/rate-rules', admin)).some((x: { id: string }) => x.id === own)).toBe(false);
   });
+
+  it('gibt ab der eingestellten Zahl von Nächten einen Nachlass je Nacht', async () => {
+    const base = { name: 'Mit Nachlass', description: '', stdOccupancy: 2, maxPersons: 2, basePriceCents: 8000, sort: 97 };
+    expect((await call('POST', '/categories', admin, { ...base, longStayNights: 1, longStayDiscountCents: 500 })).statusCode).toBe(400); // erst ab 2 Nächten sinnvoll
+    const cat = (await ok('POST', '/categories', admin, { ...base, longStayNights: 2, longStayDiscountCents: 1000 })).id as string;
+    const roomId = (await ok('POST', '/rooms', admin, { number: 'N1', categoryId: cat, floor: '', note: '', active: true, priceOverrideCents: null })).id as string;
+    const quote = async (from: string, to: string) => (await ok('GET', `/availability?from=${from}&to=${to}`, user)).find((r: { id: string }) => r.id === roomId).quoteCents as number;
+    expect(await quote('2034-02-06', '2034-02-07')).toBe(8000); // eine Nacht: voller Preis
+    expect(await quote('2034-02-06', '2034-02-08')).toBe(14000); // zwei Nächte: je 10 € weniger
+    expect(await quote('2034-02-06', '2034-02-09')).toBe(21000);
+    const id = (await ok('POST', '/bookings', user, booking([room(roomId, '2034-02-06', '2034-02-08')]))).id;
+    const b = await price(id);
+    expect(b.lodgingCents).toBe(14000);
+    expect(b.nightly![0]!.source).toContain('ab 2 Nächten');
+  });
 });

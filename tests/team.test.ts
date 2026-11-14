@@ -11,7 +11,7 @@ const { db, close } = connect(url);
 let app: FastifyInstance;
 let admin: Record<string, string>;
 let user: Record<string, string>;
-type Method = 'GET' | 'POST' | 'PUT';
+type Method = 'GET' | 'POST' | 'PUT' | 'DELETE';
 const call = (method: Method, path: string, cookies: Record<string, string>, payload?: unknown) =>
   app.inject({ method, url: '/api/v1' + path, cookies, payload: payload as object | undefined });
 const ok = async (method: Method, path: string, cookies: Record<string, string>, payload?: unknown) => {
@@ -128,5 +128,26 @@ describe('Team, Reinigungsliste und Tagesabschluss', () => {
     expect(d2.arrivals).toMatchObject({ expected: 1, checkedIn: 0 });
     expect(d2.arrivals.open[0]).toMatchObject({ room: '101' });
     expect(d2.departures.expected).toBe(1);
+  });
+
+  it('legt wiederkehrende Aufgaben am fälligen Tag einmal an', async () => {
+    const { recurringTick } = await import('../src/server/modules/team.js');
+    expect((await call('POST', '/team/recurring', user, { text: 'x', place: '', repeat: 'daily', day: 0 })).statusCode).toBe(403);
+    expect((await call('POST', '/team/recurring', admin, { text: 'x', place: '', repeat: 'monthly', day: 0 })).statusCode).toBe(400);
+    const open = async () => (await ok('GET', '/team/notes?view=task', user)).filter((n: { createdBy: string }) => n.createdBy === 'Automatisch');
+    const daily = (await ok('POST', '/team/recurring', admin, { text: 'Kühlhaus-Temperatur prüfen', place: 'Küche', repeat: 'daily', day: 0 })).id;
+    expect(await open()).toHaveLength(1); // gleich beim Anlegen für heute
+    expect((await open())[0]).toMatchObject({ text: 'Kühlhaus-Temperatur prüfen', place: 'Küche', dueDate: today, kind: 'task' });
+    expect(await recurringTick(db)).toBe(0); // nicht doppelt
+    expect(await recurringTick(db, addDays(today, 1))).toBe(1);
+    const monday = addDays('2035-01-01', 0); // 1. Januar 2035 ist ein Montag
+    await ok('POST', '/team/recurring', admin, { text: 'Getränke bestellen', place: '', repeat: 'weekly', day: 1 });
+    await ok('POST', '/team/recurring', admin, { text: 'Feuerlöscher sichten', place: '', repeat: 'monthly', day: 15 });
+    expect(await recurringTick(db, monday)).toBe(2); // täglich + montags
+    expect(await recurringTick(db, addDays(monday, 1))).toBe(1); // nur täglich
+    expect(await recurringTick(db, '2035-01-15')).toBe(3); // Montag, der 15.: alle drei
+    expect(await ok('GET', '/team/recurring', user)).toHaveLength(3);
+    await ok('DELETE', `/team/recurring/${daily}`, admin);
+    expect(await recurringTick(db, '2035-01-17')).toBe(0);
   });
 });

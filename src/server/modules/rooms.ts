@@ -147,7 +147,10 @@ export async function priceNights(db: Exec, roomId: string, categoryId: string, 
     .orderBy(asc(rateRules.priority), asc(rateRules.createdAt));
   // ohne Personenangabe gilt die Standardbelegung (kein Zu- oder Abschlag)
   const adj = persons ? personAdjust(cat, persons.adults, persons.children) : { cents: 0, label: '' };
-  return eachNight(from, to).map((date) => {
+  const all = eachNight(from, to);
+  // Nachlass bei längerem Aufenthalt: gilt für jede Nacht, sobald der Aufenthalt lang genug ist
+  const long = cat.longStayNights >= 2 && cat.longStayDiscountCents > 0 && all.length >= cat.longStayNights ? cat.longStayDiscountCents : 0;
+  return all.map((date) => {
     let price = base;
     const names: string[] = [];
     for (const r of rules) {
@@ -160,7 +163,8 @@ export async function priceNights(db: Exec, roomId: string, categoryId: string, 
       names.push(r.name);
     }
     const label = names.join(', ') || (own ? 'Zimmerpreis' : 'Grundpreis');
-    return { date, priceCents: Math.max(0, price + adj.cents), source: adj.label ? `${label}, ${adj.label}` : label };
+    const src = [label, adj.label, long ? `ab ${cat.longStayNights} Nächten` : ''].filter(Boolean).join(', ');
+    return { date, priceCents: Math.max(0, price + adj.cents - long), source: src };
   });
 }
 

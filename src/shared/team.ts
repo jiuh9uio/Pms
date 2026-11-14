@@ -39,3 +39,15 @@ export interface DayReport {
   departures: { expected: number; checkedOut: number; open: { room: string; guest: string; bookingId: string }[] };
   occupied: number; rooms: number;
 }
+
+// ---------- Wiederkehrende Aufgaben ----------
+export const REPEATS = ['daily', 'weekly', 'monthly'] as const;
+export const REPEAT_LABEL: Record<(typeof REPEATS)[number], string> = { daily: 'täglich', weekly: 'wöchentlich', monthly: 'monatlich' };
+export const recurringInput = z.object({
+  text: z.string().trim().min(1, 'Bitte eintragen, was zu tun ist').max(500), place: z.string().trim().max(80).default(''),
+  repeat: z.enum(REPEATS),
+  /** wöchentlich: 0 = Sonntag … 6 = Samstag; monatlich: Tag 1–28 */
+  day: z.number('Bitte wählen').int().min(0).max(28),
+}).refine((v) => v.repeat !== 'weekly' || v.day <= 6, { message: 'Bitte einen Wochentag wählen', path: ['day'] })
+  .refine((v) => v.repeat !== 'monthly' || v.day >= 1, { message: 'Bitte einen Tag von 1 bis 28 wählen', path: ['day'] });
+export interface RecurringDto { id: string; text: string; place: string; repeat: (typeof REPEATS)[number]; day: number; lastCreated: string | null }

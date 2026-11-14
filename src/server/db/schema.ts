@@ -90,6 +90,9 @@ export const roomCategories = pgTable('room_categories', {
   singleDiscountCents: integer('single_discount_cents').notNull().default(0),
   extraAdultCents: integer('extra_adult_cents').notNull().default(0),
   extraChildCents: integer('extra_child_cents').notNull().default(0),
+  /** Nachlass je Nacht bei längerem Aufenthalt: ab so vielen Nächten (0 = kein Nachlass) */
+  longStayNights: integer('long_stay_nights').notNull().default(0),
+  longStayDiscountCents: integer('long_stay_discount_cents').notNull().default(0),
   sort: integer('sort').notNull().default(0),
   ...stamps,
 });
@@ -205,6 +208,8 @@ export const bookings = pgTable('bookings', {
   source: text('source').notNull().default(''),
   paymentMethod: text('payment_method').notNull().default(''),
   notes: text('notes').notNull().default(''),
+  /** Zeitpunkt, zu dem die Nachricht vor der Anreise verschickt wurde (höchstens einmal je Reservierung) */
+  prearrivalSentAt: ts('prearrival_sent_at'),
   ...stamps,
 }, (t) => [index('bookings_guest_idx').on(t.guestId)]);
 
@@ -635,3 +640,15 @@ export const teamNoteReads = pgTable('team_note_reads', {
   userName: text('user_name').notNull(),
   at: ts('at').notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.noteId, t.userId] })]);
+
+/** Wiederkehrende Aufgaben: legen am fälligen Tag von selbst eine Aufgabe im Team-Bereich an. */
+export const teamRecurring = pgTable('team_recurring', {
+  id: id(),
+  text: text('text').notNull(),
+  place: text('place').notNull().default(''),
+  repeat: text('repeat', { enum: ['daily', 'weekly', 'monthly'] }).notNull(),
+  day: integer('day').notNull().default(0),
+  lastCreated: date('last_created', { mode: 'string' }),
+  createdBy: text('created_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});

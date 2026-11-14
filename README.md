@@ -244,6 +244,23 @@ rechtlich geprüft ist, steht dort ausdrücklich.
   sie ist ein Vorschlag. Antworten gehen über das eigene Mailprogramm (`mailto:`), nicht aus dem PMS. Die Mailtexte enthalten
   personenbezogene Daten; eine automatische Löschfrist gibt es nicht (einzelnes Entfernen ist möglich).
 
+**Seit Version 1.27.0/1.28.0 zusätzlich – Team, Reinigung, Tagesabschluss, Gäste-E-Mail, Online-Anfrage:**
+
+- **Team** (`team_notes`, `team_note_reads`, `team_recurring`; alle angemeldeten Benutzer): Übergaben, Aufgaben, Reparaturen mit
+  Lesebestätigung; wiederkehrende Aufgaben (`recurringTick`, alle 10 Minuten und beim Start) legen am fälligen Tag eine Aufgabe an.
+- **Reinigungsliste** (`GET /housekeeping`) und **Tagesabschluss** (`GET /reports/day`): reine Auswertungen aus Belegung und
+  Zahlungen. Der Tagesabschluss ist kein Kassenbuch und keine Kassenaufzeichnung im Sinne der AO/KassenSichV.
+- **Nachlass bei längerem Aufenthalt:** `room_categories.long_stay_nights/long_stay_discount_cents`, angewendet in `priceNights`
+  auf jede Nacht, sobald der Aufenthalt lang genug ist. Wird ein bestehender Aufenthalt verlängert oder gekürzt, gilt die
+  bestehende Regel des Programms für geänderte Nächte; bereits gebuchte Nachtpreise werden nicht rückwirkend umgerechnet.
+- **Nachricht vor der Anreise** (`prearrival`, Spalte `bookings.prearrival_sent_at`): Prüfung jede Minute ab der eingestellten
+  Uhrzeit; bestätigte Reservierungen mit E-Mail-Adresse, Anreise in 1…n Tagen, älter als 12 Stunden. Nur Angaben zur Reise,
+  keine Werbung. Nicht mit einem echten Postfach erprobt.
+- **Online-Buchungsanfrage** (`/anfrage`, `POST /public/booking-request`): ohne Anmeldung, nur wenn eingeschaltet; Begrenzung
+  30 Aufrufe/Minute je Absender, Köderfeld, 8 kB. Legt eine Nachricht (`uid_validity = 'web'`) im Posteingang an – keine Buchung,
+  keine Verfügbarkeitsauskunft, keine Preise. Der Datenschutzhinweis ist ein freies Textfeld und muss vom Betreiber kommen.
+  Nur im Hausnetz erprobt; ein Betrieb im Internet setzt die Server-Installation voraus und wurde nicht auf Sicherheit geprüft.
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

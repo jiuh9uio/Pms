@@ -133,6 +133,10 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
       return { ok: true };
     });
 
+    // Online-Buchungsanfrage: ohne Anmeldung, nur wenn eingeschaltet; legt eine Nachricht im Posteingang an
+    api.get('/public/booking-request', { preHandler: publicLimit }, () => inbox.webRequestPublic(db));
+    api.post('/public/booking-request', { preHandler: publicLimit, bodyLimit: 8 * 1024 }, (req) => inbox.submitWebRequest(db, I.webRequestInput.parse(req.body), req.ip ?? null));
+
     // ---------- Anmeldung ----------
     api.get('/auth/state', async (req) => {
       const s = await auth.authenticate(db, req.cookies[COOKIE]);
@@ -215,6 +219,9 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.get('/team/notes', any, (req) => team.listNotes(db, actor(req), T.teamListQuery.parse(req.query).view));
     api.get('/team/state', any, (req) => team.teamState(db, actor(req)));
     api.post('/team/notes', any, (req) => team.createNote(db, actor(req), T.teamNoteInput.parse(req.body)));
+    api.get('/team/recurring', any, () => team.listRecurring(db));
+    api.post('/team/recurring', { preHandler: requireAdmin }, (req) => team.createRecurring(db, actor(req), T.recurringInput.parse(req.body)));
+    api.delete('/team/recurring/:id', { preHandler: requireAdmin }, (req) => team.deleteRecurring(db, actor(req), noteId(req)));
     api.post('/team/notes/:id/read', any, (req) => team.markRead(db, actor(req), noteId(req)));
     api.post('/team/notes/:id/done', any, (req) => { const v = T.teamDoneInput.parse(req.body); return team.setDone(db, actor(req), noteId(req), v.done, v.note); });
     api.get('/overview', { preHandler: requireUser }, (req) => overview(db, req.user!));
@@ -253,6 +260,8 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.get('/settings/mail-rules', { preHandler: requireAdmin }, () => inbox.getMailRules(db));
     api.put('/settings/mail-rules', { preHandler: requireAdmin }, (req) => inbox.saveMailRules(db, actor(req), I.mailRulesInput.parse(req.body)));
     api.post('/inbox/reclassify', { preHandler: requireAdmin }, (req) => inbox.reclassify(db, actor(req)));
+    api.get('/settings/web-request', { preHandler: requireAdmin }, () => inbox.getWebRequest(db));
+    api.put('/settings/web-request', { preHandler: requireAdmin }, (req) => inbox.saveWebRequest(db, actor(req), I.webRequestSettingsInput.parse(req.body)));
     api.get('/settings/inbox', { preHandler: requireAdmin }, () => inbox.getInboxSettings(db));
     api.put('/settings/inbox', { preHandler: requireAdmin }, (req) => inbox.saveInboxSettings(db, actor(req), I.inboxSettingsInput.parse(req.body)));
 

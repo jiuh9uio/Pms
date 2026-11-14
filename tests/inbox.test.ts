@@ -189,4 +189,27 @@ describe('E-Mail-Posteingang', () => {
     expect(await ok('GET', '/inbox?status=all', admin)).toHaveLength(0);
     expect(await ok('POST', '/inbox/fetch', admin)).toEqual({ added: 0 }); // wird nicht erneut abgeholt
   });
+
+  it('nimmt Online-Anfragen nur an, wenn eingeschaltet, und legt sie in den Posteingang', async () => {
+    const day = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+    const req = { name: 'Web Gast', email: 'web@example.com', phone: '0170 5556677', from: day(20), to: day(22), adults: 2, children: 1, message: 'Gern ruhig gelegen.', consent: true, website: '' };
+    expect(await ok('GET', '/public/booking-request', {})).toMatchObject({ enabled: false });
+    expect((await call('POST', '/public/booking-request', {}, req)).statusCode).toBe(409);
+    expect((await call('PUT', '/settings/web-request', user, { enabled: true, intro: '', privacy: '' })).statusCode).toBe(403);
+    await ok('PUT', '/settings/web-request', admin, { enabled: true, intro: 'Schön, dass Sie da sind.', privacy: 'Wir verwenden Ihre Angaben nur für diese Anfrage.' });
+    expect(await ok('GET', '/public/booking-request', {})).toMatchObject({ enabled: true, intro: 'Schön, dass Sie da sind.' });
+    expect((await call('POST', '/public/booking-request', {}, { ...req, consent: false })).statusCode).toBe(400);
+    expect((await call('POST', '/public/booking-request', {}, { ...req, to: req.from })).statusCode).toBe(400);
+    expect((await call('POST', '/public/booking-request', {}, { ...req, from: day(-3), to: day(-1) })).statusCode).toBe(400);
+    await ok('POST', '/public/booking-request', {}, { ...req, website: 'http://spam.example' }); // Köder ausgefüllt: still verworfen
+    expect(await ok('GET', '/inbox?status=all', admin)).toHaveLength(0);
+    await ok('POST', '/public/booking-request', {}, req);
+    await ok('POST', '/public/booking-request', {}, { ...req, name: 'Zweiter Gast' });
+    const list = await ok('GET', '/inbox?status=new', admin);
+    expect(list).toHaveLength(2);
+    const first = list.find((m: { fromName: string }) => m.fromName === 'Web Gast');
+    expect(first).toMatchObject({ kind: 'hotel', fromAddr: 'web@example.com', extract: { from: req.from, to: req.to, persons: 2, children: 1, phone: '0170 5556677' } });
+    expect((await ok('GET', `/inbox/${first.id}`, admin)).body).toContain('Gern ruhig gelegen.');
+    expect(await ok('POST', '/inbox/fetch', admin)).toEqual({ added: 0 }); // der Abruf des Postfachs stört die Online-Anfragen nicht
+  });
 });
