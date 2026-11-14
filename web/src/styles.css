@@ -458,3 +458,5 @@ a.btn { display: inline-flex; align-items: center; padding: 8px 14px; border: 1p
 /* Gäste-Link in der Reservierung, Seite für den Gast */
 .guestlink { display: flex; gap: 14px; align-items: flex-start; margin: 8px 0 14px; } .guestlink p { margin: 0 0 6px; } .guestlink img { border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 ul.plain { list-style: none; padding: 0; margin: 0 0 10px; } ul.plain li { padding: 6px 0; border-bottom: 1px solid var(--line); }
+
+a.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }

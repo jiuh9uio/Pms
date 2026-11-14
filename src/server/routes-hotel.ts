@@ -5,6 +5,7 @@ import type { Db } from './db/client.js';
 import { listAudit, type Actor } from './modules/audit.js';
 import * as bookings from './modules/bookings.js';
 import * as breakfast from './modules/breakfast.js';
+import * as guestguide from './modules/guestguide.js';
 import * as guestlink from './modules/guestlink.js';
 import * as stats from './modules/stats.js';
 import * as prearrival from './modules/prearrival.js';
@@ -161,6 +162,8 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   api.get('/reports/origin', user, (req) => { const q = z.object({ year: z.coerce.number().int().min(2000).max(2100), month: z.coerce.number().int().min(1).max(12) }).parse(req.query); return stats.originStats(db, q.year, q.month); });
   api.get('/reports/sources', user, (req) => stats.sourceStats(db, z.object({ year: z.coerce.number().int().min(2000).max(2100) }).parse(req.query).year));
   api.get('/reports/year', user, (req) => yearReport(db, z.object({ year: z.coerce.number().int().min(2000).max(2100) }).parse(req.query).year));
+  api.get('/settings/guest-guide', admin, () => guestguide.getGuide(db));
+  api.put('/settings/guest-guide', admin, (req) => guestguide.saveGuide(db, actor(req), H.guestGuideInput.parse(req.body)));
   // Stornobedingungen und Gäste-Link
   api.get('/settings/cancel-policy', admin, () => guestlink.getPolicy(db));
   api.put('/settings/cancel-policy', admin, (req) => guestlink.savePolicy(db, actor(req), H.cancelPolicyInput.parse(req.body)));

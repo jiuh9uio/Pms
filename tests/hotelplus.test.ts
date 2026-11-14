@@ -270,4 +270,27 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     const log = await db.execute(sql`select action from audit_log where action like 'guest_link_%' order by id`);
     expect(log.map((r) => r.action)).toEqual(['guest_link_block', 'guest_link_unblock', 'guest_link_renew']);
   });
+
+  it('verweist auf die digitale Gästemappe: Bon-Zettel, E-Mails, Seite des Gastes', async () => {
+    clientIp = '10.0.0.8';
+    const guide = { enabled: true, provider: 'gastfreund', label: 'Digitale Gästemappe', url: 'https://mappe.example.org/schuetzenhaus', text: 'Alles rund um Ihren Aufenthalt.', inMails: true, onGuestPage: true };
+    expect((await call('PUT', '/settings/guest-guide', user, guide)).statusCode).toBe(403);
+    expect((await call('PUT', '/settings/guest-guide', admin, { ...guide, url: '' })).statusCode).toBe(400); // eingeschaltet ohne Adresse
+    expect((await call('PUT', '/settings/guest-guide', admin, { ...guide, url: 'mappe' })).statusCode).toBe(400);
+    const id = await mk({ firstName: 'Gabi', lastName: 'Mappe', email: 'gabi@example.com' }, addDays(today, 95), addDays(today, 96));
+    const tok = (await ok('GET', `/bookings/${id}/guest-link`, user)).url.split('/buchung/')[1]!;
+    const cred = { lastName: 'Mappe', zip: '11111' };
+    // ohne Einrichtung: nirgends ein Verweis
+    expect((await ok('GET', `/bookings/${id}/mail`, user)).text).not.toContain('Gästemappe');
+    expect((await ok('POST', `/public/booking/${tok}/open`, {}, cred)).guide).toBeNull();
+    await ok('PUT', '/settings/guest-guide', admin, guide);
+    const mail = (await ok('GET', `/bookings/${id}/mail`, user)).text;
+    expect(mail).toContain('Digitale Gästemappe: https://mappe.example.org/schuetzenhaus');
+    expect(mail).toContain('Alles rund um Ihren Aufenthalt.');
+    expect((await ok('POST', `/public/booking/${tok}/open`, {}, cred)).guide).toEqual({ label: 'Digitale Gästemappe', url: 'https://mappe.example.org/schuetzenhaus', text: 'Alles rund um Ihren Aufenthalt.' });
+    // einzeln abschaltbar
+    await ok('PUT', '/settings/guest-guide', admin, { ...guide, inMails: false, onGuestPage: false });
+    expect((await ok('GET', `/bookings/${id}/mail`, user)).text).not.toContain('mappe.example.org');
+    expect((await ok('POST', `/public/booking/${tok}/open`, {}, cred)).guide).toBeNull();
+  });
 });

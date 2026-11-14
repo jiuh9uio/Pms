@@ -7,6 +7,7 @@ import { buildJob, columns, isPrivateIp, sendToPrinter, wrap, type Line } from '
 import { record, type Actor } from './audit.js';
 import { getPrinter as getKitchenPrinter } from './breakfast.js';
 import { getWifi, wifiQrText } from './network.js';
+import { activeGuide } from './guestguide.js';
 import { getHotel } from './settings.js';
 
 /**
@@ -73,6 +74,7 @@ const center = (text: string, width: number, o: { bold?: boolean; big?: boolean 
   wrap(text, o.big ? Math.floor(width / 2) : width).map((t) => ({ text: t, align: 'center' as const, ...o }));
 
 async function slips(db: Exec): Promise<Slip[]> {
+  const guide = await activeGuide(db);
   const [h, wifi, review, own] = [await getHotel(db), await getWifi(db), await getReview(db), await db.select().from(printTemplates).orderBy(asc(printTemplates.sort), asc(printTemplates.title))];
   const address = [h.street, [h.zip, h.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
   const head = (w: number): Line[] => [...center(h.name, w, { bold: true, big: true }), ...(address ? center(address, w) : []), { rule: true }];
@@ -102,6 +104,11 @@ async function slips(db: Exec): Promise<Slip[]> {
   if (site) out.push({
     id: 'web', title: 'Unsere Website', custom: false, hint: 'QR-Code zur Website aus den Hotel-Einstellungen.',
     lines: (w) => [...head(w), ...center('Besuchen Sie uns online', w, { bold: true }), { feed: 1 }, { qr: site, size: 7 }, ...center(h.website, w), { feed: 1 }, ...contact(w).slice(0, 2)],
+  });
+  if (guide) out.push({
+    id: 'guide', title: guide.label, custom: false, hint: 'QR-Code zur digitalen Gästemappe – zum Mitgeben bei der Anreise.',
+    lines: (w) => [...head(w), ...center(guide.label, w, { bold: true, big: true }), { feed: 1 }, ...(guide.text ? [...center(guide.text, w), { feed: 1 } as Line] : []),
+      { qr: guide.url, size: 7 }, ...center('Einfach mit der Handy-Kamera scannen', w), { feed: 1 }, ...center('Wir wünschen einen angenehmen Aufenthalt!', w, { bold: true })],
   });
   out.push({
     id: 'review', title: 'Bitte um Google-Bewertung', custom: false, review,

@@ -66,6 +66,13 @@ export function BookingPage() {
         {b.state !== 'cancelled' && b.totalCents != null && <p>Gesamtbetrag: <b>{formatMoney(b.totalCents)}</b> <span className="muted small">inklusive Umsatzsteuer</span></p>}
         <p className="muted small">Anreise ab {b.checkinTime} Uhr.{b.hotelPhone && ` Bei Fragen: ${b.hotelPhone}.`}</p>
       </section>
+      {b.guide && (
+        <section className="card">
+          <h2>{b.guide.label}</h2>
+          {b.guide.text && <p>{b.guide.text}</p>}
+          <div className="formactions"><a className="btn primary" href={b.guide.url} target="_blank" rel="noreferrer">Öffnen</a></div>
+        </section>
+      )}
       {b.canArrival && (
         <form className="card" onSubmit={(e) => { setSaved(false); void f.submit({ ...cred, ...v }, e); }} noValidate>
           <h2>Wann kommen Sie an?</h2>

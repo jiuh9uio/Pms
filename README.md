@@ -296,6 +296,12 @@ rechtlich geprüft ist, steht dort ausdrücklich.
   Personen, Gesamtbetrag – keine Anschrift, keine Ausweisdaten. Online-Storno nur für vorläufige/bestätigte Zimmer vor dem
   Anreisetag. Die Ausfallgebühr wird berechnet, in den Bemerkungen und im Übergabebuch vermerkt, aber **nicht als Leistung
   gebucht** (steuerliche Behandlung und Zulässigkeit der Bedingungen sind nicht geprüft). Nur im Hausnetz erprobt.
+- **Digitale Gästemappe (seit 1.34.0, `src/server/modules/guestguide.ts`):** Einstellung `guest_guide` (Anbieter, Bezeichnung,
+  Adresse, Text). Verwendet vom Schnelldruck (Zettel `guide` mit QR-Code), von `bookingMailDraft`/Vorab-Nachricht
+  (`guideMailLines`) und der Gästeseite (`PublicBooking.guide`). Reiner Verweis – keine Datenübertragung an den Anbieter.
+  Für eine spätere Anbindung ist dort die Schnittstelle `GuideAdapter` (`upsertStay`, `cancelStay`, `setPresence`) mit leerer
+  Adapterliste angelegt; sie wird noch von keiner Stelle aufgerufen. Eine öffentliche Schnittstelle von Gastfreund für eigene
+  Hotelprogramme war nicht zu finden.
 - **Weiterhin nicht enthalten** gegenüber großen Hotelprogrammen: Angebote mit eigener Nummer, automatisches Berechnen von
   Ausfallgebühren, Kurtaxe/Gästebeitrag als eigene Funktion (nur als Leistung abbildbar), Zimmerwechsel mitten im Aufenthalt,
   Warteliste, Kontingente für Gruppen, Channel-Manager, Online-Buchung mit Sofortbestätigung, Preispläne (z. B. nicht stornierbar).

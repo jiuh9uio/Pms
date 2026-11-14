@@ -7,6 +7,7 @@ import { bookings, guests, settings, teamNotes } from '../db/schema.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 import { getBooking, setRoomStatus } from './bookings.js';
+import { activeGuide } from './guestguide.js';
 import { sign } from './mail.js';
 import { getHotel } from './settings.js';
 
@@ -81,6 +82,7 @@ export async function linkMailDraft(db: Exec, bookingId: string, baseUrl: string
 async function view(db: Exec, bookingId: string): Promise<PublicBooking> {
   const b = await getBooking(db, bookingId).catch(() => { throw GONE(); });
   const [h, p] = [await getHotel(db), await getPolicy(db)];
+  const guide = await activeGuide(db);
   const today = todayBerlin();
   const live = b.rooms.filter((r) => isActiveStatus(r.status));
   const shown = live.length ? live : b.rooms;
@@ -96,6 +98,7 @@ async function view(db: Exec, bookingId: string): Promise<PublicBooking> {
     hotelName: h.name, hotelPhone: h.phone, number: b.number, guestName: [b.guest.firstName, b.guest.lastName].filter(Boolean).join(' '),
     rooms: shown.map((r) => ({ category: r.categoryName, from: r.from, to: r.to, nights: r.nights, adults: r.adults, children: r.children, status: r.status })),
     from, to, totalCents: p.showPrice ? b.totalCents : null, welcome: p.welcome, canArrival: p.allowArrival && state === 'active', state, arrivalTime: b.arrivalTime, guestMessage: b.guestMessage, checkinTime: h.checkinTime,
+    guide: guide && guide.onGuestPage ? { label: guide.label, url: guide.url, text: guide.text } : null,
     terms, canCancel: state === 'active' && cancelHint === '', cancelHint,
   };
 }

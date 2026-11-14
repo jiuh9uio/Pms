@@ -57,6 +57,7 @@ export async function bookingMailDraft(db: Exec, bookingId: string): Promise<Mai
     '', `Gesamtbetrag: ${formatMoney(total)} (inklusive Umsatzsteuer)`,
     '', `Anreise ab ${h.checkinTime} Uhr, Abreise bis ${h.checkoutTime} Uhr.`,
     ...(terms.enabled ? ['', terms.text] : []),
+    ...(await (await import('./guestguide.js')).guideMailLines(db)),
     ...(link ? ['', `Ihre Reservierung ansehen, Ankunftszeit mitteilen oder stornieren: ${link}`, 'Zum Öffnen geben Sie Ihren Nachnamen und Ihre Postleitzahl ein.'] : []),
     '', 'Wir freuen uns auf Ihren Besuch.', '', signature(h),
   ].join('\n');

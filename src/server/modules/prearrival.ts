@@ -38,6 +38,7 @@ async function compose(db: Exec, s: PrearrivalSettings, b: Stay) {
     `- Anreise: ${day}, ab ${h.checkinTime} Uhr`, `- Abreise: ${de(b.to)}, bis ${h.checkoutTime} Uhr`,
     ...(b.rooms > 1 ? [`- ${b.rooms} Zimmer`] : []), ...(address ? [`- Anschrift: ${address}`] : []), ...(h.breakfastTimes ? [`- Frühstück: ${h.breakfastTimes}`] : []),
     ...(s.extraText ? ['', s.extraText] : []),
+    ...(await (await import('./guestguide.js')).guideMailLines(db)),
     ...(link ? ['', `Ihre voraussichtliche Ankunftszeit können Sie uns hier mitteilen (mit Nachname und Postleitzahl): ${link}`] : []),
     '', 'Sollte sich Ihre Ankunftszeit ändern oder haben Sie Fragen, erreichen Sie uns jederzeit' + (h.phone ? ` unter ${h.phone}.` : '.'),
     '', 'Wir freuen uns auf Sie.', '', signature(h),

@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.34.0
+
+- Digitale Gästemappe (z. B. Gastfreund): Unter Einstellungen → Haus lässt sich die Adresse Ihrer Gästemappe hinterlegen. Das Programm verweist dann darauf – mit einem Bon-Zettel samt QR-Code im Schnelldruck, in der Reservierungsbestätigung und der Nachricht vor der Anreise sowie mit einem Knopf auf der Reservierungsseite des Gastes.
+- Das ist ein Verweis; es werden keine Reservierungsdaten an den Anbieter übertragen. Eine spätere echte Anbindung ist im Programm vorbereitet.
+
 ## 1.33.1
 
 - Verlauf der Reservierung: Die Einträge zum Gäste-Link (gesperrt, neu ausgestellt, Ankunftszeit oder Storno durch den Gast) stehen jetzt in klarem Deutsch statt als technische Kürzel.

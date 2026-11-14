@@ -327,6 +327,8 @@ export interface PublicBooking {
   hotelName: string; hotelPhone: string; number: string; guestName: string;
   rooms: { category: string; from: string; to: string; nights: number; adults: number; children: number; status: RoomStatus }[];
   from: string; to: string; /** null = Betrag wird dem Gast nicht gezeigt */ totalCents: number | null; welcome: string; canArrival: boolean;
+  /** Verweis auf die digitale Gästemappe, wenn eingerichtet */
+  guide: { label: string; url: string; text: string } | null;
   state: 'active' | 'cancelled' | 'arrived' | 'past';
   arrivalTime: string; guestMessage: string; checkinTime: string;
   terms: CancelTerms; canCancel: boolean; /** warum nicht online storniert werden kann */ cancelHint: string;
@@ -339,3 +341,19 @@ export const publicCancelInput = z.object({ ...cred, confirm: z.literal(true) })
 /** Was die Seite vor der Eingabe zeigen darf: nichts über die Reservierung selbst */
 export interface PublicBookingGate { hotelName: string; hotelPhone: string; needsZip: boolean }
 export const publicArrivalInput = z.object({ ...cred, time: z.union([z.literal(''), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Uhrzeit im Format HH:MM')]), message: z.string().trim().max(500).default('') });
+
+// ---------- Digitale Gästemappe (z. B. Gastfreund) ----------
+export const GUIDE_PROVIDERS = ['gastfreund', 'other'] as const;
+export const GUIDE_PROVIDER_LABEL: Record<(typeof GUIDE_PROVIDERS)[number], string> = { gastfreund: 'Gastfreund', other: 'anderer Anbieter / eigene Seite' };
+export const guestGuideInput = z.object({
+  enabled: z.boolean(),
+  provider: z.enum(GUIDE_PROVIDERS),
+  /** so heißt die Mappe gegenüber dem Gast */
+  label: z.string().trim().min(1, 'Bitte eine Bezeichnung eintragen').max(60),
+  /** Adresse der Gästemappe, wie der Anbieter sie nennt */
+  url: z.union([z.literal(''), z.url('Bitte die vollständige Adresse eintragen, z. B. https://…')]),
+  /** kurzer Satz dazu – auf dem Bon, in E-Mails und auf der Seite des Gastes */
+  text: z.string().trim().max(200),
+  inMails: z.boolean(), onGuestPage: z.boolean(),
+}).refine((v) => !v.enabled || v.url !== '', { message: 'Bitte die Adresse der Gästemappe eintragen', path: ['url'] });
+export type GuestGuide = z.infer<typeof guestGuideInput>;
