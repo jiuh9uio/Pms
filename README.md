@@ -275,6 +275,20 @@ rechtlich geprüft ist, steht dort ausdrücklich.
   Der Ausfallzustand liegt nur im Arbeitsspeicher. Die Meldung des Betriebssystems (Notification API) verlangt die Erlaubnis im
   Browser und funktioniert nur über `localhost` oder HTTPS – also am Rechner mit dem Programm, nicht an anderen PCs im Hausnetz.
 
+**Seit Version 1.31.0 zusätzlich – Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste:**
+
+- `bookings.option_until`: Frist vorläufiger Reservierungen; erreicht → Aufgabe in der Übersicht. Kein automatisches Storno.
+- `src/server/modules/stats.ts`: `forecast` (Belegung je Tag/Kategorie), `originStats` (Ankünfte/Übernachtungen in Personen je
+  Herkunftsland; Land = Anschrift des Hauptgastes, Mitreisende werden nicht getrennt erfasst; Ankunft zählt im Monat der ersten
+  Nacht; Betten = Höchstbelegung der aktiven Zimmer), `sourceStats` (Umsatz je Buchungsquelle).
+  Die Herkunftsstatistik ist eine Arbeitshilfe für die Beherbergungsstatistik, keine geprüfte Meldung; Meldepflicht und
+  Abgrenzungen (z. B. Schwelle der Bettenzahl, Zählweise) sind mit dem Statistischen Landesamt zu klären.
+- `guests.guestDuplicates` / `mergeGuests`: gleiche E-Mail oder gleicher Name; Zusammenführen verschiebt die Reservierungen,
+  ergänzt leere Felder und löscht den zweiten Eintrag (nicht umkehrbar, im Protokoll vermerkt).
+- **Weiterhin nicht enthalten** gegenüber großen Hotelprogrammen: Angebote mit eigener Nummer, Stornobedingungen und
+  Ausfallgebühren, Kurtaxe/Gästebeitrag als eigene Funktion (nur als Leistung abbildbar), Zimmerwechsel mitten im Aufenthalt,
+  Warteliste, Kontingente für Gruppen, Channel-Manager, Online-Buchung mit Sofortbestätigung, Preispläne (z. B. nicht stornierbar).
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

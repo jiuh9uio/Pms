@@ -19,6 +19,7 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
   const [from, setFrom] = useState(start);
   const [to, setTo] = useState(preset.to ?? addDays(start, 1));
   const [status, setStatus] = useState<'confirmed' | 'tentative'>('confirmed');
+  const [optionUntil, setOptionUntil] = useState('');
   const [picks, setPicks] = useState<Record<string, Pick>>({});
   const [guest, setGuest] = useState<GuestDto | null>(preset.guest ?? null);
   const [draft, setDraft] = useState<GuestDraft>(toDraft(preset.draft ?? {}));
@@ -78,7 +79,7 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
   });
   const submit = (e?: React.FormEvent) => void f.submit({
     ...(guest ? { guestId: guest.id } : draft.lastName.trim() ? { guest: draft } : {}),
-    ...meta, breakfast, ...(companyId ? { companyId } : {}),
+    ...meta, breakfast, ...(companyId ? { companyId } : {}), ...(status === 'tentative' && optionUntil ? { optionUntil } : {}),
     rooms: selected.map((r) => {
       const p = picks[r.id]!;
       return { roomId: r.id, from, to, status, adults: Number(p.adults), children: Number(p.children), pricePerNightCents: p.price.trim() === '' ? null : parseMoney(p.price) };
@@ -106,6 +107,7 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
                 <option value="confirmed">Bestätigt</option><option value="tentative">Vorläufig</option>
               </select>
             </Field>
+            {status === 'tentative' && <Field label="Option bis" hint="freiwillig – danach erinnert die Übersicht"><input type="date" value={optionUntil} min={todayBerlin()} max={isIsoDate(from) ? from : undefined} onChange={(e) => setOptionUntil(e.target.value)} /></Field>}
           </div>
           <h3>Freie Zimmer{valid && free.data ? ` (${free.data.length})` : ''}</h3>
           {free.error && <p className="notice danger">{free.error}</p>}

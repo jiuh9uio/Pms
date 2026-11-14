@@ -7,7 +7,7 @@ import { useData } from '../data.tsx';
 import { Button, LoadState, PageHeader, useLoad, useToast } from '../ui.tsx';
 import { BookingTable } from './Reservations.tsx';
 
-const TASK_TONE: Record<string, string> = { cleaning: 'warn',  overdue_arrival: 'warn', overdue_departure: 'warn', arrival: 'in', departure: 'out', tentative: 'info' };
+const TASK_TONE: Record<string, string> = { cleaning: 'warn',  overdue_arrival: 'warn', overdue_departure: 'warn', arrival: 'in', departure: 'out', tentative: 'info', option: 'warn' };
 
 export function Dashboard() {
   const { user } = useAuth();

@@ -452,3 +452,5 @@ a.btn { display: inline-flex; align-items: center; padding: 8px 14px; border: 1p
 .netbanner { position: sticky; top: 0; z-index: 40; background: #b42318; color: #fff; padding: 8px 16px; text-align: center; font-size: 14px; }
 .netbanner a { color: #fff; text-decoration: underline; margin-left: 6px; }
 @media print { .netbanner { display: none; } }
+
+.yearnav { margin: 0 0 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } tr.weekend td { background: var(--surface-2); }

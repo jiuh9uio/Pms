@@ -5,6 +5,7 @@ import type { Db } from './db/client.js';
 import { listAudit, type Actor } from './modules/audit.js';
 import * as bookings from './modules/bookings.js';
 import * as breakfast from './modules/breakfast.js';
+import * as stats from './modules/stats.js';
 import * as prearrival from './modules/prearrival.js';
 import { cleanList, dayReport } from './modules/team.js';
 import * as companies from './modules/companies.js';
@@ -111,6 +112,8 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
 
   // ---------- Gäste ----------
   api.get('/guests', user, (req) => guests.listGuests(db, z.object({ q: z.string().max(100).default('') }).parse(req.query).q.trim()));
+  api.get('/guests/duplicates', admin, () => guests.guestDuplicates(db));
+  api.post('/guests/:id/merge', admin, (req) => guests.mergeGuests(db, actor(req), idOf(req), H.guestMergeInput.parse(req.body).otherId));
   api.get('/guests/:id', user, async (req) => ({ guest: await guests.getGuest(db, idOf(req)), bookings: await bookings.guestBookings(db, idOf(req)) }));
   api.post('/guests', user, (req) => db.transaction((tx) => guests.createGuest(tx, actor(req), H.guestInput.parse(req.body))));
   api.get('/guests/:id/export.json', admin, async (req, reply) => {
@@ -153,6 +156,9 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   api.put('/settings/kitchen-printer', admin, (req) => breakfast.savePrinter(db, actor(req), H.kitchenPrinterInput.parse(req.body)));
   api.post('/settings/kitchen-printer/test', admin, async () => { await breakfast.testPrint(db); return { ok: true }; });
 
+  api.get('/reports/forecast', user, (req) => { const q = z.object({ from: z.string().refine(H.isIsoDate), days: z.coerce.number().int().min(1).max(92).default(30) }).parse(req.query); return stats.forecast(db, q.from, q.days); });
+  api.get('/reports/origin', user, (req) => { const q = z.object({ year: z.coerce.number().int().min(2000).max(2100), month: z.coerce.number().int().min(1).max(12) }).parse(req.query); return stats.originStats(db, q.year, q.month); });
+  api.get('/reports/sources', user, (req) => stats.sourceStats(db, z.object({ year: z.coerce.number().int().min(2000).max(2100) }).parse(req.query).year));
   api.get('/reports/year', user, (req) => yearReport(db, z.object({ year: z.coerce.number().int().min(2000).max(2100) }).parse(req.query).year));
   api.get('/bookings/:id/guest-form', user, (req) => guestforms.formStatus(db, idOf(req)));
   api.post('/bookings/:id/guest-form', user, (req) => {

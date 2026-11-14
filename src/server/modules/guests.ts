@@ -1,5 +1,5 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import type { GuestDto, GuestInput } from '../../shared/hotel.js';
+import type { GuestDto, GuestDuplicate, GuestInput } from '../../shared/hotel.js';
 import type { Db, Exec } from '../db/client.js';
 import { auditLog, bookingRooms, bookings as bookingsTable, guests, invoices } from '../db/schema.js';
 import { conflict, notFound, stale } from '../lib/errors.js';
@@ -94,5 +94,49 @@ export async function anonymizeGuest(db: Db, actor: Actor, id: string) {
     }).where(and(eq(auditLog.entity, 'guest'), eq(auditLog.entityId, id)));
     await tx.execute(sql`select set_config('pms.audit_scrub', '', true)`);
     await record(tx, actor, { action: 'anonymize', entity: 'guest', entityId: id });
+  });
+}
+
+// ---------- Doppelte Gäste ----------
+/** Mögliche Doppelte: gleiche E-Mail-Adresse oder gleicher Vor- und Nachname. Behalten wird vorgeschlagen, wer mehr Reservierungen hat. */
+export async function guestDuplicates(db: Exec): Promise<GuestDuplicate[]> {
+  const rows = await db.execute(sql`
+    select a.id as a_id, b.id as b_id,
+      case when a.email <> '' and lower(a.email) = lower(b.email) then 'gleiche E-Mail-Adresse' else 'gleicher Name' end as reason,
+      (select count(*) from bookings x where x.guest_id = a.id)::int as a_n, (select count(*) from bookings x where x.guest_id = b.id)::int as b_n
+    from guests a join guests b on a.id < b.id and (
+      (a.email <> '' and lower(a.email) = lower(b.email))
+      or (a.last_name <> '' and lower(trim(a.last_name)) = lower(trim(b.last_name)) and lower(trim(a.first_name)) = lower(trim(b.first_name)) and a.first_name <> ''))
+    where a.last_name <> 'Anonymisiert' and b.last_name <> 'Anonymisiert' limit 100`);
+  const list = Array.from(rows);
+  if (!list.length) return [];
+  const ids = [...new Set(list.flatMap((r) => [r.a_id as string, r.b_id as string]))];
+  const byId = new Map((await db.select().from(guests).where(inArray(guests.id, ids))).map((g) => [g.id, toGuestDto(g)]));
+  return list.map((r) => {
+    const aFirst = Number(r.a_n) >= Number(r.b_n);
+    const keep = byId.get((aFirst ? r.a_id : r.b_id) as string)!, other = byId.get((aFirst ? r.b_id : r.a_id) as string)!;
+    return { keep: { ...keep, stays: Number(aFirst ? r.a_n : r.b_n) }, other: { ...other, stays: Number(aFirst ? r.b_n : r.a_n) }, reason: r.reason as string };
+  });
+}
+
+/**
+ * Zwei Gäste zusammenführen: Alle Reservierungen des zweiten gehen auf den ersten über, leere Felder des ersten werden aus dem
+ * zweiten ergänzt, dann wird der zweite gelöscht. Rechnungen bleiben unverändert (sie tragen ihre eigene Empfängerkopie).
+ */
+export async function mergeGuests(db: Db, actor: Actor, keepId: string, otherId: string) {
+  if (keepId === otherId) throw conflict('Ein Gast kann nicht mit sich selbst zusammengeführt werden');
+  return db.transaction(async (tx) => {
+    const [keep] = await tx.select().from(guests).where(eq(guests.id, keepId)).for('update');
+    const [other] = await tx.select().from(guests).where(eq(guests.id, otherId)).for('update');
+    if (!keep || !other) throw notFound('Gast');
+    const fill: Partial<Row> = {};
+    for (const k of ['salutation', 'firstName', 'company', 'email', 'phone', 'street', 'zip', 'city', 'nationality', 'idNumber'] as const) if (!keep[k] && other[k]) fill[k] = other[k];
+    if (!keep.birthdate && other.birthdate) fill.birthdate = other.birthdate;
+    if (other.notes && other.notes !== keep.notes) fill.notes = [keep.notes, other.notes].filter(Boolean).join('\n').slice(0, 2000);
+    const moved = await tx.update(bookingsTable).set({ guestId: keepId }).where(eq(bookingsTable.guestId, otherId)).returning({ id: bookingsTable.id });
+    await tx.update(guests).set({ ...fill, version: keep.version + 1, updatedAt: new Date() }).where(eq(guests.id, keepId));
+    await tx.delete(guests).where(eq(guests.id, otherId));
+    await record(tx, actor, { action: 'merge', entity: 'guest', entityId: keepId, before: { removed: `${other.firstName} ${other.lastName}`.trim(), removedId: otherId }, after: { bookingsMoved: moved.length, filled: Object.keys(fill) } });
+    return { ok: true, bookingsMoved: moved.length };
   });
 }

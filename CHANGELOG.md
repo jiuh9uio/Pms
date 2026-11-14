@@ -3,6 +3,16 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.31.0
+
+Hotel – Ergänzungen aus dem Vergleich mit großen Hotelprogrammen:
+
+- Optionsfrist: Vorläufige Reservierungen können ein Datum „Option bis“ bekommen. Ist es erreicht, steht die Reservierung in der Übersicht als Aufgabe „bestätigen oder stornieren“. Es wird nichts von selbst storniert.
+- Auswertung → Belegungsvorschau: 30 Tage im Voraus je Tag belegte, vorläufige, gesperrte und freie Zimmer, freie Zimmer je Kategorie, An- und Abreisen.
+- Auswertung → Herkunft der Gäste: Ankünfte und Übernachtungen je Monat nach Herkunftsland mit Bettenauslastung – die Zahlen, die die amtliche Beherbergungsstatistik abfragt.
+- Auswertung → Buchungsquellen: Reservierungen, Nächte und Umsatz je Buchungsquelle. Die Jahresübersicht zeigt zusätzlich den Durchschnittspreis je Nacht und den Umsatz je verfügbarem Zimmer.
+- Gäste: mögliche doppelte Gäste finden und zusammenführen (nur Administrator).
+
 ## 1.30.0
 
 - Internet wird jetzt jede Minute geprüft (bisher alle zwei Minuten).

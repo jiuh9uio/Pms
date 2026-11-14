@@ -107,9 +107,11 @@ export const bookingCreateInput = z.object({
   groupName: text(120), source: text(60), paymentMethod: text(60), notes: text(2000),
   rooms: z.array(bookingRoomInput).min(1, 'Mindestens ein Zimmer').max(30),
   breakfast: z.boolean(),
+  /** Optionsfrist für vorläufige Reservierungen */
+  optionUntil: z.union([isoDate, z.literal('').transform(() => null), z.null()]).optional(),
 }).refine((v) => !!v.guestId || !!v.guest, { message: 'Bitte einen Gast wählen oder anlegen', path: ['guest'] });
 export const bookingUpdateInput = z.object({
-  guestId: z.uuid().optional(), companyId: z.uuid().nullable().optional(), groupName: text(120).optional(), source: text(60).optional(), paymentMethod: text(60).optional(), notes: text(2000).optional(), version,
+  guestId: z.uuid().optional(), companyId: z.uuid().nullable().optional(), groupName: text(120).optional(), source: text(60).optional(), paymentMethod: text(60).optional(), notes: text(2000).optional(), optionUntil: z.union([isoDate, z.literal('').transform(() => null), z.null()]).optional(), version,
 });
 export const bookingRoomUpdateInput = z.object({
   roomId: z.uuid().optional(), from: isoDate.optional(), to: isoDate.optional(), adults: count(1, 20).optional(), children: count(0, 20).optional(),
@@ -154,6 +156,8 @@ export interface BookingRoomDto {
 export interface ChargeDto { id: string; bookingRoomId: string | null; name: string; quantity: number; unitPriceCents: number; taxRatePercent: number; totalCents: number }
 export interface BookingDto {
   id: string; number: string; groupName: string; source: string; paymentMethod: string; notes: string; version: number; createdAt: string;
+  /** Optionsfrist (nur bei vorläufigen Reservierungen von Bedeutung) */
+  optionUntil: string | null;
   companyId: string | null; companyName: string | null;
   guest: GuestDto; rooms: BookingRoomDto[]; charges: ChargeDto[];
   lodgingCents: number; chargesCents: number; totalCents: number;
@@ -165,7 +169,7 @@ export interface CalendarEntry {
   blockId?: string; reason?: string;
 }
 export interface CalendarDto { from: string; days: number; rooms: RoomDto[]; entries: CalendarEntry[] }
-export interface TaskDto { kind: 'arrival' | 'departure' | 'overdue_arrival' | 'overdue_departure' | 'tentative' | 'cleaning'; text: string; bookingId: string; bookingRoomId: string }
+export interface TaskDto { kind: 'arrival' | 'departure' | 'overdue_arrival' | 'overdue_departure' | 'tentative' | 'cleaning' | 'option'; text: string; bookingId: string; bookingRoomId: string }
 export interface HousekeepingRow { roomId: string; number: string; categoryName: string; arrivalToday: string | null; occupied: boolean }
 export interface DashboardDto {
   today: string; rooms: { total: number; occupied: number; free: number; blocked: number; occupancyPercent: number };
@@ -260,3 +264,21 @@ export const prearrivalInput = z.object({
 });
 export type PrearrivalSettings = z.infer<typeof prearrivalInput>;
 export interface PrearrivalState { settings: PrearrivalSettings; mailReady: boolean; /** Beispieltext mit erfundenen Angaben */ sample: { subject: string; text: string }; lastRun: string | null; sentTotal: number; dueNow: number }
+
+// ---------- Belegungsvorschau ----------
+export interface ForecastDay {
+  date: string; occupied: number; tentative: number; blocked: number; free: number; arrivals: number; departures: number; occupancyPercent: number;
+  /** freie Zimmer je Kategorie (Reihenfolge wie categories) */
+  freeByCategory: number[];
+}
+export interface ForecastDto { from: string; rooms: number; categories: { id: string; name: string; rooms: number }[]; days: ForecastDay[] }
+
+// ---------- Statistik ----------
+export interface OriginRow { country: string; arrivals: number; nights: number }
+export interface OriginStats { year: number; month: number; rows: OriginRow[]; total: { arrivals: number; nights: number }; beds: number; openDays: number; bedOccupancyPercent: number }
+export interface SourceRow { source: string; bookings: number; nights: number; lodgingCents: number }
+export interface SourceStats { year: number; rows: SourceRow[] }
+
+// ---------- Doppelte Gäste ----------
+export interface GuestDuplicate { keep: GuestDto; other: GuestDto; reason: string }
+export const guestMergeInput = z.object({ otherId: z.uuid() });

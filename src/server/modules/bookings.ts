@@ -75,7 +75,7 @@ export async function getBooking(db: Exec, id: string): Promise<BookingDto> {
   const lodgingCents = roomDtos.filter((r) => isActiveStatus(r.status)).reduce((s, r) => s + r.lodgingCents, 0);
   const chargesCents = chargeDtos.reduce((s, c) => s + c.totalCents, 0);
   return {
-    id: b.id, number: b.number, groupName: b.groupName, source: b.source, paymentMethod: b.paymentMethod, notes: b.notes, version: b.version,
+    id: b.id, number: b.number, groupName: b.groupName, source: b.source, paymentMethod: b.paymentMethod, notes: b.notes, version: b.version, optionUntil: b.optionUntil,
     createdAt: b.createdAt.toISOString(), companyId: b.companyId, companyName: company?.name ?? null, guest: toGuestDto(g!), rooms: roomDtos, charges: chargeDtos,
     lodgingCents, chargesCents, totalCents: lodgingCents + chargesCents,
   };
@@ -162,7 +162,7 @@ async function addServiceCharge(tx: Tx, bookingId: string, bookingRoomId: string
 }
 
 export async function createBooking(db: Db, actor: Actor, input: {
-  guestId?: string; guest?: GuestInput; companyId?: string; groupName: string; source: string; paymentMethod: string; notes: string; rooms: RoomIn[]; breakfast: boolean;
+  guestId?: string; guest?: GuestInput; companyId?: string; groupName: string; source: string; paymentMethod: string; notes: string; rooms: RoomIn[]; breakfast: boolean; optionUntil?: string | null;
 }) {
   return db.transaction(async (tx) => {
     let guestId = input.guestId;
@@ -173,7 +173,8 @@ export async function createBooking(db: Db, actor: Actor, input: {
 
     const number = await nextNumber(tx, 'booking', 'B');
     if (input.companyId && !(await tx.select({ id: companies.id }).from(companies).where(eq(companies.id, input.companyId))).length) throw notFound('Firma');
-    const [b] = await tx.insert(bookings).values({ number, guestId, companyId: input.companyId ?? null, groupName: input.groupName, source: input.source, paymentMethod: input.paymentMethod, notes: input.notes }).returning();
+    const [b] = await tx.insert(bookings).values({ number, guestId, companyId: input.companyId ?? null, groupName: input.groupName, source: input.source, paymentMethod: input.paymentMethod, notes: input.notes,
+      optionUntil: input.rooms.some((r) => r.status === 'tentative') ? input.optionUntil ?? null : null }).returning();
     const summary: unknown[] = [];
     const [breakfast] = input.breakfast ? await tx.select().from(services).where(and(eq(services.isBreakfast, true), eq(services.active, true))).limit(1) : [];
     if (input.breakfast && !breakfast) throw conflict('Es ist keine aktive Frühstücksleistung angelegt (Zimmer & Preise → Leistungen)');
@@ -187,18 +188,18 @@ export async function createBooking(db: Db, actor: Actor, input: {
   });
 }
 
-export async function updateBooking(db: Db, actor: Actor, id: string, v: { guestId?: string; companyId?: string | null; groupName?: string; source?: string; paymentMethod?: string; notes?: string; version: number }) {
+export async function updateBooking(db: Db, actor: Actor, id: string, v: { guestId?: string; companyId?: string | null; groupName?: string; source?: string; paymentMethod?: string; notes?: string; optionUntil?: string | null; version: number }) {
   await db.transaction(async (tx) => {
     const [before] = await tx.select().from(bookings).where(eq(bookings.id, id)).for('update');
     if (!before) throw notFound('Reservierung');
     if (before.version !== v.version) throw stale();
     if (v.guestId && !(await tx.select({ id: guests.id }).from(guests).where(eq(guests.id, v.guestId))).length) throw notFound('Gast');
     if (v.companyId && !(await tx.select({ id: companies.id }).from(companies).where(eq(companies.id, v.companyId))).length) throw notFound('Firma');
-    const set = { guestId: v.guestId ?? before.guestId, companyId: v.companyId === undefined ? before.companyId : v.companyId, groupName: v.groupName ?? before.groupName, source: v.source ?? before.source, paymentMethod: v.paymentMethod ?? before.paymentMethod, notes: v.notes ?? before.notes };
+    const set = { guestId: v.guestId ?? before.guestId, companyId: v.companyId === undefined ? before.companyId : v.companyId, groupName: v.groupName ?? before.groupName, source: v.source ?? before.source, paymentMethod: v.paymentMethod ?? before.paymentMethod, notes: v.notes ?? before.notes, optionUntil: v.optionUntil === undefined ? before.optionUntil : v.optionUntil };
     await tx.update(bookings).set({ ...set, version: before.version + 1, updatedAt: new Date() }).where(eq(bookings.id, id));
     await record(tx, actor, {
       action: 'update', entity: 'booking', entityId: id,
-      before: { guestId: before.guestId, companyId: before.companyId, groupName: before.groupName, source: before.source, paymentMethod: before.paymentMethod, notes: before.notes }, after: set,
+      before: { guestId: before.guestId, companyId: before.companyId, groupName: before.groupName, source: before.source, paymentMethod: before.paymentMethod, notes: before.notes, optionUntil: before.optionUntil }, after: set,
     });
   });
 }
@@ -402,13 +403,24 @@ export async function dashboard(db: Exec): Promise<DashboardDto> {
     const y = x as Raw;
     return { roomId: y.id as string, number: y.number as string, categoryName: y.category_name as string, arrivalToday: (y.arrival as string) ?? null, occupied: y.occupied as boolean };
   }).sort((a, b) => Number(!!b.arrivalToday) - Number(!!a.arrivalToday) || a.number.localeCompare(b.number, 'de', { numeric: true }));
+  // Optionsfrist erreicht oder überschritten: vorläufige Reservierungen, die bestätigt oder freigegeben werden sollten
+  const optionRows = await db.execute(sql`
+    select b.id, b.option_until::text as until, trim(g.first_name || ' ' || g.last_name) as guest, min(br.id::text) as room_id, min(lower(a.period))::text as "from", count(*)::int as rooms
+    from bookings b join guests g on g.id = b.guest_id join booking_rooms br on br.booking_id = b.id join room_allocations a on a.id = br.allocation_id
+    where br.status = 'tentative' and b.option_until is not null and b.option_until <= ${today}::date group by b.id, g.id order by b.option_until`);
+  const options = Array.from(optionRows).map((o): TaskDto => ({
+    kind: 'option', bookingId: o.id as string, bookingRoomId: o.room_id as string,
+    text: `Option ${(o.until as string) < today ? `abgelaufen seit ${de(o.until as string)}` : 'läuft heute ab'}: ${o.guest}, Anreise ${de(o.from as string)}${Number(o.rooms) > 1 ? `, ${o.rooms} Zimmer` : ''} – bestätigen oder stornieren`,
+  }));
+  const withOption = new Set(options.map((o) => o.bookingId));
   const tasks: TaskDto[] = [
+    ...options,
     ...overdueDep.map((r) => task('overdue_departure', r, `Abreise überfällig: ${r.guestName}, Zimmer ${r.roomNumber} (geplant ${de(r.to)})`)),
     ...overdueArr.map((r) => task('overdue_arrival', r, `Nicht angereist seit ${de(r.from)}: ${r.guestName}, Zimmer ${r.roomNumber} – einchecken oder als nicht angereist markieren`)),
     ...departures.map((r) => task('departure', r, `Check-out: ${r.guestName}, Zimmer ${r.roomNumber}`)),
     ...dirty.filter((d) => d.arrivalToday).map((d): TaskDto => ({ kind: 'cleaning', text: `Zimmer ${d.number} reinigen – heute Anreise ${d.arrivalToday}`, bookingId: '', bookingRoomId: d.roomId })),
     ...arrivals.map((r) => task('arrival', r, `Check-in: ${r.guestName}, Zimmer ${r.roomNumber}${r.status === 'tentative' ? ' (noch vorläufig)' : ''}`)),
-    ...tentative.map((r) => task('tentative', r, `Vorläufige Reservierung bestätigen: ${r.guestName}, Anreise ${de(r.from)}`)),
+    ...tentative.filter((r) => !withOption.has(r.bookingId)).map((r) => task('tentative', r, `Vorläufige Reservierung bestätigen: ${r.guestName}, Anreise ${de(r.from)}`)),
   ];
   return {
     today,

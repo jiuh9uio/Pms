@@ -337,7 +337,8 @@ function Charges({ booking }: { booking: BookingDto }) {
 function Meta({ booking }: { booking: BookingDto }) {
   const { bump } = useData();
   const toast = useToast();
-  const init = { companyId: booking.companyId ?? '', source: booking.source, paymentMethod: booking.paymentMethod, groupName: booking.groupName, notes: booking.notes };
+  const init = { companyId: booking.companyId ?? '', source: booking.source, paymentMethod: booking.paymentMethod, groupName: booking.groupName, notes: booking.notes, optionUntil: booking.optionUntil ?? '' };
+  const tentative = booking.rooms.some((r) => r.status === 'tentative');
   const [v, setV] = useState(init);
   useEffect(() => setV(init), [booking.version]); // eslint-disable-line react-hooks/exhaustive-deps
   const dirty = JSON.stringify(v) !== JSON.stringify(init);
@@ -351,6 +352,7 @@ function Meta({ booking }: { booking: BookingDto }) {
         <Field label="Buchungsquelle"><select value={v.source} onChange={(e) => setV({ ...v, source: e.target.value })}><option value="">–</option>{opts(SOURCES, v.source).map((s) => <option key={s}>{s}</option>)}</select></Field>
         <Field label="Zahlungsart"><select value={v.paymentMethod} onChange={(e) => setV({ ...v, paymentMethod: e.target.value })}><option value="">offen</option>{opts(PAYMENT_METHODS, v.paymentMethod).map((s) => <option key={s}>{s}</option>)}</select></Field>
         {(booking.rooms.length > 1 || v.groupName) && <Field label="Gruppenname" wide><input value={v.groupName} onChange={(e) => setV({ ...v, groupName: e.target.value })} /></Field>}
+        {(tentative || v.optionUntil) && <Field label="Option bis" error={f.errors.optionUntil} hint={tentative ? 'bis dahin wird das Zimmer freigehalten; danach erscheint die Reservierung als Aufgabe in der Übersicht' : 'nur bei vorläufigen Reservierungen von Bedeutung'}><input type="date" value={v.optionUntil} onChange={(e) => setV({ ...v, optionUntil: e.target.value })} /></Field>}
         <Field label="Interne Bemerkungen" wide error={f.errors.notes}><textarea rows={3} value={v.notes} onChange={(e) => setV({ ...v, notes: e.target.value })} /></Field>
       </div>
       {dirty && <div className="formactions"><Button type="submit" variant="primary" busy={f.busy}>Angaben speichern</Button></div>}
