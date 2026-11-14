@@ -450,7 +450,12 @@ function describe(h: AuditDto): string {
     case 'status': return `Zimmer ${a.room}: ${STATUS_LABEL[b.status as RoomStatus]} → ${STATUS_LABEL[a.status as RoomStatus]}${a.earlyDeparture ? ' (vorzeitige Abreise)' : ''}`;
     case 'charge_add': return `Leistung hinzugefügt: ${a.name}`;
     case 'charge_remove': return `Leistung entfernt: ${b.name}`;
-    case 'mail': return `Bestätigung per E-Mail gesendet an ${a.to}`;
+    case 'mail': return a.automatic === 'prearrival' ? `Nachricht vor der Anreise gesendet an ${a.to}` : `E-Mail gesendet an ${a.to}${a.subject ? ` („${a.subject}“)` : ''}`;
+    case 'guest_link_block': return 'Gäste-Link gesperrt';
+    case 'guest_link_unblock': return 'Gäste-Link wieder freigegeben';
+    case 'guest_link_renew': return 'Neuen Gäste-Link ausgestellt (der alte gilt nicht mehr)';
+    case 'guest_arrival': return `Gast über seinen Link: ${a.arrivalTime ? `Ankunft voraussichtlich ${a.arrivalTime} Uhr` : 'Nachricht hinterlassen'}`;
+    case 'guest_cancel': return `Vom Gast über seinen Link storniert${a.free ? ' (kostenfrei)' : a.feeCents ? ` – Ausfallgebühr laut Bedingungen ${formatMoney(a.feeCents as number)}` : ''}`;
     case 'guest_form_link': return 'QR-Code für den Meldeschein erzeugt';
     case 'guest_form': return `Meldeschein vom Gast ausgefüllt${a.companions ? ` (${a.companions} mitreisende ${a.companions === 1 ? 'Person' : 'Personen'})` : ''}`;
     default: return h.action;
