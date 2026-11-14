@@ -22,6 +22,7 @@ export interface InboxMailDto {
   kind: MailKind; status: InboxStatus; extract: MailExtract;
   /** was daraus angelegt wurde */
   linkKind: 'booking' | 'table' | null; linkId: string | null; handledBy: string;
+  repliedAt: string | null; repliedBy: string;
   /** nur in der Einzelansicht */
   body?: string;
 }
@@ -30,3 +31,18 @@ export const inboxUpdateInput = z.object({
   linkKind: z.enum(['booking', 'table']).nullable().optional(), linkId: z.uuid().nullable().optional(),
 });
 export const inboxListQuery = z.object({ status: z.enum([...INBOX_STATUSES, 'all']).default('new'), kind: z.enum([...MAIL_KINDS, 'all']).default('all'), q: z.string().max(100).default('') });
+
+// ---------- Antworten ----------
+export const REPLY_TEMPLATES = ['reply', 'confirm', 'decline'] as const;
+export type ReplyTemplate = (typeof REPLY_TEMPLATES)[number];
+
+// ---------- E-Mail-Regeln (Einstellungen → Algorithmen → E-Mail) ----------
+const words = z.array(z.string().trim().min(2).max(60)).max(50);
+export const mailRulesInput = z.object({
+  /** Nachrichten, die keine Zimmer- oder Tischanfrage sind, gleich unter „Ignoriert“ ablegen */
+  hideOther: z.boolean(),
+  hotelWords: words, tableWords: words,
+  /** Absender (Teil der Adresse oder des Namens), deren Nachrichten nie als Anfrage gelten */
+  ignoreSenders: words,
+});
+export type MailRules = z.infer<typeof mailRulesInput>;

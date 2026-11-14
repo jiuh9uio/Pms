@@ -19,7 +19,7 @@ async function issuedInvoice(db: Exec, id: string) {
 const de = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
 const safe = (s: string) => s.replace(/[^A-Za-z0-9._-]+/g, '_').slice(0, 60) || 'rechnung';
 
-async function ready(db: Exec) {
+export async function ready(db: Exec) {
   const s = await getMailSettings(db);
   return s.enabled && !!s.host && !!s.user && s.hasPassword;
 }
@@ -28,7 +28,7 @@ function greeting(g: { salutation: string; lastName: string }) {
   if (g.salutation === 'Frau') return `Sehr geehrte Frau ${g.lastName},`;
   return 'Guten Tag,';
 }
-function signature(h: Awaited<ReturnType<typeof getHotel>>) {
+export function signature(h: Awaited<ReturnType<typeof getHotel>>) {
   return ['Mit freundlichen Grüßen', h.name, [h.street, [h.zip, h.city].filter(Boolean).join(' ')].filter(Boolean).join(', '), h.phone && `Telefon ${h.phone}`, h.website]
     .filter(Boolean).join('\n');
 }

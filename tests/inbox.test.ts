@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/server/app.js';
 import { connect, runMigrations } from '../src/server/db/client.js';
 import { autoFetchTick, setInboxFetcher, type RawMail } from '../src/server/modules/inbox.js';
+import { setMailSender } from '../src/server/modules/mail.js';
 
 const url = process.env.TEST_DATABASE_URL ?? 'postgres://pms:pms@127.0.0.1:5432/pms_test';
 if (!/test/.test(new URL(url).pathname)) throw new Error('Tests löschen die Datenbank – der Datenbankname muss „test“ enthalten');
@@ -116,5 +117,60 @@ describe('E-Mail-Posteingang', () => {
     expect(await autoFetchTick(db, new Date(Date.now() + 60_000))).toBe('idle'); // erst nach 5 Minuten wieder
     const [late] = await ok('GET', '/inbox?q=spaet', admin);
     expect(late.extract).toMatchObject({ kind: 'hotel', from: '2026-11-15', persons: 1 });
+  });
+
+  it('antwortet aus dem Programm und bestätigt eine übernommene Tischreservierung', async () => {
+    const sent: { to: string; subject: string; text: string; inReplyTo?: string }[] = [];
+    setMailSender(async (_c, mail) => { sent.push(mail); });
+    const [mail] = await ok('GET', '/inbox?kind=table&status=done', admin);
+    // ohne eingerichteten Versand: Vorschlag ja, Senden nein
+    const draft = await ok('GET', `/inbox/${mail.id}/mail`, admin);
+    expect(draft).toMatchObject({ to: 'max@example.com', subject: 'Re: Tisch für Heiligabend', ready: false });
+    expect(draft.text).toContain('Guten Tag Max Muster,');
+    expect(draft.text).toContain('> bitte einen Tisch am 24.12.');
+    expect((await call('POST', `/inbox/${mail.id}/mail`, admin, { to: draft.to, subject: draft.subject, text: draft.text })).statusCode).toBe(409);
+    await ok('PUT', '/settings/mail', admin, { enabled: true, host: 'mail.gmx.net', port: 587, user: 'info@example.org', fromName: 'Schützenhaus', password: 'smtp-geheim' });
+
+    // Bestätigung nur, wenn die Reservierung existiert
+    expect((await call('GET', `/inbox/${mail.id}/mail?template=confirm`, admin)).statusCode).toBe(409); // Verknüpfung zeigt ins Leere
+    const res = await ok('POST', '/restaurant/reservations', admin, { date: '2026-12-24', time: '18:30', durationMin: 120, persons: 6, name: 'Max Muster', phone: '', note: '', tableId: null });
+    await ok('PATCH', `/inbox/${mail.id}`, admin, { linkKind: 'table', linkId: res.id });
+    const confirm = await ok('GET', `/inbox/${mail.id}/mail?template=confirm`, admin);
+    expect(confirm.subject).toContain('Ihre Tischreservierung am 24.12.2026');
+    expect(confirm.text).toContain('Donnerstag, 24.12.2026 um 18:30 Uhr');
+    expect(confirm.text).toContain('6 Personen');
+    await ok('POST', `/inbox/${mail.id}/mail`, admin, { to: confirm.to, subject: confirm.subject, text: confirm.text });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ to: 'max@example.com', inReplyTo: '<m2@example.org>' });
+    expect(await ok('GET', `/inbox/${mail.id}`, admin)).toMatchObject({ repliedBy: 'Chefin' });
+    expect((await ok('GET', `/inbox/${mail.id}`, admin)).repliedAt).toBeTruthy();
+    const [hotel] = await ok('GET', '/inbox?kind=hotel&q=erika', admin);
+    expect((await ok('GET', `/inbox/${hotel.id}/mail?template=decline`, admin)).text).toContain('leider kein Zimmer mehr frei');
+    expect((await call('GET', `/inbox/${hotel.id}/mail?template=confirm`, admin)).statusCode).toBe(409); // noch nichts angelegt
+  });
+
+  it('wendet die E-Mail-Regeln an: nur Anfragen zeigen, eigene Stichwörter, Absender ausschließen', async () => {
+    expect((await call('PUT', '/settings/mail-rules', user, {})).statusCode).toBe(403);
+    await ok('PUT', '/settings/mail-rules', admin, { hideOther: true, hotelWords: [], tableWords: ['Stammtisch'], ignoreSenders: ['newsletter@'] });
+    box.push(
+      raw(6, 'Werbung <newsletter@example.com>', 'Zimmer frei? Jetzt buchen', 'Haben Sie ein Zimmer frei? Buchen Sie unsere Software.'),
+      raw(7, 'Verein <verein@example.com>', 'Stammtisch', 'Wir möchten am 10.12. um 19 Uhr mit 12 Personen kommen.'),
+      raw(8, 'Bank <bank@example.com>', 'Kontoauszug', 'Ihr Kontoauszug liegt bereit.'),
+    );
+    expect(await ok('POST', '/inbox/fetch', admin)).toEqual({ added: 3 });
+    const fresh = await ok('GET', '/inbox?status=new', admin);
+    expect(fresh.find((m: { subject: string }) => m.subject === 'Stammtisch')).toMatchObject({ kind: 'table', extract: { dates: ['2026-12-10'], time: '19:00', persons: 12 } });
+    expect(fresh.some((m: { subject: string }) => m.subject === 'Kontoauszug' || m.subject.startsWith('Zimmer frei? Jetzt'))).toBe(false);
+    const hidden = await ok('GET', '/inbox?status=ignored', admin);
+    expect(hidden.filter((m: { handledBy: string }) => m.handledBy === 'Regel').map((m: { subject: string }) => m.subject).sort()).toEqual(['Kontoauszug', 'Zimmer frei? Jetzt buchen']);
+
+    // Regeln ändern und auf Vorhandenes anwenden: Verstecktes kommt zurück, die alte Rechnungsmail wird versteckt
+    await ok('PUT', '/settings/mail-rules', admin, { hideOther: false, hotelWords: [], tableWords: [], ignoreSenders: [] });
+    const re = await ok('POST', '/inbox/reclassify', admin);
+    expect(re.changed).toBeGreaterThanOrEqual(3);
+    const back = await ok('GET', '/inbox?status=new', admin);
+    expect(back.find((m: { subject: string }) => m.subject === 'Zimmer frei? Jetzt buchen').kind).toBe('hotel');
+    expect(back.find((m: { subject: string }) => m.subject === 'Stammtisch').kind).toBe('other');
+    expect(back.some((m: { subject: string }) => m.subject === 'Kontoauszug')).toBe(true);
   });
 });

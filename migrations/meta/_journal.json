@@ -162,6 +162,13 @@
       "when": 1794617321737,
       "tag": "0022_posteingang",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1794617992883,
+      "tag": "0023_antworten",
+      "breakpoints": true
     }
   ]
 }

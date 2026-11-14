@@ -113,17 +113,20 @@ export function findPhone(text: string): string {
 
 const HOTEL = /zimmer|übernacht|uebernacht|anreise|abreise|\bnächte\b|\bnacht\b|check-?in|unterkunft|\bhotel\b|frühstück|doppelzimmer|einzelzimmer|ferienwohnung/gi;
 const TABLE = /\btisch|mittagessen|abendessen|zum essen|essen gehen|brunch|\brestaurant\b|speisen|\bgeburtstagsessen\b|\bplätze\b|tischreserv/gi;
-export function classify(text: string): MailKind {
-  const h = (text.match(HOTEL) ?? []).length, t = (text.match(TABLE) ?? []).length;
+/** Zusätzliche Stichwörter aus den Einstellungen (Algorithmen → E-Mail) */
+export interface ExtraWords { hotel: string[]; table: string[] }
+const hits = (text: string, words: string[]) => { const low = text.toLowerCase(); return words.filter((w) => w.trim() && low.includes(w.trim().toLowerCase())).length; };
+export function classify(text: string, extra: ExtraWords = { hotel: [], table: [] }): MailKind {
+  const h = (text.match(HOTEL) ?? []).length + hits(text, extra.hotel), t = (text.match(TABLE) ?? []).length + hits(text, extra.table);
   const asks = /reserv|buch|anfrage|frei|verfügbar|möchte|würde|hätten|haben sie/i.test(text);
   if (!asks || (h === 0 && t === 0)) return 'other';
   return h > t ? 'hotel' : 'table';
 }
 
 /** ref = Tag, an dem die Mail einging (für Angaben ohne Jahr und für „morgen“). */
-export function extract(subject: string, body: string, ref: string): MailExtract {
+export function extract(subject: string, body: string, ref: string, extra?: ExtraWords): MailExtract {
   const text = `${subject}\n${ownText(body)}`;
-  const kind = classify(text);
+  const kind = classify(text, extra);
   const dates = findDates(text, ref);
   const { persons, children } = findPersons(text);
   let from: string | null = null, to: string | null = null;

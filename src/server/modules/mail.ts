@@ -62,7 +62,7 @@ export async function saveMailSettings(db: Db, actor: Actor, v: { enabled: boole
 }
 
 // ---------- Versand ----------
-export interface Mail { to: string; subject: string; text: string; attachments?: { filename: string; content: Buffer; contentType: string }[] }
+export interface Mail { to: string; subject: string; text: string; /** Message-ID der Nachricht, auf die geantwortet wird */ inReplyTo?: string; attachments?: { filename: string; content: Buffer; contentType: string }[] }
 type Sender = (config: { host: string; port: number; user: string; pass: string }, mail: Mail & { from: { name: string; address: string } }) => Promise<void>;
 
 let sender: Sender = async (c, mail) => {
@@ -70,7 +70,7 @@ let sender: Sender = async (c, mail) => {
     host: c.host, port: c.port, secure: c.port === 465, requireTLS: c.port !== 465, auth: { user: c.user, pass: c.pass },
     connectionTimeout: 15_000, greetingTimeout: 15_000, socketTimeout: 60_000,
   });
-  await transport.sendMail(mail);
+  await transport.sendMail({ ...mail, ...(mail.inReplyTo ? { references: mail.inReplyTo } : {}) });
 };
 /** Für Tests: Versand ersetzen, damit keine echte E-Mail verschickt wird. */
 export const setMailSender = (s: Sender) => { sender = s; };

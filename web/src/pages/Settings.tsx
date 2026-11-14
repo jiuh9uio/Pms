@@ -7,6 +7,7 @@ import { BackupCard } from './BackupCard.tsx';
 import { KitchenPrinterCard } from './KitchenPrinterCard.tsx';
 import { TerminalCard } from './TerminalCard.tsx';
 import { PurgeCard } from './PurgeCard.tsx';
+import { MailRulesCard } from './MailRulesCard.tsx';
 import { RulesCard } from './RulesCard.tsx';
 import { TseCard } from './TseCard.tsx';
 import { Changelog, UpdateCard } from './UpdateCard.tsx';
@@ -29,11 +30,26 @@ export function Settings() {
       {current === 'ecgeraet' && <TerminalCard />}
       {current === 'tse' && <TseCard />}
       {current === 'steuern' && <TaxRates />}
-      {current === 'algorithmen' && <RulesCard />}
+      {current === 'algorithmen' && <Algorithms />}
       {current === 'netz' && <NetworkCard />}
       {current === 'sicherung' && <BackupCard />}
       {current === 'update' && <><UpdateCard /><Changelog /></>}
       {current === 'loeschen' && <PurgeCard />}
+    </>
+  );
+}
+
+/** Algorithmen: Regeln, die das Programm selbst auswertet – nach Bereichen getrennt. */
+function Algorithms() {
+  const [cat, setCat] = useState<'fruehstueck' | 'email'>('fruehstueck');
+  return (
+    <>
+      <div className="segmented" role="tablist" aria-label="Bereich">
+        {([['fruehstueck', 'Frühstück'], ['email', 'E-Mail']] as const).map(([k, l]) => (
+          <button key={k} type="button" role="tab" aria-selected={cat === k} className={cat === k ? 'on' : ''} onClick={() => setCat(k)}>{l}</button>
+        ))}
+      </div>
+      {cat === 'fruehstueck' ? <RulesCard /> : <MailRulesCard />}
     </>
   );
 }

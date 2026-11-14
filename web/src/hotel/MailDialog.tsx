@@ -22,7 +22,7 @@ export function MailDialog({ path, title, onClose, onSent }: { path: string; tit
         <form onSubmit={(e) => void f.submit(v, e)} noValidate>
           {!data.ready && <p className="notice warn">Der E-Mail-Versand ist noch nicht eingerichtet. Ein Administrator kann das Postfach unter Verwaltung → Einstellungen → E-Mail-Versand hinterlegen.</p>}
           <div className="formgrid">
-            <Field label="An" error={f.errors.to} wide hint={data.to ? undefined : 'Beim Gast ist keine E-Mail-Adresse hinterlegt'}><input type="email" value={v.to} onChange={(e) => setV({ ...v, to: e.target.value })} /></Field>
+            <Field label="An" error={f.errors.to} wide hint={data.to ? undefined : 'Es ist keine E-Mail-Adresse hinterlegt'}><input type="email" value={v.to} onChange={(e) => setV({ ...v, to: e.target.value })} /></Field>
             <Field label="Betreff" error={f.errors.subject} wide><input value={v.subject} onChange={(e) => setV({ ...v, subject: e.target.value })} /></Field>
             <Field label="Text" error={f.errors.text} wide><textarea rows={14} value={v.text} onChange={(e) => setV({ ...v, text: e.target.value })} /></Field>
           </div>

@@ -604,5 +604,7 @@ export const inboxMails = pgTable('inbox_mails', {
   linkKind: text('link_kind', { enum: ['booking', 'table'] }),
   linkId: uuid('link_id'),
   handledBy: text('handled_by').notNull().default(''),
+  repliedAt: ts('replied_at'),
+  repliedBy: text('replied_by').notNull().default(''),
   fetchedAt: ts('fetched_at').notNull().defaultNow(),
 }, (t) => [uniqueIndex('inbox_mails_uid_idx').on(t.uidValidity, t.uid), index('inbox_mails_received_idx').on(t.receivedAt)]);

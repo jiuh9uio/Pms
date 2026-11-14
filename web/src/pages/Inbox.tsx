@@ -7,6 +7,7 @@ import { api } from '../api.ts';
 import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
+import { MailDialog } from '../hotel/MailDialog.tsx';
 import { Badge, Button, Field, LoadState, PageHeader, fmtDateTime, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
 
 export const INBOX_TABS = [['new', 'Neu'], ['done', 'Erledigt'], ['ignored', 'Ignoriert'], ['all', 'Alle']] as const;
@@ -58,7 +59,7 @@ export function Inbox() {
           {list.data?.map((m) => (
             <button key={m.id} type="button" className={`card inboxitem${m.id === openId ? ' on' : ''}`} onClick={() => setOpenId(m.id)}>
               <span className="top"><b>{m.fromName || m.fromAddr}</b><small>{fmtDateTime(m.receivedAt)}</small></span>
-              <span className="subject">{m.subject || '(ohne Betreff)'} <Badge tone={tone(m.kind)}>{MAIL_KIND_LABEL[m.kind]}</Badge>{m.status === 'done' && <> <Badge tone="ok">erledigt</Badge></>}</span>
+              <span className="subject">{m.subject || '(ohne Betreff)'} <Badge tone={tone(m.kind)}>{MAIL_KIND_LABEL[m.kind]}</Badge>{m.status === 'done' && <> <Badge tone="ok">erledigt</Badge></>}{m.repliedAt && <> <Badge>beantwortet</Badge></>}</span>
               <small className="muted">{m.snippet}</small>
             </button>
           ))}
@@ -77,6 +78,7 @@ function MailDetail({ id, onGone }: { id: string; onGone: () => void }) {
   const { data, error, reload } = useLoad(() => api<InboxMailDto>('GET', `/inbox/${id}`), [id]);
   const [h, setH] = useState({ from: '', to: '' });
   const [t, setT] = useState({ date: '', time: '', persons: '', name: '', phone: '', note: '' });
+  const [mail, setMail] = useState<'reply' | 'confirm' | 'decline' | null>(null);
   useEffect(() => {
     if (!data) return;
     const x = data.extract;
@@ -115,9 +117,14 @@ function MailDetail({ id, onGone }: { id: string; onGone: () => void }) {
           {data.status !== 'done' && <Button onClick={() => status('done', 'Als erledigt markiert')}>Erledigt</Button>}
           {data.status === 'new' && <Button onClick={() => status('ignored', 'Ignoriert')}>Ignorieren</Button>}
           {data.status !== 'new' && <Button onClick={() => status('new', 'Wieder offen')}>Wieder öffnen</Button>}
-          <a className="btn" href={`mailto:${data.fromAddr}?subject=${encodeURIComponent(`Re: ${data.subject}`)}`}>Antworten (Mailprogramm)</a>
+          <Button onClick={() => setMail('reply')}>Antworten</Button>
+          {data.linkKind && <Button variant="primary" onClick={() => setMail('confirm')}>Bestätigung senden</Button>}
+          {!data.linkKind && data.kind !== 'other' && <Button onClick={() => setMail('decline')}>Absage senden</Button>}
           <Button variant="danger" onClick={() => void remove()}>Entfernen</Button>
         </div>
+        {data.repliedAt && <p className="muted small">Beantwortet am {fmtDateTime(data.repliedAt)}{data.repliedBy && ` von ${data.repliedBy}`}.</p>}
+        {mail && <MailDialog path={`/inbox/${id}/mail?template=${mail}`} title={mail === 'confirm' ? 'Bestätigung senden' : mail === 'decline' ? 'Absage senden' : 'Antworten'} onClose={() => setMail(null)}
+          onSent={() => { if (mail !== 'reply' && data.status === 'new') void patch({ status: 'done' }); else { bump(); reload(); } }} />}
         {data.linkKind && <p className="notice">Daraus angelegt: {data.linkKind === 'booking'
           ? <button type="button" className="linkbtn" onClick={() => data.linkId && openBooking(data.linkId)}>Zimmerreservierung öffnen</button> : 'eine Tischreservierung (im Modul Restaurant zu finden)'}{data.handledBy && ` · bearbeitet von ${data.handledBy}`}</p>}
       </section>

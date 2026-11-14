@@ -430,3 +430,8 @@ table.kv td { padding: 8px 0; border-bottom: 1px solid var(--line); } .wrapcode 
 .mailbody { white-space: pre-wrap; word-break: break-word; font: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; max-height: 45vh; overflow: auto; margin: 12px 0; }
 a.btn { display: inline-flex; align-items: center; padding: 8px 14px; border: 1px solid var(--line-strong); border-radius: 8px; text-decoration: none; color: inherit; background: var(--surface); font-weight: 500; }
 @media (max-width: 900px) { .inbox { grid-template-columns: 1fr; } .inboxlist { max-height: 40vh; } }
+
+/* Umschalter für Bereiche (Algorithmen) */
+.segmented { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 10px; overflow: hidden; margin: 0 0 14px; background: var(--surface); }
+.segmented button { border: 0; background: none; padding: 8px 18px; font: inherit; color: inherit; cursor: pointer; } .segmented button + button { border-left: 1px solid var(--line-strong); }
+.segmented button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
