@@ -57,6 +57,9 @@ function toInfo(info: TseReply, cert: TseReply | undefined): TseInfoDto {
   };
 }
 
+/** Epsons Beispiele verwenden als Herstellerkürzel „TSE1“; der Modellname aus GetStorageInfo kann davon abweichen. */
+const vendorOf = (info: TseReply | undefined) => ({ vendor: 'TSE1', altVendors: [str(info?.output.vendorType), 'TSE', ''] });
+
 async function run(db: Exec, selfTest: boolean): Promise<TseInfoDto> {
   const t = await getTse(db);
   if (!t.enabled) throw conflict('Die TSE ist noch nicht eingerichtet (Einstellungen → TSE)', 'tse_not_configured');
@@ -65,9 +68,9 @@ async function run(db: Exec, selfTest: boolean): Promise<TseInfoDto> {
     replies = await tseSession(t.host, t.port, [
       { fn: 'GetStorageInfo', storageType: 'COMMON', vendor: '' },
       // der Selbsttest kann bis zu 60 Sekunden dauern
-      (prev) => (selfTest && prev[0]?.result === 'EXECUTION_OK' ? { fn: 'RunTSESelfTest', vendor: str(prev[0].output.vendorType), timeoutMs: 120000 } : null),
+      (prev) => (selfTest && prev[0]?.result === 'EXECUTION_OK' ? { fn: 'RunTSESelfTest', ...vendorOf(prev[0]), timeoutMs: 120000 } : null),
       (prev) => (selfTest && prev[0]?.result === 'EXECUTION_OK' ? { fn: 'GetStorageInfo', storageType: 'COMMON', vendor: '' } : null),
-      (prev) => (prev[0]?.result === 'EXECUTION_OK' ? { fn: 'GetLogMessageCertificate', vendor: str(prev[0].output.vendorType) } : null),
+      (prev) => (prev[0]?.result === 'EXECUTION_OK' ? { fn: 'GetLogMessageCertificate', ...vendorOf(prev[0]) } : null),
     ]);
   } catch (e) {
     throw new AppError(502, 'tse_failed', e instanceof TseError ? e.message : `TSE nicht erreichbar: ${e instanceof Error ? e.message : e}`);

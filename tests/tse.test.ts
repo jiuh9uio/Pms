@@ -25,6 +25,8 @@ const session = (res: { cookies: { name: string; value: string }[] }) => ({ pms_
 let mode: 'ok' | 'no-stick' | 'selftest-fails' | 'in-use' = 'ok';
 let seen: { fn: string; storage: { type: string; vendor: string }; timeout: string }[] = [];
 let tested = false;
+/** Herstellerkürzel, das die simulierte Schnittstelle für TSE-Befehle annimmt */
+let acceptVendor = 'TSE1';
 const xmlEsc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 const PEM = '-----BEGIN CERTIFICATE-----\nTUlJQmV4YW1wbGU=\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nUk9PVA==\n-----END CERTIFICATE-----\n';
 function tseServer(sock: Socket) {
@@ -47,9 +49,10 @@ function tseServer(sock: Socket) {
         const req = JSON.parse(/<requestdata>([\s\S]*)<\/requestdata>/.exec(msg)![1]!.replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
         seen.push({ fn: req.function, storage: req.storage, timeout: /<timeout>(\d+)<\/timeout>/.exec(msg)![1]! });
         let result: object;
-        if (mode === 'no-stick') result = { result: 'OTHER_ERROR_NO_STORAGE_FOUND', function: req.function, output: {}, error: { fact: 'No valid storage is inserted' } };
+        if (req.storage.type === 'TSE' && req.storage.vendor !== acceptVendor) result = { result: 'JSON_ERROR_UNEXPECTED_STORAGE_VENDOR', function: req.function, output: {} };
+        else if (mode === 'no-stick') result = { result: 'OTHER_ERROR_NO_STORAGE_FOUND', function: req.function, output: {}, error: { fact: 'No valid storage is inserted' } };
         else if (req.function === 'GetStorageInfo') result = { result: 'EXECUTION_OK', function: 'GetStorageInfo', output: {
-          vendorType: 'TSE1', smartInformation: { healthStatus: 'PASS' },
+          vendorType: 'EPSON-USB-TSE', smartInformation: { healthStatus: 'PASS' },
           tseInformation: { serialNumber: Buffer.from('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef', 'hex').toString('base64'), tsePublicKey: 'BEtleQ==', signatureAlgorithm: 'ecdsa-plain-SHA384',
             tseDescription: 'BSI-K-TR-0373-2019', cdcId: 'DE0123456789012345', tseInitializationState: 'INITIALIZED', hasValidTime: false, hasPassedSelfTest: tested, isTSEUnlocked: false,
             timeUntilNextSelfTest: 90000, certificateExpirationDate: '2028-12-31T23:59:59Z', createdSignatures: 1234, remainingSignatures: 9998766, maxSignatures: 10000000,
@@ -110,7 +113,7 @@ describe('TSE (Epson) prüfen', () => {
     expect(seen[0]!.storage).toEqual({ type: 'COMMON', vendor: '' });
     expect(seen[1]!.storage).toEqual({ type: 'TSE', vendor: 'TSE1' });
     expect(i).toMatchObject({
-      vendorType: 'TSE1', serialNumberHex: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef', description: 'BSI-K-TR-0373-2019', signatureAlgorithm: 'ecdsa-plain-SHA384',
+      vendorType: 'EPSON-USB-TSE', serialNumberHex: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef', description: 'BSI-K-TR-0373-2019', signatureAlgorithm: 'ecdsa-plain-SHA384',
       initializationState: 'INITIALIZED', hasPassedSelfTest: false, hasValidTime: false, createdSignatures: 1234, remainingSignatures: 9998766, registeredClients: 2,
       certificateExpirationDate: '2028-12-31T23:59:59Z', healthStatus: 'PASS',
     });
@@ -134,6 +137,15 @@ describe('TSE (Epson) prüfen', () => {
     await ok('PUT', '/settings/tse', admin, { enabled: true, host: '127.0.0.1', port: 9 });
     expect((await call('GET', '/tse/info', admin)).json().error.message).toContain('keine TSE-Schnittstelle');
     await ok('PUT', '/settings/tse', admin, { enabled: true, host: '127.0.0.1', port });
+  });
+
+  it('versucht ein anderes Herstellerkürzel, wenn die Schnittstelle „TSE1“ ablehnt', async () => {
+    acceptVendor = 'EPSON-USB-TSE';
+    seen = [];
+    const info = await ok('GET', '/tse/info', admin);
+    expect(info.certificatePem).toContain('BEGIN CERTIFICATE');
+    expect(seen.map((x) => `${x.fn}:${x.storage.vendor}`)).toEqual(['GetStorageInfo:', 'GetLogMessageCertificate:TSE1', 'GetLogMessageCertificate:EPSON-USB-TSE']);
+    acceptVendor = 'TSE1';
   });
 
   it('druckt das Datenblatt auf dem Bondrucker', async () => {

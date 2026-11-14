@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.21.1
+
+- TSE: Fehler „JSON_ERROR_UNEXPECTED_STORAGE_VENDOR“ beim Selbsttest und beim Lesen des Zertifikats behoben – das Programm sendet jetzt das von Epson erwartete Kürzel und probiert bei Ablehnung weitere Schreibweisen.
+
 ## 1.21.0
 
 - Einstellungen → neuer Reiter „Daten löschen“: Administratoren können Rechnungen und Zahlungen, vergangene oder alle Buchungen sowie Gäste ohne Buchung löschen – zum Aufräumen von Probedaten vor dem echten Betrieb.

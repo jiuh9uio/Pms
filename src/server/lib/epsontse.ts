@@ -11,7 +11,7 @@ import { connect } from 'node:net';
  * Hier werden nur Befehle ohne Anmeldung verwendet (Rolle „-“): Sie lesen Informationen oder führen den Selbsttest aus,
  * schreiben aber keine Vorgänge und verbrauchen keine PIN-Versuche.
  */
-export interface TseCall { fn: string; input?: Record<string, unknown>; /** COMMON nur für GetStorageInfo erlaubt */ storageType?: 'TSE' | 'COMMON'; vendor?: string; timeoutMs?: number }
+export interface TseCall { fn: string; input?: Record<string, unknown>; /** COMMON nur für GetStorageInfo erlaubt */ storageType?: 'TSE' | 'COMMON'; vendor?: string; /** weitere Schreibweisen, falls die Schnittstelle `vendor` ablehnt */ altVendors?: string[]; timeoutMs?: number }
 export interface TseReply { fn: string; result: string; output: Record<string, unknown>; error?: { fact?: string; errorinfo?: string } }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -92,7 +92,16 @@ export function tseSession(host: string, port: number, calls: (TseCall | ((prev:
           step = 'run';
           next();
         } else if (step === 'run' && msg.includes('<device_data>') && current) {
-          replies.push(parseOperateResult(msg, current.fn));
+          const reply = parseOperateResult(msg, current.fn);
+          const alt = current.altVendors?.find((x) => x !== current!.vendor);
+          if (reply.result === 'JSON_ERROR_UNEXPECTED_STORAGE_VENDOR' && alt !== undefined) {
+            // andere Schreibweise des Herstellerkürzels versuchen
+            current = { ...current, vendor: alt, altVendors: current.altVendors!.filter((x) => x !== alt && x !== current!.vendor) };
+            arm((current.timeoutMs ?? 10000) + 5000, `keine Antwort auf ${current.fn}`);
+            send(operate(current));
+            continue;
+          }
+          replies.push(reply);
           index++;
           next();
         } else if (step === 'close' && msg.includes('<close_device>')) finish();
