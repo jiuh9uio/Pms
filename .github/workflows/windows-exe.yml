@@ -129,6 +129,7 @@ jobs:
           $day = Invoke-RestMethod "$base/reports/day?date=$(Get-Date -Format 'yyyy-MM-dd')" -WebSession $s
           if ($null -eq $day.totalCents) { throw 'Tagesabschluss fehlerhaft' }
           if ((Invoke-RestMethod "$base/public/booking-request").enabled) { throw 'Online-Anfrage ist ohne Einschalten aktiv' }
+          try { Invoke-RestMethod "$base/public/booking/00000000000000000000000000000000.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" | Out-Null; throw 'Gefälschter Gäste-Link wurde angenommen' } catch { if ($_.Exception.Response.StatusCode.value__ -ne 404) { throw "Gäste-Link: erwartet 404, erhalten $($_.Exception.Message)" } }
           $gr = Post '/goods-receipts' @{ supplier = 'Test'; goods = 'Ware'; tempC = 3.5; ok = $true; note = '' } $s
           if (-not $gr.id) { throw 'Wareneingang wurde nicht gespeichert' }
           $rep = Invoke-RestMethod "$base/reports/year?year=2031" -WebSession $s

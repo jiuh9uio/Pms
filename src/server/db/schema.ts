@@ -212,6 +212,9 @@ export const bookings = pgTable('bookings', {
   prearrivalSentAt: ts('prearrival_sent_at'),
   /** Optionsfrist einer vorläufigen Reservierung: bis zu diesem Tag wird das Zimmer freigehalten */
   optionUntil: date('option_until', { mode: 'string' }),
+  /** vom Gast über seinen Link mitgeteilt: voraussichtliche Ankunftszeit (HH:MM) und Nachricht */
+  arrivalTime: text('arrival_time').notNull().default(''),
+  guestMessage: text('guest_message').notNull().default(''),
   ...stamps,
 }, (t) => [index('bookings_guest_idx').on(t.guestId)]);
 

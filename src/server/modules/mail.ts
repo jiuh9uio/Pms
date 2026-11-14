@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
@@ -25,6 +25,8 @@ function secretKey() {
   }
   return (key = readFileSync(file));
 }
+/** Prüfsumme mit dem Schlüssel der Installation – für Links, die ohne gespeicherten Zugangscode auskommen */
+export const sign = (text: string) => createHmac('sha256', secretKey()).update(text).digest('base64url').slice(0, 32);
 export function encrypt(plain: string) {
   const iv = randomBytes(12);
   const c = createCipheriv('aes-256-gcm', secretKey(), iv);

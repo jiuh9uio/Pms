@@ -35,7 +35,7 @@ const PAGES: Page[] = [
   { to: '/einstellungen?ansicht=drucker', title: 'Drucker', area: 'Einstellungen', words: 'epson küchendrucker bondrucker ip-adresse testdruck automatisch frühstücksliste', admin: true },
   { to: '/einstellungen?ansicht=ecgeraet', title: 'EC-Gerät', area: 'Einstellungen', words: 'kartenzahlung kartenterminal vr payment zvt terminal karte', admin: true },
   { to: '/einstellungen?ansicht=loeschen', title: 'Hotel-Daten löschen', area: 'Einstellungen', words: 'löschen aufräumen probedaten testdaten rechnungen buchungen zurücksetzen leeren', admin: true },
-  { to: '/einstellungen?ansicht=algorithmen', title: 'Algorithmen (Frühstück, E-Mail)', area: 'Einstellungen', words: 'algorithmus regel frühstück etage personen mindestens weniger automatisch email filter anfragen stichwörter absender', admin: true },
+  { to: '/einstellungen?ansicht=algorithmen', title: 'Algorithmen (Frühstück, E-Mail)', area: 'Einstellungen', words: 'storno stornobedingungen ausfallgebühr gästelink algorithmus regel frühstück etage personen mindestens weniger automatisch email filter anfragen stichwörter absender', admin: true },
   { to: '/email', title: 'E-Mail-Posteingang', area: 'E-Mail', words: 'email mail posteingang anfrage postfach gmx nachricht', module: 'email' },
   { to: '/team', title: 'Team – Übergabebuch', area: 'Team', words: 'übergabe übergabebuch aufgabe reparatur schicht notiz defekt kaputt' },
   { to: '/reinigung', title: 'Reinigung', area: 'Hotel', words: 'reinigung housekeeping zimmermädchen endreinigung putzen sauber', module: 'hotel' },

@@ -139,4 +139,76 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect((await call('GET', `/guests/${gb.id}`, user)).statusCode).toBe(404);
     expect((await ok('GET', `/guests/${ga.id}`, user)).bookings.length).toBe(2);
   });
+
+  it('zeigt dem Gast über seinen Link die Reservierung, nimmt die Ankunftszeit an und lässt nach den Bedingungen stornieren', async () => {
+    const policy = { enabled: true, freeDays: 3, feePercent: 80, online: true, onlineLate: false, publicUrl: '', extraText: '' };
+    expect((await call('PUT', '/settings/cancel-policy', user, policy)).statusCode).toBe(403);
+    const far = await mk({ firstName: 'Lea', lastName: 'Link' }, addDays(today, 40), addDays(today, 42));
+    const near = await mk({ firstName: 'Nah', lastName: 'Dran' }, addDays(today, 2), addDays(today, 3));
+    const link = await ok('GET', `/bookings/${far}/guest-link`, user);
+    expect(link.url).toMatch(/\/buchung\/[0-9a-f]{32}\.[A-Za-z0-9_-]{32}$/);
+    expect(link.qr).toContain('data:image/png');
+    const tok = (u: string) => u.split('/buchung/')[1]!;
+    const t = tok(link.url);
+    // gefälschter oder fremder Link
+    expect((await call('GET', `/public/booking/${t.slice(0, -1)}${t.endsWith('A') ? 'B' : 'A'}`, {})).statusCode).toBe(404);
+    expect((await call('GET', `/public/booking/${'0'.repeat(32)}.${t.split('.')[1]}`, {})).statusCode).toBe(404);
+
+    // ohne eingeschaltete Bedingungen: ansehen ja, stornieren nein
+    let pub = await ok('GET', `/public/booking/${t}`, {});
+    expect(pub).toMatchObject({ guestName: 'Lea Link', state: 'active', totalCents: 19800, canCancel: false, from: addDays(today, 40) });
+    expect(pub.cancelHint).toContain('rufen Sie uns bitte an');
+    expect(JSON.stringify(pub)).not.toContain('Weg 1'); // keine Anschrift, keine Ausweisdaten
+    expect((await call('POST', `/public/booking/${t}/cancel`, {}, { confirm: true })).statusCode).toBe(409);
+
+    // Ankunftszeit mitteilen: steht in der Reservierung und im Übergabebuch
+    expect((await call('POST', `/public/booking/${t}/arrival`, {}, { time: '25:00', message: '' })).statusCode).toBe(400);
+    await ok('POST', `/public/booking/${t}/arrival`, {}, { time: '21:30', message: 'Wir kommen mit dem Zug.' });
+    expect(await ok('GET', `/bookings/${far}`, user)).toMatchObject({ arrivalTime: '21:30', guestMessage: 'Wir kommen mit dem Zug.' });
+    expect((await ok('GET', '/team/notes', user))[0].text).toContain('Ankunft voraussichtlich 21:30 Uhr');
+
+    // Bedingungen einschalten
+    await ok('PUT', '/settings/cancel-policy', admin, policy);
+    pub = await ok('GET', `/public/booking/${t}`, {});
+    expect(pub.terms).toMatchObject({ enabled: true, free: true, freeUntil: addDays(today, 37), feeCents: 0, feePercent: 80 });
+    expect(pub.canCancel).toBe(true);
+    expect(await ok('GET', `/bookings/${far}/cancel-terms`, user)).toMatchObject({ free: true, freeUntil: addDays(today, 37) });
+    // nach der Frist: online nur, wenn ausdrücklich erlaubt – dann mit Ausfallgebühr als Meldung, nicht als Buchung
+    const tn = tok((await ok('GET', `/bookings/${near}/guest-link`, user)).url);
+    let late = await ok('GET', `/public/booking/${tn}`, {});
+    expect(late.terms).toMatchObject({ free: false, feeCents: 7920 }); // 80 % von 99 €
+    expect(late.canCancel).toBe(false);
+    expect((await call('POST', `/public/booking/${tn}/cancel`, {}, { confirm: true })).statusCode).toBe(409);
+    await ok('PUT', '/settings/cancel-policy', admin, { ...policy, onlineLate: true });
+    expect((await call('POST', `/public/booking/${tn}/cancel`, {}, {})).statusCode).toBe(400); // ohne Bestätigung
+    late = await ok('POST', `/public/booking/${tn}/cancel`, {}, { confirm: true });
+    expect(late).toMatchObject({ state: 'cancelled', canCancel: false });
+    const nb = await ok('GET', `/bookings/${near}`, user);
+    expect(nb.rooms[0].status).toBe('cancelled');
+    expect(nb.notes).toContain('Ausfallgebühr laut Bedingungen: 79,20 €');
+    expect(nb.charges).toHaveLength(0); // nichts automatisch berechnet
+    expect((await ok('GET', '/team/notes', user))[0].text).toContain('Storno durch den Gast');
+    // das Zimmer ist wieder frei
+    expect((await ok('GET', `/availability?from=${addDays(today, 2)}&to=${addDays(today, 3)}`, user)).length).toBe(1);
+
+    // kostenfrei innerhalb der Frist
+    const done = await ok('POST', `/public/booking/${t}/cancel`, {}, { confirm: true });
+    expect(done.state).toBe('cancelled');
+    expect((await ok('GET', `/bookings/${far}`, user)).notes).toContain('Kostenfrei innerhalb der Frist');
+    expect((await call('POST', `/public/booking/${t}/cancel`, {}, { confirm: true })).statusCode).toBe(409); // nicht doppelt
+    expect((await call('POST', `/public/booking/${t}/arrival`, {}, { time: '10:00', message: '' })).statusCode).toBe(409);
+  });
+
+  it('nimmt Bedingungen und – mit Internetadresse – den Link in die Bestätigung auf', async () => {
+    const id = await mk({ firstName: 'Mia', lastName: 'Mail', email: 'mia@example.com' }, addDays(today, 60), addDays(today, 61));
+    let d = await ok('GET', `/bookings/${id}/mail`, user);
+    expect(d.text).toContain('Kostenfreie Stornierung bis einschließlich');
+    expect(d.text).toContain('80 % des Zimmerpreises');
+    expect(d.text).not.toContain('/buchung/'); // ohne Adresse im Internet kein Link in der E-Mail
+    expect((await call('PUT', '/settings/cancel-policy', admin, { enabled: true, freeDays: 3, feePercent: 80, online: true, onlineLate: false, publicUrl: 'hotel', extraText: '' })).statusCode).toBe(400);
+    await ok('PUT', '/settings/cancel-policy', admin, { enabled: true, freeDays: 3, feePercent: 80, online: true, onlineLate: false, publicUrl: 'https://hotel.example.de/', extraText: '' });
+    d = await ok('GET', `/bookings/${id}/mail`, user);
+    expect(d.text).toMatch(/stornieren: https:\/\/hotel\.example\.de\/buchung\/[0-9a-f]{32}\./);
+    expect((await ok('GET', `/bookings/${id}/guest-link`, user))).toMatchObject({ localOnly: false });
+  });
 });

@@ -4,7 +4,7 @@ import {
   isActiveStatus,
   PAYMENT_METHODS, SOURCES, STATUS_LABEL, addDays, bookingRoomInput, bookingRoomUpdateInput, bookingUpdateInput, chargeInput, diffDays, formatMoney,
   guestInput, isIsoDate, moneyInput, parseMoney, todayBerlin,
-  type BookingDto, type BookingRoomDto, type FreeRoomDto, type RoomStatus, type ServiceDto,
+  type BookingDto, type BookingRoomDto, type CancelTerms, type GuestLinkDto, type FreeRoomDto, type RoomStatus, type ServiceDto,
 } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
 import type { BookingBillingDto } from '../../../src/shared/billing.js';
@@ -346,6 +346,7 @@ function Meta({ booking }: { booking: BookingDto }) {
   const opts = (list: string[], cur: string) => (cur && !list.includes(cur) ? [cur, ...list] : list);
   return (
     <form onSubmit={(e) => void f.submit({ ...v, companyId: v.companyId || null, version: booking.version }, e)} noValidate>
+      <GuestSide booking={booking} />
       <h3>Angaben</h3>
       <div className="formgrid">
         <div className="wide"><CompanySelect value={v.companyId} onChange={(cid) => setV({ ...v, companyId: cid })} hint={v.companyId !== (booking.companyId ?? '') ? 'Gilt für neu hinzukommende Nächte und neue Rechnungen; gebuchte Preise bleiben.' : undefined} /></div>
@@ -357,6 +358,30 @@ function Meta({ booking }: { booking: BookingDto }) {
       </div>
       {dirty && <div className="formactions"><Button type="submit" variant="primary" busy={f.busy}>Angaben speichern</Button></div>}
     </form>
+  );
+}
+
+/** Was der Gast über seinen Link mitgeteilt hat, die Stornobedingungen dieser Reservierung und der Link selbst. */
+function GuestSide({ booking }: { booking: BookingDto }) {
+  const toast = useToast();
+  const terms = useLoad(() => api<CancelTerms>('GET', `/bookings/${booking.id}/cancel-terms`), [booking.id, booking.version]).data;
+  const [link, setLink] = useState<GuestLinkDto | null>(null);
+  const show = async () => { try { setLink(await api<GuestLinkDto>('GET', `/bookings/${booking.id}/guest-link`)); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); } };
+  const copy = async () => { try { await navigator.clipboard.writeText(link!.url); toast('Link kopiert'); } catch { toast('Kopieren nicht möglich – bitte den Link markieren', 'error'); } };
+  const active = booking.rooms.some((r) => r.status === 'tentative' || r.status === 'confirmed');
+  return (
+    <>
+      {(booking.arrivalTime || booking.guestMessage) && <p className="notice"><b>Vom Gast:</b> {booking.arrivalTime && `Ankunft voraussichtlich ${booking.arrivalTime} Uhr. `}{booking.guestMessage && `„${booking.guestMessage}“`}</p>}
+      {terms?.enabled && active && <p className="muted small">Storno: {terms.free ? `kostenfrei bis einschließlich ${deDate(terms.freeUntil!)}` : `Frist abgelaufen (${deDate(terms.freeUntil!)}) – Ausfallgebühr laut Bedingungen ${formatMoney(terms.feeCents)} (${terms.feePercent} %)`}.</p>}
+      {link ? (
+        <div className="guestlink">
+          <img src={link.qr} alt="QR-Code zum Gäste-Link" width={120} height={120} />
+          <div><p><b>Link für den Gast</b> – Reservierung ansehen, Ankunftszeit mitteilen, stornieren:</p><p><code className="wrapcode">{link.url}</code></p>
+            <p><Button onClick={() => void copy()}>Link kopieren</Button></p>
+            {link.localOnly && <p className="muted small">Diese Adresse ist nur im Hausnetz erreichbar. Für Gäste zu Hause muss das Programm aus dem Internet erreichbar und die Adresse unter Einstellungen → Algorithmen → Storno eingetragen sein.</p>}</div>
+        </div>
+      ) : <p><button type="button" className="linkbtn" onClick={() => void show()}>Link für den Gast anzeigen</button></p>}
+    </>
   );
 }
 

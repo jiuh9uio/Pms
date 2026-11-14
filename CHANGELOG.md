@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.32.0
+
+- Stornobedingungen (Einstellungen → Algorithmen → Storno): kostenfrei bis so viele Tage vor der Anreise, danach ein Anteil des Zimmerpreises. Die Bedingungen stehen in der Reservierungsbestätigung, in der Reservierung und auf der Seite des Gastes.
+- Gäste-Link: Jede Reservierung hat einen persönlichen Link (auch als QR-Code, in der Reservierung unter „Angaben“). Der Gast sieht dort seine Buchung, teilt Ankunftszeit und eine Nachricht mit und kann – wenn Sie es erlauben – selbst stornieren. Das Zimmer wird dabei sofort frei, im Übergabebuch erscheint eine Meldung.
+- Eine Ausfallgebühr wird dem Gast vor dem Stornieren angezeigt und Ihnen gemeldet, aber nicht von selbst berechnet.
+- Für Gäste zu Hause funktioniert der Link erst, wenn das Programm aus dem Internet erreichbar ist; dann kommt er auch in die Bestätigung und in die Nachricht vor der Anreise.
+
 ## 1.31.0
 
 Hotel – Ergänzungen aus dem Vergleich mit großen Hotelprogrammen:

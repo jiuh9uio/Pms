@@ -158,6 +158,8 @@ export interface BookingDto {
   id: string; number: string; groupName: string; source: string; paymentMethod: string; notes: string; version: number; createdAt: string;
   /** Optionsfrist (nur bei vorläufigen Reservierungen von Bedeutung) */
   optionUntil: string | null;
+  /** vom Gast über seinen Link mitgeteilt */
+  arrivalTime: string; guestMessage: string;
   companyId: string | null; companyName: string | null;
   guest: GuestDto; rooms: BookingRoomDto[]; charges: ChargeDto[];
   lodgingCents: number; chargesCents: number; totalCents: number;
@@ -282,3 +284,41 @@ export interface SourceStats { year: number; rows: SourceRow[] }
 // ---------- Doppelte Gäste ----------
 export interface GuestDuplicate { keep: GuestDto; other: GuestDto; reason: string }
 export const guestMergeInput = z.object({ otherId: z.uuid() });
+
+// ---------- Stornobedingungen und Gäste-Link ----------
+export const cancelPolicyInput = z.object({
+  /** Bedingungen anwenden und anzeigen */
+  enabled: z.boolean(),
+  /** kostenfrei stornierbar bis so viele Tage vor der Anreise */
+  freeDays: z.number('Bitte eine Zahl eingeben').int().min(0).max(365),
+  /** danach: Anteil des Zimmerpreises in Prozent */
+  feePercent: z.number('Bitte eine Zahl eingeben').int().min(0).max(100),
+  /** Gäste dürfen über ihren Link selbst stornieren */
+  online: z.boolean(),
+  /** … auch nach Ablauf der kostenfreien Frist (dann mit Hinweis auf die Ausfallgebühr) */
+  onlineLate: z.boolean(),
+  /** Adresse, unter der Gäste das Programm im Internet erreichen (leer = Link nicht in E-Mails aufnehmen) */
+  publicUrl: z.union([z.literal(''), z.url('Bitte eine Adresse wie https://hotel.example.de eintragen')]).default(''),
+  extraText: z.string().trim().max(600),
+});
+export type CancelPolicy = z.infer<typeof cancelPolicyInput>;
+/** Stand der Bedingungen für eine bestimmte Reservierung */
+export interface CancelTerms { enabled: boolean; freeUntil: string | null; free: boolean; feePercent: number; feeCents: number; text: string }
+export const cancelFreeUntil = (arrival: string, freeDays: number) => addDays(arrival, -freeDays);
+export function cancelTerms(p: CancelPolicy, arrival: string, lodgingCents: number, today: string): CancelTerms {
+  if (!p.enabled) return { enabled: false, freeUntil: null, free: true, feePercent: 0, feeCents: 0, text: '' };
+  const freeUntil = cancelFreeUntil(arrival, p.freeDays), free = today <= freeUntil;
+  const de = (s: string) => `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)}`;
+  const text = [`Kostenfreie Stornierung bis einschließlich ${de(freeUntil)}.`, p.feePercent > 0 ? `Danach und bei Nichtanreise berechnen wir ${p.feePercent} % des Zimmerpreises.` : 'Auch danach berechnen wir bei Stornierung nichts.', p.extraText].filter(Boolean).join(' ');
+  return { enabled: true, freeUntil, free, feePercent: p.feePercent, feeCents: free ? 0 : Math.round(lodgingCents * p.feePercent / 100), text };
+}
+export interface GuestLinkDto { url: string; qr: string; /** true = Adresse nur im Hausnetz erreichbar */ localOnly: boolean }
+export interface PublicBooking {
+  hotelName: string; hotelPhone: string; number: string; guestName: string;
+  rooms: { category: string; from: string; to: string; nights: number; adults: number; children: number; status: RoomStatus }[];
+  from: string; to: string; totalCents: number;
+  state: 'active' | 'cancelled' | 'arrived' | 'past';
+  arrivalTime: string; guestMessage: string; checkinTime: string;
+  terms: CancelTerms; canCancel: boolean; /** warum nicht online storniert werden kann */ cancelHint: string;
+}
+export const publicArrivalInput = z.object({ time: z.union([z.literal(''), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Uhrzeit im Format HH:MM')]), message: z.string().trim().max(500).default('') });

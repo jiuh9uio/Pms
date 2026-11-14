@@ -1,4 +1,4 @@
-import { formatMoney, isActiveStatus, STATUS_LABEL, type MailDraft } from '../../shared/hotel.js';
+import { cancelTerms, formatMoney, isActiveStatus, STATUS_LABEL, todayBerlin, type MailDraft } from '../../shared/hotel.js';
 import type { Db, Exec } from '../db/client.js';
 import { conflict } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
@@ -44,6 +44,10 @@ export async function bookingMailDraft(db: Exec, bookingId: string): Promise<Mai
     (tentative ? ` (${STATUS_LABEL[r.status]})` : ''));
   const extras = b.charges.map((c) => `- ${c.quantity} × ${c.name} – ${formatMoney(c.totalCents)}`);
   const total = rooms.reduce((s, r) => s + r.lodgingCents, 0) + b.chargesCents;
+  // Stornobedingungen und persönlicher Link (der Link nur, wenn das Programm aus dem Internet erreichbar ist)
+  const { getPolicy, mailLink } = await import('./guestlink.js');
+  const terms = cancelTerms(await getPolicy(db), rooms.map((r) => r.from).sort()[0]!, rooms.reduce((s, r) => s + r.lodgingCents, 0), todayBerlin());
+  const link = await mailLink(db, b.id);
   const text = [
     greeting(b.guest), '',
     tentative
@@ -52,6 +56,8 @@ export async function bookingMailDraft(db: Exec, bookingId: string): Promise<Mai
     '', ...lines, ...(extras.length ? ['', 'Zusätzlich gebucht:', ...extras] : []),
     '', `Gesamtbetrag: ${formatMoney(total)} (inklusive Umsatzsteuer)`,
     '', `Anreise ab ${h.checkinTime} Uhr, Abreise bis ${h.checkoutTime} Uhr.`,
+    ...(terms.enabled ? ['', terms.text] : []),
+    ...(link ? ['', `Ihre Reservierung ansehen, Ankunftszeit mitteilen oder stornieren: ${link}`] : []),
     '', 'Wir freuen uns auf Ihren Besuch.', '', signature(h),
   ].join('\n');
   return { to: b.guest.email, subject: `${tentative ? 'Ihre Anfrage' : 'Reservierungsbestätigung'} ${b.number} – ${h.name}`, text, attachment: null, ready: await ready(db) };

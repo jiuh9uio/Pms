@@ -25,18 +25,20 @@ export async function savePrearrival(db: Db, actor: Actor, v: PrearrivalSettings
 
 const de = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
 const WEEKDAY = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
-interface Stay { number: string; salutation: string; lastName: string; from: string; to: string; rooms: number }
+interface Stay { id?: string; number: string; salutation: string; lastName: string; from: string; to: string; rooms: number }
 
 async function compose(db: Exec, s: PrearrivalSettings, b: Stay) {
   const h = await getHotel(db);
   const hello = b.salutation === 'Herr' ? `Sehr geehrter Herr ${b.lastName},` : b.salutation === 'Frau' ? `Sehr geehrte Frau ${b.lastName},` : 'Guten Tag,';
   const day = `${WEEKDAY[new Date(`${b.from}T12:00:00Z`).getUTCDay()]}, ${de(b.from)}`;
+  const link = b.id ? await (await import('./guestlink.js')).mailLink(db, b.id) : null;
   const address = [h.street, [h.zip, h.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
   const text = [
     hello, '', `bald ist es so weit: Wir erwarten Sie am ${day}. Hier das Wichtigste zu Ihrer Reservierung ${b.number}:`, '',
     `- Anreise: ${day}, ab ${h.checkinTime} Uhr`, `- Abreise: ${de(b.to)}, bis ${h.checkoutTime} Uhr`,
     ...(b.rooms > 1 ? [`- ${b.rooms} Zimmer`] : []), ...(address ? [`- Anschrift: ${address}`] : []), ...(h.breakfastTimes ? [`- Frühstück: ${h.breakfastTimes}`] : []),
     ...(s.extraText ? ['', s.extraText] : []),
+    ...(link ? ['', `Ihre voraussichtliche Ankunftszeit können Sie uns hier mitteilen: ${link}`] : []),
     '', 'Sollte sich Ihre Ankunftszeit ändern oder haben Sie Fragen, erreichen Sie uns jederzeit' + (h.phone ? ` unter ${h.phone}.` : '.'),
     '', 'Wir freuen uns auf Sie.', '', signature(h),
   ].join('\n');

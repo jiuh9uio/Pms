@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { hotelSettings, taxRateCreateInput, taxRateUpdateInput, type HotelSettings, type TaxRateDto } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
+import { CancelPolicyCard } from './CancelPolicyCard.tsx';
 import { InboxSettings } from './InboxSettings.tsx';
 import { MailSettings } from './MailSettings.tsx';
 import { BackupCard } from './BackupCard.tsx';
@@ -43,15 +44,15 @@ export function Settings() {
 
 /** Algorithmen: Regeln, die das Programm selbst auswertet – nach Bereichen getrennt. */
 function Algorithms() {
-  const [cat, setCat] = useState<'fruehstueck' | 'email' | 'gast'>('fruehstueck');
+  const [cat, setCat] = useState<'fruehstueck' | 'email' | 'gast' | 'storno'>('fruehstueck');
   return (
     <>
       <div className="segmented" role="tablist" aria-label="Bereich">
-        {([['fruehstueck', 'Frühstück'], ['email', 'E-Mail'], ['gast', 'Gäste-E-Mail']] as const).map(([k, l]) => (
+        {([['fruehstueck', 'Frühstück'], ['email', 'E-Mail'], ['gast', 'Gäste-E-Mail'], ['storno', 'Storno']] as const).map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={cat === k} className={cat === k ? 'on' : ''} onClick={() => setCat(k)}>{l}</button>
         ))}
       </div>
-      {cat === 'fruehstueck' ? <RulesCard /> : cat === 'email' ? <MailRulesCard /> : <PrearrivalCard />}
+      {cat === 'fruehstueck' ? <RulesCard /> : cat === 'email' ? <MailRulesCard /> : cat === 'gast' ? <PrearrivalCard /> : <CancelPolicyCard />}
     </>
   );
 }

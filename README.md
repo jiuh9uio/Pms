@@ -285,7 +285,15 @@ rechtlich geprüft ist, steht dort ausdrücklich.
   Abgrenzungen (z. B. Schwelle der Bettenzahl, Zählweise) sind mit dem Statistischen Landesamt zu klären.
 - `guests.guestDuplicates` / `mergeGuests`: gleiche E-Mail oder gleicher Name; Zusammenführen verschiebt die Reservierungen,
   ergänzt leere Felder und löscht den zweiten Eintrag (nicht umkehrbar, im Protokoll vermerkt).
-- **Weiterhin nicht enthalten** gegenüber großen Hotelprogrammen: Angebote mit eigener Nummer, Stornobedingungen und
+- **Stornobedingungen und Gäste-Link (seit 1.32.0, `src/server/modules/guestlink.ts`):** Einstellung `cancel_policy`
+  (Frist in Tagen, Prozentsatz, Online-Storno, auch nach Frist, Internetadresse). Der Link `/buchung/<id>.<Prüfsumme>` trägt
+  eine HMAC-Prüfsumme mit dem Schlüssel der Installation (`secret.key`) und wird nicht gespeichert; er lässt sich daher nicht
+  einzeln widerrufen und gilt, solange die Reservierung besteht. Öffentlich: `GET /public/booking/:token`,
+  `POST …/arrival`, `POST …/cancel` (Begrenzung wie die anderen öffentlichen Seiten). Die Seite zeigt Zeitraum, Kategorie,
+  Personen, Gesamtbetrag – keine Anschrift, keine Ausweisdaten. Online-Storno nur für vorläufige/bestätigte Zimmer vor dem
+  Anreisetag. Die Ausfallgebühr wird berechnet, in den Bemerkungen und im Übergabebuch vermerkt, aber **nicht als Leistung
+  gebucht** (steuerliche Behandlung und Zulässigkeit der Bedingungen sind nicht geprüft). Nur im Hausnetz erprobt.
+- **Weiterhin nicht enthalten** gegenüber großen Hotelprogrammen: Angebote mit eigener Nummer, automatisches Berechnen von
   Ausfallgebühren, Kurtaxe/Gästebeitrag als eigene Funktion (nur als Leistung abbildbar), Zimmerwechsel mitten im Aufenthalt,
   Warteliste, Kontingente für Gruppen, Channel-Manager, Online-Buchung mit Sofortbestätigung, Preispläne (z. B. nicht stornierbar).
 

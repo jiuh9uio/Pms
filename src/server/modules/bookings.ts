@@ -75,7 +75,7 @@ export async function getBooking(db: Exec, id: string): Promise<BookingDto> {
   const lodgingCents = roomDtos.filter((r) => isActiveStatus(r.status)).reduce((s, r) => s + r.lodgingCents, 0);
   const chargesCents = chargeDtos.reduce((s, c) => s + c.totalCents, 0);
   return {
-    id: b.id, number: b.number, groupName: b.groupName, source: b.source, paymentMethod: b.paymentMethod, notes: b.notes, version: b.version, optionUntil: b.optionUntil,
+    id: b.id, number: b.number, groupName: b.groupName, source: b.source, paymentMethod: b.paymentMethod, notes: b.notes, version: b.version, optionUntil: b.optionUntil, arrivalTime: b.arrivalTime, guestMessage: b.guestMessage,
     createdAt: b.createdAt.toISOString(), companyId: b.companyId, companyName: company?.name ?? null, guest: toGuestDto(g!), rooms: roomDtos, charges: chargeDtos,
     lodgingCents, chargesCents, totalCents: lodgingCents + chargesCents,
   };
