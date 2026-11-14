@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { addDays, todayBerlin, type BreakfastDto } from '../../../src/shared/hotel.js';
+import { addDays, todayBerlin, type BreakfastDay, type BreakfastDto } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
 import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
@@ -18,6 +18,7 @@ export function Breakfast() {
   // nachmittags interessiert meist schon das Frühstück von morgen
   const [date, setDate] = useState(() => (new Date().toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', hour12: false }) >= '12' ? addDays(today, 1) : today));
   const { data, error } = useLoad(() => api<BreakfastDto>('GET', `/breakfast?date=${date}`), [date, rev]);
+  const week = useLoad(() => api<BreakfastDay[]>('GET', `/breakfast/week?date=${today}`), [today, rev]).data;
   const [busy, setBusy] = useState(false);
   const send = async () => {
     setBusy(true);
@@ -36,6 +37,17 @@ export function Breakfast() {
           <Button onClick={() => window.print()}>Drucken</Button>
           <Button variant="primary" busy={busy} disabled={!data?.printerReady} onClick={() => void send()}>An Küche senden</Button>
         </>} />
+      {week && (
+        <div className="weekrow noprint" aria-label="Die nächsten sieben Tage">
+          {week.map((d) => (
+            <button key={d.date} type="button" className={`weekday${d.date === date ? ' on' : ''}`} onClick={() => setDate(d.date)}>
+              <small>{weekday(d.date)!.slice(0, 2)} {d.date.slice(8, 10)}.{d.date.slice(5, 7)}.</small>
+              <b>{d.persons}</b><small>{d.persons === 1 ? 'Gast' : 'Gäste'} · {d.rooms} Zi.</small>
+              {d.variant && <small className="rule">{d.variant}</small>}
+            </button>
+          ))}
+        </div>
+      )}
       <LoadState error={error} loading={!data} />
       {data && (
         <>

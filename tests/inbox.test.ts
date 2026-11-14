@@ -57,7 +57,7 @@ describe('E-Mail-Posteingang', () => {
     expect((await call('PUT', '/settings/inbox', user, cfg)).statusCode).toBe(403);
     expect((await call('POST', '/inbox/fetch', admin)).statusCode).toBe(409);
     const saved = await ok('PUT', '/settings/inbox', admin, cfg);
-    expect(saved).toEqual({ enabled: true, host: 'imap.gmx.net', port: 993, user: 'info@example.org', folder: 'INBOX', autoMinutes: 0, hasPassword: true });
+    expect(saved).toEqual({ enabled: true, host: 'imap.gmx.net', port: 993, user: 'info@example.org', folder: 'INBOX', autoMinutes: 0, keepDays: 0, hasPassword: true });
     const stored = await db.execute(sql`select value::text as v from settings where key = 'inbox'`);
     expect(String(stored[0]!.v)).not.toContain('geheim-imap'); // Passwort nur verschlüsselt
     const log = await db.execute(sql`select coalesce(before::text, '') || after::text as t from audit_log where entity_id = 'inbox'`);
@@ -172,5 +172,21 @@ describe('E-Mail-Posteingang', () => {
     expect(back.find((m: { subject: string }) => m.subject === 'Zimmer frei? Jetzt buchen').kind).toBe('hotel');
     expect(back.find((m: { subject: string }) => m.subject === 'Stammtisch').kind).toBe('other');
     expect(back.some((m: { subject: string }) => m.subject === 'Kontoauszug')).toBe(true);
+  });
+
+  it('entfernt Erledigtes nach der eingestellten Frist und leert den Posteingang über „Daten löschen“', async () => {
+    const before = (await ok('GET', '/inbox?status=all', admin)).length;
+    await db.execute(sql`update inbox_mails set received_at = now() - interval '40 days' where status = 'done'`);
+    await db.execute(sql`update inbox_mails set received_at = now() - interval '40 days' where subject = 'Zimmeranfrage'`); // noch offen
+    await ok('PUT', '/settings/inbox', admin, { ...cfg, password: '', keepDays: 30 });
+    await ok('POST', '/inbox/fetch', admin);
+    const after = await ok('GET', '/inbox?status=all', admin);
+    expect(after.length).toBe(before - 1); // nur die erledigte, alte Nachricht
+    expect(after.some((m: { subject: string }) => m.subject === 'Zimmeranfrage')).toBe(true); // Offenes bleibt, egal wie alt
+    const purge = { billing: false, bookings: 'none', guests: false, resetNumbers: false, inbox: true, password: 'sehr-geheim-123', confirm: 'LÖSCHEN' };
+    expect((await ok('POST', '/settings/purge', admin, { ...purge, dryRun: true })).mails).toBe(after.length);
+    expect((await ok('POST', '/settings/purge', admin, { ...purge, dryRun: false })).mails).toBe(after.length);
+    expect(await ok('GET', '/inbox?status=all', admin)).toHaveLength(0);
+    expect(await ok('POST', '/inbox/fetch', admin)).toEqual({ added: 0 }); // wird nicht erneut abgeholt
   });
 });

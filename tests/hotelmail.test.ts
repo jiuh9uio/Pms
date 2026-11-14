@@ -146,6 +146,12 @@ describe('E-Mail an den Gast', () => {
     ] });
     expect((await ok('GET', '/breakfast?date=2031-05-09', admin)).variant).toEqual({ name: 'Kleines Frühstück', text: 'Frühstück in der 1. Etage' });
     expect((await ok('GET', '/breakfast?date=2031-05-12', admin)).variant).toBeNull(); // niemand frühstückt
+    const week = await ok('GET', '/breakfast/week?date=2031-05-08', admin);
+    expect(week).toHaveLength(7);
+    expect(week.slice(0, 3)).toEqual([
+      { date: '2031-05-08', persons: 0, rooms: 0, variant: null }, { date: '2031-05-09', persons: 2, rooms: 1, variant: 'Frühstück in der 1. Etage' },
+      { date: '2031-05-10', persons: 2, rooms: 1, variant: 'A' }, // am Folgetag greift die Regel für diesen Wochentag
+    ]);
     got.length = 0;
     await ok('POST', '/breakfast/print', admin, { date: '2031-05-09' });
     await new Promise((r) => setTimeout(r, 100));

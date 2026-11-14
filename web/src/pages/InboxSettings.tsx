@@ -7,10 +7,10 @@ import { Button, Field, LoadState, useLoad, useSubmit, useToast } from '../ui.ts
 export function InboxSettings() {
   const toast = useToast();
   const { data, error, reload } = useLoad(() => api<InboxSettingsDto>('GET', '/settings/inbox'));
-  const [v, setV] = useState({ enabled: false, host: 'imap.gmx.net', port: '993', user: '', password: '', folder: 'INBOX', autoMinutes: '0' });
+  const [v, setV] = useState({ enabled: false, host: 'imap.gmx.net', port: '993', user: '', password: '', folder: 'INBOX', autoMinutes: '0', keepDays: '0' });
   const [testing, setTesting] = useState(false);
-  useEffect(() => { if (data) setV({ enabled: data.enabled, host: data.host, port: String(data.port), user: data.user, password: '', folder: data.folder, autoMinutes: String(data.autoMinutes) }); }, [data]);
-  const payload = () => ({ ...v, port: Number(v.port), autoMinutes: Number(v.autoMinutes) });
+  useEffect(() => { if (data) setV({ enabled: data.enabled, host: data.host, port: String(data.port), user: data.user, password: '', folder: data.folder, autoMinutes: String(data.autoMinutes), keepDays: String(data.keepDays) }); }, [data]);
+  const payload = () => ({ ...v, port: Number(v.port), autoMinutes: Number(v.autoMinutes), keepDays: Number(v.keepDays) });
   const f = useSubmit(inboxSettingsInput, async (d) => { await api('PUT', '/settings/inbox', d); toast('E-Mail-Empfang gespeichert'); reload(); });
   const test = async () => {
     setTesting(true);
@@ -35,6 +35,11 @@ export function InboxSettings() {
         <Field label="Automatisch abrufen" error={f.errors.autoMinutes}>
           <select value={v.autoMinutes} onChange={(e) => setV({ ...v, autoMinutes: e.target.value })}>
             <option value="0">nein, nur auf Knopfdruck</option><option value="5">alle 5 Minuten</option><option value="15">alle 15 Minuten</option><option value="60">jede Stunde</option>
+          </select>
+        </Field>
+        <Field label="Erledigtes aus dem Programm entfernen" error={f.errors.keepDays} hint="gilt für erledigte und ignorierte Nachrichten; im Postfach bleiben sie">
+          <select value={v.keepDays} onChange={(e) => setV({ ...v, keepDays: e.target.value })}>
+            <option value="0">nie</option><option value="30">nach 30 Tagen</option><option value="90">nach 90 Tagen</option><option value="365">nach einem Jahr</option>
           </select>
         </Field>
         <Field label="Posteingangsserver (IMAP)" error={f.errors.host}><input value={v.host} onChange={(e) => setV({ ...v, host: e.target.value })} /></Field>

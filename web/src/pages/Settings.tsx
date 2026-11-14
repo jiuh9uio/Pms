@@ -22,7 +22,7 @@ export function Settings() {
   const { current, bar } = useTabs(SETTINGS_TABS);
   return (
     <>
-      <PageHeader title="Einstellungen" sub="Angaben zum Haus, E-Mail, Drucker, EC-Gerät, TSE, Steuersätze, Hausnetz, Datensicherung und Programm-Update" />
+      <PageHeader title="Einstellungen" sub="Angaben zum Haus, E-Mail, Drucker, EC-Gerät, TSE, Steuersätze, Algorithmen, Hausnetz, Datensicherung und Programm-Update" />
       {bar}
       {current === 'haus' && <><HotelForm /><LogoCard /></>}
       {current === 'email' && <><MailSettings /><InboxSettings /></>}

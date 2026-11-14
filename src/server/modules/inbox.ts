@@ -16,8 +16,8 @@ import { getHotel } from './settings.js';
  * E-Mail-Posteingang: holt die Nachrichten des Geschäftspostfachs per IMAP ab (nur lesend – im Postfach wird nichts
  * verändert, gelöscht oder als gelesen markiert), schätzt die Art der Anfrage und schlägt Angaben für eine Reservierung vor.
  */
-interface Stored { enabled: boolean; host: string; port: number; user: string; passEnc: string; folder: string; autoMinutes: number }
-const DEFAULTS: Stored = { enabled: false, host: 'imap.gmx.net', port: 993, user: '', passEnc: '', folder: 'INBOX', autoMinutes: 0 };
+interface Stored { enabled: boolean; host: string; port: number; user: string; passEnc: string; folder: string; autoMinutes: number; keepDays: number }
+const DEFAULTS: Stored = { enabled: false, host: 'imap.gmx.net', port: 993, user: '', passEnc: '', folder: 'INBOX', autoMinutes: 0, keepDays: 0 };
 interface State { lastFetchAt: string | null; lastError: string | null; uidValidity: string; lastUid: number }
 const STATE0: State = { lastFetchAt: null, lastError: null, uidValidity: '', lastUid: 0 };
 /** beim ersten Abruf: so viele Tage zurück, höchstens so viele Nachrichten */
@@ -29,13 +29,13 @@ const read = async <T>(db: Exec, key: string, def: T): Promise<T> => {
 };
 const write = (db: Exec, key: string, value: unknown) =>
   db.insert(settings).values({ key, value }).onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date() } });
-const toDto = (s: Stored): InboxSettingsDto => ({ enabled: s.enabled, host: s.host, port: s.port, user: s.user, folder: s.folder, autoMinutes: s.autoMinutes, hasPassword: !!s.passEnc });
+const toDto = (s: Stored): InboxSettingsDto => ({ enabled: s.enabled, host: s.host, port: s.port, user: s.user, folder: s.folder, autoMinutes: s.autoMinutes, keepDays: s.keepDays, hasPassword: !!s.passEnc });
 const ready = (s: Stored) => s.enabled && !!s.host && !!s.user && !!s.passEnc;
 
 export const getInboxSettings = async (db: Exec) => toDto(await read(db, 'inbox', DEFAULTS));
-export async function saveInboxSettings(db: Db, actor: Actor, v: { enabled: boolean; host: string; port: number; user: string; password: string; folder: string; autoMinutes: number }) {
+export async function saveInboxSettings(db: Db, actor: Actor, v: { enabled: boolean; host: string; port: number; user: string; password: string; folder: string; autoMinutes: number; keepDays: number }) {
   const cur = await read(db, 'inbox', DEFAULTS);
-  const next: Stored = { enabled: v.enabled, host: v.host, port: v.port, user: v.user, folder: v.folder, autoMinutes: v.autoMinutes, passEnc: v.password ? encrypt(v.password) : cur.passEnc };
+  const next: Stored = { enabled: v.enabled, host: v.host, port: v.port, user: v.user, folder: v.folder, autoMinutes: v.autoMinutes, keepDays: v.keepDays, passEnc: v.password ? encrypt(v.password) : cur.passEnc };
   await write(db, 'inbox', next);
   // anderes Postfach oder anderer Ordner: Zählung der Nachrichten beginnt neu
   if (cur.host !== next.host || cur.user !== next.user || cur.folder !== next.folder) await write(db, 'inbox_state', STATE0);
@@ -150,6 +150,8 @@ export async function fetchInbox(db: Db, actor: Actor | null): Promise<{ added: 
       lastUid = Math.max(lastUid, raw.uid);
     }
     await write(db, 'inbox_state', { lastFetchAt: new Date().toISOString(), lastError: null, uidValidity: got.uidValidity, lastUid } satisfies State);
+    // Aufbewahrung: erledigte und ignorierte Nachrichten nach der eingestellten Frist aus dem Programm entfernen (im Postfach bleiben sie)
+    if (s.keepDays > 0) await db.delete(inboxMails).where(sql`${inboxMails.status} <> 'new' and ${inboxMails.receivedAt} < now() - make_interval(days => ${s.keepDays})`);
     if (actor && added) await record(db, actor, { action: 'fetch', entity: 'inbox', after: { added } });
     return { added };
   } catch (e) {

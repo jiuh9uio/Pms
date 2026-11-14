@@ -16,7 +16,7 @@ const count = async (tx: Tx, q: ReturnType<typeof sql>) => Number(((await tx.exe
 const del = (tx: Tx, q: ReturnType<typeof sql>) => count(tx, sql`with d as (${q} returning 1) select count(*)::int as n from d`);
 
 async function work(tx: Tx, v: PurgeInput): Promise<Omit<PurgeResult, 'dryRun' | 'backupFile'>> {
-  const r = { invoices: 0, payments: 0, einvoices: 0, bookings: 0, keptBookings: 0, blocks: 0, guests: 0 };
+  const r = { invoices: 0, payments: 0, einvoices: 0, bookings: 0, keptBookings: 0, blocks: 0, guests: 0, mails: 0 };
   const today = todayBerlin();
   if (v.billing) {
     // Der Schutz wird nur innerhalb dieser Transaktion aufgehoben; scheitert etwas, bleibt alles wie zuvor.
@@ -47,6 +47,7 @@ async function work(tx: Tx, v: PurgeInput): Promise<Omit<PurgeResult, 'dryRun' |
     await tx.execute(sql`drop table purge_candidates, purge_ids, purge_allocs`);
     if (all && v.resetNumbers && (await count(tx, sql`select count(*)::int as n from bookings`)) === 0) await tx.execute(sql`delete from number_sequences where key = 'booking'`);
   }
+  if (v.inbox) r.mails = await del(tx, sql`delete from inbox_mails`);
   if (v.guests) r.guests = await del(tx, sql`delete from guests g where not exists (select 1 from bookings b where b.guest_id = g.id)`);
   return r;
 }
@@ -56,7 +57,7 @@ async function work(tx: Tx, v: PurgeInput): Promise<Omit<PurgeResult, 'dryRun' |
  * dryRun zählt nur (alles wird zurückgerollt). Der echte Lauf verlangt das Passwort und schreibt vorher eine Datensicherung.
  */
 export async function purge(db: Db, actor: Actor, v: PurgeInput): Promise<PurgeResult> {
-  if (!v.billing && v.bookings === 'none' && !v.guests) throw new AppError(400, 'validation', 'Bitte auswählen, was gelöscht werden soll');
+  if (!v.billing && v.bookings === 'none' && !v.guests && !v.inbox) throw new AppError(400, 'validation', 'Bitte auswählen, was gelöscht werden soll');
   let backupFile: string | null = null;
   if (!v.dryRun) {
     const [user] = await db.select().from(users).where(eq(users.id, actor.userId!));
@@ -69,7 +70,7 @@ export async function purge(db: Db, actor: Actor, v: PurgeInput): Promise<PurgeR
     return await db.transaction(async (tx) => {
       const r = { ...(await work(tx, v)), dryRun: v.dryRun, backupFile };
       if (v.dryRun) throw new DryRun(r);
-      await record(tx, actor, { action: 'purge', entity: 'program', after: { auswahl: { rechnungen: v.billing, buchungen: v.bookings, gaeste: v.guests, nummernNeu: v.resetNumbers }, geloescht: r } });
+      await record(tx, actor, { action: 'purge', entity: 'program', after: { auswahl: { rechnungen: v.billing, buchungen: v.bookings, gaeste: v.guests, posteingang: v.inbox, nummernNeu: v.resetNumbers }, geloescht: r } });
       return r;
     });
   } catch (e) {

@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.26.0
+
+- Frühstück: oben eine Vorschau der nächsten sieben Tage mit Zahl der Frühstücksgäste und der jeweils geltenden Regel – für die Personalplanung.
+- Startmenü: Die Kachel „E-Mail“ zeigt die Zahl der offenen Anfragen.
+- E-Mail-Empfang: Erledigte und ignorierte Nachrichten lassen sich nach 30, 90 oder 365 Tagen von selbst aus dem Programm entfernen (im Postfach bleiben sie).
+- Daten löschen: zusätzlich wählbar „E-Mail-Posteingang“.
+
 ## 1.25.0
 
 - E-Mail: direkt aus dem Programm antworten. Zu jeder Nachricht gibt es „Antworten“, „Bestätigung senden“ (für die daraus angelegte Zimmer- oder Tischreservierung) und „Absage senden“ – jeweils mit fertigem Textvorschlag, der sich vor dem Senden ändern lässt. Gesendet wird über das unter „E-Mail-Versand“ eingerichtete Postfach.

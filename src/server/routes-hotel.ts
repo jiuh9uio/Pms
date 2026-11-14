@@ -139,6 +139,7 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   // ---------- Frühstücksliste und Küchendrucker ----------
   const dateOf = (v: unknown) => z.object({ date: z.string().refine(H.isIsoDate) }).parse(v).date;
   api.get('/breakfast', user, (req) => breakfast.breakfastList(db, dateOf(req.query)));
+  api.get('/breakfast/week', user, (req) => breakfast.breakfastWeek(db, dateOf(req.query)));
   api.post('/breakfast/print', user, (req) => breakfast.printBreakfast(db, actor(req), dateOf(req.body)));
   api.get('/settings/breakfast-rules', admin, () => breakfast.getRules(db));
   api.put('/settings/breakfast-rules', admin, (req) => breakfast.saveRules(db, actor(req), H.breakfastRulesInput.parse(req.body)));

@@ -435,3 +435,10 @@ a.btn { display: inline-flex; align-items: center; padding: 8px 14px; border: 1p
 .segmented { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 10px; overflow: hidden; margin: 0 0 14px; background: var(--surface); }
 .segmented button { border: 0; background: none; padding: 8px 18px; font: inherit; color: inherit; cursor: pointer; } .segmented button + button { border-left: 1px solid var(--line-strong); }
 .segmented button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+
+.tile-count { display: inline-block; margin-left: 8px; min-width: 22px; padding: 1px 7px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 700; text-align: center; vertical-align: 2px; }
+/* Frühstück: Vorschau der nächsten Tage */
+.weekrow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin: 0 0 14px; }
+.weekday { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font: inherit; color: inherit; cursor: pointer; }
+.weekday.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); } .weekday b { font-size: 18px; } .weekday small { color: var(--ink-2); } .weekday .rule { color: var(--accent-text); font-weight: 600; }
+@media (max-width: 800px) { .weekrow { grid-template-columns: repeat(4, 1fr); } }

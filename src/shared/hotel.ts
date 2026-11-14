@@ -234,6 +234,8 @@ export function applyBreakfastRules(rules: BreakfastRule[], date: string, n: Rec
     return r.op === 'lt' ? x < r.value : r.op === 'lte' ? x <= r.value : r.op === 'gte' ? x >= r.value : x > r.value;
   }) ?? null;
 }
+/** Vorschau für die Planung: je Tag Frühstücksgäste und geltende Regel */
+export interface BreakfastDay { date: string; persons: number; rooms: number; variant: string | null }
 export interface BreakfastDto { /** zutreffende Frühstücksregel des Tages */ variant: { name: string; text: string } | null; date: string; rooms: BreakfastRow[]; printerReady: boolean; /** Uhrzeit des täglichen automatischen Drucks, leer = aus */ autoTime: string; /** Tag, für den zuletzt automatisch gedruckt wurde */ autoLast: string | null; total: { rooms: number; adults: number; children: number; without: number } }
 export const kitchenPrinterInput = z.object({
   enabled: z.boolean(), host: z.string().trim().max(15).regex(/^(\d{1,3}(\.\d{1,3}){3})?$/, 'IP-Adresse im Format 192.168.1.50'),

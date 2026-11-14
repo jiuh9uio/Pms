@@ -4,13 +4,13 @@ import { api } from '../api.ts';
 import { useData } from '../data.tsx';
 import { Button, Field, useToast } from '../ui.tsx';
 
-type Sel = { billing: boolean; bookings: 'none' | 'past' | 'all'; guests: boolean; resetNumbers: boolean };
+type Sel = { billing: boolean; bookings: 'none' | 'past' | 'all'; guests: boolean; resetNumbers: boolean; inbox: boolean };
 
 /** Hotel-Daten löschen: Auswahl → Vorschau (zählt nur) → Passwort und Bestätigung → löschen. */
 export function PurgeCard() {
   const toast = useToast();
   const { bump } = useData();
-  const [sel, setSel] = useState<Sel>({ billing: false, bookings: 'none', guests: false, resetNumbers: false });
+  const [sel, setSel] = useState<Sel>({ billing: false, bookings: 'none', guests: false, resetNumbers: false, inbox: false });
   const [preview, setPreview] = useState<PurgeResult | null>(null);
   const [done, setDone] = useState<PurgeResult | null>(null);
   const [password, setPassword] = useState('');
@@ -18,7 +18,7 @@ export function PurgeCard() {
   const [busy, setBusy] = useState(false);
   const [fail, setFail] = useState<string | null>(null);
   const change = (p: Partial<Sel>) => { setSel({ ...sel, ...p }); setPreview(null); setDone(null); setFail(null); };
-  const nothing = !sel.billing && sel.bookings === 'none' && !sel.guests;
+  const nothing = !sel.billing && sel.bookings === 'none' && !sel.guests && !sel.inbox;
   const run = async (dryRun: boolean) => {
     setBusy(true); setFail(null);
     try {
@@ -37,6 +37,7 @@ export function PurgeCard() {
       {sel.bookings !== 'none' && <li><b>{r.bookings}</b> {sel.bookings === 'past' ? 'vergangene ' : ''}Buchungen und <b>{r.blocks}</b> {sel.bookings === 'past' ? 'abgelaufene oder aufgehobene ' : ''}Zimmersperren</li>}
       {r.keptBookings > 0 && <li><b>{r.keptBookings}</b> Buchungen bleiben stehen, weil Rechnungen oder Zahlungen daran hängen. Sollen sie auch weg, zusätzlich „Rechnungen und Zahlungen“ ankreuzen.</li>}
       {sel.guests && <li><b>{r.guests}</b> Gäste ohne Buchung</li>}
+      {sel.inbox && <li><b>{r.mails}</b> abgerufene E-Mails (im Postfach bleiben sie erhalten)</li>}
     </ul>
   );
   return (
@@ -55,6 +56,7 @@ export function PurgeCard() {
           </select>
         </Field>
         <label className="check wide"><input type="checkbox" checked={sel.guests} onChange={(e) => change({ guests: e.target.checked })} /><span>Gäste ohne Buchung<small>Gäste, zu denen danach keine Buchung mehr gehört</small></span></label>
+        <label className="check wide"><input type="checkbox" checked={sel.inbox} onChange={(e) => change({ inbox: e.target.checked })} /><span>E-Mail-Posteingang<small>alle im Programm gespeicherten Nachrichten; im Postfach selbst bleibt alles, es wird aber nicht erneut abgeholt</small></span></label>
       </div>
       <div className="formactions"><Button busy={busy && !preview} disabled={nothing || busy} onClick={() => void run(true)}>Prüfen, was gelöscht würde</Button></div>
       {fail && <p className="notice danger" role="alert">{fail}</p>}

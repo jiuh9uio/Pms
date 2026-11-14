@@ -13,8 +13,10 @@ export const inboxSettingsInput = z.object({
   folder: z.string().trim().min(1).max(120).default('INBOX'),
   /** automatischer Abruf alle … Minuten; 0 = nur auf Knopfdruck */
   autoMinutes: z.number().int().min(0).max(1440),
+  /** erledigte und ignorierte Nachrichten nach so vielen Tagen aus dem Programm entfernen; 0 = nie */
+  keepDays: z.number().int().min(0).max(3650).default(0),
 });
-export interface InboxSettingsDto { enabled: boolean; host: string; port: number; user: string; folder: string; autoMinutes: number; hasPassword: boolean }
+export interface InboxSettingsDto { enabled: boolean; host: string; port: number; user: string; folder: string; autoMinutes: number; keepDays: number; hasPassword: boolean }
 export interface InboxState { lastFetchAt: string | null; lastError: string | null; ready: boolean; autoMinutes: number; newCount: number }
 
 export interface InboxMailDto {

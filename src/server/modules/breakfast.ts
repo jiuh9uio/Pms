@@ -1,5 +1,5 @@
 import { eq, sql } from 'drizzle-orm';
-import { addDays, applyBreakfastRules, type BreakfastDto, type BreakfastRule, type KitchenPrinter } from '../../shared/hotel.js';
+import { addDays, applyBreakfastRules, type BreakfastDay, type BreakfastDto, type BreakfastRule, type KitchenPrinter } from '../../shared/hotel.js';
 import type { Db, Exec } from '../db/client.js';
 import { settings } from '../db/schema.js';
 import { AppError, conflict } from '../lib/errors.js';
@@ -76,6 +76,16 @@ export async function breakfastList(db: Exec, date: string): Promise<BreakfastDt
     date, rooms: list, printerReady: ready(printer), autoTime: ready(printer) ? printer.autoBreakfastTime : '', autoLast: await lastAuto(db),
     total: { rooms: with_.length, adults: with_.reduce((s, r) => s + r.adults, 0), children: with_.reduce((s, r) => s + r.children, 0), without: list.length - with_.length },
   };
+}
+
+/** Die nächsten sieben Tage ab `from`: Frühstücksgäste und geltende Regel je Tag. */
+export async function breakfastWeek(db: Exec, from: string): Promise<BreakfastDay[]> {
+  const out: BreakfastDay[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = await breakfastList(db, addDays(from, i));
+    out.push({ date: d.date, persons: d.total.adults + d.total.children, rooms: d.total.rooms, variant: d.variant?.text ?? null });
+  }
+  return out;
 }
 
 const de = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;

@@ -14,7 +14,8 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
 | Kontrollen | Temperatur-, Reinigungs- und Wareneingangsprotokoll, Unterlagen, Kontrollbesuche |
 | E-Rechnung | PDF → ZUGFeRD, Versand per E-Mail |
 | Internet | Verbindung und Ausfallprotokoll, Gäste-WLAN-Aushang, Geräte im Netz |
-| Verwaltung | Benutzer und Freigaben, Änderungsprotokoll, Einstellungen (Haus, E-Mail, Drucker, EC-Gerät, Steuersätze, Hausnetz, Datensicherung, Programm-Update) |
+| E-Mail | Geschäftspostfach abrufen, Zimmer- und Tischanfragen erkennen, übernehmen, beantworten und bestätigen |
+| Verwaltung | Benutzer und Freigaben, Änderungsprotokoll, Einstellungen (Haus, E-Mail, Drucker, EC-Gerät, TSE, Steuersätze, Algorithmen, Hausnetz, Datensicherung, Programm-Update, Daten löschen) |
 
 Die Abschnitte „Seit Version …“ weiter unten beschreiben jede Ergänzung mit ihren Grenzen; was nicht erprobt oder nicht
 rechtlich geprüft ist, steht dort ausdrücklich.
