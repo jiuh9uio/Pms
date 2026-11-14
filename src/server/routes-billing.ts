@@ -68,6 +68,10 @@ export function registerBillingRoutes(api: FastifyInstance, { db, requireUser, r
     const download = z.object({ download: z.string().optional() }).parse(req.query).download;
     return reply.header('Content-Type', 'application/pdf').header('Content-Disposition', `${download ? 'attachment' : 'inline'}; filename="${f.filename}"`).send(f.pdf);
   });
+  api.get('/settings/invoice-layout', admin, () => billing.getLayout(db));
+  api.put('/settings/invoice-layout', admin, (req) => billing.saveLayout(db, actor(req), B.invoiceLayoutInput.parse(req.body)));
+  api.get('/settings/invoice-layout/preview', admin, async (req, reply) =>
+    reply.header('Content-Type', 'application/pdf').header('Content-Disposition', 'inline; filename="Muster-Rechnung.pdf"').send(await billing.layoutPreview(db, B.invoiceLayoutInput.parse(req.query))));
   api.get('/settings/logo-info', user, async () => ({ present: !!(await billing.getLogo(db)) }));
   api.get('/settings/logo', user, async (_req, reply) => {
     const logo = await billing.getLogo(db);

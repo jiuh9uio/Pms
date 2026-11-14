@@ -5,7 +5,8 @@ import {
 import { addDays, isActiveStatus, todayBerlin } from '../../shared/hotel.js';
 import type { Db, Exec, Tx } from '../db/client.js';
 import { bookings, companies, invoiceLines, invoices, numberSequences, payments, invoiceDocuments, settings } from '../db/schema.js';
-import { renderInvoice, type Logo } from '../einvoice/invoicepdf.js';
+import { DEFAULT_LAYOUT, renderInvoice, type InvoiceLayout, type Logo } from '../einvoice/invoicepdf.js';
+import { sampleInvoice } from '../einvoice/sample.js';
 import { AppError, conflict, notFound, stale } from '../lib/errors.js';
 import type { InvoiceNumberState } from '../../shared/schemas.js';
 import { record, type Actor } from './audit.js';
@@ -499,6 +500,24 @@ export async function saveLogo(db: Db, actor: Actor, v: { mime: Logo['mime']; da
   await record(db, actor, { action: 'update', entity: 'settings', entityId: 'logo', after: { logo: v ? `${v.mime}` : 'entfernt' } });
 }
 
+// ---------- Rechnungslayout ----------
+export async function getLayout(db: Exec): Promise<InvoiceLayout> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'invoice_layout'));
+  return { ...DEFAULT_LAYOUT, ...((row?.value as Partial<InvoiceLayout>) ?? {}) };
+}
+export async function saveLayout(db: Db, actor: Actor, v: InvoiceLayout) {
+  await db.insert(settings).values({ key: 'invoice_layout', value: v }).onConflictDoUpdate({ target: settings.key, set: { value: v, updatedAt: new Date() } });
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: 'invoice_layout', after: v });
+  return v;
+}
+/** Muster-Rechnung mit erfundenen Angaben im gewählten Layout – zum Ansehen vor dem Speichern. */
+export async function layoutPreview(db: Exec, v: InvoiceLayout): Promise<Buffer> {
+  const h = await getHotel(db);
+  const issuer: IssuerDto = { name: h.name, street: h.street, zip: h.zip, city: h.city, country: h.country, phone: h.phone, email: h.email, website: h.website,
+    taxNumber: h.taxNumber, vatId: h.vatId, bankName: h.bankName, iban: h.iban, bic: h.bic, footer: h.invoiceFooter };
+  return Buffer.from(await renderInvoice(sampleInvoice(issuer, todayBerlin()), issuer, await getLogo(db), v));
+}
+
 /**
  * PDF einer Rechnung. Ausgestellte Rechnungen und Stornobelege werden beim ersten Abruf (spätestens direkt nach dem Ausstellen)
  * erzeugt und als Archivkopie gespeichert; danach kommt immer genau diese Datei zurück. Entwürfe werden jedes Mal neu gezeichnet.
@@ -513,7 +532,7 @@ export async function invoicePdf(db: Db, id: string): Promise<{ filename: string
   const h = await getHotel(db);
   const issuer: IssuerDto = inv.issuer ?? { name: h.name, street: h.street, zip: h.zip, city: h.city, country: h.country, phone: h.phone, email: h.email, website: h.website,
     taxNumber: h.taxNumber, vatId: h.vatId, bankName: h.bankName, iban: h.iban, bic: h.bic, footer: h.invoiceFooter };
-  const pdf = Buffer.from(await renderInvoice(inv, issuer, await getLogo(db)));
+  const pdf = Buffer.from(await renderInvoice(inv, issuer, await getLogo(db), await getLayout(db)));
   if (inv.status === 'draft') return { filename: name, pdf, archived: false };
   // gleichzeitige Abrufe: die zuerst gespeicherte Kopie gilt
   await db.insert(invoiceDocuments).values({ invoiceId: id, pdf }).onConflictDoNothing();

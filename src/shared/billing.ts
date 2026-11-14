@@ -84,3 +84,14 @@ export const terminalPayInput = z.object({
   payer: text(160), note: text(300),
 }).refine((v) => !!v.bookingId || !!v.invoiceId, { message: 'Reservierung oder Rechnung angeben', path: ['bookingId'] });
 export interface TerminalLogDto { id: string; at: string; amountCents: number; outcome: 'approved' | 'unrecorded' | 'declined' | 'unknown'; message: string; trace: string; receiptNo: string; cardName: string; userName: string }
+
+// ---------- Rechnungslayout ----------
+export const invoiceLayoutInput = z.object({
+  spacing: z.enum(['compact', 'normal', 'wide']).default('normal'),
+  fontSize: z.enum(['small', 'normal', 'large']).default('normal'),
+  /** Satz über den Positionen, z. B. „Vielen Dank für Ihren Aufenthalt.“ */
+  intro: z.string().trim().max(300).default(''),
+  /** Schlusssatz unter den Summen */
+  closing: z.string().trim().max(300).default(''),
+});
+export type InvoiceLayoutDto = z.infer<typeof invoiceLayoutInput>;

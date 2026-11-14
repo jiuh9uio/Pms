@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.40.0
+
+- Hotelrechnung neu gestaltet: mehr Abstand zwischen Kopf, Anschrift, Positionen und Summen; Positionen mit Kopfzeile und Trennlinien; Summen als eigener Block rechts (Netto und Umsatzsteuer je Steuersatz, Gesamtbetrag hervorgehoben); Fuß in drei Spalten; Seitenzahl bei mehrseitigen Rechnungen.
+- Einstellungen → Haus → „Rechnungslayout“: Abstände (eng, normal, großzügig), Schriftgröße (klein, normal, groß), ein Satz über den Positionen und ein Schlusssatz – mit Vorschau als Muster-Rechnung. Gilt für neu ausgestellte Rechnungen; bereits ausgestellte bleiben unverändert.
+
 ## 1.39.1
 
 - Reservierung → Rechnungen und Zahlungen: Ist alles berechnet und bezahlt, werden „Bezahlen / Abrechnen“ und „Einzelne Zahlung“ nicht mehr angeboten; stattdessen steht dort ein Hinweis. (Der Server hat eine zweite Zahlung auch bisher schon abgelehnt.)

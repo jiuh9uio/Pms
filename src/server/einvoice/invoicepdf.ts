@@ -8,12 +8,15 @@ import { asset } from './pdf.js';
  * Archiv und als Träger der E-Rechnung. Ausgestellte Rechnungen werden einmal erzeugt und dann unverändert aufbewahrt.
  */
 export interface Logo { mime: 'image/png' | 'image/jpeg'; data: Buffer }
+/** Gestaltung der Rechnung (Einstellungen → Haus → Rechnungslayout) */
+export interface InvoiceLayout { spacing: 'compact' | 'normal' | 'wide'; fontSize: 'small' | 'normal' | 'large'; intro: string; closing: string }
+export const DEFAULT_LAYOUT: InvoiceLayout = { spacing: 'normal', fontSize: 'normal', intro: '', closing: '' };
 
 const money = (cents: number) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(cents / 100);
 const de = (iso: string | null) => (iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}` : '–');
 const num = (n: number) => n.toLocaleString('de-DE');
 
-export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Logo | null): Promise<Uint8Array> {
+export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Logo | null, layout: InvoiceLayout = DEFAULT_LAYOUT): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.registerFontkit(fontkit);
   const regular = await doc.embedFont(asset('LiberationSans-Regular.ttf'), { subset: true });
@@ -26,118 +29,150 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
   doc.setTitle(inv.number ? `${title} ${inv.number}` : 'Rechnungsentwurf');
   doc.setAuthor(issuer.name);
 
-  const W = 595.28, H = 841.89, L = 56, R = W - 56;
-  const black = rgb(0, 0, 0), grey = rgb(0.35, 0.35, 0.35);
+  // f = Schriftgröße, g = Abstände
+  const f = layout.fontSize === 'small' ? 0.92 : layout.fontSize === 'large' ? 1.1 : 1;
+  const g = (layout.spacing === 'compact' ? 0.8 : layout.spacing === 'wide' ? 1.25 : 1) * f;
+  const W = 595.28, H = 841.89, L = 62, R = W - 54;
+  const black = rgb(0.1, 0.1, 0.1), grey = rgb(0.38, 0.38, 0.38), hair = rgb(0.82, 0.82, 0.82), band = rgb(0.95, 0.95, 0.95);
+  const pages: PDFPage[] = [];
   let page: PDFPage = doc.addPage([W, H]);
-  let y = H - 60;
+  pages.push(page);
+  let y = H - 62;
   const put = (s: string, x: number, yy: number, o: { size?: number; font?: PDFFont; color?: typeof black; right?: boolean } = {}) => {
-    const size = o.size ?? 10, font = o.font ?? regular;
+    const size = (o.size ?? 10) * f, font = o.font ?? regular;
     page.drawText(s, { x: o.right ? x - font.widthOfTextAtSize(s, size) : x, y: yy, size, font, color: o.color ?? black });
   };
-  const line = (yy: number, w = 0.7) => page.drawLine({ start: { x: L, y: yy }, end: { x: R, y: yy }, thickness: w, color: black });
+  const rule = (yy: number, w = 0.5, color = hair, x1 = L, x2 = R) => page.drawLine({ start: { x: x1, y: yy }, end: { x: x2, y: yy }, thickness: w, color });
   const wrap = (s: string, width: number, size: number, font = regular) => {
     const out: string[] = [];
     for (const para of s.split('\n')) {
       let cur = '';
       for (const word of para.split(/\s+/)) {
         const next = cur ? `${cur} ${word}` : word;
-        if (font.widthOfTextAtSize(next, size) > width && cur) { out.push(cur); cur = word; } else cur = next;
+        if (font.widthOfTextAtSize(next, size * f) > width && cur) { out.push(cur); cur = word; } else cur = next;
       }
       out.push(cur);
     }
     return out;
   };
-  const footerLines = [issuer.footer, [issuer.taxNumber && `Steuernummer: ${issuer.taxNumber}`, issuer.vatId && `USt-IdNr.: ${issuer.vatId}`].filter(Boolean).join(' · '),
-    [issuer.bankName, issuer.iban && `IBAN ${issuer.iban}`, issuer.bic && `BIC ${issuer.bic}`].filter(Boolean).join(' · ')].filter(Boolean).flatMap((f) => wrap(f, R - L, 8));
-  const decorate = () => {
-    let fy = 40 + footerLines.length * 10;
-    page.drawLine({ start: { x: L, y: fy + 6 }, end: { x: R, y: fy + 6 }, thickness: 0.4, color: grey });
-    for (const f of footerLines) { fy -= 10; put(f, L, fy, { size: 8, color: grey }); }
-    if (draft) page.drawText('ENTWURF', { x: 120, y: 300, size: 90, font: bold, color: rgb(0.88, 0.88, 0.88), rotate: degrees(35) });
-  };
-  const bottom = 70 + footerLines.length * 10;
-  const need = (h: number) => { if (y - h < bottom) { decorate(); page = doc.addPage([W, H]); y = H - 60; return true; } return false; };
 
-  // Kopf: Logo rechts oben, Name und Anschrift links
+  // Fuß: freie Fußzeile, darunter drei Spalten (Anschrift · Steuer · Bank)
+  const colW = (R - L) / 3;
+  const footCols = [
+    [issuer.name, issuer.street, `${issuer.zip} ${issuer.city}`.trim()],
+    [issuer.phone && `Tel. ${issuer.phone}`, issuer.email, issuer.website, issuer.taxNumber && `Steuernummer ${issuer.taxNumber}`, issuer.vatId && `USt-IdNr. ${issuer.vatId}`],
+    [issuer.bankName, issuer.iban && `IBAN ${issuer.iban}`, issuer.bic && `BIC ${issuer.bic}`],
+  ].map((c) => (c.filter(Boolean) as string[]).flatMap((t) => wrap(t, colW - 10, 7.5)));
+  const footFree = issuer.footer ? wrap(issuer.footer, R - L, 8) : [];
+  const footLead = 9.5 * f;
+  const footH = Math.max(...footCols.map((c) => c.length)) * footLead + footFree.length * (10 * f) + (footFree.length ? 6 : 0);
+  const bottom = 46 + footH + 22;
+  const newPage = () => { page = doc.addPage([W, H]); pages.push(page); y = H - 62; };
+  const need = (h: number) => { if (y - h < bottom) { newPage(); return true; } return false; };
+
+  // Kopf: Name und Anschrift links, Logo rechts oben
   if (image) {
-    const s = Math.min(150 / image.width, 56 / image.height, 1);
-    page.drawImage(image, { x: R - image.width * s, y: H - 40 - image.height * s, width: image.width * s, height: image.height * s });
+    const s = Math.min(170 / image.width, 64 / image.height, 1);
+    page.drawImage(image, { x: R - image.width * s, y: H - 38 - image.height * s, width: image.width * s, height: image.height * s });
   }
-  put(issuer.name, L, y, { size: 16, font: bold });
-  y -= 15;
+  put(issuer.name, L, y, { size: 17, font: bold });
+  y -= 16 * f;
   put([issuer.street, `${issuer.zip} ${issuer.city}`.trim()].filter(Boolean).join(' · '), L, y, { size: 9, color: grey });
-  y -= 11;
+  y -= 12 * f;
   put([issuer.phone && `Tel. ${issuer.phone}`, issuer.email, issuer.website].filter(Boolean).join(' · '), L, y, { size: 9, color: grey });
-  y -= 8;
-  line(y, 1.2);
+  y -= 12;
+  rule(y, 1, black);
 
-  // Empfänger und Rechnungsdaten
-  y -= 40;
+  // Anschriftfeld (für Fensterumschläge) und Rechnungsdaten rechts daneben
+  y -= 52 * g;
   const top = y;
-  put([issuer.name, issuer.street, `${issuer.zip} ${issuer.city}`.trim()].filter(Boolean).join(' · '), L, y + 14, { size: 6.5, color: grey });
+  put([issuer.name, issuer.street, `${issuer.zip} ${issuer.city}`.trim()].filter(Boolean).join(' · '), L, y + 16 * f, { size: 6.5, color: grey });
   for (const s of [inv.recipientCompany, inv.recipientName, inv.recipientStreet, `${inv.recipientZip} ${inv.recipientCity}`.trim(),
     inv.recipientCountry && inv.recipientCountry !== 'Deutschland' ? inv.recipientCountry : '', inv.recipientVatId && `USt-IdNr.: ${inv.recipientVatId}`].filter(Boolean) as string[]) {
-    put(s, L, y, { size: 10.5 });
-    y -= 14;
+    put(s, L, y, { size: 11 });
+    y -= 15.5 * f;
   }
   let my = top;
   const meta: [string, string][] = [[cancel ? 'Stornobeleg-Nr.' : 'Rechnungsnummer', inv.number ?? '–'], ['Rechnungsdatum', de(inv.issueDate)],
     ['Leistungszeitraum', !inv.serviceFrom ? '–' : inv.serviceTo && inv.serviceTo !== inv.serviceFrom ? `${de(inv.serviceFrom)} – ${de(inv.serviceTo)}` : de(inv.serviceFrom)]];
   if (inv.bookingNumber) meta.push(['Buchungsnummer', inv.bookingNumber]);
   if (cancel && inv.cancelsNumber) meta.push(['Storno zu', inv.cancelsNumber]);
-  for (const [k, v] of meta) { put(k, 350, my, { size: 9.5, color: grey }); put(v, R, my, { size: 9.5, right: true }); my -= 14; }
-  y = Math.min(y, my) - 26;
-  put(title, L, y, { size: 14, font: bold });
-  y -= 22;
+  for (const [k, v] of meta) { put(k, 345, my, { size: 9.5, color: grey }); put(v, R, my, { size: 9.5, right: true }); my -= 16 * f; }
+  y = Math.min(y, my, top - 5 * 15.5 * f) - 34 * g;
+  put(inv.number && !draft ? `${title} ${inv.number}` : title, L, y, { size: 16, font: bold });
+  y -= 24 * g;
+  if (layout.intro && !cancel) { for (const t of wrap(layout.intro, R - L, 10)) { put(t, L, y); y -= 14 * f; } y -= 10 * g; }
 
   // Positionen
-  const cols = { pos: L, name: L + 26, qty: 350, unit: 425, rate: 468, total: R };
+  const cols = { pos: L + 6, name: L + 34, qty: 352, unit: 428, rate: 470, total: R - 6 };
+  const lead = 13 * f, dlead = 11.5 * f, pad = 8 * g;
   const headRow = () => {
-    put('Pos.', cols.pos, y, { size: 8.5, color: grey }); put('Leistung', cols.name, y, { size: 8.5, color: grey });
-    put('Menge', cols.qty, y, { size: 8.5, color: grey, right: true }); put('Einzelpreis', cols.unit, y, { size: 8.5, color: grey, right: true });
-    put('USt', cols.rate, y, { size: 8.5, color: grey, right: true }); put('Betrag', cols.total, y, { size: 8.5, color: grey, right: true });
-    y -= 6; line(y, 0.5); y -= 14;
+    const hh = 12 * f + pad * 1.4;
+    page.drawRectangle({ x: L, y: y - hh + 12 * f, width: R - L, height: hh, color: band });
+    const ty = y - hh / 2 + 12 * f - 3 * f;
+    put('Pos.', cols.pos, ty, { size: 8.5, font: bold, color: grey }); put('Leistung', cols.name, ty, { size: 8.5, font: bold, color: grey });
+    put('Menge', cols.qty, ty, { size: 8.5, font: bold, color: grey, right: true }); put('Einzelpreis', cols.unit, ty, { size: 8.5, font: bold, color: grey, right: true });
+    put('USt', cols.rate, ty, { size: 8.5, font: bold, color: grey, right: true }); put('Betrag', cols.total, ty, { size: 8.5, font: bold, color: grey, right: true });
+    y -= hh + pad;
   };
   headRow();
-  for (const l of inv.lines) {
-    const text = wrap(l.description, cols.qty - 50 - cols.name, 10);
-    const detail = l.detail ? wrap(l.detail, cols.qty - 50 - cols.name, 8.5) : [];
-    if (need(text.length * 12 + detail.length * 10.5 + 8)) headRow();
-    put(String(l.pos), cols.pos, y); put(num(l.quantity), cols.qty, y, { right: true });
+  inv.lines.forEach((l, idx) => {
+    const text = wrap(l.description, cols.qty - 46 - cols.name, 10);
+    const detail = l.detail ? wrap(l.detail, cols.qty - 46 - cols.name, 8.5) : [];
+    const h = text.length * lead + detail.length * dlead + pad * 2;
+    if (need(h)) headRow();
+    else if (idx > 0) rule(y + lead - 2 * f + pad - 1);
+    put(String(l.pos), cols.pos, y, { color: grey }); put(num(l.quantity), cols.qty, y, { right: true });
     put(money(l.unitPriceCents), cols.unit, y, { right: true }); put(`${num(l.taxRatePercent)} %`, cols.rate, y, { right: true });
     put(money(l.totalCents), cols.total, y, { right: true });
-    text.forEach((t, k) => put(t, cols.name, y - k * 12));
-    y -= text.length * 12;
-    detail.forEach((t, k) => put(t, cols.name, y - k * 10.5, { size: 8.5, color: grey }));
-    y -= detail.length * 10.5 + 6;
-  }
-  line(y + 6, 0.5);
+    text.forEach((t, k) => put(t, cols.name, y - k * lead));
+    y -= text.length * lead;
+    detail.forEach((t, k) => put(t, cols.name, y - k * dlead, { size: 8.5, color: grey }));
+    y -= detail.length * dlead + pad * 2 - lead + lead;
+  });
+  rule(y + lead - 2 * f + pad - 1, 0.8, grey);
 
-  // Summen
-  need(60 + inv.taxes.length * 13 + 60);
-  y -= 8;
+  // Summen: rechtsbündiger Block
+  const sx = 330, row = 15 * f;
+  const payRows = !cancel && inv.paidCents !== 0 ? new Set(inv.payments.map((p) => p.method)).size + 1 : 0;
+  need(inv.taxes.length * 2 * row + 34 * f + payRows * row + 30 * g);
+  y -= 4 * g;
   for (const t of inv.taxes) {
-    put(`Nettobetrag ${num(t.rate)} %: ${money(t.netCents)} · enthaltene Umsatzsteuer ${num(t.rate)} %`, L, y, { size: 9, color: grey });
-    put(money(t.taxCents), R, y, { size: 9, color: grey, right: true });
-    y -= 13;
+    put(`Nettobetrag ${num(t.rate)} %`, sx, y, { size: 9.5, color: grey }); put(money(t.netCents), cols.total, y, { size: 9.5, color: grey, right: true });
+    y -= row;
+    put(`Umsatzsteuer ${num(t.rate)} %`, sx, y, { size: 9.5, color: grey }); put(money(t.taxCents), cols.total, y, { size: 9.5, color: grey, right: true });
+    y -= row;
   }
-  y -= 2; line(y + 8, 1.2); y -= 8;
-  put('Gesamtbetrag (brutto)', L, y, { font: bold }); put(money(inv.grossCents), R, y, { font: bold, right: true });
-  y -= 16;
+  y -= 4 * f;
+  page.drawRectangle({ x: sx - 8, y: y - 8 * f, width: R - sx + 8, height: 24 * f, color: band });
+  put('Gesamtbetrag', sx, y, { size: 11.5, font: bold }); put(money(inv.grossCents), cols.total, y, { size: 11.5, font: bold, right: true });
+  y -= 26 * f;
   if (!cancel && inv.paidCents !== 0) {
     // Zahlungen je Zahlungsart, wie sie beim Erzeugen des PDFs gebucht waren
     const byMethod = new Map<string, number>();
     for (const p of inv.payments) byMethod.set(p.method, (byMethod.get(p.method) ?? 0) + p.amountCents);
-    for (const [m, c] of byMethod) if (c !== 0) { put(`Bezahlt (${m})`, L, y, { color: grey }); put(money(-c), R, y, { color: grey, right: true }); y -= 14; }
+    for (const [m, c] of byMethod) if (c !== 0) { put(`Bezahlt (${m})`, sx, y, { size: 9.5, color: grey }); put(money(-c), cols.total, y, { size: 9.5, color: grey, right: true }); y -= row; }
     y -= 2;
-    put(inv.openCents > 0 ? 'Zu zahlen' : inv.openCents < 0 ? 'Guthaben' : 'Offener Betrag', L, y, { font: bold }); put(money(Math.abs(inv.openCents)), R, y, { font: bold, right: true });
-    y -= 16;
+    put(inv.openCents > 0 ? 'Zu zahlen' : inv.openCents < 0 ? 'Guthaben' : 'Offener Betrag', sx, y, { font: bold }); put(money(Math.abs(inv.openCents)), cols.total, y, { font: bold, right: true });
+    y -= row;
   }
-  y -= 10;
+  y -= 22 * g;
   const closing = [inv.notes,
     !cancel && !draft && inv.openCents > 0 && inv.dueDate ? `Bitte überweisen Sie den Betrag bis zum ${de(inv.dueDate)} unter Angabe der Rechnungsnummer ${inv.number}.` : '',
-    !cancel && inv.openCents === 0 && inv.paidCents !== 0 ? 'Der Rechnungsbetrag wurde vollständig bezahlt. Vielen Dank!' : ''].filter(Boolean).join('\n');
-  for (const t of closing ? wrap(closing, R - L, 10) : []) { need(14); put(t, L, y); y -= 13; }
-  decorate();
+    !cancel && inv.openCents === 0 && inv.paidCents !== 0 ? 'Der Rechnungsbetrag wurde vollständig bezahlt. Vielen Dank!' : '',
+    !cancel ? layout.closing : ''].filter(Boolean).join('\n\n');
+  for (const t of closing ? wrap(closing, R - L, 10) : []) { need(15 * f); if (t) put(t, L, y); y -= (t ? 14 : 8) * f; }
+
+  // Fuß und Seitenzahl auf jeder Seite
+  pages.forEach((pg, i) => {
+    page = pg;
+    let fy = 40 + footH;
+    rule(fy + 8, 0.5, grey);
+    for (const t of footFree) { fy -= 10 * f; put(t, L, fy, { size: 8, color: grey }); }
+    if (footFree.length) fy -= 6;
+    footCols.forEach((c, k) => c.forEach((t, n) => put(t, L + k * colW, fy - (n + 1) * footLead, { size: 7.5, color: grey })));
+    if (pages.length > 1) put(`Seite ${i + 1} von ${pages.length}`, R, 26, { size: 7.5, color: grey, right: true });
+    if (draft) page.drawText('ENTWURF', { x: 120, y: 300, size: 90, font: bold, color: rgb(0.5, 0.5, 0.5), opacity: 0.16, rotate: degrees(35) });
+  });
   return doc.save();
 }

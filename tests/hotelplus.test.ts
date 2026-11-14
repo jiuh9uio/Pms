@@ -368,4 +368,25 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect((await issue(await mk({ lastName: 'Nummer2' }, addDays(today, 102), addDays(today, 103)))).number).toMatch(/-0121$/);
     expect(await ok('GET', `/settings/invoice-number?year=${year}`, admin)).toMatchObject({ next: 122, issued: 121 });
   });
+
+  it('speichert das Rechnungslayout und liefert eine Muster-Rechnung als Vorschau', async () => {
+    expect(await ok('GET', '/settings/invoice-layout', admin)).toEqual({ spacing: 'normal', fontSize: 'normal', intro: '', closing: '' });
+    expect((await call('PUT', '/settings/invoice-layout', user, { spacing: 'wide' })).statusCode).toBe(403);
+    expect((await call('PUT', '/settings/invoice-layout', admin, { spacing: 'riesig' })).statusCode).toBe(400);
+    const sizes: number[] = [];
+    for (const q of ['spacing=compact&fontSize=small', 'spacing=wide&fontSize=large&intro=Vielen%20Dank&closing=Bis%20bald']) {
+      const r = await call('GET', `/settings/invoice-layout/preview?${q}`, admin);
+      expect(r.statusCode).toBe(200);
+      expect(r.headers['content-type']).toBe('application/pdf');
+      expect(r.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+      sizes.push(r.rawPayload.length);
+    }
+    expect(sizes[0]).not.toBe(sizes[1]);
+    expect(await ok('PUT', '/settings/invoice-layout', admin, { spacing: 'wide', fontSize: 'large', intro: 'Vielen Dank', closing: '' })).toMatchObject({ spacing: 'wide', intro: 'Vielen Dank' });
+    // eine echte Rechnung lässt sich im neuen Layout erzeugen
+    const inv = await issue(await mk({ lastName: 'Layout' }, addDays(today, 110), addDays(today, 112)));
+    const pdf = await call('GET', `/invoices/${inv.id}/pdf`, admin);
+    expect(pdf.statusCode).toBe(200);
+    expect(pdf.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+  });
 });

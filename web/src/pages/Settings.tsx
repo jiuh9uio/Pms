@@ -4,6 +4,7 @@ import { api } from '../api.ts';
 import { CancelPolicyCard } from './CancelPolicyCard.tsx';
 import { GuideCard } from './GuideCard.tsx';
 import { InboxSettings } from './InboxSettings.tsx';
+import { InvoiceLayoutCard } from './InvoiceLayoutCard.tsx';
 import { InvoiceNumberCard } from './InvoiceNumberCard.tsx';
 import { MailSettings } from './MailSettings.tsx';
 import { BackupCard } from './BackupCard.tsx';
@@ -29,7 +30,7 @@ export function Settings() {
     <>
       <PageHeader title="Einstellungen" sub="Angaben zum Haus, E-Mail, Drucker, EC-Gerät, TSE, Steuersätze, Algorithmen, Hausnetz, Datensicherung und Programm-Update" />
       {bar}
-      {current === 'haus' && <><HotelForm /><LogoCard /><GuideCard /></>}
+      {current === 'haus' && <><HotelForm /><LogoCard /><InvoiceLayoutCard /><GuideCard /></>}
       {current === 'email' && <><MailSettings /><InboxSettings /><WebRequestCard /></>}
       {current === 'drucker' && <><KitchenPrinterCard kind="kitchen" /><KitchenPrinterCard kind="front" /></>}
       {current === 'ecgeraet' && <TerminalCard />}
