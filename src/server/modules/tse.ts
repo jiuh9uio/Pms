@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { eq } from 'drizzle-orm';
-import type { TseInfoDto, TseSettings } from '../../shared/schemas.js';
+import type { TseInfoDto, TseSettings, TseSignResult } from '../../shared/schemas.js';
 import type { Db, Exec } from '../db/client.js';
 import { settings } from '../db/schema.js';
 import { AppError, conflict } from '../lib/errors.js';
@@ -12,8 +12,9 @@ import { getHotel } from './settings.js';
 
 /**
  * TSE (Epson): Daten des Sticks anzeigen, Selbsttest ausführen, Datenblatt drucken, Zertifikat herunterladen.
- * Es werden ausschließlich Befehle ohne Anmeldung verwendet. Das PMS zeichnet KEINE Vorgänge in der TSE auf –
- * diese Seite dient dazu, den Stick zu prüfen.
+ * Lesen, Selbsttest und Zertifikat kommen ohne Anmeldung aus. Einzige Ausnahme ist die Test-Signatur (unten): Sie meldet
+ * sich mit der vom Benutzer eingegebenen Zeit-PIN an und zeichnet einen gekennzeichneten Testvorgang auf.
+ * Zahlungen des PMS werden NICHT in der TSE aufgezeichnet.
  */
 const DEFAULT: TseSettings = { enabled: false, host: '127.0.0.1', port: 8009 };
 export async function getTse(db: Exec): Promise<TseSettings> {
@@ -113,4 +114,102 @@ export async function printTseSheet(db: Db, actor: Actor) {
   });
   await record(db, actor, { action: 'print', entity: 'program', entityId: 'tse', after: { serial: i.serialNumberHex.slice(0, 16) } });
   return { ok: true };
+}
+
+// ---------- Test-Signatur ----------
+const TEST_TYPE = 'SonstigerVorgang';
+const TEST_DATA = 'PMS Testsignatur - kein Umsatz';
+
+/** Meldung zu einem fehlgeschlagenen Schritt der Test-Signatur – mit der Zahl der verbleibenden PIN-Versuche, wenn die TSE sie nennt. */
+function signFail(r: TseReply): never {
+  const left = num(r.output.remainingRetries);
+  const code = r.result;
+  const msg = left != null ? `Die PIN wurde nicht angenommen. Noch ${left} ${left === 1 ? 'Versuch' : 'Versuche'}, danach ist die PIN gesperrt und nur mit der PUK wieder freizuschalten.`
+    : code === 'OTHER_ERROR_HOST_AUTHENTICATION_FAILED' ? 'Die Anmeldung wurde abgelehnt: Der geheime Schlüssel passt nicht (Standard ist EPSONKEY). Es wurde kein PIN-Versuch verbraucht.'
+    : code === 'TSE1_ERROR_CLIENT_NOT_REGISTERED' ? 'Diese Kassen-Kennung ist in der TSE nicht angemeldet. Sie muss zuerst mit der Admin-PIN registriert werden.'
+    : code === 'TSE1_ERROR_TSE_NOT_INITIALIZED' ? 'Die TSE ist noch nicht in Betrieb genommen.'
+    : code === 'TSE1_ERROR_CERTIFICATE_EXPIRED' ? 'Das Zertifikat der TSE ist abgelaufen – sie signiert nicht mehr.'
+    : code === 'TSE1_ERROR_WRONG_STATE_NEEDS_PIN_CHANGE' || code === 'TSE1_ERROR_WRONG_STATE_NEEDS_PUK_CHANGE' ? 'Die TSE verlangt zuerst das Ändern der Auslieferungs-PIN bzw. -PUK (Inbetriebnahme).'
+    : `Schritt „${r.fn}“ ist fehlgeschlagen`;
+  throw new AppError(502, 'tse_failed', `${msg} (${[code, r.error?.fact].filter(Boolean).join(' – ')})`);
+}
+
+/**
+ * Test-Signatur: meldet sich mit Kassen-Kennung und Zeit-PIN an, setzt die Uhrzeit, zeichnet einen als Test gekennzeichneten
+ * Vorgang („SonstigerVorgang“) auf und meldet sich wieder ab. PIN und Schlüssel werden weder gespeichert noch protokolliert.
+ * Der Vorgang bleibt dauerhaft in der TSE stehen.
+ */
+export async function tseTestSignature(db: Db, actor: Actor, v: { clientId: string; pin: string; secretKey: string; print: boolean }): Promise<TseSignResult> {
+  const t = await getTse(db);
+  if (!t.enabled) throw conflict('Die TSE ist noch nicht eingerichtet (Einstellungen → TSE)', 'tse_not_configured');
+  const okSoFar = (prev: TseReply[]) => prev.every((r) => r.result === 'EXECUTION_OK');
+  const by = (prev: TseReply[], fn: string) => prev.find((r) => r.fn === fn);
+  const b64 = (text: string) => Buffer.from(text, 'utf8').toString('base64');
+  let replies: TseReply[];
+  try {
+    replies = await tseSession(t.host, t.port, [
+      { fn: 'GetStorageInfo', storageType: 'COMMON', vendor: '' },
+      (p) => {
+        const info = (p[0]?.output.tseInformation ?? {}) as Record<string, unknown>;
+        return okSoFar(p) && info.tseInitializationState === 'INITIALIZED' && info.hasPassedSelfTest === false ? { fn: 'RunTSESelfTest', ...vendorOf(p[0]), timeoutMs: 120000 } : null;
+      },
+      (p) => (okSoFar(p) && (p[0]!.output.tseInformation as Record<string, unknown> | undefined)?.tseInitializationState === 'INITIALIZED'
+        ? { fn: 'GetChallenge', ...vendorOf(p[0]), input: { userId: v.clientId } } : null),
+      (p) => {
+        const challenge = str(by(p, 'GetChallenge')?.output.challenge);
+        if (!okSoFar(p) || !challenge) return null;
+        // nach Epsons Beispielprogramm: SHA-256 über Challenge + geheimen Schlüssel, Base64
+        const hash = createHash('sha256').update(challenge + v.secretKey, 'utf8').digest('base64');
+        return { fn: 'AuthenticateUserForTimeAdmin', ...vendorOf(p[0]), input: { clientId: v.clientId, pin: v.pin, hash } };
+      },
+      (p) => (okSoFar(p) && by(p, 'AuthenticateUserForTimeAdmin')
+        ? { fn: 'UpdateTime', ...vendorOf(p[0]), input: { userId: v.clientId, newDateTime: new Date().toISOString().slice(0, 19) + 'Z', useTimeSync: false } } : null),
+      (p) => (okSoFar(p) && by(p, 'UpdateTime') ? { fn: 'StartTransaction', ...vendorOf(p[0]), input: { clientId: v.clientId, processData: '', processType: '', additionalData: '' } } : null),
+      (p) => {
+        const start = by(p, 'StartTransaction');
+        return okSoFar(p) && start ? { fn: 'FinishTransaction', ...vendorOf(p[0]), input: { clientId: v.clientId, transactionNumber: start.output.transactionNumber, processData: b64(TEST_DATA), processType: TEST_TYPE, additionalData: '' } } : null;
+      },
+      // abmelden, sobald die Anmeldung geklappt hat – auch wenn ein späterer Schritt gescheitert ist
+      (p) => (by(p, 'AuthenticateUserForTimeAdmin')?.result === 'EXECUTION_OK' ? { fn: 'LogOutForTimeAdmin', ...vendorOf(p[0]), input: { clientId: v.clientId } } : null),
+    ]);
+  } catch (e) {
+    throw new AppError(502, 'tse_failed', e instanceof TseError ? e.message : `TSE nicht erreichbar: ${e instanceof Error ? e.message : e}`);
+  }
+  const first = replies[0];
+  if (!first || first.result !== 'EXECUTION_OK') fail(first, 'Die TSE-Daten ließen sich nicht lesen');
+  const info = (first.output.tseInformation ?? {}) as Record<string, unknown>;
+  if (info.tseInitializationState !== 'INITIALIZED')
+    throw conflict(`Die TSE ist nicht in Betrieb (${str(info.tseInitializationState) || 'Zustand unbekannt'}). Signieren geht erst nach der Inbetriebnahme mit PUK und PINs.`, 'tse_not_initialized');
+  const bad = replies.find((r) => r.result !== 'EXECUTION_OK' && r.fn !== 'LogOutForTimeAdmin');
+  const start = by(replies, 'StartTransaction'), finish = by(replies, 'FinishTransaction');
+  if (start?.result === 'EXECUTION_OK')
+    await record(db, actor, { action: 'tse_test_signature', entity: 'program', entityId: 'tse', after: { clientId: v.clientId, transactionNumber: start.output.transactionNumber, finished: finish?.result === 'EXECUTION_OK' } });
+  if (bad) {
+    if (start?.result === 'EXECUTION_OK') throw new AppError(502, 'tse_failed', `Der Testvorgang Nr. ${start.output.transactionNumber} wurde begonnen, aber nicht abgeschlossen (${bad.result}). Er steht in der TSE als offener Vorgang.`);
+    signFail(bad);
+  }
+  if (!start || !finish) throw new AppError(502, 'tse_failed', 'Die TSE hat den Testvorgang nicht ausgeführt.');
+  const r: TseSignResult = {
+    clientId: v.clientId, serialNumberHex: hex(str(info.serialNumber)), transactionNumber: num(start.output.transactionNumber),
+    startTime: str(start.output.logTime), finishTime: str(finish.output.logTime), signatureCounter: num(finish.output.signatureCounter),
+    signatureBase64: str(finish.output.signature), processType: TEST_TYPE, processData: TEST_DATA, printed: false, printError: '',
+  };
+  if (v.print) {
+    try {
+      const h = await getHotel(db);
+      const t2 = (iso: string) => (iso ? new Date(iso).toLocaleString('de-DE', { timeZone: 'Europe/Berlin', dateStyle: 'short', timeStyle: 'medium' }) : '–');
+      await printLines(db, (w) => {
+        const row = (k: string, val: string): Line[] => [{ text: k, bold: true }, ...chunks(val || '–', w).map((text) => ({ text }))];
+        return [
+          { text: h.name, align: 'center', bold: true }, { text: 'TSE-TESTSIGNATUR', align: 'center', bold: true, big: true }, { text: 'Kein Umsatz – kein Kassenbeleg', align: 'center' }, { rule: true },
+          ...row('Vorgangsart', r.processType), ...row('Inhalt', r.processData), ...row('Kassen-Kennung', r.clientId),
+          ...row('Transaktionsnummer', String(r.transactionNumber ?? '–')), ...row('Signaturzähler', String(r.signatureCounter ?? '–')),
+          ...row('Beginn', t2(r.startTime)), ...row('Ende', t2(r.finishTime)),
+          ...row('Seriennummer der TSE (hex)', r.serialNumberHex), ...row('Signatur (Base64)', r.signatureBase64), { rule: true },
+        ];
+      });
+      r.printed = true;
+    } catch (e) { r.printError = e instanceof Error ? e.message : 'Druck fehlgeschlagen'; }
+  }
+  return r;
 }

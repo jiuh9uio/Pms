@@ -244,6 +244,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.get('/tse/info', { preHandler: requireAdmin }, () => tse.tseInfo(db));
     api.post('/tse/selftest', { preHandler: requireAdmin }, (req) => tse.tseSelfTest(db, actor(req)));
     api.post('/tse/print', { preHandler: requireAdmin }, (req) => tse.printTseSheet(db, actor(req)));
+    api.post('/tse/test-signature', { preHandler: requireAdmin }, (req) => tse.tseTestSignature(db, actor(req), S.tseSignInput.parse(req.body)));
 
     // ---------- Datensicherung (nur Administrator) ----------
     api.get('/backup/status', { preHandler: requireAdmin }, () => getBackupStatus());

@@ -150,3 +150,17 @@ export interface PurgeResult {
   /** vergangene Buchungen, die bleiben, weil Rechnungen oder Zahlungen daran hängen */
   keptBookings: number; blocks: number; guests: number; dryRun: boolean; backupFile: string | null;
 }
+
+// ---------- TSE: Test-Signatur ----------
+const printable = /^[A-Za-z0-9'()+,\-./:=? ]+$/;
+export const tseSignInput = z.object({
+  clientId: z.string().trim().min(1, 'Bitte die Kassen-Kennung eintragen').max(30).regex(printable, 'Nur Buchstaben ohne Umlaute, Ziffern und einfache Zeichen'),
+  pin: z.string().regex(/^.{5}$/, 'Die PIN hat genau 5 Zeichen'),
+  secretKey: z.string().regex(/^.{8}$/, 'Der Schlüssel hat genau 8 Zeichen').default('EPSONKEY'),
+  print: z.boolean().default(false),
+});
+export interface TseSignResult {
+  clientId: string; serialNumberHex: string; transactionNumber: number | null; startTime: string; finishTime: string;
+  signatureCounter: number | null; signatureBase64: string; processType: string; processData: string;
+  printed: boolean; printError: string;
+}

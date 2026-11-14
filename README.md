@@ -205,8 +205,13 @@ rechtlich geprüft ist, steht dort ausdrücklich.
   und führt auf Knopfdruck den Selbsttest aus (`RunTSESelfTest`, bis 120 s). Das Datenblatt lässt sich auf dem Bondrucker
   drucken, das Zertifikat als PEM-Datei speichern. Quelle: Epson „ePOS-Device XML User's Manual“ und „Germany Fiscal Element
   JSON Specification“ (Rev. C).
-- **Was es bewusst nicht tut:** keine Anmeldung an der TSE (keine PIN, keine PIN-Versuche), keine Inbetriebnahme, keine
-  Zeitsetzung, keine Vorgänge (`StartTransaction`/`FinishTransaction`), kein Export. **Zahlungen im PMS werden nicht mit der TSE
+- **Test-Signatur (seit 1.22.0):** `POST /tse/test-signature` mit Client-ID, TimeAdmin-PIN und Secret Key (Standard `EPSONKEY`):
+  `GetChallenge` → `AuthenticateUserForTimeAdmin` (Hash = Base64(SHA-256(Challenge + Secret Key)) – so aus Epsons
+  Beispielprogramm in Erinnerung, im Handbuch nicht beschrieben; ein falscher Hash führt laut Fehlerliste zu
+  `OTHER_ERROR_HOST_AUTHENTICATION_FAILED` und verbraucht keinen PIN-Versuch) → `UpdateTime` → `StartTransaction` →
+  `FinishTransaction` (processType `SonstigerVorgang`, processData „PMS Testsignatur - kein Umsatz“) → `LogOutForTimeAdmin`.
+  PIN und Schlüssel werden nicht gespeichert und nicht protokolliert. Der Vorgang bleibt dauerhaft in der TSE.
+- **Was es bewusst nicht tut:** keine Inbetriebnahme (`SetUp`), keine Admin-Anmeldung, kein Registrieren von Clients, kein Export. **Zahlungen im PMS werden nicht mit der TSE
   signiert**; die Frage, ob das nötig ist, bleibt offen (siehe Abrechnung).
 - **Grenzen:** mit keinem echten Stick erprobt, nur gegen eine nachgebaute Schnittstelle. Der Epson TSE Driver ist laut Epson
   nur für Windows verfügbar – auf einem Linux-Server lässt sich ein USB-Stick so nicht ansprechen. Öffnet ein anderes Programm

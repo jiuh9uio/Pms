@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createServer, type Server, type Socket } from 'node:net';
 import { sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
@@ -25,6 +26,13 @@ const session = (res: { cookies: { name: string; value: string }[] }) => ({ pms_
 let mode: 'ok' | 'no-stick' | 'selftest-fails' | 'in-use' = 'ok';
 let seen: { fn: string; storage: { type: string; vendor: string }; timeout: string }[] = [];
 let tested = false;
+let state = 'INITIALIZED';
+let retries = 3;
+let loggedIn = false;
+let timeSet = false;
+let txn = 41;
+let sigs = 1234;
+const inputs: Record<string, unknown>[] = [];
 /** Herstellerkürzel, das die simulierte Schnittstelle für TSE-Befehle annimmt */
 let acceptVendor = 'TSE1';
 const xmlEsc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
@@ -54,11 +62,28 @@ function tseServer(sock: Socket) {
         else if (req.function === 'GetStorageInfo') result = { result: 'EXECUTION_OK', function: 'GetStorageInfo', output: {
           vendorType: 'EPSON-USB-TSE', smartInformation: { healthStatus: 'PASS' },
           tseInformation: { serialNumber: Buffer.from('0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef', 'hex').toString('base64'), tsePublicKey: 'BEtleQ==', signatureAlgorithm: 'ecdsa-plain-SHA384',
-            tseDescription: 'BSI-K-TR-0373-2019', cdcId: 'DE0123456789012345', tseInitializationState: 'INITIALIZED', hasValidTime: false, hasPassedSelfTest: tested, isTSEUnlocked: false,
+            tseDescription: 'BSI-K-TR-0373-2019', cdcId: 'DE0123456789012345', tseInitializationState: state, hasValidTime: timeSet, hasPassedSelfTest: tested, isTSEUnlocked: false,
             timeUntilNextSelfTest: 90000, certificateExpirationDate: '2028-12-31T23:59:59Z', createdSignatures: 1234, remainingSignatures: 9998766, maxSignatures: 10000000,
             registeredClients: 2, maxRegisteredClients: 100, startedTransactions: 0, tseCapacity: 14000000, tseCurrentSize: 0, softwareVersion: 65792, hardwareVersion: 65536 } } };
         else if (req.function === 'RunTSESelfTest') { tested = mode !== 'selftest-fails'; result = tested ? { result: 'EXECUTION_OK', function: req.function, output: {} } : { result: 'TSE1_ERROR_IO', function: req.function, output: {}, error: { fact: 'self test' } }; }
         else if (req.function === 'GetLogMessageCertificate') result = { result: 'EXECUTION_OK', function: req.function, output: { logMessageCertificate: Buffer.from(PEM).toString('base64') } };
+        else if (req.function === 'GetChallenge') result = { result: 'EXECUTION_OK', function: req.function, output: { challenge: 'abcdefgh12345678' } };
+        else if (req.function === 'AuthenticateUserForTimeAdmin') {
+          const good = createHash('sha256').update('abcdefgh12345678EPSONKEY').digest('base64');
+          if (req.input.hash !== good) result = { result: 'OTHER_ERROR_HOST_AUTHENTICATION_FAILED', function: req.function, output: {} };
+          else if (req.input.clientId !== 'KASSE1') result = { result: 'TSE1_ERROR_CLIENT_NOT_REGISTERED', function: req.function, output: {} };
+          else if (req.input.pin !== '54321') { retries--; result = { result: 'TSE1_ERROR_AUTHENTICATION_FAILED', function: req.function, output: { remainingRetries: retries } }; }
+          else { loggedIn = true; result = { result: 'EXECUTION_OK', function: req.function, output: {} }; }
+        } else if (['UpdateTime', 'StartTransaction', 'FinishTransaction', 'LogOutForTimeAdmin'].includes(req.function)) {
+          inputs.push({ fn: req.function, ...req.input });
+          if (!loggedIn) result = { result: 'OTHER_ERROR_UNAUTHENTICATED_TIME_ADMIN_USER', function: req.function, output: {} };
+          else if (req.function === 'UpdateTime') { timeSet = true; result = { result: 'EXECUTION_OK', function: req.function, output: {} }; }
+          else if (req.function === 'StartTransaction') result = { result: 'EXECUTION_OK', function: req.function, output: { transactionNumber: ++txn, logTime: '2026-11-14T08:00:00Z', serialNumber: 'AA==', signatureCounter: ++sigs, signature: 'U1RBUlQ=' } };
+          else if (req.function === 'FinishTransaction') result = req.input.transactionNumber === txn
+            ? { result: 'EXECUTION_OK', function: req.function, output: { logTime: '2026-11-14T08:00:01Z', signatureCounter: ++sigs, signature: 'RklOSVNI' } }
+            : { result: 'TSE1_ERROR_TRANSACTION_NOT_STARTED', function: req.function, output: {} };
+          else { loggedIn = false; result = { result: 'EXECUTION_OK', function: req.function, output: {} }; }
+        }
         else result = { result: 'JSON_ERROR_UNEXPECTED_FUNCTION', function: req.function, output: {} };
         send(`<device_data><device_id>local_TSE</device_id><data><type>operateresult</type><success>true</success><code>SUCCESS</code><resultdata>${xmlEsc(JSON.stringify(result))}</resultdata></data><data_id>2</data_id></device_data>`);
       }
@@ -146,6 +171,44 @@ describe('TSE (Epson) prüfen', () => {
     expect(info.certificatePem).toContain('BEGIN CERTIFICATE');
     expect(seen.map((x) => `${x.fn}:${x.storage.vendor}`)).toEqual(['GetStorageInfo:', 'GetLogMessageCertificate:TSE1', 'GetLogMessageCertificate:EPSON-USB-TSE']);
     acceptVendor = 'TSE1';
+  });
+
+  it('erzeugt eine Test-Signatur: anmelden, Zeit setzen, Vorgang aufzeichnen, abmelden', async () => {
+    const sign = (body: object, who = admin) => call('POST', '/tse/test-signature', who, { clientId: 'KASSE1', pin: '54321', secretKey: 'EPSONKEY', print: false, ...body });
+    const user = session(await call('POST', '/auth/login', {}, { username: 'rezeption', password: 'rezeption-123' }));
+    expect((await sign({}, user)).statusCode).toBe(403);
+    expect((await sign({ pin: '123' })).statusCode).toBe(400);
+    expect((await sign({ clientId: 'Kässe' })).statusCode).toBe(400);
+
+    // falscher Schlüssel: abgelehnt, ohne einen PIN-Versuch zu verbrauchen
+    const key = await sign({ secretKey: 'FALSCH12' });
+    expect(key.statusCode).toBe(502);
+    expect(key.json().message ?? key.body).toContain('kein PIN-Versuch');
+    expect(retries).toBe(3);
+    // falsche PIN: die verbleibenden Versuche werden genannt, es wird nichts aufgezeichnet
+    const pin = await sign({ pin: '00000' });
+    expect(pin.body).toContain('Noch 2 Versuche');
+    expect((await sign({ clientId: 'ANDERE' })).body).toContain('nicht angemeldet');
+    expect(inputs).toEqual([]);
+
+    seen = [];
+    const r = (await sign({})).json();
+    expect(r).toMatchObject({ clientId: 'KASSE1', transactionNumber: 42, signatureCounter: 1236, signatureBase64: 'RklOSVNI', processType: 'SonstigerVorgang',
+      startTime: '2026-11-14T08:00:00Z', finishTime: '2026-11-14T08:00:01Z', serialNumberHex: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef', printed: false });
+    expect(seen.map((x) => x.fn)).toEqual(['GetStorageInfo', 'GetChallenge', 'AuthenticateUserForTimeAdmin', 'UpdateTime', 'StartTransaction', 'FinishTransaction', 'LogOutForTimeAdmin']);
+    expect(inputs[0]).toMatchObject({ fn: 'UpdateTime', userId: 'KASSE1', useTimeSync: false });
+    expect(inputs[0]!.newDateTime).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
+    expect(inputs[2]).toMatchObject({ fn: 'FinishTransaction', transactionNumber: 42, processType: 'SonstigerVorgang', processData: Buffer.from('PMS Testsignatur - kein Umsatz').toString('base64') });
+    expect(loggedIn).toBe(false);
+    // PIN und Schlüssel stehen nicht im Protokoll
+    const log = await db.execute(sql`select after::text as a from audit_log where action = 'tse_test_signature'`);
+    expect(log).toHaveLength(1);
+    expect(String(log[0]!.a)).not.toContain('54321');
+
+    state = 'UNINITIALIZED';
+    const un = await sign({});
+    expect(un.statusCode).toBe(409);
+    state = 'INITIALIZED';
   });
 
   it('druckt das Datenblatt auf dem Bondrucker', async () => {

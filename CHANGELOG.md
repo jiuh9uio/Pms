@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.22.0
+
+- Einstellungen → TSE: neue „Test-Signatur“. Das Programm meldet sich mit Kassen-Kennung und Zeit-PIN an der TSE an, stellt deren Uhr, zeichnet einen gekennzeichneten Testvorgang („SonstigerVorgang“, kein Umsatz) auf und zeigt Transaktionsnummer, Signaturzähler, Zeiten und Signatur – auf Wunsch auch als Ausdruck.
+- Wichtig: Der Testvorgang bleibt dauerhaft in der TSE. PIN und Schlüssel werden nicht gespeichert. Zahlungen im Programm werden weiterhin nicht signiert. Noch nicht mit einem echten Stick erprobt.
+
 ## 1.21.1
 
 - TSE: Fehler „JSON_ERROR_UNEXPECTED_STORAGE_VENDOR“ beim Selbsttest und beim Lesen des Zertifikats behoben – das Programm sendet jetzt das von Epson erwartete Kürzel und probiert bei Ablehnung weitere Schreibweisen.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { tseSettingsInput, type TseInfoDto, type TseSettings } from '../../../src/shared/schemas.js';
+import { tseSettingsInput, tseSignInput, type TseInfoDto, type TseSettings, type TseSignResult } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { Badge, Button, Field, LoadState, fmtDateTime, useLoad, useSubmit, useToast } from '../ui.tsx';
 
@@ -44,7 +44,7 @@ export function TseCard() {
     <>
       <form className="card" onSubmit={(e) => void f.submit(payload(), e)} noValidate>
         <h2>TSE (Epson)</h2>
-        <p className="notice warn"><b>Diese Seite prüft den Stick – sie zeichnet nichts in der TSE auf.</b> Zahlungen im Programm werden weiterhin nicht mit der TSE signiert. Umgesetzt nach Epsons Handbüchern und nur gegen eine nachgebaute Schnittstelle getestet, noch nicht mit einem echten Stick.</p>
+        <p className="notice warn"><b>Lesen, Selbsttest und Datenblatt zeichnen nichts in der TSE auf</b> – nur die Test-Signatur weiter unten schreibt einen Eintrag. Zahlungen im Programm werden weiterhin nicht mit der TSE signiert. Umgesetzt nach Epsons Handbüchern und nur gegen eine nachgebaute Schnittstelle getestet, noch nicht mit einem echten Stick.</p>
         <p className="muted">Voraussetzung: Auf dem Rechner, an dem der Stick steckt, ist der „Epson TSE Driver“ (für Windows) installiert und läuft. Steckt der Stick an diesem Rechner, bleibt die Adresse 127.0.0.1.</p>
         <div className="formgrid cols3">
           <Field label="Adresse des Rechners mit der TSE" error={f.errors.host} hint="dieser Rechner: 127.0.0.1"><input value={v.host} onChange={(e) => setV({ ...v, host: e.target.value })} inputMode="decimal" /></Field>
@@ -58,7 +58,7 @@ export function TseCard() {
           <Button type="submit" busy={f.busy} disabled={busy !== ''}>Speichern</Button>
         </div>
         {busy === 'test' && <p className="muted small">Der Selbsttest läuft – bitte warten, das kann bis zu einer Minute dauern.</p>}
-        <p className="muted small">Verwendet werden nur Befehle, die keine Anmeldung brauchen: Daten lesen, Zertifikat lesen, Selbsttest. Es wird keine PIN eingegeben und es werden keine PIN-Versuche verbraucht. Benutzt gerade ein anderes Programm (z. B. Ihre Kassensoftware) die TSE, kann das Lesen abgelehnt werden.</p>
+        <p className="muted small">Diese drei Schaltflächen verwenden nur Befehle ohne Anmeldung: Es wird keine PIN gebraucht und es werden keine PIN-Versuche verbraucht. Benutzt gerade ein anderes Programm (z. B. Ihre Kassensoftware) die TSE, kann das Lesen abgelehnt werden.</p>
       </form>
       {info && (
         <section className="card">
@@ -83,6 +83,55 @@ export function TseCard() {
           <p className="muted small">Seriennummer, BSI-Zertifizierung und Gültigkeit werden unter anderem für die Meldung der Kasse beim Finanzamt gebraucht. Welche Angaben dort einzutragen sind, klärt die Steuerberatung.</p>
         </section>
       )}
+      <SignCard onDone={() => void act('read')} />
     </>
+  );
+}
+
+/** Test-Signatur: ein gekennzeichneter Testvorgang wird in der TSE aufgezeichnet und signiert. */
+function SignCard({ onDone }: { onDone: () => void }) {
+  const toast = useToast();
+  const [v, setV] = useState({ clientId: '', pin: '', secretKey: 'EPSONKEY', print: false });
+  const [res, setRes] = useState<TseSignResult | null>(null);
+  const [fail, setFail] = useState<string | null>(null);
+  const f = useSubmit(tseSignInput, async (d) => {
+    setFail(null); setRes(null);
+    if (!window.confirm('Test-Signatur jetzt erzeugen?\n\nDer Testvorgang wird dauerhaft in der TSE gespeichert und lässt sich nicht löschen. Eine falsche PIN verbraucht einen von drei Versuchen.')) return;
+    try {
+      const r = await api<TseSignResult>('POST', '/tse/test-signature', d);
+      setRes(r); setV((x) => ({ ...x, pin: '' })); toast('Test-Signatur erzeugt'); onDone();
+    } catch (e) { setFail(e instanceof Error ? e.message : 'Fehler'); setV((x) => ({ ...x, pin: '' })); }
+  });
+  const time = (iso: string) => (iso ? fmtDateTime(iso) : '–');
+  return (
+    <form className="card" onSubmit={(e) => void f.submit(v, e)} noValidate>
+      <h2>Test-Signatur</h2>
+      <p className="notice warn"><b>Das schreibt in die TSE.</b> Das Programm meldet sich mit Ihrer Zeit-PIN an, stellt die Uhr der TSE, zeichnet einen Vorgang der Art „SonstigerVorgang“ mit dem Inhalt „PMS Testsignatur - kein Umsatz“ auf und meldet sich wieder ab. Der Eintrag bleibt dauerhaft in der TSE und erscheint in einem späteren Export. Mit einem echten Stick noch nicht erprobt.</p>
+      <p className="muted">Voraussetzung: Die TSE ist in Betrieb genommen und die Kassen-Kennung ist darin angemeldet. PIN und Schlüssel werden nur für diesen einen Vorgang verwendet und nirgends gespeichert.</p>
+      <div className="formgrid cols3">
+        <Field label="Kassen-Kennung (Client-ID)" error={f.errors.clientId} hint="so, wie sie in der TSE angemeldet wurde"><input value={v.clientId} onChange={(e) => setV({ ...v, clientId: e.target.value })} autoComplete="off" /></Field>
+        <Field label="Zeit-PIN (TimeAdmin)" error={f.errors.pin} hint="5 Zeichen · nach 3 Fehlversuchen gesperrt"><input type="password" value={v.pin} onChange={(e) => setV({ ...v, pin: e.target.value })} autoComplete="off" maxLength={5} /></Field>
+        <Field label="Geheimer Schlüssel" error={f.errors.secretKey} hint="nur ändern, wenn er umgestellt wurde"><input value={v.secretKey} onChange={(e) => setV({ ...v, secretKey: e.target.value })} autoComplete="off" maxLength={8} /></Field>
+        <label className="check wide"><input type="checkbox" checked={v.print} onChange={(e) => setV({ ...v, print: e.target.checked })} /><span>Ergebnis auf dem Bondrucker drucken</span></label>
+      </div>
+      {fail && <p className="notice danger" role="alert">{fail}</p>}
+      <div className="formactions"><Button type="submit" variant="primary" busy={f.busy}>Test-Signatur erzeugen</Button></div>
+      {res && (
+        <>
+          <p className="notice"><b>Die TSE hat signiert.</b>{res.printError ? ` Der Ausdruck ist gescheitert: ${res.printError}` : res.printed ? ' Das Ergebnis wurde gedruckt.' : ''}</p>
+          <table className="kv"><tbody>
+            <tr><th>Transaktionsnummer</th><td>{n(res.transactionNumber)}</td></tr>
+            <tr><th>Signaturzähler</th><td>{n(res.signatureCounter)}</td></tr>
+            <tr><th>Beginn</th><td>{time(res.startTime)}</td></tr>
+            <tr><th>Ende</th><td>{time(res.finishTime)}</td></tr>
+            <tr><th>Vorgangsart</th><td>{res.processType}</td></tr>
+            <tr><th>Inhalt</th><td>{res.processData}</td></tr>
+            <tr><th>Kassen-Kennung</th><td>{res.clientId}</td></tr>
+            <tr><th>Seriennummer der TSE</th><td><code className="wrapcode">{res.serialNumberHex}</code></td></tr>
+            <tr><th>Signatur</th><td><code className="wrapcode">{res.signatureBase64}</code></td></tr>
+          </tbody></table>
+        </>
+      )}
+    </form>
   );
 }
