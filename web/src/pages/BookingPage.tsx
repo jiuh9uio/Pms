@@ -56,17 +56,17 @@ export function BookingPage() {
   return (
     <div className="guestform">
       <header><b>{b.hotelName}</b><h1>Ihre Reservierung</h1>
-        <p className="muted">Nr. {b.number} · {b.guestName}</p></header>
+        <p className="muted">Nr. {b.number} · {b.guestName}</p>{b.welcome && <p>{b.welcome}</p>}</header>
       {b.state === 'cancelled' && <p className="notice warn"><b>Diese Reservierung ist storniert.</b> Wenn das ein Versehen war, rufen Sie uns bitte an{b.hotelPhone && ` (${b.hotelPhone})`}.</p>}
       <section className="card">
         <h2>{deDate(b.from)} bis {deDate(b.to)}</h2>
         <ul className="plain">{b.rooms.map((r, i) => (
           <li key={i}><b>{r.category}</b> · {r.nights} {r.nights === 1 ? 'Nacht' : 'Nächte'} · {persons(r)}{b.rooms.length > 1 && <> · {deDate(r.from)}–{deDate(r.to)}</>}{r.status === 'tentative' && <> <Badge tone="warn">{STATUS_LABEL[r.status]}</Badge></>}</li>
         ))}</ul>
-        {b.state !== 'cancelled' && <p>Gesamtbetrag: <b>{formatMoney(b.totalCents)}</b> <span className="muted small">inklusive Umsatzsteuer</span></p>}
+        {b.state !== 'cancelled' && b.totalCents != null && <p>Gesamtbetrag: <b>{formatMoney(b.totalCents)}</b> <span className="muted small">inklusive Umsatzsteuer</span></p>}
         <p className="muted small">Anreise ab {b.checkinTime} Uhr.{b.hotelPhone && ` Bei Fragen: ${b.hotelPhone}.`}</p>
       </section>
-      {b.state === 'active' && (
+      {b.canArrival && (
         <form className="card" onSubmit={(e) => { setSaved(false); void f.submit({ ...cred, ...v }, e); }} noValidate>
           <h2>Wann kommen Sie an?</h2>
           <div className="formgrid">

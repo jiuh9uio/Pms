@@ -215,6 +215,9 @@ export const bookings = pgTable('bookings', {
   /** vom Gast über seinen Link mitgeteilt: voraussichtliche Ankunftszeit (HH:MM) und Nachricht */
   arrivalTime: text('arrival_time').notNull().default(''),
   guestMessage: text('guest_message').notNull().default(''),
+  /** Gäste-Link: Ausgabe-Nummer (ein neuer Link macht den alten ungültig) und Sperre */
+  linkVersion: integer('link_version').notNull().default(0),
+  linkBlocked: boolean('link_blocked').notNull().default(false),
   ...stamps,
 }, (t) => [index('bookings_guest_idx').on(t.guestId)]);
 

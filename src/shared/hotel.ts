@@ -300,6 +300,11 @@ export const cancelPolicyInput = z.object({
   /** Adresse, unter der Gäste das Programm im Internet erreichen (leer = Link nicht in E-Mails aufnehmen) */
   publicUrl: z.union([z.literal(''), z.url('Bitte eine Adresse wie https://hotel.example.de eintragen')]).default(''),
   extraText: z.string().trim().max(600),
+  /** Was die Seite des Gastes zeigt und erlaubt */
+  showPrice: z.boolean().default(true),
+  allowArrival: z.boolean().default(true),
+  /** Begrüßungstext oben auf der Seite */
+  welcome: z.string().trim().max(400).default(''),
 });
 export type CancelPolicy = z.infer<typeof cancelPolicyInput>;
 /** Stand der Bedingungen für eine bestimmte Reservierung */
@@ -312,11 +317,16 @@ export function cancelTerms(p: CancelPolicy, arrival: string, lodgingCents: numb
   const text = [`Kostenfreie Stornierung bis einschließlich ${de(freeUntil)}.`, p.feePercent > 0 ? `Danach und bei Nichtanreise berechnen wir ${p.feePercent} % des Zimmerpreises.` : 'Auch danach berechnen wir bei Stornierung nichts.', p.extraText].filter(Boolean).join(' ');
   return { enabled: true, freeUntil, free, feePercent: p.feePercent, feeCents: free ? 0 : Math.round(lodgingCents * p.feePercent / 100), text };
 }
-export interface GuestLinkDto { url: string; qr: string; /** true = Adresse nur im Hausnetz erreichbar */ localOnly: boolean }
+export interface GuestLinkDto {
+  url: string; qr: string; /** true = Adresse nur im Hausnetz erreichbar */ localOnly: boolean;
+  /** gesperrt: der Link zeigt nichts mehr, bis er wieder freigegeben oder neu ausgestellt wird */
+  blocked: boolean; /** wie oft schon neu ausgestellt */ version: number; needsZip: boolean; guestEmail: string;
+}
+export const guestLinkActionInput = z.object({ action: z.enum(['block', 'unblock', 'renew']) });
 export interface PublicBooking {
   hotelName: string; hotelPhone: string; number: string; guestName: string;
   rooms: { category: string; from: string; to: string; nights: number; adults: number; children: number; status: RoomStatus }[];
-  from: string; to: string; totalCents: number;
+  from: string; to: string; /** null = Betrag wird dem Gast nicht gezeigt */ totalCents: number | null; welcome: string; canArrival: boolean;
   state: 'active' | 'cancelled' | 'arrived' | 'past';
   arrivalTime: string; guestMessage: string; checkinTime: string;
   terms: CancelTerms; canCancel: boolean; /** warum nicht online storniert werden kann */ cancelHint: string;

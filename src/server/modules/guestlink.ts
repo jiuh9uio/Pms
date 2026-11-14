@@ -16,7 +16,7 @@ import { getHotel } from './settings.js';
  * Zusätzlich muss der Gast seinen Nachnamen und – wenn hinterlegt – seine Postleitzahl eingeben; der Link allein zeigt nichts.
  * Eine Ausfallgebühr wird nie automatisch gebucht – sie wird berechnet, angezeigt und dem Personal gemeldet.
  */
-const POLICY0: CancelPolicy = { enabled: false, freeDays: 3, feePercent: 80, online: false, onlineLate: false, publicUrl: '', extraText: '' };
+const POLICY0: CancelPolicy = { enabled: false, freeDays: 3, feePercent: 80, online: false, onlineLate: false, publicUrl: '', extraText: '', showPrice: true, allowArrival: true, welcome: '' };
 export async function getPolicy(db: Exec): Promise<CancelPolicy> {
   const [row] = await db.select().from(settings).where(eq(settings.key, 'cancel_policy'));
   return { ...POLICY0, ...((row?.value as Partial<CancelPolicy>) ?? {}) };
@@ -28,29 +28,54 @@ export async function savePolicy(db: Db, actor: Actor, v: CancelPolicy) {
   return next;
 }
 
-const tokenFor = (bookingId: string) => `${bookingId.replace(/-/g, '')}.${sign(`booking-link:${bookingId}`)}`;
+const tokenFor = (bookingId: string, version: number) => `${bookingId.replace(/-/g, '')}.${sign(`booking-link:${bookingId}${version ? `:${version}` : ''}`)}`;
 const GONE = () => new AppError(404, 'link_gone', 'Dieser Link ist nicht gültig. Bitte wenden Sie sich an das Hotel.');
-function bookingIdOf(token: string): string {
+const linkState = async (db: Exec, id: string) => (await db.select({ version: bookings.linkVersion, blocked: bookings.linkBlocked }).from(bookings).where(eq(bookings.id, id)))[0];
+/** Prüft Form, Prüfsumme (zur aktuellen Ausgabe des Links) und Sperre; liefert die Kennung der Reservierung. */
+async function bookingIdOf(db: Exec, token: string): Promise<string> {
   const [hex, mac] = token.split('.');
   if (!hex || !mac || !/^[0-9a-f]{32}$/.test(hex)) throw GONE();
   const id = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-  const want = Buffer.from(sign(`booking-link:${id}`)), got = Buffer.from(mac);
-  if (want.length !== got.length || !timingSafeEqual(want, got)) throw GONE();
+  const st = await linkState(db, id);
+  if (!st) throw GONE();
+  const want = Buffer.from(tokenFor(id, st.version).split('.')[1]!), got = Buffer.from(mac);
+  if (want.length !== got.length || !timingSafeEqual(want, got)) throw GONE(); // auch: älterer, inzwischen ersetzter Link
+  if (st.blocked) throw new AppError(403, 'link_blocked', 'Dieser Link ist derzeit gesperrt. Bitte wenden Sie sich an das Hotel.');
   return id;
 }
 
 /** Link für das Personal (zum Kopieren, als QR-Code) – baseUrl ist die Adresse, unter der das Programm gerade aufgerufen wird. */
 export async function guestLink(db: Exec, bookingId: string, baseUrl: string, localOnly: boolean): Promise<GuestLinkDto> {
-  await getBooking(db, bookingId);
-  const p = await getPolicy(db);
+  const b = await getBooking(db, bookingId);
+  const [p, st] = [await getPolicy(db), (await linkState(db, bookingId))!];
   const base = p.publicUrl || baseUrl;
-  const url = `${base}/buchung/${tokenFor(bookingId)}`;
-  return { url, qr: await QRCode.toDataURL(url, { margin: 1, width: 240 }), localOnly: !p.publicUrl && localOnly };
+  const url = `${base}/buchung/${tokenFor(bookingId, st.version)}`;
+  return { url, qr: await QRCode.toDataURL(url, { margin: 1, width: 240 }), localOnly: !p.publicUrl && localOnly, blocked: st.blocked, version: st.version, needsZip: norm(b.guest.zip) !== '', guestEmail: b.guest.email };
+}
+/** Link sperren, wieder freigeben oder neu ausstellen (der bisherige Link gilt dann nicht mehr; eine Sperre wird dabei aufgehoben). */
+export async function linkAction(db: Db, actor: Actor, bookingId: string, action: 'block' | 'unblock' | 'renew') {
+  const st = await linkState(db, bookingId);
+  if (!st) throw GONE();
+  const set = action === 'renew' ? { linkVersion: st.version + 1, linkBlocked: false } : { linkBlocked: action === 'block' };
+  await db.update(bookings).set(set).where(eq(bookings.id, bookingId));
+  fails.delete(bookingId);
+  await record(db, actor, { action: `guest_link_${action}`, entity: 'booking', entityId: bookingId });
+  return { ok: true };
 }
 /** Link für E-Mails – nur wenn eine Adresse im Internet hinterlegt ist (sonst wäre er für den Gast zu Hause nicht erreichbar). */
 export async function mailLink(db: Exec, bookingId: string): Promise<string | null> {
-  const p = await getPolicy(db);
-  return p.publicUrl ? `${p.publicUrl}/buchung/${tokenFor(bookingId)}` : null;
+  const [p, st] = [await getPolicy(db), await linkState(db, bookingId)];
+  return p.publicUrl && st && !st.blocked ? `${p.publicUrl}/buchung/${tokenFor(bookingId, st.version)}` : null;
+}
+
+/** E-Mail an den Gast mit seinem Link (Vorschlag, vor dem Senden änderbar). */
+export async function linkMailDraft(db: Exec, bookingId: string, baseUrl: string, localOnly: boolean) {
+  const [b, h, l] = [await getBooking(db, bookingId), await getHotel(db), await guestLink(db, bookingId, baseUrl, localOnly)];
+  const { ready, signature } = await import('./hotelmail.js');
+  const hello = b.guest.salutation === 'Herr' ? `Sehr geehrter Herr ${b.guest.lastName},` : b.guest.salutation === 'Frau' ? `Sehr geehrte Frau ${b.guest.lastName},` : 'Guten Tag,';
+  const text = [hello, '', `über den folgenden Link erreichen Sie Ihre Reservierung ${b.number} bei uns:`, '', l.url, '',
+    `Zum Öffnen geben Sie Ihren Nachnamen${l.needsZip ? ' und Ihre Postleitzahl' : ''} ein. Dort können Sie uns Ihre voraussichtliche Ankunftszeit mitteilen.`, '', signature(h)].join('\n');
+  return { to: b.guest.email, subject: `Ihre Reservierung ${b.number} – ${h.name}`, text, attachment: null, ready: await ready(db) };
 }
 
 async function view(db: Exec, bookingId: string): Promise<PublicBooking> {
@@ -70,7 +95,7 @@ async function view(db: Exec, bookingId: string): Promise<PublicBooking> {
   return {
     hotelName: h.name, hotelPhone: h.phone, number: b.number, guestName: [b.guest.firstName, b.guest.lastName].filter(Boolean).join(' '),
     rooms: shown.map((r) => ({ category: r.categoryName, from: r.from, to: r.to, nights: r.nights, adults: r.adults, children: r.children, status: r.status })),
-    from, to, totalCents: b.totalCents, state, arrivalTime: b.arrivalTime, guestMessage: b.guestMessage, checkinTime: h.checkinTime,
+    from, to, totalCents: p.showPrice ? b.totalCents : null, welcome: p.welcome, canArrival: p.allowArrival && state === 'active', state, arrivalTime: b.arrivalTime, guestMessage: b.guestMessage, checkinTime: h.checkinTime,
     terms, canCancel: state === 'active' && cancelHint === '', cancelHint,
   };
 }
@@ -90,12 +115,12 @@ async function guestOf(db: Exec, bookingId: string) {
 }
 /** Vor der Eingabe: nur Name des Hauses und ob eine Postleitzahl verlangt wird – nichts über die Reservierung. */
 export async function linkGate(db: Exec, token: string): Promise<PublicBookingGate> {
-  const [g, h] = [await guestOf(db, bookingIdOf(token)), await getHotel(db)];
+  const [g, h] = [await guestOf(db, await bookingIdOf(db, token)), await getHotel(db)];
   return { hotelName: h.name, hotelPhone: h.phone, needsZip: norm(g.zip) !== '' };
 }
 /** Prüft Nachname und Postleitzahl gegen die Angaben des Gastes; liefert die Kennung der Reservierung. */
 async function enter(db: Exec, token: string, cred: PublicCred, now = Date.now()): Promise<string> {
-  const id = bookingIdOf(token);
+  const id = await bookingIdOf(db, token);
   const f = fails.get(id);
   if (f && f.until > now) throw new AppError(429, 'link_locked', 'Zu viele falsche Eingaben. Bitte versuchen Sie es in 15 Minuten noch einmal oder rufen Sie uns an.');
   const g = await guestOf(db, id);
@@ -119,7 +144,7 @@ const tellTeam = (db: Exec, text: string) => db.insert(teamNotes).values({ kind:
 export async function setArrival(db: Db, token: string, v: PublicCred & { time: string; message: string }, ip: string | null) {
   const id = await enter(db, token, v);
   const b = await view(db, id);
-  if (b.state !== 'active') throw conflict('Für diese Reservierung lässt sich die Ankunftszeit nicht mehr ändern.');
+  if (!b.canArrival) throw conflict('Für diese Reservierung lässt sich die Ankunftszeit hier nicht ändern.');
   await db.update(bookings).set({ arrivalTime: v.time, guestMessage: v.message, updatedAt: new Date() }).where(eq(bookings.id, id));
   await record(db, { ...GUEST, ip }, { action: 'guest_arrival', entity: 'booking', entityId: id, after: { arrivalTime: v.time, message: v.message.slice(0, 200) } });
   if (v.time || v.message) await tellTeam(db, `Reservierung ${b.number} (${b.guestName}, Anreise ${de(b.from)}): ${v.time ? `Ankunft voraussichtlich ${v.time} Uhr` : 'Nachricht des Gastes'}${v.message ? ` – „${v.message}“` : ''}`);

@@ -16,9 +16,15 @@ export function CancelPolicyCard() {
   const sample = Number.isInteger(payload.freeDays) && Number.isInteger(payload.feePercent) ? cancelTerms({ ...payload, enabled: true }, addDays(todayBerlin(), 14), 20000, todayBerlin()).text : '';
   return (
     <form className="card" onSubmit={(e) => void f.submit(payload, e)} noValidate>
-      <h2>Stornobedingungen und Gäste-Link</h2>
-      <p className="muted">Jede Reservierung hat einen persönlichen Link für den Gast. Darüber sieht er – nach Eingabe von Nachname und Postleitzahl – seine Buchung, teilt die Ankunftszeit mit und kann, wenn Sie es erlauben, selbst stornieren. Den Link finden Sie in der Reservierung unter „Angaben“.</p>
+      <h2>Gäste-Link und Stornobedingungen</h2>
+      <p className="muted">Jede Reservierung hat einen persönlichen Link für den Gast. Darüber sieht er – nach Eingabe von Nachname und Postleitzahl – seine Buchung, teilt die Ankunftszeit mit und kann, wenn Sie es erlauben, selbst stornieren. Den Link erstellen, senden, sperren oder neu ausstellen Sie in der Reservierung über „Gäste-Link“.</p>
       <div className="formgrid cols3">
+        <h3 className="wide">Was der Gast auf seiner Seite sieht</h3>
+        <label className="check wide"><input type="checkbox" checked={v.showPrice} onChange={(e) => setV({ ...v, showPrice: e.target.checked })} /><span>Gesamtbetrag anzeigen</span></label>
+        <label className="check wide"><input type="checkbox" checked={v.allowArrival} onChange={(e) => setV({ ...v, allowArrival: e.target.checked })} /><span>Ankunftszeit und Nachricht an das Haus erlauben<small>erscheint in der Reservierung und als Meldung im Übergabebuch</small></span></label>
+        <Field label="Begrüßungstext oben auf der Seite" error={f.errors.welcome} wide hint="freiwillig"><input value={v.welcome} onChange={(e) => setV({ ...v, welcome: e.target.value })} placeholder="z. B. Wir freuen uns auf Ihren Besuch." /></Field>
+        <p className="muted small wide">Immer zu sehen sind Zeitraum, Zimmerkategorie und Personenzahl. Nie gezeigt werden Anschrift, Ausweisdaten, Zimmernummer und interne Bemerkungen.</p>
+        <h3 className="wide">Stornieren</h3>
         <label className="check wide"><input type="checkbox" checked={v.enabled} onChange={(e) => setV({ ...v, enabled: e.target.checked })} /><span>Stornobedingungen anwenden<small>Sie stehen dann in der Reservierungsbestätigung, auf der Seite des Gastes und in der Reservierung.</small></span></label>
         <Field label="Kostenfrei bis … Tage vor Anreise" error={f.errors.freeDays} hint="0 = bis zum Anreisetag"><input inputMode="numeric" value={v.freeDays} onChange={(e) => setV({ ...v, freeDays: e.target.value })} /></Field>
         <Field label="Danach in Prozent des Zimmerpreises" error={f.errors.feePercent} hint="auch bei Nichtanreise; 0 = nichts"><input inputMode="numeric" value={v.feePercent} onChange={(e) => setV({ ...v, feePercent: e.target.value })} /></Field>

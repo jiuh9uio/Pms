@@ -12,6 +12,7 @@ import { BookingBilling } from '../billing/BookingBilling.tsx';
 import { CompanySelect } from './CompanySelect.tsx';
 import { GuestFormDialog } from './GuestFormDialog.tsx';
 import { MailDialog } from './MailDialog.tsx';
+import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { Button, Dialog, Field, LoadState, fmtDateTime, useLoad, useSubmit, useToast } from '../ui.tsx';
 import { GuestFields, StatusBadge, deDate, deShort, persons, toDraft, type GuestDraft } from './common.tsx';
@@ -345,8 +346,10 @@ function Meta({ booking }: { booking: BookingDto }) {
   const f = useSubmit(bookingUpdateInput, async (d) => { await api('PATCH', `/bookings/${booking.id}`, d); toast('Angaben gespeichert'); bump(); });
   const opts = (list: string[], cur: string) => (cur && !list.includes(cur) ? [cur, ...list] : list);
   return (
+    <>
+    {/* außerhalb des Formulars: das Fenster „Gäste-Link“ enthält ein eigenes Formular (E-Mail) */}
+    <GuestSide booking={booking} />
     <form onSubmit={(e) => void f.submit({ ...v, companyId: v.companyId || null, version: booking.version }, e)} noValidate>
-      <GuestSide booking={booking} />
       <h3>Angaben</h3>
       <div className="formgrid">
         <div className="wide"><CompanySelect value={v.companyId} onChange={(cid) => setV({ ...v, companyId: cid })} hint={v.companyId !== (booking.companyId ?? '') ? 'Gilt für neu hinzukommende Nächte und neue Rechnungen; gebuchte Preise bleiben.' : undefined} /></div>
@@ -358,30 +361,73 @@ function Meta({ booking }: { booking: BookingDto }) {
       </div>
       {dirty && <div className="formactions"><Button type="submit" variant="primary" busy={f.busy}>Angaben speichern</Button></div>}
     </form>
+    </>
   );
 }
 
 /** Was der Gast über seinen Link mitgeteilt hat, die Stornobedingungen dieser Reservierung und der Link selbst. */
 function GuestSide({ booking }: { booking: BookingDto }) {
-  const toast = useToast();
   const terms = useLoad(() => api<CancelTerms>('GET', `/bookings/${booking.id}/cancel-terms`), [booking.id, booking.version]).data;
-  const [link, setLink] = useState<GuestLinkDto | null>(null);
-  const show = async () => { try { setLink(await api<GuestLinkDto>('GET', `/bookings/${booking.id}/guest-link`)); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); } };
-  const copy = async () => { try { await navigator.clipboard.writeText(link!.url); toast('Link kopiert'); } catch { toast('Kopieren nicht möglich – bitte den Link markieren', 'error'); } };
+  const [win, setWin] = useState(false);
   const active = booking.rooms.some((r) => r.status === 'tentative' || r.status === 'confirmed');
   return (
     <>
       {(booking.arrivalTime || booking.guestMessage) && <p className="notice"><b>Vom Gast:</b> {booking.arrivalTime && `Ankunft voraussichtlich ${booking.arrivalTime} Uhr. `}{booking.guestMessage && `„${booking.guestMessage}“`}</p>}
       {terms?.enabled && active && <p className="muted small">Storno: {terms.free ? `kostenfrei bis einschließlich ${deDate(terms.freeUntil!)}` : `Frist abgelaufen (${deDate(terms.freeUntil!)}) – Ausfallgebühr laut Bedingungen ${formatMoney(terms.feeCents)} (${terms.feePercent} %)`}.</p>}
-      {link ? (
-        <div className="guestlink">
-          <img src={link.qr} alt="QR-Code zum Gäste-Link" width={120} height={120} />
-          <div><p><b>Link für den Gast</b> – Reservierung ansehen, Ankunftszeit mitteilen, stornieren. Zum Öffnen gibt der Gast seinen Nachnamen{booking.guest.zip ? ' und seine Postleitzahl' : ''} ein{booking.guest.zip ? '' : ' (eine Postleitzahl ist beim Gast nicht hinterlegt)'}:</p><p><code className="wrapcode">{link.url}</code></p>
-            <p><Button onClick={() => void copy()}>Link kopieren</Button></p>
-            {link.localOnly && <p className="muted small">Diese Adresse ist nur im Hausnetz erreichbar. Für Gäste zu Hause muss das Programm aus dem Internet erreichbar und die Adresse unter Einstellungen → Algorithmen → Storno eingetragen sein.</p>}</div>
-        </div>
-      ) : <p><button type="button" className="linkbtn" onClick={() => void show()}>Link für den Gast anzeigen</button></p>}
+      <p><Button onClick={() => setWin(true)}>Gäste-Link</Button> <span className="muted small">Link erstellen, senden, sperren oder neu ausstellen</span></p>
+      {win && <GuestLinkWindow booking={booking} onClose={() => setWin(false)} />}
     </>
+  );
+}
+
+/** Fenster „Gäste-Link“: Link mit QR-Code, Kopieren, per E-Mail senden, sperren, neu ausstellen. */
+function GuestLinkWindow({ booking, onClose }: { booking: BookingDto; onClose: () => void }) {
+  const toast = useToast();
+  const { user } = useAuth();
+  const [rev, setRev] = useState(0);
+  const { data: link, error } = useLoad(() => api<GuestLinkDto>('GET', `/bookings/${booking.id}/guest-link`), [rev]);
+  const [mail, setMail] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const copy = async () => { try { await navigator.clipboard.writeText(link!.url); toast('Link kopiert'); } catch { toast('Kopieren nicht möglich – bitte den Link markieren', 'error'); } };
+  const act = async (action: 'block' | 'unblock' | 'renew', ask: string, done: string) => {
+    if (!window.confirm(ask)) return;
+    setBusy(true);
+    try { await api('POST', `/bookings/${booking.id}/guest-link`, { action }); toast(done); setRev(rev + 1); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+    setBusy(false);
+  };
+  return (
+    <Dialog title={`Gäste-Link – Reservierung ${booking.number}`} onClose={onClose} size="lg" footer={<Button onClick={onClose}>Schließen</Button>}>
+      {!link ? <LoadState error={error} loading /> : (
+        <>
+          {link.blocked && <p className="notice danger"><b>Der Link ist gesperrt.</b> Der Gast sieht damit nichts und kann nichts ändern, bis Sie ihn wieder freigeben oder neu ausstellen.</p>}
+          <div className="guestlink">
+            <img src={link.qr} alt="QR-Code zum Gäste-Link" width={150} height={150} />
+            <div>
+              <p><code className="wrapcode">{link.url}</code></p>
+              <p className="muted small">Zum Öffnen gibt der Gast seinen Nachnamen{link.needsZip ? ' und seine Postleitzahl' : ''} ein{link.needsZip ? '' : ' – eine Postleitzahl ist bei ihm nicht hinterlegt; tragen Sie sie beim Gast ein, wenn sie verlangt werden soll'}.</p>
+              {link.localOnly && <p className="notice warn">Diese Adresse ist nur im Hausnetz erreichbar. Für Gäste zu Hause muss das Programm aus dem Internet erreichbar und die Adresse unter Einstellungen → Algorithmen → Storno eingetragen sein.</p>}
+            </div>
+          </div>
+          <div className="formactions">
+            <Button variant="primary" disabled={link.blocked} onClick={() => void copy()}>Link kopieren</Button>
+            <Button disabled={link.blocked} onClick={() => setMail(true)}>Per E-Mail senden</Button>
+            <a className="btn" href={link.url} target="_blank" rel="noreferrer">Seite ansehen</a>
+          </div>
+          {!link.guestEmail && <p className="muted small">Beim Gast ist keine E-Mail-Adresse hinterlegt – sie lässt sich im Sendefenster eintragen.</p>}
+          <h3>Wenn es ein Problem gibt</h3>
+          <div className="formactions">
+            {link.blocked
+              ? <Button busy={busy} onClick={() => void act('unblock', 'Link wieder freigeben?', 'Link freigegeben')}>Wieder freigeben</Button>
+              : <Button busy={busy} onClick={() => void act('block', 'Link sperren? Der Gast kann seine Reservierung dann nicht mehr öffnen.', 'Link gesperrt')}>Link sperren</Button>}
+            <Button variant="danger" busy={busy} onClick={() => void act('renew', 'Neuen Link ausstellen?\n\nDer bisherige Link funktioniert danach nicht mehr – auch nicht der in bereits verschickten E-Mails. Den neuen müssen Sie dem Gast erneut schicken.', 'Neuer Link ausgestellt')}>Neuen Link ausstellen</Button>
+          </div>
+          <p className="muted small">Sperren: wenn der Link in falsche Hände geraten sein könnte oder der Gast nichts mehr selbst ändern soll. Neu ausstellen: macht den alten Link endgültig ungültig{link.version > 0 ? ` (bisher ${link.version}-mal neu ausgestellt)` : ''}. Nach acht falschen Eingaben von Name und Postleitzahl sperrt sich der Link von selbst für 15 Minuten; Sperren oder Neu-Ausstellen hebt das sofort auf.
+            {user.role === 'admin' ? ' Was der Gast auf der Seite sieht, stellen Sie unter Einstellungen → Algorithmen → Storno ein.' : ' Was der Gast auf der Seite sieht, legt der Administrator fest.'}</p>
+          {mail && <MailDialog path={`/bookings/${booking.id}/guest-link/mail`} title="Gäste-Link per E-Mail senden" onClose={() => setMail(false)} />}
+        </>
+      )}
+    </Dialog>
   );
 }
 

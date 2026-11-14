@@ -165,6 +165,9 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   api.get('/settings/cancel-policy', admin, () => guestlink.getPolicy(db));
   api.put('/settings/cancel-policy', admin, (req) => guestlink.savePolicy(db, actor(req), H.cancelPolicyInput.parse(req.body)));
   api.get('/bookings/:id/guest-link', user, (req) => { const base = guestBaseUrl(req); return guestlink.guestLink(db, idOf(req), base.url, base.localOnly); });
+  api.post('/bookings/:id/guest-link', user, (req) => guestlink.linkAction(db, actor(req), idOf(req), H.guestLinkActionInput.parse(req.body).action));
+  api.get('/bookings/:id/guest-link/mail', user, (req) => { const base = guestBaseUrl(req); return guestlink.linkMailDraft(db, idOf(req), base.url, base.localOnly); });
+  api.post('/bookings/:id/guest-link/mail', user, (req) => hotelmail.sendBookingMail(db, actor(req), idOf(req), H.mailSendInput.parse(req.body)));
   api.get('/bookings/:id/cancel-terms', user, (req) => guestlink.termsFor(db, idOf(req)));
   api.get('/bookings/:id/guest-form', user, (req) => guestforms.formStatus(db, idOf(req)));
   api.post('/bookings/:id/guest-form', user, (req) => {

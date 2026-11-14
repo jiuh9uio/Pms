@@ -286,9 +286,10 @@ rechtlich geprüft ist, steht dort ausdrücklich.
 - `guests.guestDuplicates` / `mergeGuests`: gleiche E-Mail oder gleicher Name; Zusammenführen verschiebt die Reservierungen,
   ergänzt leere Felder und löscht den zweiten Eintrag (nicht umkehrbar, im Protokoll vermerkt).
 - **Stornobedingungen und Gäste-Link (seit 1.32.0, `src/server/modules/guestlink.ts`):** Einstellung `cancel_policy`
-  (Frist in Tagen, Prozentsatz, Online-Storno, auch nach Frist, Internetadresse). Der Link `/buchung/<id>.<Prüfsumme>` trägt
-  eine HMAC-Prüfsumme mit dem Schlüssel der Installation (`secret.key`) und wird nicht gespeichert; er lässt sich daher nicht
-  einzeln widerrufen und gilt, solange die Reservierung besteht. Seit 1.32.1 verlangt jede Abfrage zusätzlich Nachname und
+  (Frist in Tagen, Prozentsatz, Online-Storno, auch nach Frist, Internetadresse, Anzeige von Betrag/Ankunftszeit, Begrüßung).
+  Der Link `/buchung/<id>.<Prüfsumme>` trägt eine HMAC-Prüfsumme mit dem Schlüssel der Installation (`secret.key`) über
+  Reservierung und Ausgabe-Nummer (`bookings.link_version`); er wird nicht gespeichert. Seit 1.33.0 lässt er sich je
+  Reservierung sperren (`link_blocked`) und neu ausstellen (Ausgabe-Nummer +1, alter Link ungültig). Seit 1.32.1 verlangt jede Abfrage zusätzlich Nachname und
   – falls hinterlegt – Postleitzahl des Gastes (Vergleich ohne Groß-/Kleinschreibung, Umlaute großzügig); nach 8 Fehlversuchen
   15 Minuten Sperre je Reservierung (im Arbeitsspeicher). Öffentlich: `GET /public/booking/:token` (nur Hausname),
   `POST …/open`, `POST …/arrival`, `POST …/cancel` (Begrenzung wie die anderen öffentlichen Seiten). Die Seite zeigt Zeitraum, Kategorie,

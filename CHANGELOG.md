@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.33.0
+
+- Reservierung → neues Fenster „Gäste-Link“: Link mit QR-Code ansehen, kopieren, per E-Mail an den Gast senden, die Seite selbst ansehen.
+- Wenn es ein Problem gibt: Link sperren (der Gast sieht dann nichts mehr), wieder freigeben oder neu ausstellen – der alte Link ist danach endgültig ungültig.
+- Einstellungen → Algorithmen → Storno: einstellbar, was der Gast sieht – Gesamtbetrag ja/nein, Ankunftszeit und Nachricht ja/nein, eigener Begrüßungstext.
+
 ## 1.32.1
 
 - Gäste-Link zusätzlich abgesichert: Der Link allein zeigt nichts mehr. Der Gast gibt seinen Nachnamen und – wenn bei ihm hinterlegt – seine Postleitzahl ein; erst dann öffnet sich die Reservierung. Nach acht falschen Eingaben ist der Link 15 Minuten gesperrt.

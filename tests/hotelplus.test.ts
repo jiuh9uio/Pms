@@ -12,8 +12,10 @@ let app: FastifyInstance;
 let admin: Record<string, string>;
 let user: Record<string, string>;
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH';
+/** Absenderadresse der Anfragen – die öffentlichen Seiten erlauben 30 Aufrufe je Minute und Absender */
+let clientIp = '127.0.0.1';
 const call = (method: Method, path: string, cookies: Record<string, string>, payload?: unknown) =>
-  app.inject({ method, url: '/api/v1' + path, cookies, payload: payload as object | undefined });
+  app.inject({ method, url: '/api/v1' + path, cookies, payload: payload as object | undefined, remoteAddress: clientIp });
 const ok = async (method: Method, path: string, cookies: Record<string, string>, payload?: unknown) => {
   const res = await call(method, path, cookies, payload);
   expect(res.statusCode, `${method} ${path}: ${res.body.slice(0, 300)}`).toBe(200);
@@ -228,5 +230,44 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     d = await ok('GET', `/bookings/${id}/mail`, user);
     expect(d.text).toMatch(/stornieren: https:\/\/hotel\.example\.de\/buchung\/[0-9a-f]{32}\./);
     expect((await ok('GET', `/bookings/${id}/guest-link`, user))).toMatchObject({ localOnly: false });
+  });
+
+  it('lässt den Gäste-Link sperren und neu ausstellen und zeigt nur, was eingestellt ist', async () => {
+    clientIp = '10.0.0.7'; // eigener Absender, damit die Begrenzung der vorigen Tests nicht greift
+    const policy = { enabled: true, freeDays: 3, feePercent: 80, online: true, onlineLate: false, publicUrl: '', extraText: '' };
+    await ok('PUT', '/settings/cancel-policy', admin, { ...policy, showPrice: false, allowArrival: false, welcome: 'Schön, dass Sie kommen.' });
+    const id = await mk({ firstName: 'Kai', lastName: 'Konfig', email: 'kai@example.com' }, addDays(today, 90), addDays(today, 91));
+    const cred = { lastName: 'Konfig', zip: '11111' };
+    const tok = (u: string) => u.split('/buchung/')[1]!;
+    const first = await ok('GET', `/bookings/${id}/guest-link`, user);
+    expect(first).toMatchObject({ blocked: false, version: 0, needsZip: true, guestEmail: 'kai@example.com' });
+    const t1 = tok(first.url);
+    // Anzeige nach Einstellung: kein Betrag, keine Ankunftszeit, Begrüßung
+    const pub = await ok('POST', `/public/booking/${t1}/open`, {}, cred);
+    expect(pub).toMatchObject({ totalCents: null, canArrival: false, welcome: 'Schön, dass Sie kommen.', canCancel: true });
+    expect((await call('POST', `/public/booking/${t1}/arrival`, {}, { ...cred, time: '18:00', message: '' })).statusCode).toBe(409);
+    // sperren: nichts geht mehr, auch nicht die Eingabeseite
+    expect((await call('POST', `/bookings/${id}/guest-link`, user, { action: 'kaputt' })).statusCode).toBe(400);
+    await ok('POST', `/bookings/${id}/guest-link`, user, { action: 'block' });
+    expect((await ok('GET', `/bookings/${id}/guest-link`, user)).blocked).toBe(true);
+    expect((await call('GET', `/public/booking/${t1}`, {})).statusCode).toBe(403);
+    expect((await call('POST', `/public/booking/${t1}/open`, {}, cred)).statusCode).toBe(403);
+    expect((await call('POST', `/public/booking/${t1}/cancel`, {}, { ...cred, confirm: true })).statusCode).toBe(403);
+    await ok('POST', `/bookings/${id}/guest-link`, user, { action: 'unblock' });
+    expect((await ok('POST', `/public/booking/${t1}/open`, {}, cred)).state).toBe('active');
+    // neu ausstellen: der alte Link ist endgültig ungültig, der neue gilt
+    await ok('POST', `/bookings/${id}/guest-link`, user, { action: 'renew' });
+    const second = await ok('GET', `/bookings/${id}/guest-link`, user);
+    expect(second.version).toBe(1);
+    expect(tok(second.url)).not.toBe(t1);
+    expect((await call('GET', `/public/booking/${t1}`, {})).statusCode).toBe(404);
+    expect((await ok('POST', `/public/booking/${tok(second.url)}/open`, {}, cred)).guestName).toBe('Kai Konfig');
+    // E-Mail mit dem Link: Vorschlag enthält die aktuelle Adresse und den Hinweis auf Name und Postleitzahl
+    const draft = await ok('GET', `/bookings/${id}/guest-link/mail`, user);
+    expect(draft).toMatchObject({ to: 'kai@example.com' });
+    expect(draft.text).toContain(second.url);
+    expect(draft.text).toContain('Ihren Nachnamen und Ihre Postleitzahl');
+    const log = await db.execute(sql`select action from audit_log where action like 'guest_link_%' order by id`);
+    expect(log.map((r) => r.action)).toEqual(['guest_link_block', 'guest_link_unblock', 'guest_link_renew']);
   });
 });
