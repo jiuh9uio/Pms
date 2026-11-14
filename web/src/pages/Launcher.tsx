@@ -16,6 +16,7 @@ const TILES: Tile[] = [
   { to: '/kontrollen', title: 'Kontrollen', text: 'Hygieneamt, Finanzamt und weitere: Unterlagen, Temperaturprotokolle, Besuche', icon: '✓', module: 'kontrollen' },
   { to: '/erechnung', title: 'E-Rechnung', text: 'PDF-Rechnungen in ZUGFeRD umwandeln und per E-Mail versenden', icon: '✉', module: 'erechnung' },
   { to: '/internet', title: 'Internet', text: 'Internetverbindung prüfen, Geräte im Hausnetz anzeigen und benennen', icon: '⌁', module: 'internet' },
+  { to: '/team', title: 'Team', text: 'Übergabebuch, Aufgaben und Reparaturen für alle Schichten', icon: '✎' },
   { to: '/email', title: 'E-Mail', text: 'Geschäftspostfach lesen, Zimmer- und Tischanfragen erkennen und übernehmen', icon: '✉', module: 'email' },
   { to: '/benutzer', title: 'Verwaltung', text: 'Benutzer, Änderungsprotokoll, Einstellungen', icon: '⚙', admin: true },
   { to: '/konto', title: 'Mein Konto', text: 'Passwort, Darstellung', icon: '◐', admin: true },
@@ -38,6 +39,7 @@ export function Launcher() {
   useEffect(() => { if (hasModule(user, 'hotel')) api<{ present: boolean }>('GET', '/settings/logo-info').then((r) => setLogo(r.present)).catch(() => setLogo(false)); }, [user]);
   // offene Anfragen im E-Mail-Posteingang als Zähler an der Kachel
   const mailNew = useLoad(() => (hasModule(user, 'email') ? api<{ newCount: number; ready: boolean }>('GET', '/inbox/state') : Promise.resolve(null))).data;
+  const teamNew = useLoad(() => api<{ unread: number; openTasks: number }>('GET', '/team/state')).data;
   const tiles = TILES.filter((t) => (!t.admin || user.role === 'admin') && (!t.module || hasModule(user, t.module)));
   return (
     <div className="launcher">
@@ -60,7 +62,7 @@ export function Launcher() {
         {tiles.map((t) => (
           <Link key={t.to} to={t.to} className="tile">
             <span className="tile-icon" aria-hidden>{t.icon}</span>
-            <span className="tile-title">{t.title}{t.module === 'email' && mailNew && mailNew.newCount > 0 && <span className="tile-count" aria-label={`${mailNew.newCount} offen`}>{mailNew.newCount}</span>}</span>
+            <span className="tile-title">{t.title}{t.module === 'email' && mailNew && mailNew.newCount > 0 && <span className="tile-count" aria-label={`${mailNew.newCount} offen`}>{mailNew.newCount}</span>}{t.to === '/team' && teamNew && teamNew.unread > 0 && <span className="tile-count" aria-label={`${teamNew.unread} ungelesen`}>{teamNew.unread}</span>}</span>
             <span className="tile-text">{t.text}</span>
           </Link>
         ))}

@@ -68,7 +68,7 @@ export function parseChangelog(md: string): ChangelogEntry[] {
 }
 export function getChangelog(): ChangelogEntry[] {
   for (const file of [ctx ? join(ctx.home, 'app', 'CHANGELOG.md') : '', join(process.cwd(), 'CHANGELOG.md')]) {
-    try { if (file && existsSync(file)) return parseChangelog(readFileSync(file, 'utf8')).slice(0, 30); } catch { /* nächste Stelle */ }
+    try { if (file && existsSync(file)) return parseChangelog(readFileSync(file, 'utf8')).slice(0, 100); } catch { /* nächste Stelle */ }
   }
   return [];
 }

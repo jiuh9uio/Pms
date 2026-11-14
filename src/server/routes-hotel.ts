@@ -5,6 +5,7 @@ import type { Db } from './db/client.js';
 import { listAudit, type Actor } from './modules/audit.js';
 import * as bookings from './modules/bookings.js';
 import * as breakfast from './modules/breakfast.js';
+import { cleanList, dayReport } from './modules/team.js';
 import * as companies from './modules/companies.js';
 import { networkInterfaces } from 'node:os';
 import * as guestforms from './modules/guestforms.js';
@@ -139,6 +140,8 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   // ---------- Frühstücksliste und Küchendrucker ----------
   const dateOf = (v: unknown) => z.object({ date: z.string().refine(H.isIsoDate) }).parse(v).date;
   api.get('/breakfast', user, (req) => breakfast.breakfastList(db, dateOf(req.query)));
+  api.get('/housekeeping', user, (req) => cleanList(db, dateOf(req.query)));
+  api.get('/reports/day', user, (req) => dayReport(db, dateOf(req.query)));
   api.get('/breakfast/week', user, (req) => breakfast.breakfastWeek(db, dateOf(req.query)));
   api.post('/breakfast/print', user, (req) => breakfast.printBreakfast(db, actor(req), dateOf(req.body)));
   api.get('/settings/breakfast-rules', admin, () => breakfast.getRules(db));

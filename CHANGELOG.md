@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.27.0
+
+- Neuer Bereich „Team“ (für alle Benutzer): Übergabebuch, Aufgaben und Reparaturmeldungen mit Lesebestätigung, Fälligkeit und Erledigt-Vermerk. Die Kachel im Startmenü zeigt die Zahl der ungelesenen Einträge.
+- Hotel → „Reinigung“: Tagesliste aller Zimmer mit Abreise, Bleiber und Anreise, daraus End- oder Zwischenreinigung, „Fertig“-Knopf und Ausdruck.
+- Hotel → „Tagesabschluss“: Zahlungen je Zahlungsart mit Einzelliste, Rechnungen des Tages, offene An- und Abreisen, Vergleich mit dem gezählten Bargeld. Eine Übersicht zum Abgleich – kein Kassenbuch.
+- Grundlage ist ein Vergleich mit professionellen Systemen, nachzulesen in docs/marktvergleich.md.
+
 ## 1.26.0
 
 - Frühstück: oben eine Vorschau der nächsten sieben Tage mit Zahl der Frühstücksgäste und der jeweils geltenden Regel – für die Personalplanung.

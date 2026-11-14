@@ -124,6 +124,10 @@ jobs:
           $pv = Post '/settings/purge' @{ billing = $true; bookings = 'past'; guests = $false; resetNumbers = $false; dryRun = $true; password = ''; confirm = '' } $s
           if (-not $pv.dryRun) { throw 'Vorschau für Daten löschen fehlerhaft' }
           if ((Invoke-RestMethod "$base/inbox/state" -WebSession $s).ready) { throw 'E-Mail-Empfang ist ohne Einrichtung als bereit gemeldet' }
+          $tn = Post '/team/notes' @{ kind = 'repair'; text = 'Testmeldung'; place = 'Zimmer 1'; dueDate = '' } $s
+          if (-not $tn.id) { throw 'Team-Eintrag wurde nicht gespeichert' }
+          $day = Invoke-RestMethod "$base/reports/day?date=$(Get-Date -Format 'yyyy-MM-dd')" -WebSession $s
+          if ($null -eq $day.totalCents) { throw 'Tagesabschluss fehlerhaft' }
           $gr = Post '/goods-receipts' @{ supplier = 'Test'; goods = 'Ware'; tempC = 3.5; ok = $true; note = '' } $s
           if (-not $gr.id) { throw 'Wareneingang wurde nicht gespeichert' }
           $rep = Invoke-RestMethod "$base/reports/year?year=2031" -WebSession $s

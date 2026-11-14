@@ -29,6 +29,8 @@ import { registerRestaurantRoutes } from './routes-restaurant.js';
 import { getBackupStatus, runBackup } from './backup.js';
 import { purge } from './modules/purge.js';
 import * as inbox from './modules/inbox.js';
+import * as team from './modules/team.js';
+import * as T from '../shared/team.js';
 import * as I from '../shared/inbox.js';
 import { mailSendInput } from '../shared/hotel.js';
 import { checkForUpdate, getChangelog, getUpdateStatus, installUpdate } from './update.js';
@@ -207,6 +209,14 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     });
 
     // ---------- „Heute im Haus“ für das Startmenü ----------
+    // ---------- Team: Übergabebuch, Aufgaben, Reparaturen (alle angemeldeten Benutzer) ----------
+    const any = { preHandler: requireUser };
+    const noteId = (req: FastifyRequest) => z.uuid().parse((req.params as { id: string }).id);
+    api.get('/team/notes', any, (req) => team.listNotes(db, actor(req), T.teamListQuery.parse(req.query).view));
+    api.get('/team/state', any, (req) => team.teamState(db, actor(req)));
+    api.post('/team/notes', any, (req) => team.createNote(db, actor(req), T.teamNoteInput.parse(req.body)));
+    api.post('/team/notes/:id/read', any, (req) => team.markRead(db, actor(req), noteId(req)));
+    api.post('/team/notes/:id/done', any, (req) => { const v = T.teamDoneInput.parse(req.body); return team.setDone(db, actor(req), noteId(req), v.done, v.note); });
     api.get('/overview', { preHandler: requireUser }, (req) => overview(db, req.user!));
 
     // ---------- Suche über alle freigegebenen Bereiche ----------

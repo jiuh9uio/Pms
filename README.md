@@ -8,12 +8,13 @@ Konzept, Datenmodell und offene Fragen: [`docs/konzept.md`](docs/konzept.md).
 | Bereich | Inhalt |
 |---|---|
 | Startmenü | Kacheln je freigegebenem Bereich, Suche (Strg+K), „Heute im Haus“ |
-| Hotel | Übersicht, Belegungsplan, Reservierungen, Frühstücksliste, Gäste, Firmen, Rechnungen und Zahlungen (auch EC-Gerät im Testbetrieb), Auswertung, Zimmer & Preise |
+| Hotel | Übersicht, Belegungsplan, Reservierungen, Frühstücksliste, Reinigungsliste, Tagesabschluss, Gäste, Firmen, Rechnungen und Zahlungen (auch EC-Gerät im Testbetrieb), Auswertung, Zimmer & Preise |
 | Restaurant | Tischreservierungen je Tag, Tische |
 | Schnelldruck | Info-Zettel auf dem Bondrucker (Öffnungszeiten, WLAN, Aufenthalt, Bewertung, eigene) |
 | Kontrollen | Temperatur-, Reinigungs- und Wareneingangsprotokoll, Unterlagen, Kontrollbesuche |
 | E-Rechnung | PDF → ZUGFeRD, Versand per E-Mail |
 | Internet | Verbindung und Ausfallprotokoll, Gäste-WLAN-Aushang, Geräte im Netz |
+| Team | Übergabebuch, Aufgaben, Reparaturen mit Lesebestätigung (alle Benutzer) |
 | E-Mail | Geschäftspostfach abrufen, Zimmer- und Tischanfragen erkennen, übernehmen, beantworten und bestätigen |
 | Verwaltung | Benutzer und Freigaben, Änderungsprotokoll, Einstellungen (Haus, E-Mail, Drucker, EC-Gerät, TSE, Steuersätze, Algorithmen, Hausnetz, Datensicherung, Programm-Update, Daten löschen) |
 

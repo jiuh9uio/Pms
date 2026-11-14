@@ -22,7 +22,10 @@ import { Plan } from './pages/Plan.tsx';
 import { QuickPrint } from './pages/QuickPrint.tsx';
 import { Reservations } from './pages/Reservations.tsx';
 import { Restaurant } from './pages/Restaurant.tsx';
+import { DayReport } from './pages/DayReport.tsx';
+import { Housekeeping } from './pages/Housekeeping.tsx';
 import { Inbox } from './pages/Inbox.tsx';
+import { Team } from './pages/Team.tsx';
 import { RoomsPrices } from './pages/RoomsPrices.tsx';
 import { Settings } from './pages/Settings.tsx';
 import { Users } from './pages/Users.tsx';
@@ -49,9 +52,11 @@ const NAV = [
   { to: '/plan', label: 'Belegungsplan', short: 'Plan', icon: '▦', admin: false, module: 'hotel' },
   { to: '/reservierungen', label: 'Reservierungen', short: 'Buchungen', icon: '☷', admin: false, module: 'hotel' },
   { to: '/fruehstueck', label: 'Frühstück', icon: '☕', admin: false, module: 'hotel' },
+  { to: '/reinigung', label: 'Reinigung', icon: '✧', admin: false, module: 'hotel' },
   { to: '/gaeste', label: 'Gäste', icon: '☺', admin: false, module: 'hotel' },
   { to: '/firmen', label: 'Firmen', icon: '⌘', admin: false, module: 'hotel', more: true },
   { to: '/rechnungen', label: 'Rechnungsarchiv', short: 'Rechn.', icon: '€', admin: false, module: 'hotel' },
+  { to: '/tagesabschluss', label: 'Tagesabschluss', short: 'Abschluss', icon: '∑', admin: false, module: 'hotel', more: true },
   { to: '/auswertung', label: 'Auswertung', icon: '◔', admin: false, module: 'hotel', more: true },
   { to: '/zimmer', label: 'Zimmer & Preise', short: 'Zimmer', icon: '⌂', admin: true, more: true, module: 'hotel' },
   { to: '/restaurant', label: 'Tischreservierungen', short: 'Tische', icon: '◍', admin: false, module: 'restaurant' },
@@ -59,12 +64,13 @@ const NAV = [
   { to: '/kontrollen', label: 'Kontrollen', icon: '✓', admin: false, module: 'kontrollen' },
   { to: '/erechnung', label: 'E-Rechnung', icon: '✉', admin: false, module: 'erechnung' },
   { to: '/internet', label: 'Geräte im Netz', short: 'Geräte', icon: '⌁', admin: false, module: 'internet' },
+  { to: '/team', label: 'Übergabebuch', short: 'Team', icon: '✎', admin: false, module: 'team' },
   { to: '/email', label: 'Posteingang', short: 'E-Mail', icon: '✉', admin: false, module: 'email' },
   { to: '/benutzer', label: 'Benutzer', icon: '◉', admin: true, module: 'verwaltung' },
   { to: '/protokoll', label: 'Protokoll', icon: '☰', admin: true, module: 'verwaltung' },
   { to: '/einstellungen', label: 'Einstellungen', short: 'Einstell.', icon: '⚙', admin: true, module: 'verwaltung' },
 ] as { to: string; label: string; short?: string; icon: string; admin: boolean; more?: boolean; module: string }[];
-const MODULE_TITLE: Record<string, string> = { hotel: 'Hotel', restaurant: 'Restaurant', schnelldruck: 'Schnelldruck', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet', email: 'E-Mail', verwaltung: 'Verwaltung' };
+const MODULE_TITLE: Record<string, string> = { hotel: 'Hotel', restaurant: 'Restaurant', schnelldruck: 'Schnelldruck', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet', email: 'E-Mail', team: 'Team', verwaltung: 'Verwaltung' };
 
 export function App() {
   const [state, setState] = useState<AuthState | null>(null);
@@ -133,6 +139,9 @@ function Shell({ user }: { user: UserDto }) {
           {hotel && <Route path="/plan" element={<Plan />} />}
           {hotel && <Route path="/reservierungen" element={<Reservations />} />}
           {hotel && <Route path="/fruehstueck" element={<Breakfast />} />}
+          {hotel && <Route path="/reinigung" element={<Housekeeping />} />}
+          {hotel && <Route path="/tagesabschluss" element={<DayReport />} />}
+          <Route path="/team" element={<Team />} />
           {hotel && <Route path="/gaeste" element={<Guests />} />}
           {hotel && <Route path="/rechnungen" element={<Invoices />} />}
           {hotel && <Route path="/firmen" element={<Companies />} />}

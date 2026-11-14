@@ -608,3 +608,30 @@ export const inboxMails = pgTable('inbox_mails', {
   repliedBy: text('replied_by').notNull().default(''),
   fetchedAt: ts('fetched_at').notNull().defaultNow(),
 }, (t) => [uniqueIndex('inbox_mails_uid_idx').on(t.uidValidity, t.uid), index('inbox_mails_received_idx').on(t.receivedAt)]);
+
+// =====================================================================================
+// Team: Übergabebuch, Aufgaben und Reparaturmeldungen – für alle angemeldeten Benutzer
+// =====================================================================================
+export const teamNotes = pgTable('team_notes', {
+  id: id(),
+  kind: text('kind', { enum: ['note', 'task', 'repair'] }).notNull(),
+  text: text('text').notNull(),
+  /** Zimmer oder Ort, frei eingetragen (z. B. „Zimmer 12“, „Küche“) */
+  place: text('place').notNull().default(''),
+  dueDate: date('due_date', { mode: 'string' }),
+  status: text('status', { enum: ['open', 'done'] }).notNull().default('open'),
+  createdBy: text('created_by').notNull(),
+  createdById: uuid('created_by_id'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  doneBy: text('done_by').notNull().default(''),
+  doneAt: ts('done_at'),
+  doneNote: text('done_note').notNull().default(''),
+}, (t) => [index('team_notes_created_idx').on(t.createdAt)]);
+
+/** Lesebestätigung: wer einen Eintrag zur Kenntnis genommen hat */
+export const teamNoteReads = pgTable('team_note_reads', {
+  noteId: uuid('note_id').notNull().references(() => teamNotes.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull(),
+  userName: text('user_name').notNull(),
+  at: ts('at').notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.noteId, t.userId] })]);
