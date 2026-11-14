@@ -51,6 +51,8 @@ export function CompanyDialog({ id, onClose }: { id: string | null; onClose: () 
         <Button onClick={onClose}>Schließen</Button><Button variant="primary" busy={f.busy} onClick={() => send()}>Speichern</Button></>}>
       <div className={id ? 'split' : ''}>
         <form onSubmit={send} noValidate>
+          <AddressLookup onPick={(c) => setV({ ...v, name: c.name || v.name, street: c.street || v.street, zip: c.zip || v.zip, city: c.city || v.city, country: c.country || v.country,
+            vatId: c.vatId || v.vatId, phone: c.phone || v.phone, email: c.email || v.email })} />
           <h3 className="first">Rechnungsanschrift</h3>
           <div className="formgrid">
             {input('name', 'Firmenname', { wide: true })}{input('street', 'Straße und Hausnummer', { wide: true })}{input('zip', 'PLZ')}{input('city', 'Ort')}
@@ -96,5 +98,48 @@ export function CompanyDialog({ id, onClose }: { id: string | null; onClose: () 
         )}
       </div>
     </Dialog>
+  );
+}
+
+type Found = { name: string; street: string; zip: string; city: string; country: string; phone: string; email: string; vatId: string; source: string; label?: string };
+/** Adressdaten nachschlagen: Impressum einer Website lesen oder über die Karte (OpenStreetMap) suchen. Nur auf Knopfdruck. */
+function AddressLookup({ onPick }: { onPick: (c: Found) => void }) {
+  const [q, setQ] = useState('');
+  const [busy, setBusy] = useState<'' | 'imprint' | 'map'>('');
+  const [hits, setHits] = useState<Found[] | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const looksLikeSite = /^(https?:\/\/)?[\w-]+(\.[\w-]+)+(\/\S*)?$/i.test(q.trim());
+  const run = async (kind: 'imprint' | 'map') => {
+    if (q.trim().length < 3) return;
+    setBusy(kind); setNote(null); setHits(null);
+    try {
+      if (kind === 'imprint') {
+        const r = await api<{ found: Found; page: string }>('POST', '/companies/lookup/imprint', { url: q.trim() });
+        setHits([r.found]); setNote(`Gelesen von ${r.page}`);
+      } else {
+        const r = await api<Found[]>('GET', `/companies/lookup/search?q=${encodeURIComponent(q.trim())}`);
+        setHits(r); if (!r.length) setNote('Kein Treffer mit vollständiger Anschrift. Versuchen Sie es mit Firmenname und Ort.');
+      }
+    } catch (e) { setNote(e instanceof Error ? e.message : 'Das hat nicht geklappt.'); }
+    setBusy('');
+  };
+  return (
+    <div className="lookup">
+      <h3 className="first">Adresse nachschlagen</h3>
+      <div className="lookuprow">
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Website (www.firma.de) oder Firmenname und Ort" aria-label="Website oder Firmenname"
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void run(looksLikeSite ? 'imprint' : 'map'); } }} />
+        <Button busy={busy === 'imprint'} disabled={busy !== '' || !looksLikeSite} onClick={() => void run('imprint')}>Impressum lesen</Button>
+        <Button busy={busy === 'map'} disabled={busy !== '' || q.trim().length < 3 || looksLikeSite} onClick={() => void run('map')}>Auf der Karte suchen</Button>
+      </div>
+      {note && <p className="muted small">{note}</p>}
+      {hits?.map((h, i) => (
+        <div key={i} className="lookuphit">
+          <div><b>{h.name || '(ohne Namen)'}</b><br /><small>{[h.street, [h.zip, h.city].filter(Boolean).join(' '), h.country].filter(Boolean).join(', ')}{h.phone && ` · ${h.phone}`}{h.email && ` · ${h.email}`}{h.vatId && ` · ${h.vatId}`}</small></div>
+          <Button variant="primary" onClick={() => { onPick(h); setHits(null); setNote('Übernommen – bitte prüfen und speichern.'); }}>Übernehmen</Button>
+        </div>
+      ))}
+      <p className="muted small">Der eingegebene Begriff geht dabei an die genannte Website bzw. an die Ortssuche von OpenStreetMap. Übernommen werden nur gefundene Angaben; vorhandene Einträge bleiben, wo nichts gefunden wurde.</p>
+    </div>
   );
 }

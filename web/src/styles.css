@@ -463,3 +463,11 @@ a.btn.primary { background: var(--accent); border-color: var(--accent); color: v
 
 /* E-Rechnungs-Archiv */
 .archivefilter { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; } .archivefilter input { flex: 1 1 240px; } .archivefilter select { width: auto; flex: 0 1 auto; }
+
+/* Hinweis: Änderungen von anderer Stelle */
+.syncnote { position: fixed; left: 50%; transform: translateX(-50%); bottom: 14px; z-index: 2000; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; padding: 8px 14px; font-size: 13px; box-shadow: 0 6px 24px rgba(0,0,0,.18); max-width: 92vw; }
+
+/* Adresse nachschlagen (Firmen) */
+.lookup { border: 1px dashed var(--line-strong); border-radius: 10px; padding: 12px 14px; margin: 0 0 16px; background: var(--surface-2); }
+.lookuprow { display: flex; flex-wrap: wrap; gap: 8px; } .lookuprow input { flex: 1 1 240px; }
+.lookuphit { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); margin-top: 8px; }

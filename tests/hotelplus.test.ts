@@ -293,4 +293,47 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect((await ok('GET', `/bookings/${id}/mail`, user)).text).not.toContain('mappe.example.org');
     expect((await ok('POST', `/public/booking/${tok}/open`, {}, cred)).guide).toBeNull();
   });
+
+  it('schlägt Firmendaten aus dem Impressum und über die Ortssuche vor – und ruft nichts aus dem eigenen Netz ab', async () => {
+    const { createServer } = await import('node:http');
+    const { setLookupTest } = await import('../src/server/modules/lookup.js');
+    const seen: string[] = [];
+    const site = createServer((req, res) => {
+      seen.push(`${req.url} ${req.headers['user-agent']}`);
+      if (req.url === '/') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end('<html><body><h1>Willkommen</h1><footer><a href="/impressum">Impressum</a></footer></body></html>'); }
+      else if (req.url === '/impressum') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end('<h1>Impressum</h1><p>Muster Bau GmbH<br>Industriestr. 5<br>54321 Beispielstadt</p><p>Tel.: 030 1234567</p><p>USt-IdNr.: DE123456789</p>'); }
+      else if (req.url!.startsWith('/search')) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify([
+        { name: 'Bäckerei Krume', display_name: 'Bäckerei Krume, Hauptstraße 2, Musterstadt', address: { road: 'Hauptstraße', house_number: '2', postcode: '12345', town: 'Musterstadt', country: 'Deutschland' }, extratags: { phone: '+49 30 55555' } },
+        { name: 'Ohne Straße', display_name: 'x', address: { postcode: '12345', town: 'Musterstadt' }, extratags: null }])); }
+      else { res.writeHead(404); res.end('nichts'); }
+    });
+    await new Promise<void>((r) => site.listen(0, '127.0.0.1', () => r()));
+    const port = (site.address() as { port: number }).port;
+    // Schutz: Adressen im eigenen Netz werden abgelehnt
+    const blocked = await call('POST', '/companies/lookup/imprint', user, { url: `http://127.0.0.1:${port}/` });
+    expect(blocked.statusCode).toBe(502);
+    expect(blocked.body).toContain('eigenen Netz');
+    expect((await call('POST', '/companies/lookup/imprint', user, { url: 'file:///etc/passwd' })).statusCode).toBeGreaterThanOrEqual(400);
+    expect(seen).toHaveLength(0);
+    setLookupTest({ allowPrivate: true, searchBase: `http://127.0.0.1:${port}/search` });
+    const r = await ok('POST', '/companies/lookup/imprint', user, { url: `http://127.0.0.1:${port}/` });
+    expect(r.page).toBe(`http://127.0.0.1:${port}/impressum`); // dem Link „Impressum“ gefolgt
+    expect(r.found).toMatchObject({ name: 'Muster Bau GmbH', street: 'Industriestr. 5', zip: '54321', city: 'Beispielstadt', phone: '030 1234567', vatId: 'DE123456789' });
+    expect((await call('POST', '/companies/lookup/imprint', user, { url: `http://127.0.0.1:${port}/leer` })).statusCode).toBe(502);
+    const places = await ok('GET', '/companies/lookup/search?q=B%C3%A4ckerei%20Krume%20Musterstadt', user);
+    expect(places).toEqual([{ name: 'Bäckerei Krume', street: 'Hauptstraße 2', zip: '12345', city: 'Musterstadt', country: 'Deutschland', phone: '+49 30 55555', email: '', vatId: '', source: 'OpenStreetMap', label: 'Bäckerei Krume, Hauptstraße 2, Musterstadt' }]);
+    expect(seen.at(-1)).toContain('SchuetzenhausPMS');
+    expect(seen.at(-1)).toContain('q=B%C3%A4ckerei');
+    expect((await call('GET', '/companies/lookup/search?q=ab', user)).statusCode).toBe(400);
+    setLookupTest({ allowPrivate: false, searchBase: 'https://nominatim.openstreetmap.org/search' });
+    site.close();
+  });
+
+  it('meldet Änderungen für das gleichzeitige Arbeiten', async () => {
+    expect((await call('GET', '/sync', {})).statusCode).toBe(401);
+    const before = (await ok('GET', '/sync', user)).rev;
+    expect((await ok('GET', '/sync', user)).rev).toBe(before); // ohne Änderung gleich
+    await ok('POST', '/team/notes', admin, { kind: 'note', text: 'Test', place: '', dueDate: '' });
+    expect((await ok('GET', '/sync', user)).rev).toBeGreaterThan(before); // Änderung eines anderen Benutzers
+  });
 });

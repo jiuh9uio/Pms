@@ -324,6 +324,23 @@ rechtlich geprüft ist, steht dort ausdrücklich.
   werden nicht angenommen oder ausgelesen. Die Tabelle `einvoices` ist nicht per Datenbank-Trigger gegen Änderung geschützt
   (anders als `invoices`); nicht versendete Einträge lassen sich löschen. Eine Aussage zur GoBD-Konformität wird nicht getroffen.
 
+**Seit Version 1.37.0 zusätzlich – gleichzeitiges Arbeiten, Adresse nachschlagen:**
+
+- **Gleichzeitiges Arbeiten:** `GET /sync` liefert die höchste Nummer des Änderungsprotokolls (ohne An-/Abmeldungen); die
+  Oberfläche (`web/src/data.tsx`) fragt alle 8 Sekunden ab und lädt neu, sobald sich der Wert ändert – bei offenem
+  Bearbeitungsfenster erst nach dem Schließen. Gegen widersprüchliche Änderungen schützen wie bisher die Versionsprüfung je
+  Datensatz („wurde zwischenzeitlich geändert“) und die Sperren in der Datenbank (keine Doppelbelegung, lückenlose Nummern).
+  Es gibt keine Anzeige, wer gerade welchen Datensatz geöffnet hat.
+- **Adresse nachschlagen** (`src/server/modules/lookup.ts`): `POST /companies/lookup/imprint` ruft die angegebene Seite ab, folgt
+  dem Link „Impressum“ und liest Firmendaten (`src/shared/imprint.ts`: schema.org-Angaben, sonst Muster); `GET
+  /companies/lookup/search` fragt die Ortssuche von OpenStreetMap (Nominatim) ab. Abrufe laufen über `lib/safefetch.ts`: nur
+  http/https, keine Adressen im eigenen Netz (auch nicht über Weiterleitungen), höchstens 1,5 MB und 12 Sekunden.
+- **Grenzen:** Google Maps wird nicht genutzt (dessen Daten gibt es nur über eine kostenpflichtige Schnittstelle mit eigenem
+  Schlüssel). Die Abrufe wurden nur gegen nachgebaute Seiten getestet, nicht gegen echte Websites oder den echten Dienst von
+  OpenStreetMap; dessen Nutzungsregeln (höchstens etwa eine Anfrage je Sekunde, keine Massenabfragen) sind einzuhalten.
+  Der Schutz gegen Adressen im eigenen Netz prüft die Namensauflösung vor dem Abruf; ein Angriff über wechselnde
+  Namensauflösung ist damit nicht ausgeschlossen. Impressum-Seiten, die ihren Inhalt erst per Skript nachladen, liefern nichts.
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

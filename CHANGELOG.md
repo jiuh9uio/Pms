@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.37.0
+
+- Gleichzeitiges Arbeiten an mehreren Rechnern: Ändert jemand an einem anderen Platz etwas (neue Reservierung, Check-in, Zahlung …), erscheint das innerhalb weniger Sekunden von selbst in den Listen und im Belegungsplan. Ist gerade ein Fenster zum Bearbeiten offen, wird erst nach dem Schließen aktualisiert, damit keine Eingabe verloren geht.
+- Firmen → „Adresse nachschlagen“: Website eingeben und das Impressum lesen lassen (Name, Anschrift, Telefon, E-Mail, USt-IdNr.) oder Firmenname und Ort über die Karte suchen (OpenStreetMap). Gefundenes lässt sich mit einem Klick in die Felder übernehmen.
+
 ## 1.36.0
 
 - E-Rechnung → neuer Reiter „Archiv“: alle erzeugten E-Rechnungen mit Suche (Nummer, Empfänger, Datei, E-Mail-Adresse) und Filtern nach Jahr, Monat, Versand und Herkunft; dazu Anzahl und Summe der Auswahl.

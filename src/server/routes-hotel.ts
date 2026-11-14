@@ -6,6 +6,7 @@ import { listAudit, type Actor } from './modules/audit.js';
 import * as bookings from './modules/bookings.js';
 import * as breakfast from './modules/breakfast.js';
 import * as guestguide from './modules/guestguide.js';
+import * as lookup from './modules/lookup.js';
 import * as guestlink from './modules/guestlink.js';
 import * as stats from './modules/stats.js';
 import * as prearrival from './modules/prearrival.js';
@@ -130,6 +131,9 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
 
   // ---------- Firmen ----------
   api.get('/companies', user, (req) => companies.listCompanies(db, z.object({ q: z.string().max(100).default('') }).parse(req.query).q.trim()));
+  // Adressdaten nachschlagen (auf Knopfdruck): Impressum der Website oder Ortssuche über OpenStreetMap
+  api.post('/companies/lookup/imprint', user, (req) => lookup.fromImprint(z.object({ url: z.string().trim().min(4, 'Bitte die Adresse der Website eintragen').max(300) }).parse(req.body).url));
+  api.get('/companies/lookup/search', user, (req) => lookup.searchPlace(z.object({ q: z.string().trim().min(3, 'Bitte mindestens 3 Zeichen eingeben').max(120) }).parse(req.query).q));
   api.get('/companies/:id', user, (req) => companies.getCompany(db, idOf(req)));
   api.post('/companies', user, (req) => companies.saveCompany(db, actor(req), null, H.companyInput.parse(req.body)));
   api.put('/companies/:id', user, (req) => companies.saveCompany(db, actor(req), idOf(req), H.companyInput.parse(req.body), versionOf(req)));

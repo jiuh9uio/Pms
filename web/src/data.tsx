@@ -1,10 +1,11 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode, useEffect, useRef } from 'react';
 import type { CalendarEntry, GuestDto } from '../../src/shared/hotel.js';
 import { BlockDialog } from './hotel/BlockDialog.tsx';
 import { BookingDialog } from './hotel/BookingDialog.tsx';
 import { InvoiceDialog } from './billing/InvoiceDialog.tsx';
 import { CompanyDialog } from './hotel/CompanyDialog.tsx';
 import { GuestDialog } from './hotel/GuestDialog.tsx';
+import { api } from './api.ts';
 import { NewBooking } from './hotel/NewBooking.tsx';
 
 export interface NewPreset {
@@ -53,10 +54,34 @@ export function DataProvider({ children }: { children: ReactNode }) {
     openCompany: (id) => push({ kind: 'company', id }),
     closeAll: () => setStack([]),
   }), [rev, push]);
+  // Gleichzeitiges Arbeiten: alle 8 Sekunden nachsehen, ob jemand (auch an einem anderen Rechner) etwas geändert hat.
+  // Ist gerade kein Fenster offen, werden die Listen sofort neu geladen; sonst erst nach dem Schließen – damit keine Eingabe verloren geht.
+  const seen = useRef<number | null>(null);
+  const [pending, setPending] = useState(false);
+  const open = stack.length > 0;
+  useEffect(() => {
+    let stop = false;
+    const check = async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const r = await api<{ rev: number }>('GET', '/sync');
+        if (stop) return;
+        if (seen.current !== null && r.rev !== seen.current) setPending(true);
+        seen.current = r.rev;
+      } catch { /* gerade nicht erreichbar – beim nächsten Mal wieder */ }
+    };
+    void check();
+    const t = setInterval(() => void check(), 8000);
+    const vis = () => void check();
+    document.addEventListener('visibilitychange', vis);
+    return () => { stop = true; clearInterval(t); document.removeEventListener('visibilitychange', vis); };
+  }, []);
+  useEffect(() => { if (pending && !open) { setPending(false); setRev((r) => r + 1); } }, [pending, open]);
   const close = (i: number) => setStack((s) => s.filter((_, j) => j !== i));
   return (
     <Ctx.Provider value={value}>
       {children}
+      {pending && open && <div className="syncnote" role="status">Inzwischen wurde an anderer Stelle etwas geändert. Die Listen werden aktualisiert, sobald dieses Fenster geschlossen ist.</div>}
       {stack.map((o, i) => {
         const onClose = () => close(i);
         if (o.kind === 'booking') return <BookingDialog key={i} id={o.id} onClose={onClose} />;

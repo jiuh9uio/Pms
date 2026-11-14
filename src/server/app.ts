@@ -232,6 +232,12 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.delete('/team/recurring/:id', { preHandler: requireAdmin }, (req) => team.deleteRecurring(db, actor(req), noteId(req)));
     api.post('/team/notes/:id/read', any, (req) => team.markRead(db, actor(req), noteId(req)));
     api.post('/team/notes/:id/done', any, (req) => { const v = T.teamDoneInput.parse(req.body); return team.setDone(db, actor(req), noteId(req), v.done, v.note); });
+    // Gleichzeitiges Arbeiten: Zähler, der sich mit jeder protokollierten Änderung erhöht – die Oberfläche fragt ihn alle paar
+    // Sekunden ab und lädt neu, wenn jemand anderes etwas geändert hat.
+    api.get('/sync', { preHandler: requireUser }, async () => {
+      const [r] = await db.execute(sql`select coalesce(max(id), 0)::int as rev from audit_log where action not in ('login', 'logout', 'login_failed')`);
+      return { rev: Number(r!.rev) };
+    });
     // Hinweis „Internet ist weg“ für alle angemeldeten Benutzer
     api.get('/network/alert', { preHandler: requireUser }, () => network.netAlert(db));
     api.get('/overview', { preHandler: requireUser }, (req) => overview(db, req.user!));
