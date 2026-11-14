@@ -136,6 +136,20 @@ describe('E-Mail an den Gast', () => {
     expect(text).toContain('Zi. 101  Erika Beispiel');
     expect(text).toContain('2 Personen');
     expect([...job.subarray(-4)]).toEqual([0x1d, 0x56, 66, 0]); // Schnitt
+    // Frühstücksregeln: erste zutreffende Regel gilt und steht auf Liste und Ausdruck
+    const wd = new Date('2031-05-09T12:00:00Z').getUTCDay();
+    const rule = (o: object) => ({ name: 'Regel', measure: 'breakfast_persons', op: 'lt', value: 4, weekdays: [], text: 'Frühstück in der 1. Etage', active: true, ...o });
+    expect((await call('PUT', '/settings/breakfast-rules', admin, { rules: [rule({ text: '' })] })).statusCode).toBe(400);
+    await ok('PUT', '/settings/breakfast-rules', admin, { rules: [
+      rule({ name: 'falscher Tag', weekdays: [(wd + 1) % 7], text: 'A' }), rule({ name: 'aus', active: false, text: 'B' }), rule({ name: 'zu viele', op: 'gte', value: 3, text: 'C' }),
+      rule({ name: 'Kleines Frühstück' }), rule({ name: 'später', measure: 'house_rooms', op: 'lte', value: 1, text: 'D' }),
+    ] });
+    expect((await ok('GET', '/breakfast?date=2031-05-09', admin)).variant).toEqual({ name: 'Kleines Frühstück', text: 'Frühstück in der 1. Etage' });
+    expect((await ok('GET', '/breakfast?date=2031-05-12', admin)).variant).toBeNull(); // niemand frühstückt
+    got.length = 0;
+    await ok('POST', '/breakfast/print', admin, { date: '2031-05-09' });
+    await new Promise((r) => setTimeout(r, 100));
+    expect(Buffer.concat(got).toString('latin1')).toContain('Fr\x81hst\x81ck in der 1. Etage'); // ü in CP858
     // täglicher automatischer Druck: einmal je Tag im Zeitfenster nach der eingestellten Uhrzeit
     const { autoBreakfastTick } = await import('../src/server/modules/breakfast.js');
     await ok('PUT', '/settings/kitchen-printer', admin, { enabled: true, host: '127.0.0.1', port, width: 48, autoBreakfastTime: '06:00' });

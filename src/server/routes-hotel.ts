@@ -140,6 +140,8 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   const dateOf = (v: unknown) => z.object({ date: z.string().refine(H.isIsoDate) }).parse(v).date;
   api.get('/breakfast', user, (req) => breakfast.breakfastList(db, dateOf(req.query)));
   api.post('/breakfast/print', user, (req) => breakfast.printBreakfast(db, actor(req), dateOf(req.body)));
+  api.get('/settings/breakfast-rules', admin, () => breakfast.getRules(db));
+  api.put('/settings/breakfast-rules', admin, (req) => breakfast.saveRules(db, actor(req), H.breakfastRulesInput.parse(req.body)));
   api.get('/settings/kitchen-printer', admin, () => breakfast.getPrinter(db));
   api.put('/settings/kitchen-printer', admin, (req) => breakfast.savePrinter(db, actor(req), H.kitchenPrinterInput.parse(req.body)));
   api.post('/settings/kitchen-printer/test', admin, async () => { await breakfast.testPrint(db); return { ok: true }; });

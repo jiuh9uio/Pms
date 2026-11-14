@@ -207,7 +207,34 @@ export interface GuestFormLink { exists: boolean; url: string | null; qr: string
 
 // ---------- Frühstücksliste und Küchendrucker ----------
 export interface BreakfastRow { bookingId: string; room: string; guest: string; adults: number; children: number; bookingNumber: string; notes: string; departing: boolean; breakfast: boolean; arrived: boolean }
-export interface BreakfastDto { date: string; rooms: BreakfastRow[]; printerReady: boolean; /** Uhrzeit des täglichen automatischen Drucks, leer = aus */ autoTime: string; /** Tag, für den zuletzt automatisch gedruckt wurde */ autoLast: string | null; total: { rooms: number; adults: number; children: number; without: number } }
+/** Frühstücksregel („Algorithmus“): Wenn die Messgröße die Bedingung erfüllt, gilt der Text – z. B. „Frühstück in der 1. Etage“. */
+export const RULE_MEASURES = ['breakfast_persons', 'breakfast_rooms', 'house_persons', 'house_rooms'] as const;
+export const RULE_MEASURE_LABEL: Record<(typeof RULE_MEASURES)[number], string> = {
+  breakfast_persons: 'Frühstücksgäste (Personen)', breakfast_rooms: 'Zimmer mit Frühstück', house_persons: 'Gäste im Haus (Personen)', house_rooms: 'belegte Zimmer',
+};
+export const RULE_OPS = ['lt', 'lte', 'gte', 'gt'] as const;
+export const RULE_OP_LABEL: Record<(typeof RULE_OPS)[number], string> = { lt: 'weniger als', lte: 'höchstens', gte: 'mindestens', gt: 'mehr als' };
+export const breakfastRuleInput = z.object({
+  name: z.string().trim().min(1, 'Bitte einen Namen eintragen').max(60),
+  measure: z.enum(RULE_MEASURES), op: z.enum(RULE_OPS), value: z.number('Bitte eine Zahl eintragen').int().min(0).max(999),
+  /** leer = jeden Tag; 0 = Sonntag … 6 = Samstag */
+  weekdays: z.array(z.number().int().min(0).max(6)).max(7),
+  text: z.string().trim().min(1, 'Bitte eintragen, was dann gilt').max(200),
+  active: z.boolean(),
+});
+export const breakfastRulesInput = z.object({ rules: z.array(breakfastRuleInput).max(30) });
+export type BreakfastRule = z.infer<typeof breakfastRuleInput>;
+/** Erste zutreffende Regel in der eingetragenen Reihenfolge. Ohne Frühstücksgäste gilt keine Regel. */
+export function applyBreakfastRules(rules: BreakfastRule[], date: string, n: Record<(typeof RULE_MEASURES)[number], number>): BreakfastRule | null {
+  if (n.breakfast_persons === 0) return null;
+  const wd = new Date(`${date}T12:00:00Z`).getUTCDay();
+  return rules.find((r) => {
+    if (!r.active || (r.weekdays.length && !r.weekdays.includes(wd))) return false;
+    const x = n[r.measure];
+    return r.op === 'lt' ? x < r.value : r.op === 'lte' ? x <= r.value : r.op === 'gte' ? x >= r.value : x > r.value;
+  }) ?? null;
+}
+export interface BreakfastDto { /** zutreffende Frühstücksregel des Tages */ variant: { name: string; text: string } | null; date: string; rooms: BreakfastRow[]; printerReady: boolean; /** Uhrzeit des täglichen automatischen Drucks, leer = aus */ autoTime: string; /** Tag, für den zuletzt automatisch gedruckt wurde */ autoLast: string | null; total: { rooms: number; adults: number; children: number; without: number } }
 export const kitchenPrinterInput = z.object({
   enabled: z.boolean(), host: z.string().trim().max(15).regex(/^(\d{1,3}(\.\d{1,3}){3})?$/, 'IP-Adresse im Format 192.168.1.50'),
   port: count(1, 65535), width: z.union([z.literal(32), z.literal(42), z.literal(48)]),

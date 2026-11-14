@@ -1,9 +1,9 @@
 import { eq, sql } from 'drizzle-orm';
-import { addDays, type BreakfastDto, type KitchenPrinter } from '../../shared/hotel.js';
+import { addDays, applyBreakfastRules, type BreakfastDto, type BreakfastRule, type KitchenPrinter } from '../../shared/hotel.js';
 import type { Db, Exec } from '../db/client.js';
 import { settings } from '../db/schema.js';
 import { AppError, conflict } from '../lib/errors.js';
-import { buildJob, columns, isPrivateIp, sendToPrinter, type Line } from '../lib/escpos.js';
+import { buildJob, columns, isPrivateIp, sendToPrinter, wrap, type Line } from '../lib/escpos.js';
 import { record, SYSTEM, type Actor } from './audit.js';
 import { getHotel } from './settings.js';
 
@@ -20,6 +20,17 @@ export async function savePrinter(db: Db, actor: Actor, v: KitchenPrinter) {
   await record(db, actor, { action: 'update', entity: 'settings', entityId: 'kitchen_printer', after: v });
   return v;
 }
+// ---------- Frühstücksregeln ----------
+export async function getRules(db: Exec): Promise<{ rules: BreakfastRule[] }> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'breakfast_rules'));
+  return { rules: ((row?.value as { rules?: BreakfastRule[] } | undefined)?.rules ?? []) };
+}
+export async function saveRules(db: Db, actor: Actor, v: { rules: BreakfastRule[] }) {
+  await db.insert(settings).values({ key: 'breakfast_rules', value: v }).onConflictDoUpdate({ target: settings.key, set: { value: v, updatedAt: new Date() } });
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: 'breakfast_rules', after: v });
+  return v;
+}
+
 const ready = (p: KitchenPrinter) => p.enabled && !!p.host;
 export const printerReady = async (db: Exec) => ready(await getPrinter(db));
 export const printerWidth = async (db: Exec) => (await getPrinter(db)).width;
@@ -58,7 +69,10 @@ export async function breakfastList(db: Exec, date: string): Promise<BreakfastDt
   }));
   const with_ = list.filter((r) => r.breakfast);
   const printer = await getPrinter(db);
+  const persons = (rows: typeof list) => rows.reduce((s, r) => s + r.adults + r.children, 0);
+  const rule = applyBreakfastRules((await getRules(db)).rules, date, { breakfast_persons: persons(with_), breakfast_rooms: with_.length, house_persons: persons(list), house_rooms: list.length });
   return {
+    variant: rule ? { name: rule.name, text: rule.text } : null,
     date, rooms: list, printerReady: ready(printer), autoTime: ready(printer) ? printer.autoBreakfastTime : '', autoLast: await lastAuto(db),
     total: { rooms: with_.length, adults: with_.reduce((s, r) => s + r.adults, 0), children: with_.reduce((s, r) => s + r.children, 0), without: list.length - with_.length },
   };
@@ -73,6 +87,7 @@ export function breakfastLines(d: BreakfastDto, hotelName: string, width: number
     { text: hotelName, align: 'center' }, { text: 'FRÜHSTÜCK', align: 'center', bold: true, big: true },
     { text: `${WEEKDAY[new Date(`${d.date}T12:00:00Z`).getUTCDay()]}, ${de(d.date)}`, align: 'center', bold: true }, { rule: true },
   ];
+  if (d.variant) lines.push(...wrap(d.variant.text, width).map((text): Line => ({ text, align: 'center', bold: true })), { rule: true });
   const rows = d.rooms.filter((r) => r.breakfast);
   if (rows.length === 0) lines.push({ text: 'Kein Frühstück gebucht.' });
   for (const r of rows) {
