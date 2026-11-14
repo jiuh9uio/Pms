@@ -93,5 +93,10 @@ export const invoiceLayoutInput = z.object({
   intro: z.string().trim().max(300).default(''),
   /** Schlusssatz unter den Summen */
   closing: z.string().trim().max(300).default(''),
+  style: z.enum(['classic', 'modern', 'elegant']).default('classic'),
+  accent: z.enum(['black', 'blue', 'green', 'red', 'gold', 'petrol']).default('black'),
+  font: z.enum(['sans', 'serif']).default('sans'),
+  logoPos: z.enum(['right', 'left', 'center']).default('right'),
+  table: z.enum(['lines', 'stripes', 'plain']).default('lines'),
 });
 export type InvoiceLayoutDto = z.infer<typeof invoiceLayoutInput>;

@@ -9,8 +9,19 @@ import { asset } from './pdf.js';
  */
 export interface Logo { mime: 'image/png' | 'image/jpeg'; data: Buffer }
 /** Gestaltung der Rechnung (Einstellungen → Haus → Rechnungslayout) */
-export interface InvoiceLayout { spacing: 'compact' | 'normal' | 'wide'; fontSize: 'small' | 'normal' | 'large'; intro: string; closing: string }
-export const DEFAULT_LAYOUT: InvoiceLayout = { spacing: 'normal', fontSize: 'normal', intro: '', closing: '' };
+export interface InvoiceLayout {
+  spacing: 'compact' | 'normal' | 'wide'; fontSize: 'small' | 'normal' | 'large'; intro: string; closing: string;
+  /** Gesamtbild: klassisch (grau hinterlegt), modern (Farbbalken, farbige Kopfzeile), elegant (feine Linien, Versalien) */
+  style: 'classic' | 'modern' | 'elegant';
+  accent: 'black' | 'blue' | 'green' | 'red' | 'gold' | 'petrol';
+  font: 'sans' | 'serif';
+  logoPos: 'right' | 'left' | 'center';
+  table: 'lines' | 'stripes' | 'plain';
+}
+export const DEFAULT_LAYOUT: InvoiceLayout = { spacing: 'normal', fontSize: 'normal', intro: '', closing: '', style: 'classic', accent: 'black', font: 'sans', logoPos: 'right', table: 'lines' };
+const ACCENTS: Record<InvoiceLayout['accent'], [number, number, number]> = {
+  black: [0.1, 0.1, 0.1], blue: [0.11, 0.27, 0.48], green: [0.13, 0.36, 0.25], red: [0.5, 0.12, 0.16], gold: [0.55, 0.42, 0.16], petrol: [0.07, 0.38, 0.42],
+};
 
 const money = (cents: number) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(cents / 100);
 const de = (iso: string | null) => (iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}` : '–');
@@ -19,8 +30,9 @@ const num = (n: number) => n.toLocaleString('de-DE');
 export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Logo | null, layout: InvoiceLayout = DEFAULT_LAYOUT): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   doc.registerFontkit(fontkit);
-  const regular = await doc.embedFont(asset('LiberationSans-Regular.ttf'), { subset: true });
-  const bold = await doc.embedFont(asset('LiberationSans-Bold.ttf'), { subset: true });
+  const family = layout.font === 'serif' ? 'LiberationSerif' : 'LiberationSans';
+  const regular = await doc.embedFont(asset(`${family}-Regular.ttf`), { subset: true });
+  const bold = await doc.embedFont(asset(`${family}-Bold.ttf`), { subset: true });
   let image: PDFImage | null = null;
   if (logo) { try { image = logo.mime === 'image/png' ? await doc.embedPng(logo.data) : await doc.embedJpg(logo.data); } catch { image = null; } }
   const cancel = inv.kind === 'cancellation';
@@ -34,6 +46,8 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
   const g = (layout.spacing === 'compact' ? 0.8 : layout.spacing === 'wide' ? 1.25 : 1) * f;
   const W = 595.28, H = 841.89, L = 62, R = W - 54;
   const black = rgb(0.1, 0.1, 0.1), grey = rgb(0.38, 0.38, 0.38), hair = rgb(0.82, 0.82, 0.82), band = rgb(0.95, 0.95, 0.95);
+  const acc = rgb(...(ACCENTS[layout.accent] ?? ACCENTS.black)), white = rgb(1, 1, 1);
+  const modern = layout.style === 'modern', elegant = layout.style === 'elegant';
   const pages: PDFPage[] = [];
   let page: PDFPage = doc.addPage([W, H]);
   pages.push(page);
@@ -70,18 +84,27 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
   const newPage = () => { page = doc.addPage([W, H]); pages.push(page); y = H - 62; };
   const need = (h: number) => { if (y - h < bottom) { newPage(); return true; } return false; };
 
-  // Kopf: Name und Anschrift links, Logo rechts oben
+  // Kopf: Logo rechts, links oder mittig; der Text weicht dem Logo aus
+  if (modern) page.drawRectangle({ x: 0, y: H - 12, width: W, height: 12, color: acc });
+  const pos = layout.logoPos;
+  let logoBottom = H;
   if (image) {
-    const s = Math.min(170 / image.width, 64 / image.height, 1);
-    page.drawImage(image, { x: R - image.width * s, y: H - 38 - image.height * s, width: image.width * s, height: image.height * s });
+    const s = Math.min(170 / image.width, 64 / image.height, 1), w = image.width * s, h = image.height * s;
+    page.drawImage(image, { x: pos === 'left' ? L : pos === 'center' ? (L + R) / 2 - w / 2 : R - w, y: H - 38 - h, width: w, height: h });
+    logoBottom = H - 38 - h;
+    if (pos === 'center') y = logoBottom - 24 * f;
   }
-  put(issuer.name, L, y, { size: 17, font: bold });
+  const hput = (s: string, yy: number, o: { size: number; font?: PDFFont; color?: typeof black }) => {
+    const w = (o.font ?? regular).widthOfTextAtSize(s, o.size * f);
+    put(s, pos === 'center' ? (L + R) / 2 - w / 2 : pos === 'left' && image ? R - w : L, yy, o);
+  };
+  hput(issuer.name, y, { size: 17, font: bold, color: layout.style === 'classic' ? black : acc });
   y -= 16 * f;
-  put([issuer.street, `${issuer.zip} ${issuer.city}`.trim()].filter(Boolean).join(' · '), L, y, { size: 9, color: grey });
+  hput([issuer.street, `${issuer.zip} ${issuer.city}`.trim()].filter(Boolean).join(' · '), y, { size: 9, color: grey });
   y -= 12 * f;
-  put([issuer.phone && `Tel. ${issuer.phone}`, issuer.email, issuer.website].filter(Boolean).join(' · '), L, y, { size: 9, color: grey });
-  y -= 12;
-  rule(y, 1, black);
+  hput([issuer.phone && `Tel. ${issuer.phone}`, issuer.email, issuer.website].filter(Boolean).join(' · '), y, { size: 9, color: grey });
+  y = Math.min(y, pos === 'center' ? y : logoBottom - 2) - 12;
+  if (elegant) { rule(y, 0.6, acc); rule(y - 2.6, 0.6, acc); } else rule(y, modern ? 0.5 : 1, modern ? hair : acc);
 
   // Anschriftfeld (für Fensterumschläge) und Rechnungsdaten rechts daneben
   y -= 52 * g;
@@ -99,16 +122,19 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
   if (cancel && inv.cancelsNumber) meta.push(['Storno zu', inv.cancelsNumber]);
   for (const [k, v] of meta) { put(k, 345, my, { size: 9.5, color: grey }); put(v, R, my, { size: 9.5, right: true }); my -= 16 * f; }
   y = Math.min(y, my, top - 5 * 15.5 * f) - 34 * g;
-  put(inv.number && !draft ? `${title} ${inv.number}` : title, L, y, { size: 16, font: bold });
+  const heading = inv.number && !draft ? `${title} ${inv.number}` : title;
+  put(elegant ? heading.toUpperCase() : heading, L, y, { size: elegant ? 14 : 16, font: bold, color: layout.style === 'classic' ? black : acc });
   y -= 24 * g;
   if (layout.intro && !cancel) { for (const t of wrap(layout.intro, R - L, 10)) { put(t, L, y); y -= 14 * f; } y -= 10 * g; }
 
   // Positionen
   const cols = { pos: L + 6, name: L + 34, qty: 352, unit: 428, rate: 470, total: R - 6 };
-  const lead = 13 * f, dlead = 11.5 * f, pad = 8 * g;
+  const lead = 13 * f, dlead = 11.5 * f, pad = 8 * g, headGrey = grey;
   const headRow = () => {
     const hh = 12 * f + pad * 1.4;
-    page.drawRectangle({ x: L, y: y - hh + 12 * f, width: R - L, height: hh, color: band });
+    if (elegant) { rule(y + 12 * f, 0.8, acc); rule(y - hh + 12 * f, 0.8, acc); }
+    else page.drawRectangle({ x: L, y: y - hh + 12 * f, width: R - L, height: hh, color: modern ? acc : band });
+    const grey = modern ? white : elegant ? acc : headGrey;
     const ty = y - hh / 2 + 12 * f - 3 * f;
     put('Pos.', cols.pos, ty, { size: 8.5, font: bold, color: grey }); put('Leistung', cols.name, ty, { size: 8.5, font: bold, color: grey });
     put('Menge', cols.qty, ty, { size: 8.5, font: bold, color: grey, right: true }); put('Einzelpreis', cols.unit, ty, { size: 8.5, font: bold, color: grey, right: true });
@@ -121,7 +147,8 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
     const detail = l.detail ? wrap(l.detail, cols.qty - 46 - cols.name, 8.5) : [];
     const h = text.length * lead + detail.length * dlead + pad * 2;
     if (need(h)) headRow();
-    else if (idx > 0) rule(y + lead - 2 * f + pad - 1);
+    else if (idx > 0 && layout.table === 'lines') rule(y + lead - 2 * f + pad - 1);
+    if (layout.table === 'stripes' && idx % 2 === 1) page.drawRectangle({ x: L, y: y + lead - 2 * f + pad - 1 - h, width: R - L, height: h, color: rgb(0.965, 0.965, 0.965) });
     put(String(l.pos), cols.pos, y, { color: grey }); put(num(l.quantity), cols.qty, y, { right: true });
     put(money(l.unitPriceCents), cols.unit, y, { right: true }); put(`${num(l.taxRatePercent)} %`, cols.rate, y, { right: true });
     put(money(l.totalCents), cols.total, y, { right: true });
@@ -130,7 +157,7 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
     detail.forEach((t, k) => put(t, cols.name, y - k * dlead, { size: 8.5, color: grey }));
     y -= detail.length * dlead + pad * 2 - lead + lead;
   });
-  rule(y + lead - 2 * f + pad - 1, 0.8, grey);
+  rule(y + lead - 2 * f + pad - 1, 0.8, elegant ? acc : grey);
 
   // Summen: rechtsbündiger Block
   const sx = 330, row = 15 * f;
@@ -144,8 +171,10 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
     y -= row;
   }
   y -= 4 * f;
-  page.drawRectangle({ x: sx - 8, y: y - 8 * f, width: R - sx + 8, height: 24 * f, color: band });
-  put('Gesamtbetrag', sx, y, { size: 11.5, font: bold }); put(money(inv.grossCents), cols.total, y, { size: 11.5, font: bold, right: true });
+  if (elegant) { rule(y + 16 * f, 0.8, acc, sx - 8, R); rule(y - 8 * f, 0.8, acc, sx - 8, R); rule(y - 8 * f - 2.6, 0.8, acc, sx - 8, R); }
+  else page.drawRectangle({ x: sx - 8, y: y - 8 * f, width: R - sx + 8, height: 24 * f, color: modern ? acc : band });
+  const tc = modern ? white : elegant ? acc : black;
+  put('Gesamtbetrag', sx, y, { size: 11.5, font: bold, color: tc }); put(money(inv.grossCents), cols.total, y, { size: 11.5, font: bold, right: true, color: tc });
   y -= 26 * f;
   if (!cancel && inv.paidCents !== 0) {
     // Zahlungen je Zahlungsart, wie sie beim Erzeugen des PDFs gebucht waren
@@ -167,7 +196,7 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
   pages.forEach((pg, i) => {
     page = pg;
     let fy = 40 + footH;
-    rule(fy + 8, 0.5, grey);
+    rule(fy + 8, 0.5, layout.style === 'classic' ? grey : acc);
     for (const t of footFree) { fy -= 10 * f; put(t, L, fy, { size: 8, color: grey }); }
     if (footFree.length) fy -= 6;
     footCols.forEach((c, k) => c.forEach((t, n) => put(t, L + k * colW, fy - (n + 1) * footLead, { size: 7.5, color: grey })));

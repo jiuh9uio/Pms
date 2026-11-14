@@ -476,3 +476,8 @@ a.btn.primary { background: var(--accent); border-color: var(--accent); color: v
 .setuplist { list-style: none; margin: 0; padding: 0; } .setuplist li { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .setuplist li:last-child { border-bottom: 0; } .setuplist .mark { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px; background: var(--surface-2); color: var(--ink-2); }
 .setuplist li.done .mark { background: #dcf3e3; color: #17643a; } .setuplist li.todo .mark { background: #fbe1de; color: #b42318; } .setuplist li.check .mark { background: #fdf0d5; color: #8a5a00; }
+
+/* Farbauswahl im Rechnungslayout */
+.swatches { display: flex; gap: 8px; flex-wrap: wrap; padding: 4px 0; } .swatches button { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); cursor: pointer; padding: 0; }
+.swatches button.on { box-shadow: 0 0 0 3px var(--accent, #2b6cb0); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

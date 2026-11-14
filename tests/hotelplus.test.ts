@@ -370,11 +370,12 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
   });
 
   it('speichert das Rechnungslayout und liefert eine Muster-Rechnung als Vorschau', async () => {
-    expect(await ok('GET', '/settings/invoice-layout', admin)).toEqual({ spacing: 'normal', fontSize: 'normal', intro: '', closing: '' });
+    expect(await ok('GET', '/settings/invoice-layout', admin)).toEqual({ spacing: 'normal', fontSize: 'normal', intro: '', closing: '', style: 'classic', accent: 'black', font: 'sans', logoPos: 'right', table: 'lines' });
     expect((await call('PUT', '/settings/invoice-layout', user, { spacing: 'wide' })).statusCode).toBe(403);
     expect((await call('PUT', '/settings/invoice-layout', admin, { spacing: 'riesig' })).statusCode).toBe(400);
+    expect((await call('PUT', '/settings/invoice-layout', admin, { accent: 'pink' })).statusCode).toBe(400);
     const sizes: number[] = [];
-    for (const q of ['spacing=compact&fontSize=small', 'spacing=wide&fontSize=large&intro=Vielen%20Dank&closing=Bis%20bald']) {
+    for (const q of ['spacing=compact&fontSize=small', 'spacing=wide&fontSize=large&intro=Vielen%20Dank&closing=Bis%20bald', 'style=modern&accent=blue&table=stripes&logoPos=left', 'style=elegant&accent=gold&font=serif&logoPos=center&table=plain']) {
       const r = await call('GET', `/settings/invoice-layout/preview?${q}`, admin);
       expect(r.statusCode).toBe(200);
       expect(r.headers['content-type']).toBe('application/pdf');
@@ -382,7 +383,7 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
       sizes.push(r.rawPayload.length);
     }
     expect(sizes[0]).not.toBe(sizes[1]);
-    expect(await ok('PUT', '/settings/invoice-layout', admin, { spacing: 'wide', fontSize: 'large', intro: 'Vielen Dank', closing: '' })).toMatchObject({ spacing: 'wide', intro: 'Vielen Dank' });
+    expect(await ok('PUT', '/settings/invoice-layout', admin, { spacing: 'wide', fontSize: 'large', intro: 'Vielen Dank', closing: '', style: 'elegant', accent: 'green', font: 'serif', logoPos: 'center', table: 'stripes' })).toMatchObject({ spacing: 'wide', intro: 'Vielen Dank' });
     // eine echte Rechnung lässt sich im neuen Layout erzeugen
     const inv = await issue(await mk({ lastName: 'Layout' }, addDays(today, 110), addDays(today, 112)));
     const pdf = await call('GET', `/invoices/${inv.id}/pdf`, admin);

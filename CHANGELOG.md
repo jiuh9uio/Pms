@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.41.0
+
+- Rechnungslayout mit mehr Gestaltung: drei Stile (klassisch, modern mit Farbbalken und farbiger Kopfzeile, elegant mit feinen Linien), sechs Farben (Schwarz, Dunkelblau, Tannengrün, Weinrot, Gold, Petrol), Schrift mit oder ohne Serifen, Logo rechts, links oder mittig, Positionen mit Trennlinien, abwechselnd hinterlegt oder ohne Linien. Die Vorschau zeigt jede Kombination sofort.
+
 ## 1.40.0
 
 - Hotelrechnung neu gestaltet: mehr Abstand zwischen Kopf, Anschrift, Positionen und Summen; Positionen mit Kopfzeile und Trennlinien; Summen als eigener Block rechts (Netto und Umsatzsteuer je Steuersatz, Gesamtbetrag hervorgehoben); Fuß in drei Spalten; Seitenzahl bei mehrseitigen Rechnungen.
