@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { eq } from 'drizzle-orm';
-import type { TseInfoDto, TseSettings, TseSignResult } from '../../shared/schemas.js';
+import type { TseInfoDto, TseRegisterResult, TseSettings, TseSignResult } from '../../shared/schemas.js';
 import type { Db, Exec } from '../db/client.js';
 import { settings } from '../db/schema.js';
 import { AppError, conflict } from '../lib/errors.js';
@@ -126,7 +126,7 @@ function signFail(r: TseReply): never {
   const code = r.result;
   const msg = left != null ? `Die PIN wurde nicht angenommen. Noch ${left} ${left === 1 ? 'Versuch' : 'Versuche'}, danach ist die PIN gesperrt und nur mit der PUK wieder freizuschalten.`
     : code === 'OTHER_ERROR_HOST_AUTHENTICATION_FAILED' ? 'Die Anmeldung wurde abgelehnt: Der geheime Schlüssel passt nicht (Standard ist EPSONKEY). Es wurde kein PIN-Versuch verbraucht.'
-    : code === 'TSE1_ERROR_CLIENT_NOT_REGISTERED' ? 'Diese Kassen-Kennung ist in der TSE nicht angemeldet. Sie muss zuerst mit der Admin-PIN registriert werden.'
+    : code === 'TSE1_ERROR_CLIENT_NOT_REGISTERED' ? 'Diese Kassen-Kennung ist in der TSE nicht angemeldet. Melden Sie sie zuerst unter „Kassen-Kennung anmelden“ mit der Admin-PIN an.'
     : code === 'TSE1_ERROR_TSE_NOT_INITIALIZED' ? 'Die TSE ist noch nicht in Betrieb genommen.'
     : code === 'TSE1_ERROR_CERTIFICATE_EXPIRED' ? 'Das Zertifikat der TSE ist abgelaufen – sie signiert nicht mehr.'
     : code === 'TSE1_ERROR_WRONG_STATE_NEEDS_PIN_CHANGE' || code === 'TSE1_ERROR_WRONG_STATE_NEEDS_PUK_CHANGE' ? 'Die TSE verlangt zuerst das Ändern der Auslieferungs-PIN bzw. -PUK (Inbetriebnahme).'
@@ -212,4 +212,55 @@ export async function tseTestSignature(db: Db, actor: Actor, v: { clientId: stri
     } catch (e) { r.printError = e instanceof Error ? e.message : 'Druck fehlgeschlagen'; }
   }
   return r;
+}
+
+// ---------- Kassen-Kennung anmelden ----------
+/**
+ * Meldet eine Kassen-Kennung (Client-ID) in der TSE an: Anmeldung als „Administrator“ mit der Admin-PIN, RegisterClient,
+ * Liste der Kennungen lesen, abmelden. PIN und Schlüssel werden weder gespeichert noch protokolliert.
+ * Feldnamen nach Epsons JSON-Beschreibung aus dem Gedächtnis – mit einem echten Stick nicht erprobt.
+ */
+export async function tseRegisterClient(db: Db, actor: Actor, v: { clientId: string; adminPin: string; secretKey: string }): Promise<TseRegisterResult> {
+  const t = await getTse(db);
+  if (!t.enabled) throw conflict('Die TSE ist noch nicht eingerichtet (Einstellungen → TSE)', 'tse_not_configured');
+  const ADMIN = 'Administrator';
+  const by = (prev: TseReply[], fn: string) => prev.find((r) => r.fn === fn);
+  const ok = (prev: TseReply[], fn: string) => by(prev, fn)?.result === 'EXECUTION_OK';
+  const initialized = (p: TseReply[]) => p[0]?.result === 'EXECUTION_OK' && (p[0].output.tseInformation as Record<string, unknown> | undefined)?.tseInitializationState === 'INITIALIZED';
+  let replies: TseReply[];
+  try {
+    replies = await tseSession(t.host, t.port, [
+      { fn: 'GetStorageInfo', storageType: 'COMMON', vendor: '' },
+      (p) => (initialized(p) && (p[0]!.output.tseInformation as Record<string, unknown>).hasPassedSelfTest === false ? { fn: 'RunTSESelfTest', ...vendorOf(p[0]), timeoutMs: 120000 } : null),
+      (p) => (initialized(p) && p.every((r) => r.result === 'EXECUTION_OK') ? { fn: 'GetChallenge', ...vendorOf(p[0]), input: { userId: ADMIN } } : null),
+      (p) => {
+        const challenge = str(by(p, 'GetChallenge')?.output.challenge);
+        if (!ok(p, 'GetChallenge') || !challenge) return null;
+        const hash = createHash('sha256').update(challenge + v.secretKey, 'utf8').digest('base64');
+        return { fn: 'AuthenticateUserForAdmin', ...vendorOf(p[0]), input: { userId: ADMIN, pin: v.adminPin, hash } };
+      },
+      (p) => (ok(p, 'AuthenticateUserForAdmin') ? { fn: 'RegisterClient', ...vendorOf(p[0]), input: { clientId: v.clientId } } : null),
+      (p) => (ok(p, 'RegisterClient') ? { fn: 'GetRegisteredClientList', ...vendorOf(p[0]), input: {} } : null),
+      // abmelden, sobald die Anmeldung geklappt hat – auch wenn das Anmelden der Kennung gescheitert ist
+      (p) => (ok(p, 'AuthenticateUserForAdmin') ? { fn: 'LogOutForAdmin', ...vendorOf(p[0]), input: {} } : null),
+    ]);
+  } catch (e) {
+    throw new AppError(502, 'tse_failed', e instanceof TseError ? e.message : `TSE nicht erreichbar: ${e instanceof Error ? e.message : e}`);
+  }
+  const first = replies[0];
+  if (!first || first.result !== 'EXECUTION_OK') fail(first, 'Die TSE-Daten ließen sich nicht lesen');
+  const info = (first.output.tseInformation ?? {}) as Record<string, unknown>;
+  if (info.tseInitializationState !== 'INITIALIZED')
+    throw conflict(`Die TSE ist nicht in Betrieb (${str(info.tseInitializationState) || 'Zustand unbekannt'}). Eine Kennung lässt sich erst nach der Inbetriebnahme mit PUK und PINs anmelden.`, 'tse_not_initialized');
+  const bad = replies.find((r) => r.result !== 'EXECUTION_OK' && !['LogOutForAdmin', 'GetRegisteredClientList'].includes(r.fn));
+  if (bad) {
+    if (bad.fn === 'RegisterClient') throw new AppError(502, 'tse_failed', `Die Anmeldung als Administrator hat geklappt, aber die TSE hat die Kennung nicht angenommen (${[bad.result, bad.error?.fact].filter(Boolean).join(' – ')}).`);
+    signFail(bad);
+  }
+  if (!ok(replies, 'RegisterClient')) throw new AppError(502, 'tse_failed', 'Die TSE hat die Kennung nicht angemeldet.');
+  const list = by(replies, 'GetRegisteredClientList');
+  const raw = list?.result === 'EXECUTION_OK' ? list.output.registeredClientIdList : null;
+  const clients = Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : null;
+  await record(db, actor, { action: 'tse_register_client', entity: 'program', entityId: 'tse', after: { clientId: v.clientId, serial: hex(str(info.serialNumber)).slice(0, 16) } });
+  return { clientId: v.clientId, clients };
 }

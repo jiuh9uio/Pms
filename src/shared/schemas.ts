@@ -167,6 +167,18 @@ export interface TseSignResult {
   printed: boolean; printError: string;
 }
 
+// ---------- TSE: Kassen-Kennung anmelden ----------
+export const tseRegisterInput = z.object({
+  clientId: tseSignInput.shape.clientId,
+  adminPin: z.string().regex(/^.{5}$/, 'Die Admin-PIN hat genau 5 Zeichen'),
+  secretKey: tseSignInput.shape.secretKey,
+});
+export interface TseRegisterResult {
+  clientId: string;
+  /** alle in der TSE angemeldeten Kennungen; null, wenn die TSE die Liste nicht geliefert hat */
+  clients: string[] | null;
+}
+
 // ---------- FRITZ!Box (Internet → Internetverbindung) ----------
 export const fritzSettingsInput = z.object({
   enabled: z.boolean(),

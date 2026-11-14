@@ -29,6 +29,8 @@ let tested = false;
 let state = 'INITIALIZED';
 let retries = 3;
 let loggedIn = false;
+let adminIn = false;
+const clients = new Set(['KASSE1']);
 let timeSet = false;
 let txn = 41;
 let sigs = 1234;
@@ -71,9 +73,19 @@ function tseServer(sock: Socket) {
         else if (req.function === 'AuthenticateUserForTimeAdmin') {
           const good = createHash('sha256').update('abcdefgh12345678EPSONKEY').digest('base64');
           if (req.input.hash !== good) result = { result: 'OTHER_ERROR_HOST_AUTHENTICATION_FAILED', function: req.function, output: {} };
-          else if (req.input.clientId !== 'KASSE1') result = { result: 'TSE1_ERROR_CLIENT_NOT_REGISTERED', function: req.function, output: {} };
+          else if (!clients.has(req.input.clientId)) result = { result: 'TSE1_ERROR_CLIENT_NOT_REGISTERED', function: req.function, output: {} };
           else if (req.input.pin !== '54321') { retries--; result = { result: 'TSE1_ERROR_AUTHENTICATION_FAILED', function: req.function, output: { remainingRetries: retries } }; }
           else { loggedIn = true; result = { result: 'EXECUTION_OK', function: req.function, output: {} }; }
+        } else if (req.function === 'AuthenticateUserForAdmin') {
+          const good = createHash('sha256').update('abcdefgh12345678EPSONKEY').digest('base64');
+          if (req.input.hash !== good) result = { result: 'OTHER_ERROR_HOST_AUTHENTICATION_FAILED', function: req.function, output: {} };
+          else if (req.input.userId !== 'Administrator' || req.input.pin !== '11111') { retries--; result = { result: 'TSE1_ERROR_AUTHENTICATION_FAILED', function: req.function, output: { remainingRetries: retries } }; }
+          else { adminIn = true; result = { result: 'EXECUTION_OK', function: req.function, output: {} }; }
+        } else if (['RegisterClient', 'GetRegisteredClientList', 'LogOutForAdmin'].includes(req.function)) {
+          if (!adminIn) result = { result: 'OTHER_ERROR_UNAUTHENTICATED_ADMIN_USER', function: req.function, output: {} };
+          else if (req.function === 'RegisterClient') { if (req.input.clientId === 'VOLL') result = { result: 'TSE1_ERROR_CLIENT_LIMIT', function: req.function, output: {} }; else { clients.add(req.input.clientId); result = { result: 'EXECUTION_OK', function: req.function, output: {} }; } }
+          else if (req.function === 'GetRegisteredClientList') result = { result: 'EXECUTION_OK', function: req.function, output: { registeredClientIdList: [...clients] } };
+          else { adminIn = false; result = { result: 'EXECUTION_OK', function: req.function, output: {} }; }
         } else if (['UpdateTime', 'StartTransaction', 'FinishTransaction', 'LogOutForTimeAdmin'].includes(req.function)) {
           inputs.push({ fn: req.function, ...req.input });
           if (!loggedIn) result = { result: 'OTHER_ERROR_UNAUTHENTICATED_TIME_ADMIN_USER', function: req.function, output: {} };
@@ -209,6 +221,33 @@ describe('TSE (Epson) prüfen', () => {
     const un = await sign({});
     expect(un.statusCode).toBe(409);
     state = 'INITIALIZED';
+  });
+
+  it('meldet eine Kassen-Kennung mit der Admin-PIN an', async () => {
+    const reg = (body: object, who = admin) => call('POST', '/tse/register-client', who, { clientId: 'PMS1', adminPin: '11111', secretKey: 'EPSONKEY', ...body });
+    const user = session(await call('POST', '/auth/login', {}, { username: 'rezeption', password: 'rezeption-123' }));
+    expect((await reg({}, user)).statusCode).toBe(403);
+    expect((await reg({ adminPin: '1' })).statusCode).toBe(400);
+    retries = 3;
+    expect((await reg({ secretKey: 'FALSCH12' })).body).toContain('kein PIN-Versuch');
+    expect((await reg({ adminPin: '00000' })).body).toContain('Noch 2 Versuche');
+    expect(clients.has('PMS1')).toBe(false);
+    const full = await reg({ clientId: 'VOLL' });
+    expect(full.statusCode).toBe(502);
+    expect(full.body).toContain('nicht angenommen');
+    expect(adminIn).toBe(false); // trotz Fehler wieder abgemeldet
+
+    seen = [];
+    const r = await reg({});
+    expect(r.json()).toEqual({ clientId: 'PMS1', clients: ['KASSE1', 'PMS1'] });
+    expect(seen.map((x) => x.fn)).toEqual(['GetStorageInfo', 'GetChallenge', 'AuthenticateUserForAdmin', 'RegisterClient', 'GetRegisteredClientList', 'LogOutForAdmin']);
+    expect(adminIn).toBe(false);
+    const log = await db.execute(sql`select after::text as a from audit_log where action = 'tse_register_client'`);
+    expect(log).toHaveLength(1);
+    expect(String(log[0]!.a)).not.toContain('11111');
+    // danach lässt sich mit der neuen Kennung signieren
+    const sig = await call('POST', '/tse/test-signature', admin, { clientId: 'PMS1', pin: '54321', secretKey: 'EPSONKEY', print: false });
+    expect(sig.json()).toMatchObject({ clientId: 'PMS1' });
   });
 
   it('druckt das Datenblatt auf dem Bondrucker', async () => {

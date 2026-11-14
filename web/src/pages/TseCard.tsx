@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { tseSettingsInput, tseSignInput, type TseInfoDto, type TseSettings, type TseSignResult } from '../../../src/shared/schemas.js';
+import { tseRegisterInput, tseSettingsInput, tseSignInput, type TseInfoDto, type TseRegisterResult, type TseSettings, type TseSignResult } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { Badge, Button, Field, LoadState, fmtDateTime, useLoad, useSubmit, useToast } from '../ui.tsx';
 
@@ -83,6 +83,7 @@ export function TseCard() {
           <p className="muted small">Seriennummer, BSI-Zertifizierung und Gültigkeit werden unter anderem für die Meldung der Kasse beim Finanzamt gebraucht. Welche Angaben dort einzutragen sind, klärt die Steuerberatung.</p>
         </section>
       )}
+      <RegisterCard onDone={() => void act('read')} />
       <SignCard onDone={() => void act('read')} />
     </>
   );
@@ -107,7 +108,7 @@ function SignCard({ onDone }: { onDone: () => void }) {
     <form className="card" onSubmit={(e) => void f.submit(v, e)} noValidate>
       <h2>Test-Signatur</h2>
       <p className="notice warn"><b>Das schreibt in die TSE.</b> Das Programm meldet sich mit Ihrer Zeit-PIN an, stellt die Uhr der TSE, zeichnet einen Vorgang der Art „SonstigerVorgang“ mit dem Inhalt „PMS Testsignatur - kein Umsatz“ auf und meldet sich wieder ab. Der Eintrag bleibt dauerhaft in der TSE und erscheint in einem späteren Export. Mit einem echten Stick noch nicht erprobt.</p>
-      <p className="muted">Voraussetzung: Die TSE ist in Betrieb genommen und die Kassen-Kennung ist darin angemeldet. PIN und Schlüssel werden nur für diesen einen Vorgang verwendet und nirgends gespeichert.</p>
+      <p className="muted">Voraussetzung: Die TSE ist in Betrieb genommen und die Kassen-Kennung ist darin angemeldet (siehe „Kassen-Kennung anmelden“ darüber). PIN und Schlüssel werden nur für diesen einen Vorgang verwendet und nirgends gespeichert.</p>
       <div className="formgrid cols3">
         <Field label="Kassen-Kennung (Client-ID)" error={f.errors.clientId} hint="so, wie sie in der TSE angemeldet wurde"><input value={v.clientId} onChange={(e) => setV({ ...v, clientId: e.target.value })} autoComplete="off" /></Field>
         <Field label="Zeit-PIN (TimeAdmin)" error={f.errors.pin} hint="5 Zeichen · nach 3 Fehlversuchen gesperrt"><input type="password" value={v.pin} onChange={(e) => setV({ ...v, pin: e.target.value })} autoComplete="off" maxLength={5} /></Field>
@@ -132,6 +133,38 @@ function SignCard({ onDone }: { onDone: () => void }) {
           </tbody></table>
         </>
       )}
+    </form>
+  );
+}
+
+/** Kassen-Kennung in der TSE anmelden (RegisterClient) – nötig, bevor mit dieser Kennung signiert werden kann. */
+function RegisterCard({ onDone }: { onDone: () => void }) {
+  const toast = useToast();
+  const [v, setV] = useState({ clientId: '', adminPin: '', secretKey: 'EPSONKEY' });
+  const [res, setRes] = useState<TseRegisterResult | null>(null);
+  const [fail, setFail] = useState<string | null>(null);
+  const f = useSubmit(tseRegisterInput, async (d) => {
+    setFail(null); setRes(null);
+    if (!window.confirm(`Kennung „${d.clientId}“ jetzt in der TSE anmelden?\n\nEine falsche Admin-PIN verbraucht einen von drei Versuchen. Danach ist die PIN gesperrt und nur mit der PUK wieder freizuschalten.`)) return;
+    try {
+      const r = await api<TseRegisterResult>('POST', '/tse/register-client', d);
+      setRes(r); toast('Kassen-Kennung angemeldet'); onDone();
+    } catch (e) { setFail(e instanceof Error ? e.message : 'Fehler'); }
+    setV((x) => ({ ...x, adminPin: '' }));
+  });
+  return (
+    <form className="card" onSubmit={(e) => void f.submit(v, e)} noValidate>
+      <h2>Kassen-Kennung anmelden</h2>
+      <p className="notice warn"><b>Das ändert die TSE.</b> Meldet die Test-Signatur „TSE1_ERROR_CLIENT_NOT_REGISTERED“, kennt die TSE die Kassen-Kennung noch nicht. Hier wird sie mit der <b>Admin-PIN</b> (nicht der Zeit-PIN) angemeldet. Mit einem echten Stick noch nicht erprobt.</p>
+      <p className="muted">Die Kennung wählen Sie selbst, zum Beispiel „PMS1“. Sie bleibt in der TSE gespeichert und zählt zu den angemeldeten Kassen. Dieselbe Kennung tragen Sie danach bei der Test-Signatur ein. PIN und Schlüssel werden nur für diesen Vorgang verwendet und nirgends gespeichert.</p>
+      <div className="formgrid cols3">
+        <Field label="Kassen-Kennung (Client-ID)" error={f.errors.clientId} hint="höchstens 30 Zeichen, ohne Umlaute"><input value={v.clientId} onChange={(e) => setV({ ...v, clientId: e.target.value })} autoComplete="off" maxLength={30} /></Field>
+        <Field label="Admin-PIN" error={f.errors.adminPin} hint="5 Zeichen · nach 3 Fehlversuchen gesperrt"><input type="password" value={v.adminPin} onChange={(e) => setV({ ...v, adminPin: e.target.value })} autoComplete="off" maxLength={5} /></Field>
+        <Field label="Geheimer Schlüssel" error={f.errors.secretKey} hint="nur ändern, wenn er umgestellt wurde"><input value={v.secretKey} onChange={(e) => setV({ ...v, secretKey: e.target.value })} autoComplete="off" maxLength={8} /></Field>
+      </div>
+      {fail && <p className="notice danger" role="alert">{fail}</p>}
+      <div className="formactions"><Button type="submit" variant="primary" busy={f.busy}>Kennung anmelden</Button></div>
+      {res && <p className="notice"><b>Die Kennung „{res.clientId}“ ist angemeldet.</b>{res.clients ? ` In der TSE angemeldet: ${res.clients.join(', ')}.` : ''} Sie können jetzt die Test-Signatur mit dieser Kennung ausführen.</p>}
     </form>
   );
 }
