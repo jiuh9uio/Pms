@@ -5,11 +5,14 @@ import { readFile } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
 import { desc, eq, isNull, lt } from 'drizzle-orm';
 import QRCode from 'qrcode';
-import type { InternetStatusDto, NetDeviceDto, NetOutagesDto, NetScanDto, WifiDto, WifiSettings } from '../../shared/schemas.js';
+import type { FritzInfoDto, FritzSettingsDto, InternetStatusDto, NetDeviceDto, NetOutagesDto, NetScanDto, WifiDto, WifiSettings } from '../../shared/schemas.js';
 import type { Db, Exec } from '../db/client.js';
 import { netDevices, netOutages, settings } from '../db/schema.js';
 import { getHotel } from './settings.js';
-import { AppError } from '../lib/errors.js';
+import { AppError, conflict } from '../lib/errors.js';
+import { isPrivateIp } from '../lib/escpos.js';
+import { tr064, Tr064Error, type Tr064Config } from '../lib/tr064.js';
+import { decrypt, encrypt } from './mail.js';
 import { record, type Actor } from './audit.js';
 
 /**
@@ -186,4 +189,77 @@ export function startOutageMonitor(db: Db, check: () => Promise<boolean> = onlin
 export async function listOutages(db: Exec): Promise<NetOutagesDto> {
   const rows = await db.select().from(netOutages).orderBy(desc(netOutages.startedAt)).limit(50);
   return { monitoring, outages: rows.map((r) => ({ id: r.id, startedAt: r.startedAt.toISOString(), endedAt: r.endedAt?.toISOString() ?? null, uncertain: r.uncertain })) };
+}
+
+// ---------- FRITZ!Box: Verbindung neu aufbauen oder Box neu starten ----------
+interface FritzStored { enabled: boolean; host: string; port: number; user: string; passEnc: string }
+const FRITZ0: FritzStored = { enabled: false, host: '', port: 49000, user: '', passEnc: '' };
+const hosted = () => process.env.PMS_HOSTED === 'true';
+async function fritzLoad(db: Exec): Promise<FritzStored> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'fritzbox'));
+  return { ...FRITZ0, ...((row?.value as Partial<FritzStored>) ?? {}) };
+}
+const fritzDto = (s: FritzStored): FritzSettingsDto => ({ enabled: s.enabled, host: s.host, port: s.port, user: s.user, hasPassword: !!s.passEnc, available: !hosted() });
+export async function getFritz(db: Exec): Promise<FritzSettingsDto> {
+  const s = await fritzLoad(db);
+  // Vorschlag für die Adresse: der Router dieses Rechners
+  return fritzDto(s.host || hosted() ? s : { ...s, host: (await gateway().catch(() => null)) ?? '' });
+}
+export async function saveFritz(db: Db, actor: Actor, v: { enabled: boolean; host: string; port: number; user: string; password: string }) {
+  if (v.host && !isPrivateIp(v.host)) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { host: 'Bitte die Adresse der FRITZ!Box im Hausnetz eintragen, z. B. 192.168.178.1' });
+  const cur = await fritzLoad(db);
+  const next: FritzStored = { enabled: v.enabled, host: v.host, port: v.port, user: v.user, passEnc: v.password ? encrypt(v.password) : cur.passEnc };
+  await db.insert(settings).values({ key: 'fritzbox', value: next }).onConflictDoUpdate({ target: settings.key, set: { value: next, updatedAt: new Date() } });
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: 'fritzbox', after: fritzDto(next) }); // ohne Kennwort
+  return fritzDto(next);
+}
+async function fritzConfig(db: Exec): Promise<Tr064Config> {
+  if (hosted()) throw conflict('Das Programm läuft auf einem Server im Internet – die FRITZ!Box lässt sich nur von einem Rechner im Haus steuern.', 'fritz_unavailable');
+  const s = await fritzLoad(db);
+  if (!s.enabled || !s.host || !s.passEnc) throw conflict('Die FRITZ!Box ist noch nicht eingerichtet (Internet → Internetverbindung)', 'fritz_not_configured');
+  return { host: s.host, port: s.port, user: s.user, password: decrypt(s.passEnc) };
+}
+const fritzFail = (e: unknown): never => { throw e instanceof AppError ? e : new AppError(502, 'fritz_failed', e instanceof Tr064Error ? e.message : `FRITZ!Box: ${e instanceof Error ? e.message : e}`); };
+const WAN = [
+  { path: '/upnp/control/wanpppconn1', service: 'urn:dslforum-org:service:WANPPPConnection:1' }, // DSL
+  { path: '/upnp/control/wanipconnection1', service: 'urn:dslforum-org:service:WANIPConnection:1' }, // Kabel, Glasfaser, hinter einem Modem
+];
+
+/** Modell, Version, Laufzeit und – soweit die Box sie nennt – Zustand der Internetverbindung. Dient auch als Verbindungstest. */
+export async function fritzInfo(db: Exec): Promise<FritzInfoDto> {
+  try {
+    const c = await fritzConfig(db);
+    const d = await tr064(c, '/upnp/control/deviceinfo', 'urn:dslforum-org:service:DeviceInfo:1', 'GetInfo');
+    let externalIp = '', connection = '';
+    for (const w of WAN) {
+      try {
+        const i = await tr064(c, w.path, w.service, 'GetInfo');
+        if (i.NewConnectionStatus) { connection = i.NewConnectionStatus; externalIp = i.NewExternalIPAddress ?? ''; if (connection === 'Connected') break; }
+      } catch { /* diese Anschlussart gibt es an der Box nicht */ }
+    }
+    return { model: d.NewModelName ?? '', version: d.NewSoftwareVersion ?? '', uptimeSec: d.NewUpTime ? Number(d.NewUpTime) : null, externalIp, connection };
+  } catch (e) { return fritzFail(e); }
+}
+
+/** reconnect = Internetverbindung trennen (die Box baut sie von selbst neu auf); reboot = die ganze Box neu starten (WLAN und Telefon fallen einige Minuten aus). */
+export async function fritzAction(db: Db, actor: Actor, action: 'reconnect' | 'reboot') {
+  try {
+    const c = await fritzConfig(db);
+    if (action === 'reboot') await tr064(c, '/upnp/control/deviceconfig', 'urn:dslforum-org:service:DeviceConfig:1', 'Reboot');
+    else {
+      let done = false, last: unknown = null;
+      for (const w of WAN) {
+        try { await tr064(c, w.path, w.service, 'ForceTermination'); done = true; break; }
+        catch (e) {
+          // 707 „DisconnectInProgress“: die Box trennt bereits – das ist der gewünschte Erfolg
+          if (e instanceof Tr064Error && e.code === '707') { done = true; break; }
+          if (e instanceof Tr064Error && e.status === 401) throw e;
+          last = e;
+        }
+      }
+      if (!done) throw last ?? new Tr064Error('Die FRITZ!Box bietet das Trennen der Verbindung nicht an.');
+    }
+    await record(db, actor, { action: action === 'reboot' ? 'fritz_reboot' : 'fritz_reconnect', entity: 'program', entityId: 'fritzbox', after: { host: c.host } });
+    return { ok: true };
+  } catch (e) { return fritzFail(e); }
 }

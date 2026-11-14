@@ -261,6 +261,15 @@ rechtlich geprüft ist, steht dort ausdrücklich.
   keine Verfügbarkeitsauskunft, keine Preise. Der Datenschutzhinweis ist ein freies Textfeld und muss vom Betreiber kommen.
   Nur im Hausnetz erprobt; ein Betrieb im Internet setzt die Server-Installation voraus und wurde nicht auf Sicherheit geprüft.
 
+**Seit Version 1.29.0 zusätzlich – FRITZ!Box steuern:**
+
+- `src/server/lib/tr064.ts`: TR-064 (SOAP über HTTP, Port 49000, HTTP-Digest). Verwendet werden `DeviceInfo:1#GetInfo`,
+  `DeviceConfig:1#Reboot` sowie `WANPPPConnection:1` bzw. `WANIPConnection:1` mit `GetInfo` und `ForceTermination`
+  (Fehler 707 „DisconnectInProgress“ gilt als Erfolg). Nur Adressen im Hausnetz; mit `PMS_HOSTED=true` abgeschaltet.
+- **Grenzen:** aus der AVM-Schnittstellenbeschreibung nach bestem Wissen umgesetzt und nur gegen eine nachgebaute Box getestet.
+  Ob das eigene Modell und die FRITZ!OS-Version alle Aktionen so annehmen, zeigt erst der Versuch. Es gibt bewusst keinen
+  automatischen Neustart bei Ausfall (Gefahr von Neustart-Schleifen bei Störungen des Anbieters).
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

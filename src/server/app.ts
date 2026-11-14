@@ -268,6 +268,11 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     const internet = { preHandler: requireModule('internet') };
     api.get('/network/status', internet, () => network.internetStatus());
     api.get('/network/outages', internet, () => network.listOutages(db));
+    // FRITZ!Box: Einrichtung nur Administrator; Verbindung neu aufbauen und Neustart für alle mit dem Bereich „Internet“
+    api.get('/network/fritz', internet, () => network.getFritz(db));
+    api.put('/network/fritz', { preHandler: requireAdmin }, (req) => network.saveFritz(db, actor(req), S.fritzSettingsInput.parse(req.body)));
+    api.get('/network/fritz/info', internet, () => network.fritzInfo(db));
+    api.post('/network/fritz/action', internet, (req) => network.fritzAction(db, actor(req), S.fritzActionInput.parse(req.body).action));
     api.get('/network/wifi', internet, () => network.getWifi(db));
     api.put('/network/wifi', { preHandler: requireAdmin }, (req) => network.saveWifi(db, actor(req), S.wifiSettingsInput.parse(req.body)));
     api.get('/network/devices', internet, () => network.scan(db));

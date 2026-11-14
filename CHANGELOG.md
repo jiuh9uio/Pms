@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.29.0
+
+- Internet → Internetverbindung: FRITZ!Box steuern. Wenn das Internet hängt, lässt sich die Verbindung neu aufbauen oder die ganze Box neu starten, ohne an den Router zu gehen; dazu Modell, Laufzeit und Verbindungszustand abfragen.
+- Einrichten (nur Administrator): Adresse der Box, ein FRITZ!Box-Benutzer mit dem Recht „FRITZ!Box Einstellungen“ und dessen Kennwort. In der Box muss „Zugriff für Anwendungen zulassen“ eingeschaltet sein. Noch nicht mit einer echten FRITZ!Box erprobt.
+
 ## 1.28.2
 
 - Nachlass bei längerem Aufenthalt: Wird eine Reservierung verlängert oder gekürzt und überschreitet dabei die Grenze (z. B. von 1 auf 2 Nächte), werden alle Nächte neu berechnet – der Nachlass gilt dann für den ganzen Aufenthalt bzw. entfällt ganz. Ein eingetragener Sonderpreis bleibt unberührt.

@@ -166,3 +166,13 @@ export interface TseSignResult {
   signatureCounter: number | null; signatureBase64: string; processType: string; processData: string;
   printed: boolean; printError: string;
 }
+
+// ---------- FRITZ!Box (Internet → Internetverbindung) ----------
+export const fritzSettingsInput = z.object({
+  enabled: z.boolean(),
+  host: z.string().trim().max(60), port: z.number('Bitte eine Zahl eingeben').int().min(1).max(65535).default(49000),
+  user: z.string().trim().max(80), /** leer = gespeichertes Kennwort behalten */ password: z.string().max(200),
+});
+export interface FritzSettingsDto { enabled: boolean; host: string; port: number; user: string; hasPassword: boolean; /** nur im Haus möglich */ available: boolean }
+export interface FritzInfoDto { model: string; version: string; /** Laufzeit seit dem letzten Start in Sekunden */ uptimeSec: number | null; externalIp: string; connection: string }
+export const fritzActionInput = z.object({ action: z.enum(['reconnect', 'reboot']) });

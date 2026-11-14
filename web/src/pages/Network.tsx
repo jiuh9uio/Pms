@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { wifiSettingsInput, type InternetStatusDto, type NetDeviceDto, type NetOutagesDto, type NetScanDto, type WifiDto } from '../../../src/shared/schemas.js';
+import { useEffect, useState } from 'react';
+import { fritzSettingsInput, wifiSettingsInput, type FritzInfoDto, type FritzSettingsDto, type InternetStatusDto, type NetDeviceDto, type NetOutagesDto, type NetScanDto, type WifiDto } from '../../../src/shared/schemas.js';
 import { useAuth } from '../App.tsx';
 import { api } from '../api.ts';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, fmtDateTime, printOnly, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
@@ -8,6 +8,67 @@ const duration = (a: string, b: string) => {
   const min = Math.max(1, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60_000));
   return min < 60 ? `${min} Min.` : `${Math.floor(min / 60)} Std. ${min % 60} Min.`;
 };
+
+const uptime = (sec: number) => { const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60); return d ? `${d} Tg. ${h} Std.` : h ? `${h} Std. ${m} Min.` : `${m} Min.`; };
+
+/** FRITZ!Box: Internetverbindung neu aufbauen oder die Box neu starten – direkt aus dem Programm. */
+function FritzCard() {
+  const { user } = useAuth();
+  const toast = useToast();
+  const isAdmin = user.role === 'admin';
+  const [rev, setRev] = useState(0);
+  const { data, error } = useLoad(() => api<FritzSettingsDto>('GET', '/network/fritz'), [rev]);
+  const [edit, setEdit] = useState(false);
+  const [v, setV] = useState({ host: '', port: '49000', user: '', password: '' });
+  const [info, setInfo] = useState<FritzInfoDto | null>(null);
+  const [busy, setBusy] = useState<'' | 'info' | 'reconnect' | 'reboot'>('');
+  const [fail, setFail] = useState<string | null>(null);
+  useEffect(() => { if (data) setV({ host: data.host, port: String(data.port), user: data.user, password: '' }); }, [data]);
+  const f = useSubmit(fritzSettingsInput, async (d) => { await api('PUT', '/network/fritz', d); toast('FRITZ!Box gespeichert'); setEdit(false); setRev(rev + 1); });
+  const ready = !!data && data.enabled && !!data.host && data.hasPassword;
+  const run = async (what: 'info' | 'reconnect' | 'reboot') => {
+    if (what === 'reconnect' && !window.confirm('Internetverbindung jetzt trennen und neu aufbauen? Das Internet ist dabei für etwa eine Minute weg.')) return;
+    if (what === 'reboot' && !window.confirm('FRITZ!Box jetzt neu starten?\n\nInternet, WLAN und Telefon fallen für einige Minuten aus. Laufende Kartenzahlungen und Telefonate werden unterbrochen.')) return;
+    setBusy(what); setFail(null);
+    try {
+      if (what === 'info') setInfo(await api<FritzInfoDto>('GET', '/network/fritz/info'));
+      else { await api('POST', '/network/fritz/action', { action: what }); toast(what === 'reboot' ? 'Die FRITZ!Box startet neu – das dauert einige Minuten' : 'Die Verbindung wird neu aufgebaut'); setInfo(null); }
+    } catch (e) { setFail(e instanceof Error ? e.message : 'Fehler'); }
+    setBusy('');
+  };
+  if (!data) return <section className="card"><h2>FRITZ!Box</h2><LoadState error={error} loading /></section>;
+  if (!data.available) return <section className="card"><h2>FRITZ!Box</h2><p className="muted">Das Programm läuft auf einem Server im Internet. Die FRITZ!Box lässt sich nur steuern, wenn es auf einem Rechner im Haus läuft.</p></section>;
+  return (
+    <section className="card">
+      <div className="cardhead"><div><h2>FRITZ!Box</h2><p className="muted">Wenn das Internet hängt: Verbindung neu aufbauen oder die Box neu starten, ohne an den Router zu gehen.</p></div>
+        <div className="actions">{isAdmin && !edit && <Button onClick={() => setEdit(true)}>{ready ? 'Ändern' : 'Einrichten'}</Button>}</div></div>
+      {edit ? (
+        <form onSubmit={(e) => void f.submit({ enabled: true, host: v.host, port: Number(v.port), user: v.user, password: v.password }, e)} noValidate>
+          <div className="formgrid">
+            <Field label="Adresse der FRITZ!Box" error={f.errors.host} hint="meist 192.168.178.1"><input value={v.host} onChange={(e) => setV({ ...v, host: e.target.value })} inputMode="decimal" /></Field>
+            <Field label="Port" error={f.errors.port} hint="bei der FRITZ!Box 49000"><input value={v.port} onChange={(e) => setV({ ...v, port: e.target.value })} inputMode="numeric" /></Field>
+            <Field label="FRITZ!Box-Benutzer" error={f.errors.user} hint="unter System → FRITZ!Box-Benutzer; braucht das Recht „FRITZ!Box Einstellungen“"><input value={v.user} onChange={(e) => setV({ ...v, user: e.target.value })} autoComplete="off" /></Field>
+            <Field label="Kennwort" error={f.errors.password} hint={data.hasPassword ? 'gespeichert – leer lassen zum Behalten' : undefined}><input type="password" value={v.password} onChange={(e) => setV({ ...v, password: e.target.value })} autoComplete="new-password" /></Field>
+          </div>
+          <div className="formactions"><Button type="submit" variant="primary" busy={f.busy}>Speichern</Button><Button onClick={() => setEdit(false)}>Abbrechen</Button></div>
+          <p className="muted small">In der FRITZ!Box muss unter Heimnetz → Netzwerk → Netzwerkeinstellungen „Zugriff für Anwendungen zulassen“ eingeschaltet sein. Am besten einen eigenen Benutzer für das Programm anlegen. Das Kennwort wird verschlüsselt gespeichert.</p>
+        </form>
+      ) : !ready ? <p className="muted">Noch nicht eingerichtet.{isAdmin ? '' : ' Das richtet der Administrator ein.'}</p> : (
+        <>
+          <div className="formactions">
+            <Button busy={busy === 'info'} disabled={busy !== ''} onClick={() => void run('info')}>Zustand abfragen</Button>
+            <Button variant="primary" busy={busy === 'reconnect'} disabled={busy !== ''} onClick={() => void run('reconnect')}>Internetverbindung neu aufbauen</Button>
+            <Button variant="danger" busy={busy === 'reboot'} disabled={busy !== ''} onClick={() => void run('reboot')}>FRITZ!Box neu starten</Button>
+          </div>
+          {fail && <p className="notice danger" role="alert">{fail}</p>}
+          {info && <p>{info.model || 'FRITZ!Box'}{info.version && ` · Version ${info.version}`}{info.uptimeSec != null && ` · läuft seit ${uptime(info.uptimeSec)}`}
+            {info.connection && <> · Internet: {info.connection === 'Connected' ? <Badge tone="ok">verbunden</Badge> : <Badge tone="danger">{info.connection}</Badge>}</>}{info.externalIp && ` · Adresse im Internet ${info.externalIp}`}</p>}
+          <p className="muted small">„Neu aufbauen“ trennt nur die Internetverbindung; die Box wählt sich sofort wieder ein (hilft oft schon). „Neu starten“ startet die ganze Box – WLAN und Telefon sind dann einige Minuten weg. Beides wird im Protokoll vermerkt. Hilft auch der Neustart nicht, liegt die Störung beim Anbieter.</p>
+        </>
+      )}
+    </section>
+  );
+}
 
 /** Gäste-WLAN: Zugangsdaten hinterlegen (Administrator) und als QR-Code zum Aushängen drucken. */
 function WifiCard() {
@@ -93,7 +154,7 @@ export function Network() {
     <>
       <PageHeader title="Internet" sub="Internetverbindung und Geräte, die gerade im selben Netz wie dieser Rechner erreichbar sind" />
       {bar}
-      {current === 'verbindung' && <InternetCard />}
+      {current === 'verbindung' && <><InternetCard /><FritzCard /></>}
       {current === 'wlan' && <WifiCard />}
       {current === 'geraete' && <DeviceList />}
     </>

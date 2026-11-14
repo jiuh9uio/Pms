@@ -40,6 +40,7 @@ const PAGES: Page[] = [
   { to: '/team', title: 'Team – Übergabebuch', area: 'Team', words: 'übergabe übergabebuch aufgabe reparatur schicht notiz defekt kaputt' },
   { to: '/reinigung', title: 'Reinigung', area: 'Hotel', words: 'reinigung housekeeping zimmermädchen endreinigung putzen sauber', module: 'hotel' },
   { to: '/tagesabschluss', title: 'Tagesabschluss', area: 'Hotel', words: 'tagesabschluss kasse zahlungen bar karte abrechnung tag kassensturz', module: 'hotel' },
+  { to: '/internet', title: 'FRITZ!Box neu starten', area: 'Internet', words: 'fritzbox fritz router neustart reset internet weg verbindung neu aufbauen', module: 'internet' },
   { to: '/einstellungen?ansicht=tse', title: 'TSE', area: 'Einstellungen', words: 'tse epson stick kassensicherung selbsttest zertifikat seriennummer finanzamt', admin: true },
   { to: '/einstellungen?ansicht=steuern', title: 'Steuersätze', area: 'Einstellungen', words: 'mehrwertsteuer umsatzsteuer mwst 7 19', admin: true },
   { to: '/einstellungen?ansicht=netz', title: 'Zugriff im Hausnetz', area: 'Einstellungen', words: 'tablet adresse firewall netzwerk', admin: true },
