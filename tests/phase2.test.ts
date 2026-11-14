@@ -339,5 +339,17 @@ describe('Personenabhängige Preise', () => {
     const b = await price(id);
     expect(b.lodgingCents).toBe(14000);
     expect(b.nightly![0]!.source).toContain('ab 2 Nächten');
+    // Kürzen auf eine Nacht: der Nachlass entfällt; wieder verlängern: er gilt für alle Nächte
+    await ok('PATCH', `/booking-rooms/${b.id}`, user, { to: '2034-02-07', version: b.version });
+    let c = await price(id);
+    expect(c.lodgingCents).toBe(8000);
+    await ok('PATCH', `/booking-rooms/${c.id}`, user, { to: '2034-02-09', version: c.version });
+    c = await price(id);
+    expect(c.lodgingCents).toBe(21000);
+    // ein Sonderpreis bleibt bei Verlängerung unberührt
+    await ok('PATCH', `/booking-rooms/${c.id}`, user, { pricePerNightCents: 5000, version: c.version });
+    c = await price(id);
+    await ok('PATCH', `/booking-rooms/${c.id}`, user, { to: '2034-02-10', version: c.version });
+    expect((await price(id)).lodgingCents).toBe(20000);
   });
 });

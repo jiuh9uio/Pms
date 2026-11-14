@@ -99,7 +99,7 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 .invalid input, .invalid select { border-color: var(--danger); }
 .formgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; } .formgrid.cols3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .wide { grid-column: 1 / -1; }
-.formactions { margin-top: 18px; display: flex; gap: 8px; }
+.formactions { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px; }
 .check { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; } .check input { width: 17px; height: 17px; margin-top: 2px; flex: none; accent-color: var(--accent); }
 .check small { display: block; }
 .subform { margin-top: 22px; padding-top: 4px; border-top: 1px solid var(--line); }

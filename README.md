@@ -251,8 +251,8 @@ rechtlich geprüft ist, steht dort ausdrücklich.
 - **Reinigungsliste** (`GET /housekeeping`) und **Tagesabschluss** (`GET /reports/day`): reine Auswertungen aus Belegung und
   Zahlungen. Der Tagesabschluss ist kein Kassenbuch und keine Kassenaufzeichnung im Sinne der AO/KassenSichV.
 - **Nachlass bei längerem Aufenthalt:** `room_categories.long_stay_nights/long_stay_discount_cents`, angewendet in `priceNights`
-  auf jede Nacht, sobald der Aufenthalt lang genug ist. Wird ein bestehender Aufenthalt verlängert oder gekürzt, gilt die
-  bestehende Regel des Programms für geänderte Nächte; bereits gebuchte Nachtpreise werden nicht rückwirkend umgerechnet.
+  auf jede Nacht, sobald der Aufenthalt lang genug ist. Über- oder unterschreitet eine Änderung des Zeitraums die Grenze,
+  werden alle Nächte neu berechnet (seit 1.28.2; nicht bei Sonderpreis). Sonst behalten gebuchte Nächte ihren Preis.
 - **Nachricht vor der Anreise** (`prearrival`, Spalte `bookings.prearrival_sent_at`): Prüfung jede Minute ab der eingestellten
   Uhrzeit; bestätigte Reservierungen mit E-Mail-Adresse, Anreise in 1…n Tagen, älter als 12 Stunden. Nur Angaben zur Reise,
   keine Werbung. Nicht mit einem echten Postfach erprobt.
