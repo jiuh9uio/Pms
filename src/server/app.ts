@@ -27,6 +27,7 @@ import { registerEInvoiceRoutes } from './routes-einvoice.js';
 import { registerHotelRoutes } from './routes-hotel.js';
 import { registerRestaurantRoutes } from './routes-restaurant.js';
 import { getBackupStatus, runBackup } from './backup.js';
+import { purge } from './modules/purge.js';
 import { checkForUpdate, getChangelog, getUpdateStatus, installUpdate } from './update.js';
 
 const COOKIE = 'pms_session';
@@ -246,6 +247,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
 
     // ---------- Datensicherung (nur Administrator) ----------
     api.get('/backup/status', { preHandler: requireAdmin }, () => getBackupStatus());
+    api.post('/settings/purge', { preHandler: requireAdmin }, (req) => purge(db, actor(req), S.purgeInput.parse(req.body)));
     api.post('/backup/run', { preHandler: requireAdmin }, async (req) => {
       const r = runBackup();
       await record(db, actor(req), { action: 'backup', entity: 'program', after: { file: r.last?.file } });

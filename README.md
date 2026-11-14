@@ -212,6 +212,16 @@ rechtlich geprüft ist, steht dort ausdrücklich.
   nur für Windows verfügbar – auf einem Linux-Server lässt sich ein USB-Stick so nicht ansprechen. Öffnet ein anderes Programm
   die TSE exklusiv (z. B. die Kassensoftware), kann der Zugriff abgelehnt werden.
 
+**Seit Version 1.21.0 zusätzlich – Hotel-Daten löschen:**
+
+- Einstellungen → Daten löschen (nur Administrator, `POST /settings/purge`): Rechnungen/Zahlungen (inkl. Archiv-PDF, daraus erzeugte
+  E-Rechnungen, EC-Protokoll), vergangene oder alle Buchungen mit Sperren, Gäste ohne Buchung; wahlweise Rechnungsnummern neu ab 1.
+  Ablauf: Vorschau (zählt in einer zurückgerollten Transaktion), dann Passwort + Bestätigungswort; die Windows-Version schreibt
+  vorher eine Sicherung und bricht ab, wenn diese scheitert. Der Löschschutz der Rechnungstabellen (Trigger) wird nur innerhalb
+  der Transaktion ausgesetzt. Das Protokoll (`audit_log`) bleibt und vermerkt den Vorgang.
+- **Grenze:** Die Funktion ist zum Entfernen von Probedaten gedacht. Sie hebt die Unveränderbarkeit der Rechnungen bewusst auf;
+  wer damit echte Belege löscht, verletzt voraussichtlich Aufbewahrungspflichten (AO/UStG) – das Programm prüft das nicht.
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

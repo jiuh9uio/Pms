@@ -34,6 +34,7 @@ const PAGES: Page[] = [
   { to: '/einstellungen?ansicht=email', title: 'E-Mail-Versand', area: 'Einstellungen', words: 'gmx smtp postfach mail', admin: true },
   { to: '/einstellungen?ansicht=drucker', title: 'Drucker', area: 'Einstellungen', words: 'epson küchendrucker bondrucker ip-adresse testdruck automatisch frühstücksliste', admin: true },
   { to: '/einstellungen?ansicht=ecgeraet', title: 'EC-Gerät', area: 'Einstellungen', words: 'kartenzahlung kartenterminal vr payment zvt terminal karte', admin: true },
+  { to: '/einstellungen?ansicht=loeschen', title: 'Hotel-Daten löschen', area: 'Einstellungen', words: 'löschen aufräumen probedaten testdaten rechnungen buchungen zurücksetzen leeren', admin: true },
   { to: '/einstellungen?ansicht=tse', title: 'TSE', area: 'Einstellungen', words: 'tse epson stick kassensicherung selbsttest zertifikat seriennummer finanzamt', admin: true },
   { to: '/einstellungen?ansicht=steuern', title: 'Steuersätze', area: 'Einstellungen', words: 'mehrwertsteuer umsatzsteuer mwst 7 19', admin: true },
   { to: '/einstellungen?ansicht=netz', title: 'Zugriff im Hausnetz', area: 'Einstellungen', words: 'tablet adresse firewall netzwerk', admin: true },

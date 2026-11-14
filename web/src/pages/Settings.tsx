@@ -5,12 +5,13 @@ import { MailSettings } from './MailSettings.tsx';
 import { BackupCard } from './BackupCard.tsx';
 import { KitchenPrinterCard } from './KitchenPrinterCard.tsx';
 import { TerminalCard } from './TerminalCard.tsx';
+import { PurgeCard } from './PurgeCard.tsx';
 import { TseCard } from './TseCard.tsx';
 import { Changelog, UpdateCard } from './UpdateCard.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
 
 export const SETTINGS_TABS = [
-  ['haus', 'Haus'], ['email', 'E-Mail'], ['drucker', 'Drucker'], ['ecgeraet', 'EC-Gerät'], ['tse', 'TSE'], ['steuern', 'Steuersätze'], ['netz', 'Hausnetz'], ['sicherung', 'Datensicherung'], ['update', 'Programm-Update'],
+  ['haus', 'Haus'], ['email', 'E-Mail'], ['drucker', 'Drucker'], ['ecgeraet', 'EC-Gerät'], ['tse', 'TSE'], ['steuern', 'Steuersätze'], ['netz', 'Hausnetz'], ['sicherung', 'Datensicherung'], ['update', 'Programm-Update'], ['loeschen', 'Daten löschen'],
 ] as const;
 
 /** Einstellungen, aufgeteilt in Reiter – jeder Reiter ist über /einstellungen?ansicht=… direkt erreichbar. */
@@ -29,6 +30,7 @@ export function Settings() {
       {current === 'netz' && <NetworkCard />}
       {current === 'sicherung' && <BackupCard />}
       {current === 'update' && <><UpdateCard /><Changelog /></>}
+      {current === 'loeschen' && <PurgeCard />}
     </>
   );
 }

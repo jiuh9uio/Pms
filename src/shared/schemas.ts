@@ -138,3 +138,15 @@ export interface TseInfoDto {
   capacityBlocks: number | null; usedBlocks: number | null; softwareVersion: number | null; hardwareVersion: number | null; healthStatus: string;
   certificatePem: string; certificateFingerprint: string; certificateNote: string;
 }
+
+// ---------- Hotel-Daten löschen ----------
+export const purgeInput = z.object({
+  billing: z.boolean(), bookings: z.enum(['none', 'past', 'all']), guests: z.boolean(), resetNumbers: z.boolean(),
+  dryRun: z.boolean(), password: z.string().max(200).default(''), confirm: z.string().max(20).default(''),
+});
+export type PurgeInput = z.infer<typeof purgeInput>;
+export interface PurgeResult {
+  invoices: number; payments: number; einvoices: number; bookings: number;
+  /** vergangene Buchungen, die bleiben, weil Rechnungen oder Zahlungen daran hängen */
+  keptBookings: number; blocks: number; guests: number; dryRun: boolean; backupFile: string | null;
+}

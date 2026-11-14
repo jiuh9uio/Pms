@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.21.0
+
+- Einstellungen → neuer Reiter „Daten löschen“: Administratoren können Rechnungen und Zahlungen, vergangene oder alle Buchungen sowie Gäste ohne Buchung löschen – zum Aufräumen von Probedaten vor dem echten Betrieb.
+- Sicherheit: erst eine Vorschau mit Stückzahlen, dann Passwort und das Wort LÖSCHEN; in der Windows-Version wird vorher automatisch eine Datensicherung geschrieben. Zimmer, Preise und Einstellungen bleiben.
+- Hinweis: Echte Rechnungen unterliegen Aufbewahrungspflichten – bitte nicht ohne Rücksprache mit der Steuerberatung löschen.
+
 ## 1.20.0
 
 - Zimmer & Preise: Administratoren können Kategorien, Zimmer, Preisregeln und Leistungen jetzt endgültig löschen (Schaltfläche „Löschen“ im Bearbeiten-Fenster, mit Rückfrage).
