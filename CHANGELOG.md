@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.38.0
+
+- Verwaltung → neue Seite „Erste Schritte“: eine Checkliste, die anzeigt, was für den Start eingerichtet ist, was noch fehlt und was Sie an Ihren Geräten prüfen sollten – jeweils mit direktem Sprung zur passenden Einstellung. Solange Grundlagen fehlen, weist das Startmenü darauf hin.
+- Einstellungen → Steuern & Nummern: „Rechnungsnummern“ – festlegen, mit welcher laufenden Nummer es in diesem Jahr weitergeht, falls schon Rechnungen mit einem anderen Programm geschrieben wurden. Die Nummer lässt sich nur erhöhen.
+
 ## 1.37.0
 
 - Gleichzeitiges Arbeiten an mehreren Rechnern: Ändert jemand an einem anderen Platz etwas (neue Reservierung, Check-in, Zahlung …), erscheint das innerhalb weniger Sekunden von selbst in den Listen und im Belegungsplan. Ist gerade ein Fenster zum Bearbeiten offen, wird erst nach dem Schließen aktualisiert, damit keine Eingabe verloren geht.

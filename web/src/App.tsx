@@ -26,6 +26,7 @@ import { DayReport } from './pages/DayReport.tsx';
 import { Housekeeping } from './pages/Housekeeping.tsx';
 import { NetAlert } from './NetAlert.tsx';
 import { Inbox } from './pages/Inbox.tsx';
+import { Setup } from './pages/Setup.tsx';
 import { Team } from './pages/Team.tsx';
 import { RoomsPrices } from './pages/RoomsPrices.tsx';
 import { Settings } from './pages/Settings.tsx';
@@ -67,6 +68,7 @@ const NAV = [
   { to: '/internet', label: 'Geräte im Netz', short: 'Geräte', icon: '⌁', admin: false, module: 'internet' },
   { to: '/team', label: 'Übergabebuch', short: 'Team', icon: '✎', admin: false, module: 'team' },
   { to: '/email', label: 'Posteingang', short: 'E-Mail', icon: '✉', admin: false, module: 'email' },
+  { to: '/erste-schritte', label: 'Erste Schritte', short: 'Start', icon: '✔', admin: true, module: 'verwaltung' },
   { to: '/benutzer', label: 'Benutzer', icon: '◉', admin: true, module: 'verwaltung' },
   { to: '/protokoll', label: 'Protokoll', icon: '☰', admin: true, module: 'verwaltung' },
   { to: '/einstellungen', label: 'Einstellungen', short: 'Einstell.', icon: '⚙', admin: true, module: 'verwaltung' },
@@ -150,6 +152,7 @@ function Shell({ user }: { user: UserDto }) {
           {hotel && <Route path="/auswertung" element={<Report />} />}
           {isAdmin && <Route path="/zimmer" element={<RoomsPrices />} />}
           {isAdmin && <Route path="/konto" element={<Account />} />}
+          {isAdmin && <Route path="/erste-schritte" element={<Setup />} />}
           {isAdmin && <Route path="/benutzer" element={<Users />} />}
           {hasModule(user, 'restaurant') && <Route path="/restaurant" element={<Restaurant />} />}
           {hasModule(user, 'schnelldruck') && <Route path="/schnelldruck" element={<QuickPrint />} />}

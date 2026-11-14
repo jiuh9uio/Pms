@@ -28,6 +28,8 @@ import { registerHotelRoutes } from './routes-hotel.js';
 import { registerRestaurantRoutes } from './routes-restaurant.js';
 import { getBackupStatus, runBackup } from './backup.js';
 import { purge } from './modules/purge.js';
+import { checklist } from './modules/setup.js';
+import { invoiceNumberState, setInvoiceNumber } from './modules/billing.js';
 import * as inbox from './modules/inbox.js';
 import * as team from './modules/team.js';
 import * as T from '../shared/team.js';
@@ -232,6 +234,10 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.delete('/team/recurring/:id', { preHandler: requireAdmin }, (req) => team.deleteRecurring(db, actor(req), noteId(req)));
     api.post('/team/notes/:id/read', any, (req) => team.markRead(db, actor(req), noteId(req)));
     api.post('/team/notes/:id/done', any, (req) => { const v = T.teamDoneInput.parse(req.body); return team.setDone(db, actor(req), noteId(req), v.done, v.note); });
+    // Start-Checkliste und Startwert der Rechnungsnummern (nur Administrator)
+    api.get('/setup/checklist', { preHandler: requireAdmin }, () => checklist(db));
+    api.get('/settings/invoice-number', { preHandler: requireAdmin }, (req) => invoiceNumberState(db, z.object({ year: z.coerce.number().int().min(2000).max(2100) }).parse(req.query).year));
+    api.put('/settings/invoice-number', { preHandler: requireAdmin }, (req) => setInvoiceNumber(db, actor(req), S.invoiceNumberInput.parse(req.body)));
     // Gleichzeitiges Arbeiten: Zähler, der sich mit jeder protokollierten Änderung erhöht – die Oberfläche fragt ihn alle paar
     // Sekunden ab und lädt neu, wenn jemand anderes etwas geändert hat.
     api.get('/sync', { preHandler: requireUser }, async () => {

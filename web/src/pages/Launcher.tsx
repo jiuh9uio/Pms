@@ -39,6 +39,8 @@ export function Launcher() {
   useEffect(() => { if (hasModule(user, 'hotel')) api<{ present: boolean }>('GET', '/settings/logo-info').then((r) => setLogo(r.present)).catch(() => setLogo(false)); }, [user]);
   // offene Anfragen im E-Mail-Posteingang als Zähler an der Kachel
   const mailNew = useLoad(() => (hasModule(user, 'email') ? api<{ newCount: number; ready: boolean }>('GET', '/inbox/state') : Promise.resolve(null))).data;
+  // Start-Checkliste: Hinweis für den Administrator, solange Grundlagen fehlen
+  const setup = useLoad(() => (user.role === 'admin' ? api<{ ready: boolean; open: number }>('GET', '/setup/checklist') : Promise.resolve(null))).data;
   const teamNew = useLoad(() => api<{ unread: number; openTasks: number }>('GET', '/team/state')).data;
   const tiles = TILES.filter((t) => (!t.admin || user.role === 'admin') && (!t.module || hasModule(user, t.module)));
   return (
@@ -49,6 +51,7 @@ export function Launcher() {
       </header>
       <Search variant="big" />
       {upd?.available && <p className="notice warn">Programm-Update verfügbar: Version {upd.latest}. <Link to="/einstellungen?ansicht=update">Jetzt ansehen und einspielen</Link></p>}
+      {setup && !setup.ready && <p className="notice warn">Vor dem Start {setup.open === 1 ? 'fehlt noch ein Punkt' : `fehlen noch ${setup.open} Punkte`} bei der Einrichtung. <Link to="/erste-schritte">Zur Checkliste „Erste Schritte“</Link></p>}
       {bakWarn && <p className="notice danger">{bakWarn} <Link to="/einstellungen?ansicht=sicherung">Zur Datensicherung</Link></p>}
       <p className="todaytoggle"><button type="button" className="linkbtn" aria-expanded={showToday} onClick={toggleToday}>{showToday ? 'Heute im Haus ausblenden' : 'Heute im Haus anzeigen'}</button></p>
       {showToday && today && today.length > 0 && (

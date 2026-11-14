@@ -183,3 +183,18 @@ export const fritzActionInput = z.object({ action: z.enum(['reconnect', 'reboot'
 
 /** Hinweis für alle angemeldeten Benutzer: Ist das Internet gerade weg, und was hat das Programm schon unternommen? */
 export interface NetAlertDto { offline: boolean; since: string | null; steps: string[] }
+
+// ---------- Start-Checkliste und Rechnungsnummern ----------
+export interface SetupItem {
+  key: string; title: string;
+  /** done = erledigt, todo = nötig vor dem Start, optional = kann später kommen, check = bei Ihnen zu prüfen (lässt sich nicht automatisch feststellen) */
+  state: 'done' | 'todo' | 'optional' | 'check';
+  detail: string; to: string;
+}
+export interface SetupChecklist { groups: { title: string; items: SetupItem[] }[]; ready: boolean; open: number }
+export const invoiceNumberInput = z.object({
+  year: z.number().int().min(2000).max(2100),
+  /** Nummer, die die nächste Rechnung dieses Jahres bekommen soll */
+  next: z.number('Bitte eine Zahl eingeben').int().min(1, 'Mindestens 1').max(999_999),
+});
+export interface InvoiceNumberState { year: number; next: number; /** höchste schon vergebene laufende Nummer des Jahres */ issued: number; sample: string }

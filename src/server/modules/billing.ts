@@ -7,6 +7,7 @@ import type { Db, Exec, Tx } from '../db/client.js';
 import { bookings, companies, invoiceLines, invoices, numberSequences, payments, invoiceDocuments, settings } from '../db/schema.js';
 import { renderInvoice, type Logo } from '../einvoice/invoicepdf.js';
 import { AppError, conflict, notFound, stale } from '../lib/errors.js';
+import type { InvoiceNumberState } from '../../shared/schemas.js';
 import { record, type Actor } from './audit.js';
 import { getBooking } from './bookings.js';
 import { getHotel } from './settings.js';
@@ -516,4 +517,29 @@ export async function invoicePdf(db: Db, id: string): Promise<{ filename: string
   await db.insert(invoiceDocuments).values({ invoiceId: id, pdf }).onConflictDoNothing();
   const [doc] = await db.select().from(invoiceDocuments).where(eq(invoiceDocuments.invoiceId, id));
   return { filename: name, pdf: doc!.pdf, archived: true };
+}
+
+// ---------- Rechnungsnummern: Startwert ----------
+const numberOf = (prefix: string, year: number, n: number) => `${prefix ? prefix + '-' : ''}${year}-${String(n).padStart(4, '0')}`;
+export async function invoiceNumberState(db: Exec, year: number): Promise<InvoiceNumberState> {
+  const [seq] = await db.select().from(numberSequences).where(and(eq(numberSequences.key, 'invoice'), eq(numberSequences.year, year)));
+  const [n] = await db.execute(sql`select count(*)::int as n from invoices where number is not null and extract(year from issue_date) = ${year}`);
+  const last = seq?.last ?? 0;
+  return { year, next: last + 1, issued: Number(n!.n) > 0 ? last : 0, sample: numberOf((await getHotel(db)).invoicePrefix, year, last + 1) };
+}
+/**
+ * Nächste Rechnungsnummer eines Jahres festlegen – für den Start mitten im Jahr, wenn es schon Rechnungen mit früheren Nummern gibt.
+ * Nur nach oben: Eine Nummer, die das Programm schon vergeben hat, wird nie noch einmal vergeben.
+ */
+export async function setInvoiceNumber(db: Db, actor: Actor, v: { year: number; next: number }) {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(4713)`);
+    const [seq] = await tx.select().from(numberSequences).where(and(eq(numberSequences.key, 'invoice'), eq(numberSequences.year, v.year)));
+    const last = seq?.last ?? 0;
+    if (v.next <= last) throw conflict(`Die Nummer ${last} ist in ${v.year} schon vergeben oder übersprungen – die nächste Nummer muss mindestens ${last + 1} sein.`, 'number_taken');
+    await tx.insert(numberSequences).values({ key: 'invoice', year: v.year, last: v.next - 1 })
+      .onConflictDoUpdate({ target: [numberSequences.key, numberSequences.year], set: { last: v.next - 1 } });
+    await record(tx, actor, { action: 'update', entity: 'settings', entityId: 'invoice_number', before: { year: v.year, next: last + 1 }, after: v });
+    return invoiceNumberState(tx, v.year);
+  });
 }

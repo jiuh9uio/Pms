@@ -341,6 +341,14 @@ rechtlich geprüft ist, steht dort ausdrücklich.
   Der Schutz gegen Adressen im eigenen Netz prüft die Namensauflösung vor dem Abruf; ein Angriff über wechselnde
   Namensauflösung ist damit nicht ausgeschlossen. Impressum-Seiten, die ihren Inhalt erst per Skript nachladen, liefern nichts.
 
+**Seit Version 1.38.0 zusätzlich – Start-Checkliste, Startwert der Rechnungsnummern:**
+
+- `GET /setup/checklist` (`src/server/modules/setup.ts`): wertet die vorhandenen Einstellungen aus (Hausangaben, Steuersatz,
+  Kategorien, Zimmer, Sicherungskopie, Rechnungsnummer; empfehlenswerte Punkte; Geräte). „Bitte prüfen“ heißt: eingetragen, aber
+  nur am echten Gerät überprüfbar – die Checkliste stellt keine Funktion und keine rechtliche Eignung fest.
+- `PUT /settings/invoice-number`: setzt `number_sequences` für das Jahr auf `next − 1`; nur größer als der bisherige Stand, damit
+  keine vom Programm vergebene Nummer wiederkehrt. Lücken zu früheren, anderswo vergebenen Nummern entstehen dabei bewusst.
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

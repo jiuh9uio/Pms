@@ -4,6 +4,7 @@ import { api } from '../api.ts';
 import { CancelPolicyCard } from './CancelPolicyCard.tsx';
 import { GuideCard } from './GuideCard.tsx';
 import { InboxSettings } from './InboxSettings.tsx';
+import { InvoiceNumberCard } from './InvoiceNumberCard.tsx';
 import { MailSettings } from './MailSettings.tsx';
 import { BackupCard } from './BackupCard.tsx';
 import { KitchenPrinterCard } from './KitchenPrinterCard.tsx';
@@ -18,7 +19,7 @@ import { Changelog, UpdateCard } from './UpdateCard.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
 
 export const SETTINGS_TABS = [
-  ['haus', 'Haus'], ['email', 'E-Mail'], ['drucker', 'Drucker'], ['ecgeraet', 'EC-Gerät'], ['tse', 'TSE'], ['steuern', 'Steuersätze'], ['algorithmen', 'Algorithmen'], ['netz', 'Hausnetz'], ['sicherung', 'Datensicherung'], ['update', 'Programm-Update'], ['loeschen', 'Daten löschen'],
+  ['haus', 'Haus'], ['email', 'E-Mail'], ['drucker', 'Drucker'], ['ecgeraet', 'EC-Gerät'], ['tse', 'TSE'], ['steuern', 'Steuern & Nummern'], ['algorithmen', 'Algorithmen'], ['netz', 'Hausnetz'], ['sicherung', 'Datensicherung'], ['update', 'Programm-Update'], ['loeschen', 'Daten löschen'],
 ] as const;
 
 /** Einstellungen, aufgeteilt in Reiter – jeder Reiter ist über /einstellungen?ansicht=… direkt erreichbar. */
@@ -33,7 +34,7 @@ export function Settings() {
       {current === 'drucker' && <><KitchenPrinterCard kind="kitchen" /><KitchenPrinterCard kind="front" /></>}
       {current === 'ecgeraet' && <TerminalCard />}
       {current === 'tse' && <TseCard />}
-      {current === 'steuern' && <TaxRates />}
+      {current === 'steuern' && <><TaxRates /><InvoiceNumberCard /></>}
       {current === 'algorithmen' && <Algorithms />}
       {current === 'netz' && <NetworkCard />}
       {current === 'sicherung' && <BackupCard />}

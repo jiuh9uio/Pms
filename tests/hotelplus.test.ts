@@ -336,4 +336,36 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     await ok('POST', '/team/notes', admin, { kind: 'note', text: 'Test', place: '', dueDate: '' });
     expect((await ok('GET', '/sync', user)).rev).toBeGreaterThan(before); // Änderung eines anderen Benutzers
   });
+
+  it('führt eine Start-Checkliste und lässt die erste Rechnungsnummer festlegen', async () => {
+    expect((await call('GET', '/setup/checklist', user)).statusCode).toBe(403);
+    const c = await ok('GET', '/setup/checklist', admin);
+    const item = (k: string) => c.groups.flatMap((g: { items: { key: string }[] }) => g.items).find((x: { key: string }) => x.key === k);
+    expect(item('house')).toMatchObject({ state: 'todo' }); // Telefon fehlt im Testhaus
+    expect(item('house').detail).toContain('Telefon');
+    expect(item('rooms')).toMatchObject({ state: 'done' });
+    expect(item('tax').state).toBe('done');
+    expect(item('terminal').state).toBe('optional');
+    expect(item('policy').state).toBe('done');
+    expect(c.ready).toBe(false);
+    const hotel = await ok('GET', '/settings/hotel', admin);
+    await ok('PUT', '/settings/hotel', admin, { ...hotel, phone: '01234 5678' });
+    const c2 = await ok('GET', '/setup/checklist', admin);
+    expect(c2.groups[0].items.find((x: { key: string }) => x.key === 'house').state).toBe('done');
+    expect(c2).toMatchObject({ ready: true, open: 0 }); // ohne eingebaute Sicherung (Tests) zählt sie nicht als fehlend
+
+    // Rechnungsnummern: Anschluss an bisherige Nummern, nur nach oben
+    const year = Number(today.slice(0, 4));
+    const st = await ok('GET', `/settings/invoice-number?year=${year}`, admin);
+    expect(st).toMatchObject({ year, next: 1, issued: 0 });
+    expect(st.sample).toMatch(new RegExp(`${year}-0001$`));
+    expect((await call('PUT', '/settings/invoice-number', user, { year, next: 120 })).statusCode).toBe(403);
+    expect((await ok('PUT', '/settings/invoice-number', admin, { year, next: 120 })).sample).toMatch(/-0120$/);
+    expect((await call('PUT', '/settings/invoice-number', admin, { year, next: 50 })).statusCode).toBe(409);
+    const b = await mk({ lastName: 'Nummer' }, addDays(today, 100), addDays(today, 101));
+    const inv = await issue(b);
+    expect(inv.number).toMatch(new RegExp(`${year}-0120$`));
+    expect((await issue(await mk({ lastName: 'Nummer2' }, addDays(today, 102), addDays(today, 103)))).number).toMatch(/-0121$/);
+    expect(await ok('GET', `/settings/invoice-number?year=${year}`, admin)).toMatchObject({ next: 122, issued: 121 });
+  });
 });

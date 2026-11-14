@@ -471,3 +471,8 @@ a.btn.primary { background: var(--accent); border-color: var(--accent); color: v
 .lookup { border: 1px dashed var(--line-strong); border-radius: 10px; padding: 12px 14px; margin: 0 0 16px; background: var(--surface-2); }
 .lookuprow { display: flex; flex-wrap: wrap; gap: 8px; } .lookuprow input { flex: 1 1 240px; }
 .lookuphit { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); margin-top: 8px; }
+
+/* Start-Checkliste */
+.setuplist { list-style: none; margin: 0; padding: 0; } .setuplist li { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.setuplist li:last-child { border-bottom: 0; } .setuplist .mark { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px; background: var(--surface-2); color: var(--ink-2); }
+.setuplist li.done .mark { background: #dcf3e3; color: #17643a; } .setuplist li.todo .mark { background: #fbe1de; color: #b42318; } .setuplist li.check .mark { background: #fdf0d5; color: #8a5a00; }
