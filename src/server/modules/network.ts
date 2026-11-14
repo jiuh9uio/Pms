@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
 import { desc, eq, isNull, lt } from 'drizzle-orm';
 import QRCode from 'qrcode';
-import type { FritzInfoDto, FritzSettingsDto, InternetStatusDto, NetDeviceDto, NetOutagesDto, NetScanDto, WifiDto, WifiSettings } from '../../shared/schemas.js';
+import type { FritzInfoDto, FritzSettingsDto, InternetStatusDto, NetAlertDto, NetDeviceDto, NetOutagesDto, NetScanDto, WifiDto, WifiSettings } from '../../shared/schemas.js';
 import type { Db, Exec } from '../db/client.js';
 import { netDevices, netOutages, settings } from '../db/schema.js';
 import { getHotel } from './settings.js';
@@ -13,7 +13,7 @@ import { AppError, conflict } from '../lib/errors.js';
 import { isPrivateIp } from '../lib/escpos.js';
 import { tr064, Tr064Error, type Tr064Config } from '../lib/tr064.js';
 import { decrypt, encrypt } from './mail.js';
-import { record, type Actor } from './audit.js';
+import { record, SYSTEM, type Actor } from './audit.js';
 
 /**
  * Geräte im Hausnetz: Welche Geräte sind im selben Netz wie der PMS-Rechner gerade erreichbar?
@@ -162,17 +162,23 @@ const reachable = (url: string) => fetch(url, { signal: AbortSignal.timeout(8000
 export const online = async () => (await Promise.all((process.env.PMS_ONLINE_CHECK_URL ? [process.env.PMS_ONLINE_CHECK_URL] : CHECK_URLS).map(reachable))).some(Boolean);
 
 let monitoring = false;
-/** Prüft alle zwei Minuten; ein Ausfall wird ab der zweiten fehlgeschlagenen Prüfung in Folge eingetragen (Beginn = erste). */
-export function startOutageMonitor(db: Db, check: () => Promise<boolean> = online, everyMs = 120_000) {
+/** laufender Ausfall, wie ihn die Überwachung zuletzt gesehen hat (für den Hinweis am Bildschirm) */
+let currentOutage: { id: string; startedAt: Date } | null = null;
+/** Prüft jede Minute; ein Ausfall wird ab der zweiten fehlgeschlagenen Prüfung in Folge eingetragen (Beginn = erste). */
+export function startOutageMonitor(db: Db, check: () => Promise<boolean> = online, everyMs = 60_000) {
   let firstFail: Date | null = null;
   let open: string | null = null;
   const tick = async () => {
     try {
       if (await check()) {
         if (open) await db.update(netOutages).set({ endedAt: new Date() }).where(eq(netOutages.id, open));
-        open = null; firstFail = null;
+        open = null; firstFail = null; currentOutage = null;
       } else if (!firstFail) firstFail = new Date();
-      else if (!open) open = (await db.insert(netOutages).values({ startedAt: firstFail }).returning({ id: netOutages.id }))[0]!.id;
+      else {
+        if (!open) open = (await db.insert(netOutages).values({ startedAt: firstFail }).returning({ id: netOutages.id }))[0]!.id;
+        currentOutage = { id: open, startedAt: firstFail };
+        await fritzAutoTick(db, currentOutage).catch((e) => console.error('FRITZ!Box automatisch:', e instanceof Error ? e.message : e));
+      }
     } catch (e) { console.error('Ausfallprotokoll:', e instanceof Error ? e.message : e); }
   };
   const init = async () => {
@@ -192,23 +198,23 @@ export async function listOutages(db: Exec): Promise<NetOutagesDto> {
 }
 
 // ---------- FRITZ!Box: Verbindung neu aufbauen oder Box neu starten ----------
-interface FritzStored { enabled: boolean; host: string; port: number; user: string; passEnc: string }
-const FRITZ0: FritzStored = { enabled: false, host: '', port: 49000, user: '', passEnc: '' };
+interface FritzStored { enabled: boolean; host: string; port: number; user: string; passEnc: string; auto: boolean; autoAfterMin: number }
+const FRITZ0: FritzStored = { enabled: false, host: '', port: 49000, user: '', passEnc: '', auto: false, autoAfterMin: 5 };
 const hosted = () => process.env.PMS_HOSTED === 'true';
 async function fritzLoad(db: Exec): Promise<FritzStored> {
   const [row] = await db.select().from(settings).where(eq(settings.key, 'fritzbox'));
   return { ...FRITZ0, ...((row?.value as Partial<FritzStored>) ?? {}) };
 }
-const fritzDto = (s: FritzStored): FritzSettingsDto => ({ enabled: s.enabled, host: s.host, port: s.port, user: s.user, hasPassword: !!s.passEnc, available: !hosted() });
+const fritzDto = (s: FritzStored): FritzSettingsDto => ({ auto: s.auto, autoAfterMin: s.autoAfterMin, enabled: s.enabled, host: s.host, port: s.port, user: s.user, hasPassword: !!s.passEnc, available: !hosted() });
 export async function getFritz(db: Exec): Promise<FritzSettingsDto> {
   const s = await fritzLoad(db);
   // Vorschlag für die Adresse: der Router dieses Rechners
   return fritzDto(s.host || hosted() ? s : { ...s, host: (await gateway().catch(() => null)) ?? '' });
 }
-export async function saveFritz(db: Db, actor: Actor, v: { enabled: boolean; host: string; port: number; user: string; password: string }) {
+export async function saveFritz(db: Db, actor: Actor, v: { enabled: boolean; host: string; port: number; user: string; password: string; auto: boolean; autoAfterMin: number }) {
   if (v.host && !isPrivateIp(v.host)) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { host: 'Bitte die Adresse der FRITZ!Box im Hausnetz eintragen, z. B. 192.168.178.1' });
   const cur = await fritzLoad(db);
-  const next: FritzStored = { enabled: v.enabled, host: v.host, port: v.port, user: v.user, passEnc: v.password ? encrypt(v.password) : cur.passEnc };
+  const next: FritzStored = { auto: v.auto, autoAfterMin: v.autoAfterMin, enabled: v.enabled, host: v.host, port: v.port, user: v.user, passEnc: v.password ? encrypt(v.password) : cur.passEnc };
   await db.insert(settings).values({ key: 'fritzbox', value: next }).onConflictDoUpdate({ target: settings.key, set: { value: next, updatedAt: new Date() } });
   await record(db, actor, { action: 'update', entity: 'settings', entityId: 'fritzbox', after: fritzDto(next) }); // ohne Kennwort
   return fritzDto(next);
@@ -262,4 +268,61 @@ export async function fritzAction(db: Db, actor: Actor, action: 'reconnect' | 'r
     await record(db, actor, { action: action === 'reboot' ? 'fritz_reboot' : 'fritz_reconnect', entity: 'program', entityId: 'fritzbox', after: { host: c.host } });
     return { ok: true };
   } catch (e) { return fritzFail(e); }
+}
+
+// ---------- Automatisches Zurücksetzen bei Ausfall ----------
+interface AutoState { outageId: string; reconnectAt?: string; rebootAt?: string; steps: string[]; /** Zeitpunkte automatischer Neustarts der letzten Tage */ reboots: string[] }
+const AUTO0: AutoState = { outageId: '', steps: [], reboots: [] };
+/** höchstens so viele automatische Neustarts in 24 Stunden – bei einer Störung des Anbieters hilft Neustarten nicht */
+const MAX_AUTO_REBOOTS = 2;
+const clock = (d: Date) => d.toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' });
+
+/**
+ * Je Ausfall höchstens zwei Schritte: nach der eingestellten Wartezeit die Internetverbindung neu aufbauen und – wenn das Internet
+ * danach noch einmal so lange weg bleibt – die Box einmal neu starten. Danach unternimmt das Programm bei diesem Ausfall nichts mehr.
+ */
+export async function fritzAutoTick(db: Db, outage: { id: string; startedAt: Date }, now = new Date()): Promise<'none' | 'reconnect' | 'reboot'> {
+  if (hosted()) return 'none';
+  const s = await fritzLoad(db);
+  if (!s.enabled || !s.auto || !s.host || !s.passEnc) return 'none';
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'fritz_auto'));
+  const prev = { ...AUTO0, ...((row?.value as Partial<AutoState>) ?? {}) };
+  const st: AutoState = prev.outageId === outage.id ? prev : { outageId: outage.id, steps: [], reboots: prev.reboots };
+  const wait = s.autoAfterMin * 60_000;
+  const save = () => db.insert(settings).values({ key: 'fritz_auto', value: st }).onConflictDoUpdate({ target: settings.key, set: { value: st, updatedAt: new Date() } });
+  const attempt = async (action: 'reconnect' | 'reboot', label: string) => {
+    try { await fritzAction(db, SYSTEM, action); st.steps.push(`${clock(now)} Uhr: ${label}`); }
+    catch (e) { st.steps.push(`${clock(now)} Uhr: ${label} – fehlgeschlagen (${e instanceof Error ? e.message : 'Fehler'})`); }
+  };
+  if (!st.reconnectAt) {
+    if (now.getTime() - outage.startedAt.getTime() < wait) return 'none';
+    st.reconnectAt = now.toISOString();
+    await save(); // erst merken, dann handeln: kein zweiter Versuch, falls die Aktion hängt
+    await attempt('reconnect', 'Internetverbindung automatisch neu aufgebaut');
+    await save();
+    return 'reconnect';
+  }
+  if (!st.rebootAt && now.getTime() - Date.parse(st.reconnectAt) >= wait) {
+    st.rebootAt = now.toISOString();
+    st.reboots = st.reboots.filter((t) => now.getTime() - Date.parse(t) < 86_400_000);
+    if (st.reboots.length >= MAX_AUTO_REBOOTS) {
+      st.steps.push(`${clock(now)} Uhr: kein weiterer automatischer Neustart (schon ${MAX_AUTO_REBOOTS} in 24 Stunden) – bitte den Anbieter prüfen`);
+      await save();
+      return 'none';
+    }
+    st.reboots.push(now.toISOString());
+    await save();
+    await attempt('reboot', 'FRITZ!Box automatisch neu gestartet');
+    await save();
+    return 'reboot';
+  }
+  return 'none';
+}
+
+/** Für den Hinweis am Bildschirm: läuft gerade ein Ausfall, seit wann, und was wurde automatisch unternommen? */
+export async function netAlert(db: Exec): Promise<NetAlertDto> {
+  if (hosted() || !currentOutage) return { offline: false, since: null, steps: [] };
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'fritz_auto'));
+  const st = row?.value as Partial<AutoState> | undefined;
+  return { offline: true, since: currentOutage.startedAt.toISOString(), steps: st?.outageId === currentOutage.id ? st.steps ?? [] : [] };
 }

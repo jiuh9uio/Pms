@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.30.0
+
+- Internet wird jetzt jede Minute geprüft (bisher alle zwei Minuten).
+- Hinweis bei Ausfall: Fällt das Internet aus, erscheint im Programm ein Hinweisfenster und oben ein roter Balken, bis es wieder da ist. Auf Wunsch zusätzlich als Meldung von Windows. Ein- und ausschaltbar je Gerät unter Internet → Internetverbindung.
+- FRITZ!Box automatisch zurücksetzen (einschaltbar): Nach der eingestellten Wartezeit baut das Programm die Internetverbindung neu auf; bleibt das Internet weiter weg, startet es die Box einmal neu. Je Ausfall höchstens diese zwei Schritte, höchstens zwei automatische Neustarts in 24 Stunden.
+
 ## 1.29.0
 
 - Internet → Internetverbindung: FRITZ!Box steuern. Wenn das Internet hängt, lässt sich die Verbindung neu aufbauen oder die ganze Box neu starten, ohne an den Router zu gehen; dazu Modell, Laufzeit und Verbindungszustand abfragen.

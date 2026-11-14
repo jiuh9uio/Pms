@@ -224,6 +224,8 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.delete('/team/recurring/:id', { preHandler: requireAdmin }, (req) => team.deleteRecurring(db, actor(req), noteId(req)));
     api.post('/team/notes/:id/read', any, (req) => team.markRead(db, actor(req), noteId(req)));
     api.post('/team/notes/:id/done', any, (req) => { const v = T.teamDoneInput.parse(req.body); return team.setDone(db, actor(req), noteId(req), v.done, v.note); });
+    // Hinweis „Internet ist weg“ für alle angemeldeten Benutzer
+    api.get('/network/alert', { preHandler: requireUser }, () => network.netAlert(db));
     api.get('/overview', { preHandler: requireUser }, (req) => overview(db, req.user!));
 
     // ---------- Suche über alle freigegebenen Bereiche ----------

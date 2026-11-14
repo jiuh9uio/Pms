@@ -172,7 +172,14 @@ export const fritzSettingsInput = z.object({
   enabled: z.boolean(),
   host: z.string().trim().max(60), port: z.number('Bitte eine Zahl eingeben').int().min(1).max(65535).default(49000),
   user: z.string().trim().max(80), /** leer = gespeichertes Kennwort behalten */ password: z.string().max(200),
+  /** bei Ausfall von selbst zurücksetzen: erst Verbindung neu aufbauen, dann – wenn es nicht hilft – einmal neu starten */
+  auto: z.boolean().default(false),
+  /** so viele Minuten Ausfall abwarten (und danach noch einmal so lange bis zum Neustart) */
+  autoAfterMin: z.number('Bitte eine Zahl eingeben').int().min(3, 'Mindestens 3 Minuten').max(120).default(5),
 });
-export interface FritzSettingsDto { enabled: boolean; host: string; port: number; user: string; hasPassword: boolean; /** nur im Haus möglich */ available: boolean }
+export interface FritzSettingsDto { auto: boolean; autoAfterMin: number; enabled: boolean; host: string; port: number; user: string; hasPassword: boolean; /** nur im Haus möglich */ available: boolean }
 export interface FritzInfoDto { model: string; version: string; /** Laufzeit seit dem letzten Start in Sekunden */ uptimeSec: number | null; externalIp: string; connection: string }
 export const fritzActionInput = z.object({ action: z.enum(['reconnect', 'reboot']) });
+
+/** Hinweis für alle angemeldeten Benutzer: Ist das Internet gerade weg, und was hat das Programm schon unternommen? */
+export interface NetAlertDto { offline: boolean; since: string | null; steps: string[] }

@@ -267,8 +267,13 @@ rechtlich geprüft ist, steht dort ausdrücklich.
   `DeviceConfig:1#Reboot` sowie `WANPPPConnection:1` bzw. `WANIPConnection:1` mit `GetInfo` und `ForceTermination`
   (Fehler 707 „DisconnectInProgress“ gilt als Erfolg). Nur Adressen im Hausnetz; mit `PMS_HOSTED=true` abgeschaltet.
 - **Grenzen:** aus der AVM-Schnittstellenbeschreibung nach bestem Wissen umgesetzt und nur gegen eine nachgebaute Box getestet.
-  Ob das eigene Modell und die FRITZ!OS-Version alle Aktionen so annehmen, zeigt erst der Versuch. Es gibt bewusst keinen
-  automatischen Neustart bei Ausfall (Gefahr von Neustart-Schleifen bei Störungen des Anbieters).
+  Ob das eigene Modell und die FRITZ!OS-Version alle Aktionen so annehmen, zeigt erst der Versuch.
+- **Automatik (seit 1.30.0, einschaltbar):** `fritzAutoTick` – je Ausfall höchstens `ForceTermination` nach n Minuten und
+  `Reboot` nach weiteren n Minuten; höchstens 2 automatische Neustarts in 24 Stunden (Zustand in der Einstellung `fritz_auto`).
+  Die Überwachung prüft jede Minute; ein Ausfall zählt ab der zweiten fehlgeschlagenen Prüfung.
+- **Hinweis am Bildschirm:** `GET /network/alert` (alle angemeldeten Benutzer), Abfrage alle 30 Sekunden durch `NetAlert`.
+  Der Ausfallzustand liegt nur im Arbeitsspeicher. Die Meldung des Betriebssystems (Notification API) verlangt die Erlaubnis im
+  Browser und funktioniert nur über `localhost` oder HTTPS – also am Rechner mit dem Programm, nicht an anderen PCs im Hausnetz.
 
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 

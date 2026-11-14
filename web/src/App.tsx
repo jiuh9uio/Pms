@@ -24,6 +24,7 @@ import { Reservations } from './pages/Reservations.tsx';
 import { Restaurant } from './pages/Restaurant.tsx';
 import { DayReport } from './pages/DayReport.tsx';
 import { Housekeeping } from './pages/Housekeeping.tsx';
+import { NetAlert } from './NetAlert.tsx';
 import { Inbox } from './pages/Inbox.tsx';
 import { Team } from './pages/Team.tsx';
 import { RoomsPrices } from './pages/RoomsPrices.tsx';
@@ -113,10 +114,11 @@ function Shell({ user }: { user: UserDto }) {
   const erechnung = hasModule(user, 'erechnung');
   const internet = hasModule(user, 'internet');
   const email = hasModule(user, 'email');
-  if (pathname === '/') return <DataProvider><Launcher /></DataProvider>;
+  if (pathname === '/') return <DataProvider><NetAlert /><Launcher /></DataProvider>;
   if (hotel && pathname.startsWith('/meldeschein/')) return <Routes><Route path="/meldeschein/:id" element={<RegistrationPrint />} /></Routes>;
   return (
     <DataProvider>
+    <NetAlert />
     <div className="shell">
       <aside className="sidebar">
         <div className="brand"><span className="mark">S</span><span>Schützenhaus<small>{module ? MODULE_TITLE[module] : 'PMS'}</small></span></div>

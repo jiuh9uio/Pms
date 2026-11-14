@@ -71,7 +71,7 @@ describe('FRITZ!Box steuern', () => {
     expect((await call('PUT', '/network/fritz', user, { enabled: true, host: '127.0.0.1', port, user: 'pms', password: 'x' })).statusCode).toBe(403);
     expect((await call('PUT', '/network/fritz', admin, { enabled: true, host: '8.8.8.8', port, user: 'pms', password: 'x' })).statusCode).toBe(400); // nur Adressen im Hausnetz
     const saved = await ok('PUT', '/network/fritz', admin, { enabled: true, host: '127.0.0.1', port, user: 'pms', password: 'box-geheim' });
-    expect(saved).toEqual({ enabled: true, host: '127.0.0.1', port, user: 'pms', hasPassword: true, available: true });
+    expect(saved).toEqual({ auto: false, autoAfterMin: 5, enabled: true, host: '127.0.0.1', port, user: 'pms', hasPassword: true, available: true });
     const stored = await db.execute(sql`select value::text as v from settings where key = 'fritzbox'`);
     expect(String(stored[0]!.v)).not.toContain('box-geheim');
     expect(await ok('GET', '/network/fritz', user)).toMatchObject({ hasPassword: true, user: 'pms' });
@@ -104,5 +104,45 @@ describe('FRITZ!Box steuern', () => {
     const gone = await call('GET', '/network/fritz/info', user);
     expect(gone.statusCode).toBe(502);
     expect(gone.body).toContain('nicht erreichbar');
+  });
+
+  it('setzt bei Ausfall von selbst zurück: erst neu aufbauen, dann einmal neu starten, danach nichts mehr', async () => {
+    const { fritzAutoTick, startOutageMonitor } = await import('../src/server/modules/network.js');
+    const cfg = { enabled: true, host: '127.0.0.1', port, user: 'pms', password: 'box-geheim' };
+    const t0 = new Date('2035-06-01T08:00:00Z');
+    const at = (min: number) => new Date(t0.getTime() + min * 60_000);
+    const outage = { id: '33333333-3333-4333-8333-333333333333', startedAt: t0 };
+    await ok('PUT', '/network/fritz', admin, cfg); // automatisch aus
+    expect(await fritzAutoTick(db, outage, at(30))).toBe('none');
+    expect((await call('PUT', '/network/fritz', admin, { ...cfg, auto: true, autoAfterMin: 1 })).statusCode).toBe(400); // mindestens 3 Minuten
+    await ok('PUT', '/network/fritz', admin, { ...cfg, password: '', auto: true, autoAfterMin: 5 });
+    calls.length = 0;
+    expect(await fritzAutoTick(db, outage, at(4))).toBe('none'); // noch abwarten
+    expect(await fritzAutoTick(db, outage, at(5))).toBe('reconnect');
+    expect(await fritzAutoTick(db, outage, at(6))).toBe('none'); // nicht jede Minute neu
+    expect(await fritzAutoTick(db, outage, at(10))).toBe('reboot');
+    expect(await fritzAutoTick(db, outage, at(60))).toBe('none'); // bei diesem Ausfall nichts mehr
+    expect(calls.filter((c) => c.endsWith('ForceTermination')).length).toBeGreaterThanOrEqual(1);
+    expect(calls.filter((c) => c.endsWith('Reboot'))).toHaveLength(1);
+    // zweiter und dritter Ausfall am selben Tag: höchstens zwei automatische Neustarts in 24 Stunden
+    const second = { id: '44444444-4444-4444-8444-444444444444', startedAt: at(120) };
+    expect(await fritzAutoTick(db, second, at(125))).toBe('reconnect');
+    expect(await fritzAutoTick(db, second, at(130))).toBe('reboot');
+    const third = { id: '55555555-5555-4555-8555-555555555555', startedAt: at(240) };
+    expect(await fritzAutoTick(db, third, at(245))).toBe('reconnect');
+    expect(await fritzAutoTick(db, third, at(250))).toBe('none');
+    expect(calls.filter((c) => c.endsWith('Reboot'))).toHaveLength(2);
+
+    // Hinweis am Bildschirm: nur während eines laufenden Ausfalls, für jeden angemeldeten Benutzer
+    expect((await call('GET', '/network/alert', {})).statusCode).toBe(401);
+    expect(await ok('GET', '/network/alert', user)).toEqual({ offline: false, since: null, steps: [] });
+    let up = false;
+    const tick = startOutageMonitor(db, async () => up, 0);
+    await tick(); await tick();
+    const alert = await ok('GET', '/network/alert', user);
+    expect(alert.offline).toBe(true);
+    expect(alert.since).toBeTruthy();
+    up = true; await tick();
+    expect((await ok('GET', '/network/alert', user)).offline).toBe(false);
   });
 });

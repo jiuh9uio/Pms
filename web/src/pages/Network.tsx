@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { fritzSettingsInput, wifiSettingsInput, type FritzInfoDto, type FritzSettingsDto, type InternetStatusDto, type NetDeviceDto, type NetOutagesDto, type NetScanDto, type WifiDto } from '../../../src/shared/schemas.js';
 import { useAuth } from '../App.tsx';
 import { api } from '../api.ts';
+import { netAlertOn, setNetAlertOn } from '../NetAlert.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, fmtDateTime, printOnly, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
 
 const duration = (a: string, b: string) => {
@@ -19,11 +20,11 @@ function FritzCard() {
   const [rev, setRev] = useState(0);
   const { data, error } = useLoad(() => api<FritzSettingsDto>('GET', '/network/fritz'), [rev]);
   const [edit, setEdit] = useState(false);
-  const [v, setV] = useState({ host: '', port: '49000', user: '', password: '' });
+  const [v, setV] = useState({ host: '', port: '49000', user: '', password: '', auto: false, autoAfterMin: '5' });
   const [info, setInfo] = useState<FritzInfoDto | null>(null);
   const [busy, setBusy] = useState<'' | 'info' | 'reconnect' | 'reboot'>('');
   const [fail, setFail] = useState<string | null>(null);
-  useEffect(() => { if (data) setV({ host: data.host, port: String(data.port), user: data.user, password: '' }); }, [data]);
+  useEffect(() => { if (data) setV({ host: data.host, port: String(data.port), user: data.user, password: '', auto: data.auto, autoAfterMin: String(data.autoAfterMin) }); }, [data]);
   const f = useSubmit(fritzSettingsInput, async (d) => { await api('PUT', '/network/fritz', d); toast('FRITZ!Box gespeichert'); setEdit(false); setRev(rev + 1); });
   const ready = !!data && data.enabled && !!data.host && data.hasPassword;
   const run = async (what: 'info' | 'reconnect' | 'reboot') => {
@@ -43,12 +44,14 @@ function FritzCard() {
       <div className="cardhead"><div><h2>FRITZ!Box</h2><p className="muted">Wenn das Internet hängt: Verbindung neu aufbauen oder die Box neu starten, ohne an den Router zu gehen.</p></div>
         <div className="actions">{isAdmin && !edit && <Button onClick={() => setEdit(true)}>{ready ? 'Ändern' : 'Einrichten'}</Button>}</div></div>
       {edit ? (
-        <form onSubmit={(e) => void f.submit({ enabled: true, host: v.host, port: Number(v.port), user: v.user, password: v.password }, e)} noValidate>
+        <form onSubmit={(e) => void f.submit({ enabled: true, host: v.host, port: Number(v.port), user: v.user, password: v.password, auto: v.auto, autoAfterMin: Number(v.autoAfterMin) }, e)} noValidate>
           <div className="formgrid">
             <Field label="Adresse der FRITZ!Box" error={f.errors.host} hint="meist 192.168.178.1"><input value={v.host} onChange={(e) => setV({ ...v, host: e.target.value })} inputMode="decimal" /></Field>
             <Field label="Port" error={f.errors.port} hint="bei der FRITZ!Box 49000"><input value={v.port} onChange={(e) => setV({ ...v, port: e.target.value })} inputMode="numeric" /></Field>
             <Field label="FRITZ!Box-Benutzer" error={f.errors.user} hint="unter System → FRITZ!Box-Benutzer; braucht das Recht „FRITZ!Box Einstellungen“"><input value={v.user} onChange={(e) => setV({ ...v, user: e.target.value })} autoComplete="off" /></Field>
             <Field label="Kennwort" error={f.errors.password} hint={data.hasPassword ? 'gespeichert – leer lassen zum Behalten' : undefined}><input type="password" value={v.password} onChange={(e) => setV({ ...v, password: e.target.value })} autoComplete="new-password" /></Field>
+            <label className="check wide"><input type="checkbox" checked={v.auto} onChange={(e) => setV({ ...v, auto: e.target.checked })} /><span>Bei Ausfall von selbst zurücksetzen<small>Erst wird die Internetverbindung neu aufgebaut. Bleibt das Internet danach noch einmal so lange weg, wird die Box einmal neu gestartet – höchstens zweimal in 24 Stunden.</small></span></label>
+            {v.auto && <Field label="Wartezeit in Minuten" error={f.errors.autoAfterMin} hint="so lange muss das Internet weg sein, bevor etwas geschieht (mindestens 3)"><input value={v.autoAfterMin} onChange={(e) => setV({ ...v, autoAfterMin: e.target.value })} inputMode="numeric" /></Field>}
           </div>
           <div className="formactions"><Button type="submit" variant="primary" busy={f.busy}>Speichern</Button><Button onClick={() => setEdit(false)}>Abbrechen</Button></div>
           <p className="muted small">In der FRITZ!Box muss unter Heimnetz → Netzwerk → Netzwerkeinstellungen „Zugriff für Anwendungen zulassen“ eingeschaltet sein. Am besten einen eigenen Benutzer für das Programm anlegen. Das Kennwort wird verschlüsselt gespeichert.</p>
@@ -60,6 +63,7 @@ function FritzCard() {
             <Button variant="primary" busy={busy === 'reconnect'} disabled={busy !== ''} onClick={() => void run('reconnect')}>Internetverbindung neu aufbauen</Button>
             <Button variant="danger" busy={busy === 'reboot'} disabled={busy !== ''} onClick={() => void run('reboot')}>FRITZ!Box neu starten</Button>
           </div>
+          <p>{data.auto ? <><Badge tone="ok">Automatik ein</Badge> Nach {data.autoAfterMin} Minuten ohne Internet baut das Programm die Verbindung neu auf, nach weiteren {data.autoAfterMin} Minuten startet es die Box einmal neu.</> : <><Badge>Automatik aus</Badge> Zurückgesetzt wird nur auf Knopfdruck.</>}</p>
           {fail && <p className="notice danger" role="alert">{fail}</p>}
           {info && <p>{info.model || 'FRITZ!Box'}{info.version && ` · Version ${info.version}`}{info.uptimeSec != null && ` · läuft seit ${uptime(info.uptimeSec)}`}
             {info.connection && <> · Internet: {info.connection === 'Connected' ? <Badge tone="ok">verbunden</Badge> : <Badge tone="danger">{info.connection}</Badge>}</>}{info.externalIp && ` · Adresse im Internet ${info.externalIp}`}</p>}
@@ -115,6 +119,9 @@ function InternetCard() {
   const [rev, setRev] = useState(0);
   const { data, error } = useLoad(() => api<InternetStatusDto>('GET', '/network/status'), [rev]);
   const log = useLoad(() => api<NetOutagesDto>('GET', '/network/outages'), [rev]).data;
+  const [hint, setHint] = useState(netAlertOn);
+  const [perm, setPerm] = useState(() => ('Notification' in window ? Notification.permission : 'unsupported'));
+  const allow = async () => { try { setPerm(await Notification.requestPermission()); } catch { setPerm('unsupported'); } };
   return (
     <section className="card">
       <div className="cardhead"><h2>Internetverbindung</h2><div className="actions"><Button onClick={() => setRev(rev + 1)}>Erneut prüfen</Button></div></div>
@@ -123,6 +130,11 @@ function InternetCard() {
           <p>{data.online ? <Badge tone="ok">verbunden</Badge> : <Badge tone="danger">keine Verbindung</Badge>}{' '}
             {data.online ? `Antwort aus dem Internet nach ${data.ms} ms.` : data.error} <span className="muted">Geprüft {fmtDateTime(data.checkedAt)}.</span></p>
           <p className="muted small">Adresse dieses Rechners im Hausnetz: {data.addresses.join(', ') || 'keine Netzwerkverbindung'}. Geprüft wird die Verbindung dieses Rechners (eine kurze Anfrage an api.github.com) – nicht die Geschwindigkeit und nicht das Gäste-WLAN.</p>
+          <h3>Hinweis bei Ausfall</h3>
+          <label className="check"><input type="checkbox" checked={hint} onChange={(e) => { setHint(e.target.checked); setNetAlertOn(e.target.checked); }} /><span>Auf diesem Gerät ein Hinweisfenster zeigen, wenn das Internet ausfällt<small>erscheint im Programm, solange es in einem Browserfenster geöffnet ist; dazu ein roter Balken bis das Internet wieder da ist</small></span></label>
+          {hint && perm === 'default' && <p><Button onClick={() => void allow()}>Zusätzlich Meldung von Windows erlauben</Button> <span className="muted small">zeigt die Meldung auch, wenn gerade ein anderes Fenster im Vordergrund ist</span></p>}
+          {hint && perm === 'granted' && <p className="muted small">Die Meldung von Windows ist für diesen Browser erlaubt.</p>}
+          {hint && perm === 'denied' && <p className="muted small">Die Meldung von Windows ist in diesem Browser gesperrt; sie lässt sich nur in den Browser-Einstellungen wieder erlauben. Das Hinweisfenster im Programm erscheint trotzdem.</p>}
           {log && (
             <>
               <h3>Ausfälle</h3>
@@ -136,7 +148,7 @@ function InternetCard() {
                   ))}</tbody>
                 </table></div>
               )}
-              <p className="muted small">Aufgezeichnet wird nur, solange das Programm läuft: Prüfung alle zwei Minuten (api.github.com und cloudflare.com), ein Ausfall zählt ab der zweiten fehlgeschlagenen Prüfung. Kürzere Aussetzer fehlen; die Zeiten sind auf etwa zwei Minuten genau. Gezeigt werden die letzten 50 Ausfälle.</p>
+              <p className="muted small">Aufgezeichnet wird nur, solange das Programm läuft: Prüfung jede Minute (api.github.com und cloudflare.com), ein Ausfall zählt ab der zweiten fehlgeschlagenen Prüfung. Kürzere Aussetzer fehlen; die Zeiten sind auf etwa eine Minute genau. Gezeigt werden die letzten 50 Ausfälle.</p>
             </>
           )}
         </>
