@@ -1,5 +1,6 @@
 import { desc, eq } from 'drizzle-orm';
-import { computeEInvoice, countryCode, type EInvoiceData, type EInvoiceRow } from '../../shared/einvoice.js';
+import { computeEInvoice, countryCode, type EInvoiceData, type EInvoiceExtract, type EInvoiceRow } from '../../shared/einvoice.js';
+import { extractInvoice } from '../../shared/invoiceextract.js';
 import type { Db, Exec } from '../db/client.js';
 import { einvoices } from '../db/schema.js';
 import { embedXml, loadPdf } from '../einvoice/pdf.js';
@@ -114,4 +115,28 @@ export async function sendEInvoice(db: Db, actor: Actor, id: string, v: { to: st
   await sendMail(db, actor, { to: v.to, subject: v.subject, text: v.body, attachments }, id);
   await db.update(einvoices).set({ sentAt: new Date(), sentTo: v.to }).where(eq(einvoices.id, id));
   await record(db, actor, { action: 'send', entity: 'einvoice', entityId: id, after: { to: v.to, attach: v.attach } });
+}
+
+// ---------- PDF auslesen ----------
+/**
+ * Liest den Text einer hochgeladenen Rechnungs-PDF (die Textschicht, die Programme beim Erzeugen hineinschreiben) und schlägt
+ * daraus die Angaben für die E-Rechnung vor. Eingescannte Rechnungen haben keine Textschicht – dafür wäre Texterkennung (OCR) nötig,
+ * die das Programm nicht enthält.
+ */
+export async function extractFromPdf(db: Exec, pdfBase64: string): Promise<EInvoiceExtract> {
+  const bytes = new Uint8Array(Buffer.from(pdfBase64, 'base64'));
+  if (Buffer.from(bytes.subarray(0, 5)).toString('latin1') !== '%PDF-') throw new AppError(400, 'validation', 'Das ist keine PDF-Datei');
+  let text = '', pages = 0;
+  try {
+    const { extractText, getDocumentProxy } = await import('unpdf');
+    const doc = await getDocumentProxy(bytes);
+    const r = await extractText(doc, { mergePages: false });
+    pages = r.totalPages;
+    text = (r.text as string[]).slice(0, 20).join('\n');
+  } catch (e) {
+    throw new AppError(422, 'pdf_unreadable', `Die PDF-Datei ließ sich nicht lesen (${e instanceof Error ? e.message.slice(0, 120) : 'unbekannter Fehler'}). Die Angaben bitte von Hand eintragen.`);
+  }
+  if (text.replace(/\s/g, '').length < 40) return { hasText: false, pages, suggestion: null };
+  const h = await getHotel(db);
+  return { hasText: true, pages, suggestion: extractInvoice(text, { name: h.name, zip: h.zip, vatId: h.vatId }) };
 }

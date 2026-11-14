@@ -306,6 +306,15 @@ rechtlich geprüft ist, steht dort ausdrücklich.
   Ausfallgebühren, Kurtaxe/Gästebeitrag als eigene Funktion (nur als Leistung abbildbar), Zimmerwechsel mitten im Aufenthalt,
   Warteliste, Kontingente für Gruppen, Channel-Manager, Online-Buchung mit Sofortbestätigung, Preispläne (z. B. nicht stornierbar).
 
+**Seit Version 1.35.0 zusätzlich – E-Rechnung: PDF auslesen:**
+
+- `POST /einvoices/extract`: liest die Textschicht der PDF mit `unpdf` (PDF.js, höchstens 20 Seiten) und schlägt über feste Muster
+  (`src/shared/invoiceextract.ts`) die Felder vor. Positionen werden nur übernommen, wenn ihre Summe zum gefundenen Gesamtbetrag
+  passt; sonst je Steuersatz eine zusammengefasste Position (mit Hinweis) oder gar keine.
+- **Grenzen:** keine Texterkennung (OCR) – Scans und Fotos liefern keinen Text und werden als solche gemeldet. Die Muster sind auf
+  übliche deutsche Rechnungen ausgelegt; ungewöhnliche Layouts, mehrspaltige Adressfelder, Rabatte und Fremdwährungen werden
+  nicht oder falsch gelesen. Maßgeblich bleibt, was der Benutzer bestätigt.
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

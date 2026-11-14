@@ -23,6 +23,7 @@ export function registerEInvoiceRoutes(api: FastifyInstance, { db, requireUser, 
   api.get('/einvoices/defaults', user, () => einv.defaults(db));
   api.post('/einvoices/from-invoice/:id', user, (req) => einv.fromInvoice(db, actor(req), idOf(req)));
   // PDF-Datei kommt Base64-kodiert im JSON – daher eine höhere Größengrenze nur für diese Adresse
+  api.post('/einvoices/extract', { ...user, bodyLimit: 15 * 1024 * 1024 }, (req) => einv.extractFromPdf(db, E.einvoiceExtractInput.parse(req.body).pdfBase64));
   api.post('/einvoices/upload', { ...user, bodyLimit: 15 * 1024 * 1024 }, (req) => einv.fromUpload(db, actor(req), E.einvoiceUploadInput.parse(req.body)));
   for (const kind of ['pdf', 'xml'] as const)
     api.get(`/einvoices/:id/${kind}`, user, async (req, reply) => {

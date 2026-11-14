@@ -186,4 +186,23 @@ describe('Umwandeln und Versenden', () => {
     expect((await call('GET', '/settings/mail', b)).statusCode).toBe(403);
     expect((await ok('GET', '/mail/status', b))).toEqual({ ready: true, from: 'hotel@gmx.de' });
   });
+
+  it('liest eine hochgeladene PDF aus und erkennt Dateien ohne Text', async () => {
+    const { PDFDocument, StandardFonts } = await import('pdf-lib');
+    const make = async (rows: string[]) => {
+      const doc = await PDFDocument.create();
+      const page = doc.addPage([595, 842]);
+      const font = await doc.embedFont(StandardFonts.Helvetica);
+      rows.forEach((t, i) => page.drawText(t, { x: 50, y: 780 - i * 18, size: 11, font }));
+      return Buffer.from(await doc.save()).toString('base64');
+    };
+    const withText = await make(['Muster Bau GmbH', 'Industriestr. 5', '54321 Beispielstadt', 'Rechnungsnummer RE-2031-0042', 'Rechnungsdatum 02.05.2031', 'Leistungszeitraum 28.04.2031 - 30.04.2031',
+      'Netto 19 %: 100,00', 'USt 19 % 19,00', 'Gesamtbetrag 119,00 EUR']);
+    const r = await ok('POST', '/einvoices/extract', admin, { pdfBase64: withText });
+    expect(r).toMatchObject({ hasText: true, pages: 1 });
+    expect(r.suggestion).toMatchObject({ number: 'RE-2031-0042', issueDate: '2031-05-02', serviceFrom: '2031-04-28', serviceTo: '2031-04-30', grossCents: 11900,
+      buyer: { name: 'Muster Bau GmbH', zip: '54321', city: 'Beispielstadt' }, lines: [{ quantity: 1, unitGrossCents: 11900, taxRate: 19 }] });
+    expect(await ok('POST', '/einvoices/extract', admin, { pdfBase64: await make([]) })).toEqual({ hasText: false, pages: 1, suggestion: null }); // leere Seite = wie ein Scan
+    expect((await call('POST', '/einvoices/extract', admin, { pdfBase64: Buffer.from('x'.repeat(200)).toString('base64') })).statusCode).toBe(400);
+  });
 });

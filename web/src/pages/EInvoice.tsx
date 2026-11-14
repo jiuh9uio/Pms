@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  COUNTRIES, PAYMENT_MEANS, computeEInvoice, einvoiceSendInput, einvoiceUploadInput, type EInvoiceRow,
+  COUNTRIES, PAYMENT_MEANS, computeEInvoice, einvoiceSendInput, einvoiceUploadInput, type EInvoiceExtract, type EInvoiceRow,
 } from '../../../src/shared/einvoice.js';
 import { addDays, formatMoney, parseMoney, todayBerlin } from '../../../src/shared/hotel.js';
 import type { TaxRateDto } from '../../../src/shared/schemas.js';
@@ -64,7 +64,7 @@ export function EInvoice() {
       <section className="card">
         <h2>Wichtig zu wissen</h2>
         <ul className="bullets">
-          <li>Maßgeblich bei einer E-Rechnung ist der <b>XML-Teil</b>. Er entsteht aus den Angaben, die Sie eintragen – bitte mit der PDF abgleichen, das Programm liest die PDF nicht aus.</li>
+          <li>Maßgeblich bei einer E-Rechnung ist der <b>XML-Teil</b>. Er entsteht aus den Angaben, die Sie eintragen – bitte mit der PDF abgleichen. Beim Hochladen liest das Programm die PDF und schlägt die Angaben vor; das ist eine Hilfe, keine Garantie – Lesefehler sind möglich.</li>
           <li>Die Dateien sind nach den Vorgaben für ZUGFeRD 2 / Factur-X (Profil EN 16931) aufgebaut, aber <b>nicht mit einem offiziellen Prüfprogramm validiert</b>. Vor dem ersten echten Versand bitte eine Beispieldatei mit einem ZUGFeRD-Validator prüfen.</li>
           <li>Bei hochgeladenen PDFs hängt es von der Ausgangsdatei ab, ob das Ergebnis den Archivstandard PDF/A-3 erfüllt. Aus dem PMS erzeugte Rechnungen bringen Schrift und Farbprofil selbst mit.</li>
           <li>Stornobelege und Rechnungen mit Nachlass-Positionen werden noch nicht unterstützt.</li>
@@ -107,8 +107,23 @@ function UploadDialog({ onClose }: { onClose: () => void }) {
     if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) return toast('Bitte eine PDF-Datei wählen', 'error');
     if (f.size > 10 * 1024 * 1024) return toast('Die Datei ist zu groß (höchstens 10 MB)', 'error');
     const reader = new FileReader();
-    reader.onload = () => setFile({ name: f.name, size: f.size, base64: String(reader.result).split(',')[1] ?? '' });
+    reader.onload = () => { const base64 = String(reader.result).split(',')[1] ?? ''; setFile({ name: f.name, size: f.size, base64 }); void readPdf(base64); };
     reader.readAsDataURL(f);
+  };
+  // PDF auslesen: gefundene Angaben in die Felder übernehmen (als Vorschlag – alles bleibt änderbar)
+  const [read, setRead] = useState<{ state: 'busy' | 'done' | 'none' | 'failed'; found: string[]; notes: string[]; text?: string } | null>(null);
+  const readPdf = async (base64: string) => {
+    setRead({ state: 'busy', found: [], notes: [] });
+    try {
+      const r = await api<EInvoiceExtract>('POST', '/einvoices/extract', { pdfBase64: base64 });
+      const g = r.suggestion;
+      if (!r.hasText || !g) { setRead({ state: 'none', found: [], notes: [] }); return; }
+      setV((x) => ({ ...x, number: g.number ?? x.number, issueDate: g.issueDate ?? x.issueDate, serviceFrom: g.serviceFrom ?? g.issueDate ?? x.serviceFrom, serviceTo: g.serviceTo ?? g.serviceFrom ?? g.issueDate ?? x.serviceTo,
+        dueDate: g.dueDate ?? x.dueDate, paid: g.paidCents ? (g.paidCents / 100).toFixed(2).replace('.', ',') : x.paid }));
+      if (g.buyer) setBuyer((x) => ({ ...x, name: g.buyer!.name, street: g.buyer!.street, zip: g.buyer!.zip, city: g.buyer!.city, vatId: g.buyer!.vatId || x.vatId }));
+      if (g.lines?.length) setLines(g.lines.map((l) => ({ name: l.name, quantity: String(l.quantity).replace('.', ','), price: (l.unitGrossCents / 100).toFixed(2).replace('.', ','), rate: String(l.taxRate) })));
+      setRead({ state: 'done', found: g.found, notes: g.notes });
+    } catch (e) { setRead({ state: 'failed', found: [], notes: [], text: e instanceof Error ? e.message : 'Die PDF ließ sich nicht lesen.' }); }
   };
   const parsed = lines.map((l) => ({ name: l.name, quantity: Number(l.quantity.replace(',', '.')), unitGrossCents: parseMoney(l.price), taxRate: Number(l.rate) }));
   const complete = parsed.every((l) => l.quantity > 0 && !Number.isNaN(l.unitGrossCents));
@@ -151,6 +166,16 @@ function UploadDialog({ onClose }: { onClose: () => void }) {
               {file ? <span><b>{file.name}</b><br /><small>{Math.round(file.size / 1024)} kB · zum Ersetzen klicken</small></span>
                 : <span><b>PDF-Rechnung hier ablegen</b> oder klicken zum Auswählen<br /><small>höchstens 10 MB, nicht kennwortgeschützt</small></span>}
             </label>
+            {read?.state === 'busy' && <p className="muted">Die PDF wird gelesen …</p>}
+            {read?.state === 'done' && (
+              <div className="notice">
+                <b>Aus der PDF übernommen</b> – bitte mit der Rechnung vergleichen:
+                <ul className="bullets">{read.found.map((x) => <li key={x}>{x}</li>)}</ul>
+                {read.notes.map((x) => <p key={x} className="small"><b>Achtung:</b> {x}</p>)}
+              </div>
+            )}
+            {read?.state === 'none' && <p className="notice warn">In dieser PDF steht kein lesbarer Text – vermutlich ist sie eingescannt oder ein Foto. Eine Texterkennung für Scans enthält das Programm nicht; die Angaben bitte von Hand eintragen.</p>}
+            {read?.state === 'failed' && <p className="notice warn">{read.text}</p>}
             <h3>Rechnung</h3>
             <div className="formgrid cols3">
               {f('Rechnungsnummer', v.number, (s) => setV({ ...v, number: s }))}{f('Rechnungsdatum', v.issueDate, (s) => setV({ ...v, issueDate: s }), { type: 'date' })}

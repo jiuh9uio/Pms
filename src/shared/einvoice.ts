@@ -88,3 +88,11 @@ export interface EInvoiceRow {
   id: string; source: 'upload' | 'invoice'; invoiceId: string | null; number: string; issueDate: string; buyerName: string; buyerEmail: string; grossCents: number;
   originalName: string; generatedPdf: boolean; createdBy: string; createdAt: string; sentAt: string | null; sentTo: string;
 }
+
+/** PDF auslesen: Vorschlag für die Eingabefelder */
+export const einvoiceExtractInput = z.object({ pdfBase64: z.string().min(100, 'Bitte eine PDF-Datei wählen').max(14_000_000, 'Die PDF-Datei ist zu groß (höchstens 10 MB)') });
+export interface EInvoiceExtract {
+  /** false = die PDF enthält keinen lesbaren Text (z. B. ein Scan) */
+  hasText: boolean; pages: number;
+  suggestion: import('./invoiceextract.js').InvoiceSuggestion | null;
+}
