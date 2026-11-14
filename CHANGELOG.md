@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.32.1
+
+- Gäste-Link zusätzlich abgesichert: Der Link allein zeigt nichts mehr. Der Gast gibt seinen Nachnamen und – wenn bei ihm hinterlegt – seine Postleitzahl ein; erst dann öffnet sich die Reservierung. Nach acht falschen Eingaben ist der Link 15 Minuten gesperrt.
+
 ## 1.32.0
 
 - Stornobedingungen (Einstellungen → Algorithmen → Storno): kostenfrei bis so viele Tage vor der Anreise, danach ein Anteil des Zimmerpreises. Die Bedingungen stehen in der Reservierungsbestätigung, in der Reservierung und auf der Seite des Gastes.

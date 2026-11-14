@@ -288,8 +288,10 @@ rechtlich geprüft ist, steht dort ausdrücklich.
 - **Stornobedingungen und Gäste-Link (seit 1.32.0, `src/server/modules/guestlink.ts`):** Einstellung `cancel_policy`
   (Frist in Tagen, Prozentsatz, Online-Storno, auch nach Frist, Internetadresse). Der Link `/buchung/<id>.<Prüfsumme>` trägt
   eine HMAC-Prüfsumme mit dem Schlüssel der Installation (`secret.key`) und wird nicht gespeichert; er lässt sich daher nicht
-  einzeln widerrufen und gilt, solange die Reservierung besteht. Öffentlich: `GET /public/booking/:token`,
-  `POST …/arrival`, `POST …/cancel` (Begrenzung wie die anderen öffentlichen Seiten). Die Seite zeigt Zeitraum, Kategorie,
+  einzeln widerrufen und gilt, solange die Reservierung besteht. Seit 1.32.1 verlangt jede Abfrage zusätzlich Nachname und
+  – falls hinterlegt – Postleitzahl des Gastes (Vergleich ohne Groß-/Kleinschreibung, Umlaute großzügig); nach 8 Fehlversuchen
+  15 Minuten Sperre je Reservierung (im Arbeitsspeicher). Öffentlich: `GET /public/booking/:token` (nur Hausname),
+  `POST …/open`, `POST …/arrival`, `POST …/cancel` (Begrenzung wie die anderen öffentlichen Seiten). Die Seite zeigt Zeitraum, Kategorie,
   Personen, Gesamtbetrag – keine Anschrift, keine Ausweisdaten. Online-Storno nur für vorläufige/bestätigte Zimmer vor dem
   Anreisetag. Die Ausfallgebühr wird berechnet, in den Bemerkungen und im Übergabebuch vermerkt, aber **nicht als Leistung
   gebucht** (steuerliche Behandlung und Zulässigkeit der Bedingungen sind nicht geprüft). Nur im Hausnetz erprobt.

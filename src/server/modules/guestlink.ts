@@ -1,9 +1,9 @@
 import { timingSafeEqual } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import QRCode from 'qrcode';
-import { cancelTerms, isActiveStatus, todayBerlin, type CancelPolicy, type GuestLinkDto, type PublicBooking } from '../../shared/hotel.js';
+import { cancelTerms, isActiveStatus, todayBerlin, type CancelPolicy, type GuestLinkDto, type PublicBooking, type PublicBookingGate, type PublicCred } from '../../shared/hotel.js';
 import type { Db, Exec } from '../db/client.js';
-import { bookings, settings, teamNotes } from '../db/schema.js';
+import { bookings, guests, settings, teamNotes } from '../db/schema.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 import { getBooking, setRoomStatus } from './bookings.js';
@@ -13,6 +13,7 @@ import { getHotel } from './settings.js';
 /**
  * Stornobedingungen und der persönliche Link des Gastes zu seiner Reservierung: ansehen, Ankunftszeit mitteilen, stornieren.
  * Der Link enthält die Kennung der Reservierung und eine Prüfsumme mit dem Schlüssel dieser Installation; er wird nicht gespeichert.
+ * Zusätzlich muss der Gast seinen Nachnamen und – wenn hinterlegt – seine Postleitzahl eingeben; der Link allein zeigt nichts.
  * Eine Ausfallgebühr wird nie automatisch gebucht – sie wird berechnet, angezeigt und dem Personal gemeldet.
  */
 const POLICY0: CancelPolicy = { enabled: false, freeDays: 3, feePercent: 80, online: false, onlineLate: false, publicUrl: '', extraText: '' };
@@ -73,15 +74,50 @@ async function view(db: Exec, bookingId: string): Promise<PublicBooking> {
     terms, canCancel: state === 'active' && cancelHint === '', cancelHint,
   };
 }
-export const publicBooking = (db: Exec, token: string) => view(db, bookingIdOf(token));
+// ---------- Zugang: Link + Nachname + Postleitzahl ----------
+const norm = (s: string) => s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/ß/g, 'ss').toLowerCase().replace(/[^a-z0-9]/g, '');
+/** Umlaute ausgeschrieben („Mueller“ für „Müller“) */
+const normDe = (s: string) => norm(s.replace(/ä/gi, 'ae').replace(/ö/gi, 'oe').replace(/ü/gi, 'ue'));
+const sameName = (a: string, b: string) => norm(a) === norm(b) || normDe(a) === normDe(b);
+/** Fehlversuche je Reservierung: nach 8 falschen Eingaben ist der Link 15 Minuten gesperrt */
+const fails = new Map<string, { n: number; until: number }>();
+const MAX_FAILS = 8, LOCK_MS = 15 * 60_000;
+
+async function guestOf(db: Exec, bookingId: string) {
+  const [g] = await db.select({ lastName: guests.lastName, zip: guests.zip }).from(bookings).innerJoin(guests, eq(guests.id, bookings.guestId)).where(eq(bookings.id, bookingId));
+  if (!g) throw GONE();
+  return g;
+}
+/** Vor der Eingabe: nur Name des Hauses und ob eine Postleitzahl verlangt wird – nichts über die Reservierung. */
+export async function linkGate(db: Exec, token: string): Promise<PublicBookingGate> {
+  const [g, h] = [await guestOf(db, bookingIdOf(token)), await getHotel(db)];
+  return { hotelName: h.name, hotelPhone: h.phone, needsZip: norm(g.zip) !== '' };
+}
+/** Prüft Nachname und Postleitzahl gegen die Angaben des Gastes; liefert die Kennung der Reservierung. */
+async function enter(db: Exec, token: string, cred: PublicCred, now = Date.now()): Promise<string> {
+  const id = bookingIdOf(token);
+  const f = fails.get(id);
+  if (f && f.until > now) throw new AppError(429, 'link_locked', 'Zu viele falsche Eingaben. Bitte versuchen Sie es in 15 Minuten noch einmal oder rufen Sie uns an.');
+  const g = await guestOf(db, id);
+  const ok = sameName(cred.lastName, g.lastName) && (norm(g.zip) === '' || norm(cred.zip) === norm(g.zip));
+  if (!ok) {
+    const n = (f && f.until === 0 ? f.n : 0) + 1;
+    if (fails.size > 5000) fails.clear();
+    fails.set(id, n >= MAX_FAILS ? { n: 0, until: now + LOCK_MS } : { n, until: 0 });
+    throw new AppError(403, 'link_denied', 'Nachname und Postleitzahl passen nicht zu dieser Reservierung. Bitte so eingeben wie bei der Buchung.');
+  }
+  fails.delete(id);
+  return id;
+}
+export const publicBooking = async (db: Exec, token: string, cred: PublicCred) => view(db, await enter(db, token, cred));
 
 const GUEST: Actor = { userId: null, userName: 'Gast (Link)', ip: null };
 const de = (s: string) => `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)}`;
 const tellTeam = (db: Exec, text: string) => db.insert(teamNotes).values({ kind: 'note', text, createdBy: 'Gast (Link)', createdById: null });
 
 /** Ankunftszeit und Nachricht des Gastes speichern; das Personal sieht sie in der Reservierung und im Übergabebuch. */
-export async function setArrival(db: Db, token: string, v: { time: string; message: string }, ip: string | null) {
-  const id = bookingIdOf(token);
+export async function setArrival(db: Db, token: string, v: PublicCred & { time: string; message: string }, ip: string | null) {
+  const id = await enter(db, token, v);
   const b = await view(db, id);
   if (b.state !== 'active') throw conflict('Für diese Reservierung lässt sich die Ankunftszeit nicht mehr ändern.');
   await db.update(bookings).set({ arrivalTime: v.time, guestMessage: v.message, updatedAt: new Date() }).where(eq(bookings.id, id));
@@ -91,8 +127,8 @@ export async function setArrival(db: Db, token: string, v: { time: string; messa
 }
 
 /** Storno durch den Gast – nur wenn die Bedingungen es online erlauben. Gibt die Zimmer frei und meldet es dem Personal. */
-export async function cancelByGuest(db: Db, token: string, ip: string | null) {
-  const id = bookingIdOf(token);
+export async function cancelByGuest(db: Db, token: string, cred: PublicCred, ip: string | null) {
+  const id = await enter(db, token, cred);
   const b = await view(db, id);
   if (!b.canCancel) throw conflict(b.cancelHint || 'Diese Reservierung lässt sich hier nicht stornieren.', 'cancel_not_possible');
   const full = await getBooking(db, id);

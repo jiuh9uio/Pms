@@ -17,7 +17,7 @@ export function CancelPolicyCard() {
   return (
     <form className="card" onSubmit={(e) => void f.submit(payload, e)} noValidate>
       <h2>Stornobedingungen und Gäste-Link</h2>
-      <p className="muted">Jede Reservierung hat einen persönlichen Link für den Gast. Darüber sieht er seine Buchung, teilt die Ankunftszeit mit und kann – wenn Sie es erlauben – selbst stornieren. Den Link finden Sie in der Reservierung unter „Angaben“.</p>
+      <p className="muted">Jede Reservierung hat einen persönlichen Link für den Gast. Darüber sieht er – nach Eingabe von Nachname und Postleitzahl – seine Buchung, teilt die Ankunftszeit mit und kann, wenn Sie es erlauben, selbst stornieren. Den Link finden Sie in der Reservierung unter „Angaben“.</p>
       <div className="formgrid cols3">
         <label className="check wide"><input type="checkbox" checked={v.enabled} onChange={(e) => setV({ ...v, enabled: e.target.checked })} /><span>Stornobedingungen anwenden<small>Sie stehen dann in der Reservierungsbestätigung, auf der Seite des Gastes und in der Reservierung.</small></span></label>
         <Field label="Kostenfrei bis … Tage vor Anreise" error={f.errors.freeDays} hint="0 = bis zum Anreisetag"><input inputMode="numeric" value={v.freeDays} onChange={(e) => setV({ ...v, freeDays: e.target.value })} /></Field>

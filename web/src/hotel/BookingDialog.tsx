@@ -376,7 +376,7 @@ function GuestSide({ booking }: { booking: BookingDto }) {
       {link ? (
         <div className="guestlink">
           <img src={link.qr} alt="QR-Code zum Gäste-Link" width={120} height={120} />
-          <div><p><b>Link für den Gast</b> – Reservierung ansehen, Ankunftszeit mitteilen, stornieren:</p><p><code className="wrapcode">{link.url}</code></p>
+          <div><p><b>Link für den Gast</b> – Reservierung ansehen, Ankunftszeit mitteilen, stornieren. Zum Öffnen gibt der Gast seinen Nachnamen{booking.guest.zip ? ' und seine Postleitzahl' : ''} ein{booking.guest.zip ? '' : ' (eine Postleitzahl ist beim Gast nicht hinterlegt)'}:</p><p><code className="wrapcode">{link.url}</code></p>
             <p><Button onClick={() => void copy()}>Link kopieren</Button></p>
             {link.localOnly && <p className="muted small">Diese Adresse ist nur im Hausnetz erreichbar. Für Gäste zu Hause muss das Programm aus dem Internet erreichbar und die Adresse unter Einstellungen → Algorithmen → Storno eingetragen sein.</p>}</div>
         </div>

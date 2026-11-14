@@ -321,4 +321,11 @@ export interface PublicBooking {
   arrivalTime: string; guestMessage: string; checkinTime: string;
   terms: CancelTerms; canCancel: boolean; /** warum nicht online storniert werden kann */ cancelHint: string;
 }
-export const publicArrivalInput = z.object({ time: z.union([z.literal(''), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Uhrzeit im Format HH:MM')]), message: z.string().trim().max(500).default('') });
+/** Zugangsangaben des Gastes zum Link: Nachname und – falls bei der Reservierung hinterlegt – Postleitzahl */
+const cred = { lastName: z.string().trim().min(1, 'Bitte Ihren Nachnamen eintragen').max(80), zip: z.string().trim().max(12).default('') };
+export const publicCredInput = z.object(cred);
+export type PublicCred = z.infer<typeof publicCredInput>;
+export const publicCancelInput = z.object({ ...cred, confirm: z.literal(true) });
+/** Was die Seite vor der Eingabe zeigen darf: nichts über die Reservierung selbst */
+export interface PublicBookingGate { hotelName: string; hotelPhone: string; needsZip: boolean }
+export const publicArrivalInput = z.object({ ...cred, time: z.union([z.literal(''), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Uhrzeit im Format HH:MM')]), message: z.string().trim().max(500).default('') });

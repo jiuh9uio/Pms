@@ -154,34 +154,43 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect((await call('GET', `/public/booking/${t.slice(0, -1)}${t.endsWith('A') ? 'B' : 'A'}`, {})).statusCode).toBe(404);
     expect((await call('GET', `/public/booking/${'0'.repeat(32)}.${t.split('.')[1]}`, {})).statusCode).toBe(404);
 
+    // der Link allein zeigt nichts – erst Nachname und Postleitzahl öffnen die Reservierung
+    expect(await ok('GET', `/public/booking/${t}`, {})).toEqual({ hotelName: 'Hotel & Restaurant Schützenhaus', hotelPhone: '', needsZip: true });
+    const lea = { lastName: ' link ', zip: '11111' }, nah = { lastName: 'Dran', zip: '11111' };
+    expect((await call('POST', `/public/booking/${t}/open`, {}, { lastName: 'Falsch', zip: '11111' })).statusCode).toBe(403);
+    expect((await call('POST', `/public/booking/${t}/open`, {}, { lastName: 'Link', zip: '99999' })).statusCode).toBe(403);
+    expect((await call('POST', `/public/booking/${t}/arrival`, {}, { lastName: 'Falsch', zip: '', time: '10:00', message: '' })).statusCode).toBe(403);
+    expect((await call('POST', `/public/booking/${t}/cancel`, {}, { lastName: 'Falsch', zip: '', confirm: true })).statusCode).toBe(403);
+    const open = (tk: string, c: object) => ok('POST', `/public/booking/${tk}/open`, {}, c);
+
     // ohne eingeschaltete Bedingungen: ansehen ja, stornieren nein
-    let pub = await ok('GET', `/public/booking/${t}`, {});
+    let pub = await open(t, lea); // Groß-/Kleinschreibung und Leerzeichen sind egal
     expect(pub).toMatchObject({ guestName: 'Lea Link', state: 'active', totalCents: 19800, canCancel: false, from: addDays(today, 40) });
     expect(pub.cancelHint).toContain('rufen Sie uns bitte an');
     expect(JSON.stringify(pub)).not.toContain('Weg 1'); // keine Anschrift, keine Ausweisdaten
-    expect((await call('POST', `/public/booking/${t}/cancel`, {}, { confirm: true })).statusCode).toBe(409);
+    expect((await call('POST', `/public/booking/${t}/cancel`, {}, { ...lea, confirm: true })).statusCode).toBe(409);
 
     // Ankunftszeit mitteilen: steht in der Reservierung und im Übergabebuch
-    expect((await call('POST', `/public/booking/${t}/arrival`, {}, { time: '25:00', message: '' })).statusCode).toBe(400);
-    await ok('POST', `/public/booking/${t}/arrival`, {}, { time: '21:30', message: 'Wir kommen mit dem Zug.' });
+    expect((await call('POST', `/public/booking/${t}/arrival`, {}, { ...lea, time: '25:00', message: '' })).statusCode).toBe(400);
+    await ok('POST', `/public/booking/${t}/arrival`, {}, { ...lea, time: '21:30', message: 'Wir kommen mit dem Zug.' });
     expect(await ok('GET', `/bookings/${far}`, user)).toMatchObject({ arrivalTime: '21:30', guestMessage: 'Wir kommen mit dem Zug.' });
     expect((await ok('GET', '/team/notes', user))[0].text).toContain('Ankunft voraussichtlich 21:30 Uhr');
 
     // Bedingungen einschalten
     await ok('PUT', '/settings/cancel-policy', admin, policy);
-    pub = await ok('GET', `/public/booking/${t}`, {});
+    pub = await open(t, lea);
     expect(pub.terms).toMatchObject({ enabled: true, free: true, freeUntil: addDays(today, 37), feeCents: 0, feePercent: 80 });
     expect(pub.canCancel).toBe(true);
     expect(await ok('GET', `/bookings/${far}/cancel-terms`, user)).toMatchObject({ free: true, freeUntil: addDays(today, 37) });
     // nach der Frist: online nur, wenn ausdrücklich erlaubt – dann mit Ausfallgebühr als Meldung, nicht als Buchung
     const tn = tok((await ok('GET', `/bookings/${near}/guest-link`, user)).url);
-    let late = await ok('GET', `/public/booking/${tn}`, {});
+    let late = await open(tn, nah);
     expect(late.terms).toMatchObject({ free: false, feeCents: 7920 }); // 80 % von 99 €
     expect(late.canCancel).toBe(false);
-    expect((await call('POST', `/public/booking/${tn}/cancel`, {}, { confirm: true })).statusCode).toBe(409);
+    expect((await call('POST', `/public/booking/${tn}/cancel`, {}, { ...nah, confirm: true })).statusCode).toBe(409);
     await ok('PUT', '/settings/cancel-policy', admin, { ...policy, onlineLate: true });
-    expect((await call('POST', `/public/booking/${tn}/cancel`, {}, {})).statusCode).toBe(400); // ohne Bestätigung
-    late = await ok('POST', `/public/booking/${tn}/cancel`, {}, { confirm: true });
+    expect((await call('POST', `/public/booking/${tn}/cancel`, {}, nah)).statusCode).toBe(400); // ohne Bestätigung
+    late = await ok('POST', `/public/booking/${tn}/cancel`, {}, { ...nah, confirm: true });
     expect(late).toMatchObject({ state: 'cancelled', canCancel: false });
     const nb = await ok('GET', `/bookings/${near}`, user);
     expect(nb.rooms[0].status).toBe('cancelled');
@@ -192,11 +201,20 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect((await ok('GET', `/availability?from=${addDays(today, 2)}&to=${addDays(today, 3)}`, user)).length).toBe(1);
 
     // kostenfrei innerhalb der Frist
-    const done = await ok('POST', `/public/booking/${t}/cancel`, {}, { confirm: true });
+    const done = await ok('POST', `/public/booking/${t}/cancel`, {}, { ...lea, confirm: true });
     expect(done.state).toBe('cancelled');
     expect((await ok('GET', `/bookings/${far}`, user)).notes).toContain('Kostenfrei innerhalb der Frist');
-    expect((await call('POST', `/public/booking/${t}/cancel`, {}, { confirm: true })).statusCode).toBe(409); // nicht doppelt
-    expect((await call('POST', `/public/booking/${t}/arrival`, {}, { time: '10:00', message: '' })).statusCode).toBe(409);
+    expect((await call('POST', `/public/booking/${t}/cancel`, {}, { ...lea, confirm: true })).statusCode).toBe(409); // nicht doppelt
+    expect((await call('POST', `/public/booking/${t}/arrival`, {}, { ...lea, time: '10:00', message: '' })).statusCode).toBe(409);
+
+    // Gast ohne hinterlegte Postleitzahl: der Nachname genügt; nach acht falschen Eingaben ist der Link eine Weile gesperrt
+    const noZip = await mk({ firstName: 'Ole', lastName: 'Müller-Groß', zip: '' }, addDays(today, 70), addDays(today, 71));
+    const tz = tok((await ok('GET', `/bookings/${noZip}/guest-link`, user)).url);
+    expect((await ok('GET', `/public/booking/${tz}`, {})).needsZip).toBe(false);
+    expect((await open(tz, { lastName: 'mueller gross', zip: '' })).guestName).toBe('Ole Müller-Groß'); // ausgeschriebene Umlaute gelten
+    expect((await open(tz, { lastName: 'MULLER-GROSS', zip: 'egal' })).guestName).toBe('Ole Müller-Groß'); // Umlaute und Bindestrich großzügig
+    for (let i = 0; i < 8; i++) expect((await call('POST', `/public/booking/${tz}/open`, {}, { lastName: 'Falsch', zip: '' })).statusCode).toBe(403);
+    expect((await call('POST', `/public/booking/${tz}/open`, {}, { lastName: 'Müller-Groß', zip: '' })).statusCode).toBe(429);
   });
 
   it('nimmt Bedingungen und – mit Internetadresse – den Link in die Bestätigung auf', async () => {
