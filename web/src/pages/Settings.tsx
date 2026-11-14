@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { hotelSettings, taxRateCreateInput, taxRateUpdateInput, type HotelSettings, type TaxRateDto } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
+import { InboxSettings } from './InboxSettings.tsx';
 import { MailSettings } from './MailSettings.tsx';
 import { BackupCard } from './BackupCard.tsx';
 import { KitchenPrinterCard } from './KitchenPrinterCard.tsx';
@@ -23,7 +24,7 @@ export function Settings() {
       <PageHeader title="Einstellungen" sub="Angaben zum Haus, E-Mail, Drucker, EC-Gerät, TSE, Steuersätze, Hausnetz, Datensicherung und Programm-Update" />
       {bar}
       {current === 'haus' && <><HotelForm /><LogoCard /></>}
-      {current === 'email' && <MailSettings />}
+      {current === 'email' && <><MailSettings /><InboxSettings /></>}
       {current === 'drucker' && <><KitchenPrinterCard kind="kitchen" /><KitchenPrinterCard kind="front" /></>}
       {current === 'ecgeraet' && <TerminalCard />}
       {current === 'tse' && <TseCard />}

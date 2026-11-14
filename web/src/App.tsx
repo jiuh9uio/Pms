@@ -22,6 +22,7 @@ import { Plan } from './pages/Plan.tsx';
 import { QuickPrint } from './pages/QuickPrint.tsx';
 import { Reservations } from './pages/Reservations.tsx';
 import { Restaurant } from './pages/Restaurant.tsx';
+import { Inbox } from './pages/Inbox.tsx';
 import { RoomsPrices } from './pages/RoomsPrices.tsx';
 import { Settings } from './pages/Settings.tsx';
 import { Users } from './pages/Users.tsx';
@@ -58,11 +59,12 @@ const NAV = [
   { to: '/kontrollen', label: 'Kontrollen', icon: '✓', admin: false, module: 'kontrollen' },
   { to: '/erechnung', label: 'E-Rechnung', icon: '✉', admin: false, module: 'erechnung' },
   { to: '/internet', label: 'Geräte im Netz', short: 'Geräte', icon: '⌁', admin: false, module: 'internet' },
+  { to: '/email', label: 'Posteingang', short: 'E-Mail', icon: '✉', admin: false, module: 'email' },
   { to: '/benutzer', label: 'Benutzer', icon: '◉', admin: true, module: 'verwaltung' },
   { to: '/protokoll', label: 'Protokoll', icon: '☰', admin: true, module: 'verwaltung' },
   { to: '/einstellungen', label: 'Einstellungen', short: 'Einstell.', icon: '⚙', admin: true, module: 'verwaltung' },
 ] as { to: string; label: string; short?: string; icon: string; admin: boolean; more?: boolean; module: string }[];
-const MODULE_TITLE: Record<string, string> = { hotel: 'Hotel', restaurant: 'Restaurant', schnelldruck: 'Schnelldruck', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet', verwaltung: 'Verwaltung' };
+const MODULE_TITLE: Record<string, string> = { hotel: 'Hotel', restaurant: 'Restaurant', schnelldruck: 'Schnelldruck', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet', email: 'E-Mail', verwaltung: 'Verwaltung' };
 
 export function App() {
   const [state, setState] = useState<AuthState | null>(null);
@@ -104,6 +106,7 @@ function Shell({ user }: { user: UserDto }) {
   const kontrollen = hasModule(user, 'kontrollen');
   const erechnung = hasModule(user, 'erechnung');
   const internet = hasModule(user, 'internet');
+  const email = hasModule(user, 'email');
   if (pathname === '/') return <DataProvider><Launcher /></DataProvider>;
   if (hotel && pathname.startsWith('/meldeschein/')) return <Routes><Route path="/meldeschein/:id" element={<RegistrationPrint />} /></Routes>;
   return (
@@ -140,6 +143,7 @@ function Shell({ user }: { user: UserDto }) {
           {hasModule(user, 'restaurant') && <Route path="/restaurant" element={<Restaurant />} />}
           {hasModule(user, 'schnelldruck') && <Route path="/schnelldruck" element={<QuickPrint />} />}
           {internet && <Route path="/internet" element={<Network />} />}
+          {email && <Route path="/email" element={<Inbox />} />}
           {isAdmin && <Route path="/protokoll" element={<Audit />} />}
           {isAdmin && <Route path="/einstellungen" element={<Settings />} />}
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -227,6 +227,21 @@ rechtlich geprüft ist, steht dort ausdrücklich.
 - **Grenze:** Die Funktion ist zum Entfernen von Probedaten gedacht. Sie hebt die Unveränderbarkeit der Rechnungen bewusst auf;
   wer damit echte Belege löscht, verletzt voraussichtlich Aufbewahrungspflichten (AO/UStG) – das Programm prüft das nicht.
 
+**Seit Version 1.23.0/1.24.0 zusätzlich – Frühstücksregeln und E-Mail-Posteingang:**
+
+- **Frühstücksregeln** (Einstellungen → Algorithmen, Einstellung `breakfast_rules`): Liste von Regeln „Messgröße · Bedingung · Zahl ·
+  Wochentage → Text“; die erste zutreffende Regel (`applyBreakfastRules` in `src/shared/hotel.ts`) erscheint auf der Frühstücksliste
+  und dem Küchenausdruck. Reine Anzeige, keine Wirkung auf Buchungen oder Preise.
+- **E-Mail-Posteingang** (Modul `email`, Tabelle `inbox_mails`): Abruf per IMAP mit `imapflow` (Ordner per `EXAMINE` nur lesend,
+  `BODY.PEEK[]` – nichts wird als gelesen markiert, verschoben oder gelöscht), Zerlegen mit `mailparser`, gespeichert wird nur der
+  Text (max. 20 000 Zeichen, keine Anhänge). Erster Abruf: letzte 30 Tage, höchstens 200 Nachrichten; danach nur neue (UID).
+  Einordnung und Angaben über feste Muster in `src/shared/mailextract.ts` (keine KI): deutsche Datums-, Zeit- und
+  Personenangaben; Zitate älterer Nachrichten werden nicht mitgelesen.
+- **Grenzen:** Mit einem echten Postfach (GMX) nicht erprobt – getestet gegen einen nachgebauten IMAP-Server ohne TLS. Die
+  Erkennung irrt bei ungewöhnlichen Formulierungen, bei mehreren Terminen in einer Mail und bei HTML-Mails ohne Textteil;
+  sie ist ein Vorschlag. Antworten gehen über das eigene Mailprogramm (`mailto:`), nicht aus dem PMS. Die Mailtexte enthalten
+  personenbezogene Daten; eine automatische Löschfrist gibt es nicht (einzelnes Entfernen ist möglich).
+
 **Nicht enthalten** (in der Anwendung nicht als Schaltfläche vorhanden):
 
 - DATEV-Format, Mahnstufen/Mahngebühren, Kassenfunktion/TSE

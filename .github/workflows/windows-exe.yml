@@ -123,6 +123,7 @@ jobs:
           try { Invoke-RestMethod "$base/tse/info" -WebSession $s | Out-Null; throw 'TSE liefert Daten ohne Einrichtung' } catch { if ($_.Exception.Response.StatusCode.value__ -ne 409) { throw "TSE ohne Einrichtung: erwartet 409, erhalten $($_.Exception.Message)" } }
           $pv = Post '/settings/purge' @{ billing = $true; bookings = 'past'; guests = $false; resetNumbers = $false; dryRun = $true; password = ''; confirm = '' } $s
           if (-not $pv.dryRun) { throw 'Vorschau für Daten löschen fehlerhaft' }
+          if ((Invoke-RestMethod "$base/inbox/state" -WebSession $s).ready) { throw 'E-Mail-Empfang ist ohne Einrichtung als bereit gemeldet' }
           $gr = Post '/goods-receipts' @{ supplier = 'Test'; goods = 'Ware'; tempC = 3.5; ok = $true; note = '' } $s
           if (-not $gr.id) { throw 'Wareneingang wurde nicht gespeichert' }
           $rep = Invoke-RestMethod "$base/reports/year?year=2031" -WebSession $s

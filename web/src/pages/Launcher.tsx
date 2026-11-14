@@ -16,6 +16,7 @@ const TILES: Tile[] = [
   { to: '/kontrollen', title: 'Kontrollen', text: 'Hygieneamt, Finanzamt und weitere: Unterlagen, Temperaturprotokolle, Besuche', icon: '✓', module: 'kontrollen' },
   { to: '/erechnung', title: 'E-Rechnung', text: 'PDF-Rechnungen in ZUGFeRD umwandeln und per E-Mail versenden', icon: '✉', module: 'erechnung' },
   { to: '/internet', title: 'Internet', text: 'Internetverbindung prüfen, Geräte im Hausnetz anzeigen und benennen', icon: '⌁', module: 'internet' },
+  { to: '/email', title: 'E-Mail', text: 'Geschäftspostfach lesen, Zimmer- und Tischanfragen erkennen und übernehmen', icon: '✉', module: 'email' },
   { to: '/benutzer', title: 'Verwaltung', text: 'Benutzer, Änderungsprotokoll, Einstellungen', icon: '⚙', admin: true },
   { to: '/konto', title: 'Mein Konto', text: 'Passwort, Darstellung', icon: '◐', admin: true },
 ];

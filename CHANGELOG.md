@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.24.0
+
+- Neues Modul „E-Mail“: Das Geschäftspostfach wird abgerufen (auf Knopfdruck oder automatisch), jede Nachricht als Zimmer-, Tisch- oder sonstige Anfrage eingeordnet, und Datum, Uhrzeit, Personenzahl und Telefon werden als Vorschlag herausgelesen.
+- Übernehmen: Tischanfragen werden mit einem Klick zur Tischreservierung; Zimmeranfragen öffnen die Maske „Neue Reservierung“ mit Zeitraum, Name, E-Mail und Telefon. Die Nachricht wird danach als erledigt markiert und mit der Reservierung verknüpft.
+- Einrichtung unter Einstellungen → E-Mail → „E-Mail-Empfang“. Das Programm liest nur – im Postfach wird nichts verändert. Das Modul muss Benutzern einzeln freigegeben werden. Noch nicht mit einem echten Postfach erprobt.
+
 ## 1.23.0
 
 - Einstellungen → neuer Reiter „Algorithmen“: Frühstücksregeln. Beispiel: „Wenn Frühstücksgäste weniger als 4, dann: Frühstück in der 1. Etage“. Wählbar sind Frühstücksgäste, Zimmer mit Frühstück, Gäste im Haus oder belegte Zimmer, die Bedingung, Wochentage und der Text.

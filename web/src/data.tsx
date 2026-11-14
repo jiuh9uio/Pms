@@ -7,7 +7,11 @@ import { CompanyDialog } from './hotel/CompanyDialog.tsx';
 import { GuestDialog } from './hotel/GuestDialog.tsx';
 import { NewBooking } from './hotel/NewBooking.tsx';
 
-export interface NewPreset { roomId?: string; from?: string; to?: string; guest?: GuestDto; companyId?: string }
+export interface NewPreset {
+  roomId?: string; from?: string; to?: string; guest?: GuestDto; companyId?: string;
+  /** Vorbelegung aus einer E-Mail-Anfrage */
+  draft?: { firstName?: string; lastName?: string; email?: string; phone?: string }; notes?: string; source?: string; onCreated?: (id: string) => void;
+}
 export interface BlockPreset { roomId?: string; from?: string; entry?: CalendarEntry }
 type Open =
   | { kind: 'booking'; id: string }

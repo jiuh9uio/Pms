@@ -418,3 +418,15 @@ table.kv td { padding: 8px 0; border-bottom: 1px solid var(--line); } .wrapcode 
 /* Regeln (Algorithmen) */
 .rulebox { border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px 14px; margin: 0 0 14px; } .rulebox legend { font-weight: 600; padding: 0 6px; }
 .inline2 { display: grid; grid-template-columns: 1fr 80px; gap: 8px; }
+
+/* E-Mail-Posteingang */
+.inboxfilter { display: flex; gap: 10px; margin: 0 0 14px; } .inboxfilter input { flex: 1; max-width: 420px; } .inboxfilter select { width: auto; }
+.inbox { display: grid; grid-template-columns: minmax(280px, 380px) 1fr; gap: 16px; align-items: start; }
+.inboxlist { display: flex; flex-direction: column; gap: 8px; max-height: 75vh; overflow: auto; }
+.inboxitem { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 10px 14px; cursor: pointer; font: inherit; color: inherit; margin: 0; }
+.inboxitem.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.inboxitem .top { display: flex; justify-content: space-between; gap: 8px; } .inboxitem .top small { color: var(--ink-2); white-space: nowrap; }
+.inboxitem small.muted { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mailbody { white-space: pre-wrap; word-break: break-word; font: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; max-height: 45vh; overflow: auto; margin: 12px 0; }
+a.btn { display: inline-flex; align-items: center; padding: 8px 14px; border: 1px solid var(--line-strong); border-radius: 8px; text-decoration: none; color: inherit; background: var(--surface); font-weight: 500; }
+@media (max-width: 900px) { .inbox { grid-template-columns: 1fr; } .inboxlist { max-height: 40vh; } }

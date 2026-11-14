@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { buildApp } from './app.js';
 import { startBreakfastScheduler } from './modules/breakfast.js';
+import { startInboxScheduler } from './modules/inbox.js';
 import { startOutageMonitor } from './modules/network.js';
 import { loadConfig } from './config.js';
 import { connect, runMigrations } from './db/client.js';
@@ -15,6 +16,7 @@ const app = await buildApp({ db, cookieSecure: config.cookieSecure, webDir: conf
 await app.listen({ host: config.host, port: config.port });
 startOutageMonitor(db);
 startBreakfastScheduler(db);
+startInboxScheduler(db);
 console.log(`Schützenhaus PMS läuft auf http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${config.port}`);
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
-  type AnyPgColumn, bigserial, boolean, customType, date, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, uuid,
+  type AnyPgColumn, bigserial, boolean, customType, date, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core';
 
 const id = () => uuid('id').primaryKey().default(sql`gen_random_uuid()`);
@@ -584,3 +584,25 @@ export const mailLog = pgTable('mail_log', {
   userName: text('user_name').notNull(),
   einvoiceId: uuid('einvoice_id'),
 });
+
+// =====================================================================================
+// E-Mail-Posteingang: abgerufene Nachrichten des Geschäftspostfachs (Kopie; das Postfach selbst bleibt unverändert)
+// =====================================================================================
+export const inboxMails = pgTable('inbox_mails', {
+  id: id(),
+  uidValidity: text('uid_validity').notNull(),
+  uid: integer('uid').notNull(),
+  messageId: text('message_id').notNull().default(''),
+  fromName: text('from_name').notNull().default(''),
+  fromAddr: text('from_addr').notNull().default(''),
+  subject: text('subject').notNull().default(''),
+  receivedAt: ts('received_at').notNull(),
+  body: text('body').notNull().default(''),
+  kind: text('kind', { enum: ['hotel', 'table', 'other'] }).notNull(),
+  extract: jsonb('extract').notNull(),
+  status: text('status', { enum: ['new', 'done', 'ignored'] }).notNull().default('new'),
+  linkKind: text('link_kind', { enum: ['booking', 'table'] }),
+  linkId: uuid('link_id'),
+  handledBy: text('handled_by').notNull().default(''),
+  fetchedAt: ts('fetched_at').notNull().defaultNow(),
+}, (t) => [uniqueIndex('inbox_mails_uid_idx').on(t.uidValidity, t.uid), index('inbox_mails_received_idx').on(t.receivedAt)]);

@@ -28,6 +28,8 @@ import { registerHotelRoutes } from './routes-hotel.js';
 import { registerRestaurantRoutes } from './routes-restaurant.js';
 import { getBackupStatus, runBackup } from './backup.js';
 import { purge } from './modules/purge.js';
+import * as inbox from './modules/inbox.js';
+import * as I from '../shared/inbox.js';
 import { checkForUpdate, getChangelog, getUpdateStatus, installUpdate } from './update.js';
 
 const COOKIE = 'pms_session';
@@ -226,6 +228,17 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.post('/settings/front-printer/test', { preHandler: requireAdmin }, async () => { await quickprint.testFrontPrinter(db); return { ok: true }; });
 
     // ---------- Bereich „Internet“: Verbindung und Geräte im Hausnetz (Administrator oder Freigabe) ----------
+    // ---------- E-Mail-Posteingang ----------
+    const email = { preHandler: requireModule('email') };
+    api.get('/inbox', email, (req) => inbox.listInbox(db, I.inboxListQuery.parse(req.query)));
+    api.get('/inbox/state', email, () => inbox.inboxState(db));
+    api.post('/inbox/fetch', email, (req) => inbox.fetchInbox(db, actor(req)));
+    api.get('/inbox/:id', email, (req) => inbox.getInboxMail(db, z.uuid().parse((req.params as { id: string }).id)));
+    api.patch('/inbox/:id', email, (req) => inbox.updateInboxMail(db, actor(req), z.uuid().parse((req.params as { id: string }).id), I.inboxUpdateInput.parse(req.body)));
+    api.delete('/inbox/:id', email, (req) => inbox.deleteInboxMail(db, actor(req), z.uuid().parse((req.params as { id: string }).id)));
+    api.get('/settings/inbox', { preHandler: requireAdmin }, () => inbox.getInboxSettings(db));
+    api.put('/settings/inbox', { preHandler: requireAdmin }, (req) => inbox.saveInboxSettings(db, actor(req), I.inboxSettingsInput.parse(req.body)));
+
     const internet = { preHandler: requireModule('internet') };
     api.get('/network/status', internet, () => network.internetStatus());
     api.get('/network/outages', internet, () => network.listOutages(db));

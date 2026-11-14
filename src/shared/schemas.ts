@@ -7,11 +7,11 @@ export type Role = (typeof ROLES)[number];
 export const ROLE_LABEL: Record<Role, string> = { admin: 'Administrator', user: 'Benutzer' };
 
 /** Bereiche des Programms, die je Benutzer freigegeben werden. Verwaltung und Konto sind dem Administrator vorbehalten. */
-export const MODULES = ['hotel', 'restaurant', 'schnelldruck', 'kontrollen', 'erechnung', 'internet'] as const;
+export const MODULES = ['hotel', 'restaurant', 'schnelldruck', 'kontrollen', 'erechnung', 'internet', 'email'] as const;
 /** Bereiche, die neue Benutzer von sich aus erhalten – „Internet“ (Geräte im Netz) gibt der Administrator bewusst frei. */
 export const DEFAULT_MODULES: Module[] = ['hotel', 'restaurant', 'schnelldruck', 'kontrollen', 'erechnung'];
 export type Module = (typeof MODULES)[number];
-export const MODULE_LABEL: Record<Module, string> = { hotel: 'Hotel', restaurant: 'Restaurant', schnelldruck: 'Schnelldruck', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet' };
+export const MODULE_LABEL: Record<Module, string> = { hotel: 'Hotel', restaurant: 'Restaurant', schnelldruck: 'Schnelldruck', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet', email: 'E-Mail' };
 const modules = z.array(z.enum(MODULES)).max(MODULES.length);
 export const hasModule = (u: { role: Role; modules: string[] }, m: Module) => u.role === 'admin' || u.modules.includes(m);
 

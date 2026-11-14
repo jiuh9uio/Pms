@@ -21,10 +21,10 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
   const [status, setStatus] = useState<'confirmed' | 'tentative'>('confirmed');
   const [picks, setPicks] = useState<Record<string, Pick>>({});
   const [guest, setGuest] = useState<GuestDto | null>(preset.guest ?? null);
-  const [draft, setDraft] = useState<GuestDraft>(toDraft({}));
+  const [draft, setDraft] = useState<GuestDraft>(toDraft(preset.draft ?? {}));
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<GuestDto[]>([]);
-  const [meta, setMeta] = useState({ source: preset.companyId ? 'Firma' : 'Telefon', paymentMethod: preset.companyId ? 'Rechnung an Firma' : '', groupName: '', notes: '' });
+  const [meta, setMeta] = useState({ source: preset.source ?? (preset.companyId ? 'Firma' : 'Telefon'), paymentMethod: preset.companyId ? 'Rechnung an Firma' : '', groupName: '', notes: preset.notes ?? '' });
   const [companyId, setCompanyId] = useState(preset.companyId ?? '');
   const [breakfast, setBreakfast] = useState(false);
 
@@ -70,8 +70,9 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
   }, 0), [selected, picks, nights]);
 
   const f = useSubmit(bookingCreateInput, async (d) => {
-    const r = await api<{ number: string }>('POST', '/bookings', d);
+    const r = await api<{ id: string; number: string }>('POST', '/bookings', d);
     toast(`Reservierung ${r.number} angelegt`);
+    preset.onCreated?.(r.id);
     bump();
     onClose();
   });

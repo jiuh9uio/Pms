@@ -25,13 +25,13 @@ function secretKey() {
   }
   return (key = readFileSync(file));
 }
-function encrypt(plain: string) {
+export function encrypt(plain: string) {
   const iv = randomBytes(12);
   const c = createCipheriv('aes-256-gcm', secretKey(), iv);
   const enc = Buffer.concat([c.update(plain, 'utf8'), c.final()]);
   return Buffer.concat([iv, c.getAuthTag(), enc]).toString('base64');
 }
-function decrypt(b64: string) {
+export function decrypt(b64: string) {
   try {
     const buf = Buffer.from(b64, 'base64');
     const d = createDecipheriv('aes-256-gcm', secretKey(), buf.subarray(0, 12));
