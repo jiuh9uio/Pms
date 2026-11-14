@@ -65,10 +65,10 @@ function judge(rules: MailRules, m: { fromName: string; fromAddr: string; subjec
   return { ex, hidden: rules.hideOther && ex.kind === 'other' };
 }
 const BY_RULE = 'Regel';
-/** Regeln auf vorhandene, noch unbearbeitete Nachrichten neu anwenden (z. B. nach einer Änderung der Regeln). */
+/** Regeln auf vorhandene, noch unbearbeitete Nachrichten neu anwenden (z. B. nach einer Änderung der Regeln). Online-Anfragen bleiben, wie sie sind. */
 export async function reclassify(db: Db, actor: Actor) {
   const rules = await getMailRules(db);
-  const rows = await db.select().from(inboxMails).where(sql`${inboxMails.linkKind} is null and (${inboxMails.status} = 'new' or (${inboxMails.status} = 'ignored' and ${inboxMails.handledBy} = ${BY_RULE}))`);
+  const rows = await db.select().from(inboxMails).where(sql`${inboxMails.uidValidity} <> 'web' and ${inboxMails.linkKind} is null and (${inboxMails.status} = 'new' or (${inboxMails.status} = 'ignored' and ${inboxMails.handledBy} = ${BY_RULE}))`);
   let changed = 0;
   for (const r of rows) {
     const { ex, hidden } = judge(rules, { fromName: r.fromName, fromAddr: r.fromAddr, subject: r.subject, body: r.body, day: berlinDay(r.receivedAt) });
@@ -225,7 +225,7 @@ const quote = (r: Row) => ['', '', `--- Ihre Nachricht vom ${r.receivedAt.toLoca
  * Vorschlag für eine Antwort: reply = leere Antwort, decline = Absage, confirm = Bestätigung der daraus angelegten Reservierung
  * (Zimmer: derselbe Text wie die Reservierungsbestätigung im Hotel; Tisch: Tag, Uhrzeit, Personen).
  */
-export async function replyDraft(db: Exec, id: string, template: ReplyTemplate): Promise<MailDraft> {
+export async function replyDraft(db: Exec, id: string, template: ReplyTemplate, canHotel = true): Promise<MailDraft> {
   const [r] = await db.select().from(inboxMails).where(eq(inboxMails.id, id));
   if (!r) throw notFound('E-Mail');
   const [h, isReady] = [await getHotel(db), await mailReady(db)];
@@ -233,6 +233,8 @@ export async function replyDraft(db: Exec, id: string, template: ReplyTemplate):
   const hello = r.fromName ? `Guten Tag ${r.fromName.replace(/["']/g, '').split(',').reverse().join(' ').trim()},` : 'Guten Tag,';
   const base = { to: r.fromAddr, attachment: null, ready: isReady };
   if (template === 'confirm') {
+    // die Bestätigung enthält Zimmer und Preise der Reservierung – nur mit Freigabe für den Bereich Hotel
+    if (r.linkKind === 'booking' && !canHotel) throw new AppError(403, 'forbidden', 'Für die Bestätigung einer Zimmerreservierung fehlt die Freigabe für den Bereich „Hotel“');
     if (r.linkKind === 'booking' && r.linkId) return { ...(await bookingMailDraft(db, r.linkId)), to: r.fromAddr };
     if (r.linkKind === 'table' && r.linkId) {
       const [t] = await db.select({ t: tableReservations, table: restaurantTables.name }).from(tableReservations).leftJoin(restaurantTables, eq(restaurantTables.id, tableReservations.tableId)).where(eq(tableReservations.id, r.linkId));
@@ -264,6 +266,8 @@ export async function sendReply(db: Db, actor: Actor, id: string, v: { to: strin
 }
 
 // ---------- Online-Buchungsanfrage ----------
+/** höchstens so viele Online-Anfragen in 24 Stunden */
+export const WEB_PER_DAY = 40;
 const WEB0: WebRequestSettings = { enabled: false, intro: '', privacy: '' };
 export const getWebRequest = (db: Exec) => read(db, 'web_request', WEB0);
 export async function saveWebRequest(db: Db, actor: Actor, v: WebRequestSettings) {
@@ -283,6 +287,9 @@ export async function submitWebRequest(db: Db, v: { name: string; email: string;
   const s = await getWebRequest(db);
   if (!s.enabled) throw conflict('Online-Anfragen sind derzeit nicht möglich', 'web_request_off');
   if (v.website) return { ok: true }; // automatischer Eintrag: still verwerfen
+  // Obergrenze gegen Überfluten des Posteingangs, unabhängig vom Absender
+  const [day] = await db.execute(sql`select count(*)::int as n from inbox_mails where uid_validity = 'web' and received_at > now() - interval '24 hours'`);
+  if (Number(day!.n) >= WEB_PER_DAY) throw new AppError(429, 'too_many', 'Heute sind schon sehr viele Anfragen eingegangen. Bitte rufen Sie uns an oder schreiben Sie uns eine E-Mail.');
   if (v.from < todayOf(new Date())) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { from: 'Die Anreise liegt in der Vergangenheit' });
   const body = [`Online-Anfrage über die Website`, '', `Name: ${v.name}`, `E-Mail: ${v.email}`, ...(v.phone ? [`Telefon: ${v.phone}`] : []),
     `Anreise: ${deDay(v.from)}`, `Abreise: ${deDay(v.to)}`, `Personen: ${v.adults} Erwachsene${v.children ? `, ${v.children} Kinder` : ''}`, ...(v.message ? ['', 'Nachricht:', v.message] : [])].join('\n');

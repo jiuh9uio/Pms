@@ -429,6 +429,15 @@ describe('E-Mail an den Gast', () => {
     expect(sent.at(-1)!.text).toContain('Samstag, 10.03.2035, ab 15:00 Uhr');
     expect(await prearrivalTick(db, at('2035-03-08T10:00:00Z'))).toEqual({ sent: 0, failed: 0 }); // nicht doppelt
     expect((await ok('GET', '/settings/prearrival', admin)).sentTotal).toBe(1);
+    // Versand gestört: ein Versuch, dann eine Stunde Pause statt eines Versuchs je Minute
+    await mk({ ...guest, lastName: 'Später', email: 'spaeter@example.com' }, '2035-04-10', '2035-04-11');
+    await db.execute(sql`update bookings set created_at = now() - interval '2 days'`);
+    setMailSender(async () => { throw new Error('connect ETIMEDOUT'); });
+    expect(await prearrivalTick(db, at('2035-04-08T10:00:00Z'))).toEqual({ sent: 0, failed: 1 });
+    expect(await prearrivalTick(db, at('2035-04-08T10:01:00Z'))).toEqual({ sent: 0, failed: 0 });
+    setMailSender(async (_c, m) => { sent.push({ to: m.to, subject: m.subject, text: m.text, files: [] }); });
+    expect(await prearrivalTick(db, at('2035-04-08T10:30:00Z'))).toEqual({ sent: 0, failed: 0 });
+    expect(await prearrivalTick(db, at('2035-04-08T11:05:00Z'))).toEqual({ sent: 1, failed: 0 });
     expect(id).toBeTruthy();
   });
 });

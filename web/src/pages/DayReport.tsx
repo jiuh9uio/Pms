@@ -14,7 +14,7 @@ export function DayReport() {
   const [counted, setCounted] = useState('');
   const { data, error } = useLoad(() => api<Report>('GET', `/reports/day?date=${date}`), [date, rev]);
   const c = parseMoney(counted);
-  const diff = data && !Number.isNaN(c) && counted.trim() ? Math.round(c * 100) - data.cashCents : null;
+  const diff = data && !Number.isNaN(c) && counted.trim() ? c - data.cashCents : null; // parseMoney liefert Cent
   return (
     <>
       <PageHeader title="Tagesabschluss" sub={`${deDate(date)}${date === today ? ' · heute' : ''}`}

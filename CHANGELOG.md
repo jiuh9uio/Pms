@@ -3,6 +3,15 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.28.1
+
+Ergebnis einer Durchsicht der letzten Neuerungen:
+
+- Tagesabschluss: Der Vergleich mit dem gezählten Bargeld rechnete falsch (Faktor 100) und zeigte dadurch eine falsche Abweichung – behoben.
+- Nachricht vor der Anreise: Ist der Versand gestört, wird jetzt erst nach einer Stunde wieder versucht statt jede Minute.
+- Online-Buchungsanfrage: höchstens 40 Anfragen in 24 Stunden, damit der Posteingang nicht überflutet werden kann.
+- E-Mail: „Guten Morgen“ wird nicht mehr als Datum (morgen) gelesen. „Regeln anwenden“ lässt Online-Anfragen unberührt. Die Zimmerbestätigung aus dem E-Mail-Modul verlangt die Freigabe für den Bereich Hotel.
+
 ## 1.28.0
 
 - Zimmer & Preise: Je Kategorie lässt sich ein Nachlass je Nacht ab einer Zahl von Nächten einstellen (z. B. ab 2 Nächten 10 € weniger je Nacht). Er gilt für neue Reservierungen und steht bei den Nachtpreisen als „ab 2 Nächten“.

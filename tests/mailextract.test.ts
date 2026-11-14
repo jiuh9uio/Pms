@@ -10,6 +10,8 @@ describe('E-Mail-Erkennung', () => {
     expect(findDates('am 20. Januar', REF)).toEqual(['2027-01-20']); // ohne Jahr: der nächste solche Tag
     expect(findDates('am 24.12. um 18.30 Uhr', REF)).toEqual(['2026-12-24']); // Uhrzeit ist kein Datum
     expect(findDates('für morgen Abend', REF)).toEqual(['2026-11-15']);
+    expect(findDates('Guten Morgen, haben Sie am 20.12. etwas frei? Wir kommen morgens an.', REF)).toEqual(['2026-12-20']); // Gruß und „morgens“ sind kein Datum
+    expect(findDates('morgen früh', REF)).toEqual(['2026-11-15']);
     expect(findDates('am 31.02.2027 oder 2027-03-01', REF)).toEqual(['2027-03-01']);
     expect(findDates('Bestellnummer 12.345.678', REF)).toEqual([]);
   });

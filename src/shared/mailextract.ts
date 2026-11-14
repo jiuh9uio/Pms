@@ -81,7 +81,8 @@ export function findDates(text: string, ref: string): string[] {
   const iso = /(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)/g;
   while ((m = iso.exec(text))) push(m.index, valid(Number(m[1]), Number(m[2]), Number(m[3])) ? m[0] : null);
   // heute / morgen / übermorgen
-  const rel = /\b(heute|morgen|übermorgen)\b(?!\s*(früh|s\b))/gi;
+  // „Guten Morgen“ und „morgens“ sind keine Tagesangaben
+  const rel = /(?<!guten\s)(?<!am\s)\b(heute|morgen|übermorgen)\b/gi;
   while ((m = rel.exec(text))) push(m.index, addDays(ref, m[1]!.toLowerCase() === 'heute' ? 0 : m[1]!.toLowerCase() === 'morgen' ? 1 : 2));
   const out: string[] = [];
   for (const h of hits.sort((a, b) => a.at - b.at)) if (!out.includes(h.iso)) out.push(h.iso);

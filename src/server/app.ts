@@ -255,7 +255,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.patch('/inbox/:id', email, (req) => inbox.updateInboxMail(db, actor(req), z.uuid().parse((req.params as { id: string }).id), I.inboxUpdateInput.parse(req.body)));
     api.delete('/inbox/:id', email, (req) => inbox.deleteInboxMail(db, actor(req), z.uuid().parse((req.params as { id: string }).id)));
     const tpl = (req: FastifyRequest) => z.object({ template: z.enum(I.REPLY_TEMPLATES).default('reply') }).parse(req.query).template;
-    api.get('/inbox/:id/mail', email, (req) => inbox.replyDraft(db, z.uuid().parse((req.params as { id: string }).id), tpl(req)));
+    api.get('/inbox/:id/mail', email, (req) => inbox.replyDraft(db, z.uuid().parse((req.params as { id: string }).id), tpl(req), S.hasModule(req.user!, 'hotel')));
     api.post('/inbox/:id/mail', email, (req) => inbox.sendReply(db, actor(req), z.uuid().parse((req.params as { id: string }).id), mailSendInput.parse(req.body)));
     api.get('/settings/mail-rules', { preHandler: requireAdmin }, () => inbox.getMailRules(db));
     api.put('/settings/mail-rules', { preHandler: requireAdmin }, (req) => inbox.saveMailRules(db, actor(req), I.mailRulesInput.parse(req.body)));

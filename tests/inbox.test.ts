@@ -211,5 +211,16 @@ describe('E-Mail-Posteingang', () => {
     expect(first).toMatchObject({ kind: 'hotel', fromAddr: 'web@example.com', extract: { from: req.from, to: req.to, persons: 2, children: 1, phone: '0170 5556677' } });
     expect((await ok('GET', `/inbox/${first.id}`, admin)).body).toContain('Gern ruhig gelegen.');
     expect(await ok('POST', '/inbox/fetch', admin)).toEqual({ added: 0 }); // der Abruf des Postfachs stört die Online-Anfragen nicht
+    // Regeln neu anwenden lässt Online-Anfragen unberührt; ohne Freigabe „Hotel“ gibt es keine Zimmerbestätigung
+    await ok('PUT', '/settings/mail-rules', admin, { hideOther: true, hotelWords: [], tableWords: [], ignoreSenders: ['web@'] });
+    await ok('POST', '/inbox/reclassify', admin);
+    expect(await ok('GET', '/inbox?status=new', admin)).toHaveLength(2);
+    const rez = (await ok('GET', '/users', admin)).find((u: { username: string }) => u.username === 'rezeption');
+    await ok('PATCH', `/users/${rez.id}`, admin, { modules: ['email'], version: rez.version });
+    await ok('PATCH', `/inbox/${first.id}`, user, { linkKind: 'booking', linkId: '22222222-2222-4222-8222-222222222222' });
+    expect((await call('GET', `/inbox/${first.id}/mail?template=confirm`, user)).statusCode).toBe(403);
+    // Obergrenze je Tag
+    await db.execute(sql`insert into inbox_mails (uid_validity, uid, received_at, kind, extract) select 'web', 1000 + g, now(), 'hotel', '{}'::jsonb from generate_series(1, 40) g`);
+    expect((await call('POST', '/public/booking-request', {}, req)).statusCode).toBe(429);
   });
 });

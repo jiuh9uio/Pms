@@ -60,6 +60,10 @@ export async function prearrivalTick(db: Db, now = new Date()): Promise<{ sent: 
   const s = await getPrearrival(db);
   if (!s.enabled || !(await mailReady(db))) return { sent: 0, failed: 0 };
   if (berlinMinutes(now) < Number(s.time.slice(0, 2)) * 60 + Number(s.time.slice(3, 5))) return { sent: 0, failed: 0 };
+  // nach einem Fehlschlag (Postfach gestört, Adresse abgelehnt) erst nach einer Stunde wieder versuchen – sonst gäbe es jede Minute einen Versuch
+  const [lastRow] = await db.select().from(settings).where(eq(settings.key, 'prearrival_last'));
+  const failedAt = (lastRow?.value as { failedAt?: string } | undefined)?.failedAt;
+  if (failedAt && now.getTime() - Date.parse(failedAt) < 60 * 60_000 && now.getTime() >= Date.parse(failedAt)) return { sent: 0, failed: 0 };
   const today = now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
   let sent = 0, failed = 0;
   for (const b of await due(db, s, today)) {
@@ -71,7 +75,8 @@ export async function prearrivalTick(db: Db, now = new Date()): Promise<{ sent: 
       sent++;
     } catch { failed++; if (failed >= 3) break; } // Fehler stehen im E-Mail-Protokoll; bei Störung nicht alle durchprobieren
   }
-  await db.insert(settings).values({ key: 'prearrival_last', value: { at: now.toISOString() } }).onConflictDoUpdate({ target: settings.key, set: { value: { at: now.toISOString() }, updatedAt: new Date() } });
+  const mark = { at: now.toISOString(), ...(failed ? { failedAt: now.toISOString() } : {}) };
+  await db.insert(settings).values({ key: 'prearrival_last', value: mark }).onConflictDoUpdate({ target: settings.key, set: { value: mark, updatedAt: new Date() } });
   return { sent, failed };
 }
 export function startPrearrivalScheduler(db: Db) {
