@@ -1,12 +1,12 @@
 # Schützenhaus PMS auf einem gemieteten Linux-Server
 
-Stand: Version 1.18.1. **Die Installation ist nicht auf einem echten Server erprobt.** Geprüft ist nur der Kern des
+Stand: Version 1.18.1, Hinweise aktualisiert mit 1.68.0. **Die Installation ist nicht auf einem echten Server erprobt.** Geprüft ist nur der Kern des
 Ablaufs (veröffentlichte Version laden, bauen, mit leerer Datenbank starten). Paketinstallation, Dienste, HTTPS-Zertifikat
 und Firewall sind ungetestet – bitte zuerst auf einem frischen Server ohne echte Daten ausprobieren.
 
 ## Was gebraucht wird
 
-- Ein **virtueller Server (VPS) mit Root-Zugang**, z. B. bei IONOS, mit Ubuntu 22.04 oder 24.04, mindestens 2 GB
+- Ein **virtueller Server (VPS) mit Root-Zugang**, z. B. bei Hetzner (Cloud-Server, Standort Deutschland) oder IONOS, mit Ubuntu 22.04 oder 24.04, mindestens 2 GB
   Arbeitsspeicher. Ein reines „Webhosting“-Paket (Webspace mit PHP) reicht nicht: Das PMS ist ein eigenes Programm mit
   eigener Datenbank und muss dauerhaft laufen.
 - Eine **Domain oder Subdomain** (z. B. `pms.mein-hotel.de`), deren A-Eintrag auf die IP-Adresse des Servers zeigt.
@@ -21,7 +21,7 @@ sudo bash Pms-*/deploy/server/install.sh pms.mein-hotel.de
 ```
 
 Danach `https://pms.mein-hotel.de` öffnen und **sofort** das Administrator-Konto anlegen: Solange keines besteht, kann das
-jeder tun, der die Adresse kennt.
+jeder tun, der die Adresse kennt. Anschließend unter „Mein Konto“ die Zwei-Faktor-Anmeldung (Authenticator-App) einschalten.
 
 Eingerichtet werden: PostgreSQL, Node.js 22, das PMS als Dienst `pms` (eigener Benutzer), Caddy als Webserver mit
 automatischem HTTPS-Zertifikat, Firewall (nur SSH, 80, 443), tägliche Sicherung um 02:30 Uhr nach `/var/backups/pms`.
@@ -44,8 +44,9 @@ automatischem HTTPS-Zertifikat, Firewall (nur SSH, 80, 443), tägliche Sicherung
 - **Sicherungen liegen auf demselben Server.** Sie schützen nicht vor dem Verlust des Servers – bitte regelmäßig herunterladen
   oder zusätzlich die Sicherungsfunktion des Anbieters buchen. Die Sicherungen sind nicht verschlüsselt.
 - **Programm-Update und „Datensicherung“ in den Einstellungen** sind Windows-Funktionen; auf dem Server gelten die Befehle oben.
-- **Zugangsschutz:** Das PMS ist dann aus dem ganzen Internet erreichbar. Geschützt ist es durch HTTPS, Passwörter und die
-  Sperre nach fünf Fehlversuchen; eine Zwei-Faktor-Anmeldung gibt es nicht. Lange, eigene Passwörter für jedes Konto verwenden.
+- **Zugangsschutz:** Das PMS ist dann aus dem ganzen Internet erreichbar. Geschützt ist es durch HTTPS, Passwörter, eine Bremse
+  bei vielen Fehlversuchen und die Zwei-Faktor-Anmeldung (je Benutzer einschaltbar). Lange, eigene Passwörter verwenden und
+  die Zwei-Faktor-Anmeldung für alle Administratoren einschalten.
 - **Datenschutz:** Gäste- und Rechnungsdaten liegen dann beim Anbieter. Dafür ist ein Vertrag zur Auftragsverarbeitung mit dem
   Anbieter nötig; das wurde nicht rechtlich geprüft.
 - **Umzug bestehender Daten** von der Windows-Version: Sicherung dort erstellen (`backups\*.dump`), auf den Server kopieren und
