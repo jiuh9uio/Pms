@@ -48,6 +48,11 @@ export function registerControlRoutes(api: FastifyInstance, { db, requireUser, r
   api.put('/hygiene/areas/:id', admin, (req) => controls.saveArea(db, actor(req), idOf(req), C.hygieneAreaInput.parse(req.body), versionOf(req)));
   api.post('/hygiene/points', admin, (req) => controls.savePoint(db, actor(req), null, C.hygienePointInput.parse(req.body)));
   api.put('/hygiene/points/:id', admin, (req) => controls.savePoint(db, actor(req), idOf(req), C.hygienePointInput.parse(req.body), versionOf(req)));
+  // Löschen darf nur der Administrator
+  api.delete('/hygiene/points/:id', admin, (req) => controls.deletePoint(db, actor(req), idOf(req)));
+  api.delete('/hygiene/areas/:id', admin, (req) => controls.deleteArea(db, actor(req), idOf(req)));
+  api.delete('/cleaning/tasks/:id', admin, (req) => controls.deleteCleaningTask(db, actor(req), idOf(req)));
+  api.post('/hygiene/reset', admin, (req) => controls.deleteAllHygiene(db, actor(req)));
   api.get('/hygiene/readings', user, (req) => {
     const q = z.object({ from: z.string().refine(isIsoDate), to: z.string().refine(isIsoDate) }).parse(req.query);
     return controls.listReadings(db, q.from, q.to);

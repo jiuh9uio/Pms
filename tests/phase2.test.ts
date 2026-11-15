@@ -326,6 +326,19 @@ describe('Personenabhängige Preise', () => {
     expect((await ok('GET', '/rate-rules', admin)).some((x: { id: string }) => x.id === own)).toBe(false);
   });
 
+  it('rechnet bei längerem Aufenthalt für Einzelbelegung einen eigenen Nachlass', async () => {
+    const base = { name: 'Nachlass allein', description: '', stdOccupancy: 2, maxPersons: 2, basePriceCents: 10000, sort: 96, singleDiscountCents: 2000, longStayNights: 2, longStayDiscountCents: 1000 };
+    // zusammen mit dem Nachlass bei Einzelbelegung nicht höher als der Grundpreis
+    expect((await call('POST', '/categories', admin, { ...base, longStaySingleDiscountCents: 9000 })).statusCode).toBe(400);
+    const cat = (await ok('POST', '/categories', admin, { ...base, longStaySingleDiscountCents: 500 })).id as string;
+    const roomId = (await ok('POST', '/rooms', admin, { number: 'NA1', categoryId: cat, floor: '', note: '', active: true, priceOverrideCents: null })).id as string;
+    const lodging = async (from: string, to: string, adults: number) => (await price((await ok('POST', '/bookings', user, booking([room(roomId, from, to, { adults })]))).id)).lodgingCents;
+    expect(await lodging('2034-03-06', '2034-03-07', 2)).toBe(10000); // eine Nacht zu zweit: voller Preis
+    expect(await lodging('2034-03-10', '2034-03-11', 1)).toBe(8000); // eine Nacht allein: nur Einzelbelegung
+    expect(await lodging('2034-03-13', '2034-03-15', 2)).toBe(18000); // zwei Nächte zu zweit: je 10 € weniger
+    expect(await lodging('2034-03-20', '2034-03-22', 1)).toBe(15000); // zwei Nächte allein: 100 − 20 − 5 je Nacht
+  });
+
   it('gibt ab der eingestellten Zahl von Nächten einen Nachlass je Nacht', async () => {
     const base = { name: 'Mit Nachlass', description: '', stdOccupancy: 2, maxPersons: 2, basePriceCents: 8000, sort: 97 };
     expect((await call('POST', '/categories', admin, { ...base, longStayNights: 1, longStayDiscountCents: 500 })).statusCode).toBe(400); // erst ab 2 Nächten sinnvoll

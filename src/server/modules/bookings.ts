@@ -255,7 +255,7 @@ export async function updateBookingRoom(db: Db, actor: Actor, id: string, v: {
     // Ändert die neue Personenzahl den Zu-/Abschlag der Kategorie, werden alle Nächte neu berechnet (nicht bei Sonderpreis).
     const [cat] = await tx.select().from(roomCategories).where(eq(roomCategories.id, br.categoryId));
     // Dasselbe gilt, wenn der Aufenthalt durch die Änderung die Grenze für den Nachlass bei längerem Aufenthalt über- oder unterschreitet.
-    const longStay = !!cat && cat.longStayNights >= 2 && cat.longStayDiscountCents > 0 && (old.length >= cat.longStayNights) !== (dates.length >= cat.longStayNights);
+    const longStay = !!cat && cat.longStayNights >= 2 && (cat.longStayDiscountCents > 0 || cat.longStaySingleDiscountCents > 0) && (old.length >= cat.longStayNights) !== (dates.length >= cat.longStayNights);
     const repriced = !manual && v.pricePerNightCents === undefined && !!cat
       && (longStay || personAdjust(cat, persons.adults, persons.children).cents !== personAdjust(cat, br.adults, br.children).cents);
     if (typeof v.pricePerNightCents === 'number') {

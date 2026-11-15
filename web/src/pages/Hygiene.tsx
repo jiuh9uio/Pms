@@ -60,12 +60,12 @@ export function Hygiene() {
   }, [readings.data, date]);
 
   const close = () => setDlg(null);
-  const editArea = (a?: HygieneAreaDto) => setDlg(<MasterDialog title={a ? 'Bereich bearbeiten' : 'Bereich anlegen'} path="/hygiene/areas" id={a?.id ?? null} version={a?.version} schema={hygieneAreaInput} onClose={close}
+  const editArea = (a?: HygieneAreaDto) => setDlg(<MasterDialog title={a ? 'Bereich bearbeiten' : 'Bereich anlegen'} del={a && isAdmin ? `Bereich „${a.name}“ endgültig löschen? Alle Messstellen, bisherigen Messwerte und Reinigungsaufgaben dieses Bereichs werden mit gelöscht.` : undefined} path="/hygiene/areas" id={a?.id ?? null} version={a?.version} schema={hygieneAreaInput} onClose={close}
     fields={[{ key: 'name', label: 'Name', type: 'text', wide: true, hint: 'z. B. Küche, Lager, Theke' }, ...(a ? [{ key: 'active', label: 'Anzeigen', type: 'check' as const }] : [])]}
     initial={{ name: a?.name ?? '', active: a?.active ?? true }} />);
-  const editPoint = (p?: HygienePointDto) => setDlg(<MasterDialog title={p ? 'Messstelle bearbeiten' : 'Messstelle anlegen'} path="/hygiene/points" id={p?.id ?? null} version={p?.version} schema={hygienePointInput} onClose={close}
+  const editPoint = (p?: HygienePointDto) => setDlg(<MasterDialog title={p ? 'Messstelle bearbeiten' : 'Messstelle anlegen'} del={p && isAdmin ? `„${p.name}“ endgültig löschen? Die bisherigen Messwerte dieser Messstelle werden mit gelöscht.` : undefined} path="/hygiene/points" id={p?.id ?? null} version={p?.version} schema={hygienePointInput} onClose={close}
     fields={[
-      { key: 'name', label: 'Name', type: 'text', hint: 'z. B. Kühltruhe, Kühlschrank 1, Kühlhaus' },
+      { key: 'name', label: 'Name', type: 'text', hint: 'frei wählbar, z. B. Kühltruhe Keller, Kühlschrank Theke, Kühlhaus' },
       { key: 'areaId', label: 'Bereich', type: 'select', options: (areas.data ?? []).map((a): [string, string] => [a.id, a.name]) },
       { key: 'minC', label: 'Mindestens °C', type: 'numberOpt', hint: 'leer = keine Untergrenze' }, { key: 'maxC', label: 'Höchstens °C', type: 'numberOpt', hint: 'z. B. −18 für Tiefkühlung, 7 für Kühlung' },
       ...(p ? [{ key: 'active', label: 'Anzeigen', type: 'check' as const, hint: 'Ausgeblendete Messstellen behalten ihre bisherigen Werte.' }] : []),

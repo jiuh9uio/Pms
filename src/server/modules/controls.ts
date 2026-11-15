@@ -125,6 +125,57 @@ export const saveArea = (db: Db, actor: Actor, id: string | null, v: { name: str
 export const savePoint = (db: Db, actor: Actor, id: string | null, v: { areaId: string; name: string; minC: number | null; maxC: number | null; active: boolean }, version?: number) =>
   saveRow(db, actor, hygienePoints, 'hygiene_point', id, v, version);
 
+// ---------- Löschen (nur Administrator): Messstelle, Bereich, alles ----------
+/** Löscht eine Messstelle mitsamt ihren bisherigen Messwerten. Im Protokoll steht, was gelöscht wurde. */
+export async function deletePoint(db: Db, actor: Actor, id: string) {
+  return db.transaction(async (tx) => {
+    const [p] = await tx.select().from(hygienePoints).where(eq(hygienePoints.id, id)).for('update');
+    if (!p) throw notFound('Messstelle');
+    const gone = await tx.delete(hygieneReadings).where(eq(hygieneReadings.pointId, id)).returning({ d: hygieneReadings.date });
+    await tx.delete(hygienePoints).where(eq(hygienePoints.id, id));
+    await record(tx, actor, { action: 'delete', entity: 'hygiene_point', entityId: id, before: { name: p.name, minC: p.minC, maxC: p.maxC, readings: gone.length } });
+    return { ok: true, readings: gone.length };
+  });
+}
+/** Löscht einen Bereich mit allen Messstellen, Messwerten, Reinigungsaufgaben und deren Einträgen. */
+export async function deleteArea(db: Db, actor: Actor, id: string) {
+  return db.transaction(async (tx) => {
+    const [a] = await tx.select().from(hygieneAreas).where(eq(hygieneAreas.id, id)).for('update');
+    if (!a) throw notFound('Bereich');
+    const readings = await tx.execute(sql`delete from hygiene_readings where point_id in (select id from hygiene_points where area_id = ${id})`);
+    const points = await tx.delete(hygienePoints).where(eq(hygienePoints.areaId, id)).returning({ id: hygienePoints.id });
+    await tx.execute(sql`delete from cleaning_log where task_id in (select id from cleaning_tasks where area_id = ${id})`);
+    const tasks = await tx.delete(cleaningTasks).where(eq(cleaningTasks.areaId, id)).returning({ id: cleaningTasks.id });
+    await tx.delete(hygieneAreas).where(eq(hygieneAreas.id, id));
+    await record(tx, actor, { action: 'delete', entity: 'hygiene_area', entityId: id, before: { name: a.name, points: points.length, readings: (readings as unknown as { count?: number }).count ?? 0, tasks: tasks.length } });
+    return { ok: true };
+  });
+}
+/** Setzt die Eigenkontrolle zurück: alle Bereiche, Messstellen, Messwerte, Reinigungsaufgaben und -einträge. Unterlagen und Kontrollbesuche bleiben. */
+export async function deleteAllHygiene(db: Db, actor: Actor) {
+  return db.transaction(async (tx) => {
+    const n = async (q: ReturnType<typeof sql>) => Number(((await tx.execute(q))[0] as { n: number }).n);
+    const before = {
+      areas: await n(sql`select count(*)::int as n from hygiene_areas`), points: await n(sql`select count(*)::int as n from hygiene_points`),
+      readings: await n(sql`select count(*)::int as n from hygiene_readings`), tasks: await n(sql`select count(*)::int as n from cleaning_tasks`), cleaned: await n(sql`select count(*)::int as n from cleaning_log`),
+    };
+    await tx.execute(sql`delete from hygiene_readings`); await tx.execute(sql`delete from cleaning_log`);
+    await tx.execute(sql`delete from hygiene_points`); await tx.execute(sql`delete from cleaning_tasks`); await tx.execute(sql`delete from hygiene_areas`);
+    await record(tx, actor, { action: 'delete', entity: 'hygiene_area', entityId: 'alle', before });
+    return before;
+  });
+}
+export async function deleteCleaningTask(db: Db, actor: Actor, id: string) {
+  return db.transaction(async (tx) => {
+    const [t] = await tx.select().from(cleaningTasks).where(eq(cleaningTasks.id, id)).for('update');
+    if (!t) throw notFound('Reinigungsaufgabe');
+    await tx.execute(sql`delete from cleaning_log where task_id = ${id}`);
+    await tx.delete(cleaningTasks).where(eq(cleaningTasks.id, id));
+    await record(tx, actor, { action: 'delete', entity: 'cleaning_task', entityId: id, before: { name: t.name } });
+    return { ok: true };
+  });
+}
+
 export async function listReadings(db: Exec, from: string, to: string): Promise<HygieneReadingDto[]> {
   const rows = await db.select().from(hygieneReadings).where(and(gte(hygieneReadings.date, from), lte(hygieneReadings.date, to))).orderBy(asc(hygieneReadings.date));
   return rows.map((r) => ({ pointId: r.pointId, date: r.date, valueC: r.valueC, confirmed: r.confirmed, note: r.note, userName: r.userName, enteredAt: r.enteredAt.toISOString() }));

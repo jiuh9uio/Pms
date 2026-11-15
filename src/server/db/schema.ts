@@ -93,6 +93,8 @@ export const roomCategories = pgTable('room_categories', {
   /** Nachlass je Nacht bei längerem Aufenthalt: ab so vielen Nächten (0 = kein Nachlass) */
   longStayNights: integer('long_stay_nights').notNull().default(0),
   longStayDiscountCents: integer('long_stay_discount_cents').notNull().default(0),
+  /** derselbe Nachlass, wenn nur eine Person im Zimmer ist (Einzelnutzung eines Mehrbettzimmers) */
+  longStaySingleDiscountCents: integer('long_stay_single_discount_cents').notNull().default(0),
   sort: integer('sort').notNull().default(0),
   ...stamps,
 });

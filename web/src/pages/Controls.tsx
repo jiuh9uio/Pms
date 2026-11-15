@@ -6,7 +6,6 @@ import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
 import { Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useToast } from '../ui.tsx';
-import { HygienePrompt } from './HygienePrompt.tsx';
 import { Zones } from './Zones.tsx';
 
 /** Auswahl der Kontrollart: Hygieneamt, Finanzamt und alles, was der Betrieb zusätzlich anlegt. */
@@ -35,7 +34,6 @@ export function Controls() {
       </div>
       {isAdmin && data && <Zones types={data} />}
       {add && <TypeDialog type={null} onClose={() => setAdd(false)} />}
-      <HygienePrompt />
     </>
   );
 }

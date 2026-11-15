@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.46.0
+
+- Zimmer & Preise → Kategorie: Der Nachlass bei längerem Aufenthalt lässt sich für Einzelbelegung getrennt festlegen („… – Einzelbelegung“). Er gilt, wenn nur eine Person in einem Mehrbettzimmer wohnt, zusätzlich zum Nachlass bei Einzelbelegung. Bestehende Kategorien behalten ihren bisherigen Betrag für beide Fälle.
+- Kontrollen → Eigenkontrolle: Der Administrator kann Messstellen (z. B. eine Kühltruhe), ganze Bereiche und Reinigungsaufgaben löschen und über „Alles löschen“ die gesamte Eigenkontrolle zurücksetzen. Beim Anlegen eines Geräts fragt das Programm nach dem Namen; ein Klick auf den Namen öffnet Umbenennen, Sollwert und Löschen.
+- Die tägliche Abfrage „alles im Sollwert?“ / „Reinigung erledigt?“ erscheint jetzt beim Start des Programms im Startmenü statt beim Öffnen der Kontrollen. „Später“ gilt, bis das Programmfenster geschlossen wird.
+
 ## 1.45.0
 
 - Neue Gliederung. Startmenü in drei Gruppen: Tagesgeschäft (Hotel, Restaurant, E-Mail, Team – große Kacheln), Büro (Rechnungen, Auswertung, Kontrollen) und Haus & Technik (Internet, Schnelldruck, Verwaltung, Mein Konto – kleine Kacheln).

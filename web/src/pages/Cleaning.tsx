@@ -54,7 +54,7 @@ export function Cleaning() {
     try { await fn(); toast(msg); bump(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
     setBusy(null);
   };
-  const edit = (t?: CleaningTaskDto) => setDlg(<MasterDialog title={t ? 'Reinigungsaufgabe bearbeiten' : 'Reinigungsaufgabe anlegen'} path="/cleaning/tasks" id={t?.id ?? null} version={t?.version} schema={cleaningTaskInput} onClose={() => setDlg(null)}
+  const edit = (t?: CleaningTaskDto) => setDlg(<MasterDialog title={t ? 'Reinigungsaufgabe bearbeiten' : 'Reinigungsaufgabe anlegen'} del={t ? `Reinigungsaufgabe „${t.name}“ endgültig löschen? Die bisherigen Einträge dazu werden mit gelöscht.` : undefined} path="/cleaning/tasks" id={t?.id ?? null} version={t?.version} schema={cleaningTaskInput} onClose={() => setDlg(null)}
     fields={[
       { key: 'name', label: 'Was ist zu reinigen?', type: 'text', wide: true, hint: 'z. B. Arbeitsflächen desinfizieren, Fritteuse Öl wechseln, Kühltruhe abtauen' },
       { key: 'areaId', label: 'Bereich', type: 'select', options: areas.map((a): [string, string] => [a.id, a.name]) },

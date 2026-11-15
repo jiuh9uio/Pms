@@ -232,6 +232,13 @@
       "when": 1794706466253,
       "tag": "0032_geraeteart",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794748123088,
+      "tag": "0033_nachlass_einzelbelegung",
+      "breakpoints": true
     }
   ]
 }

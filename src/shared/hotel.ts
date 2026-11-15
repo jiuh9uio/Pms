@@ -63,8 +63,11 @@ export const categoryInput = z.object({
   singleDiscountCents: cents.default(0), extraAdultCents: cents.default(0), extraChildCents: cents.default(0),
   /** Nachlass je Nacht ab so vielen Nächten; 0 = aus */
   longStayNights: z.number('Bitte eine Zahl eingeben').int().min(0).max(60).default(0), longStayDiscountCents: cents.default(0),
+  /** Nachlass je Nacht bei längerem Aufenthalt, wenn nur eine Person im Zimmer ist */
+  longStaySingleDiscountCents: cents.default(0),
 }).refine((v) => v.longStayNights !== 1, { message: 'Bitte mindestens 2 Nächte (oder 0 für keinen Nachlass)', path: ['longStayNights'] })
-  .refine((v) => v.longStayDiscountCents <= v.basePriceCents, { message: 'Darf nicht höher als der Grundpreis sein', path: ['longStayDiscountCents'] }).refine((v) => v.singleDiscountCents <= v.basePriceCents, { message: 'Darf nicht höher als der Grundpreis sein', path: ['singleDiscountCents'] }).refine((v) => v.maxPersons >= v.stdOccupancy, { message: 'Darf nicht kleiner als die Standardbelegung sein', path: ['maxPersons'] });
+  .refine((v) => v.longStayDiscountCents <= v.basePriceCents, { message: 'Darf nicht höher als der Grundpreis sein', path: ['longStayDiscountCents'] })
+  .refine((v) => v.longStaySingleDiscountCents + v.singleDiscountCents <= v.basePriceCents, { message: 'Zusammen mit dem Nachlass bei Einzelbelegung höher als der Grundpreis', path: ['longStaySingleDiscountCents'] }).refine((v) => v.singleDiscountCents <= v.basePriceCents, { message: 'Darf nicht höher als der Grundpreis sein', path: ['singleDiscountCents'] }).refine((v) => v.maxPersons >= v.stdOccupancy, { message: 'Darf nicht kleiner als die Standardbelegung sein', path: ['maxPersons'] });
 export const roomInput = z.object({
   number: required(20), categoryId: z.uuid('Bitte wählen'), floor: text(20), note: text(300), active: z.boolean(), priceOverrideCents: cents.nullable(),
 });
@@ -126,7 +129,7 @@ export const chargeInput = z.object({
 }).refine((v) => !!v.serviceId || (!!v.name && v.unitPriceCents !== undefined && !!v.taxRateId), { message: 'Leistung wählen oder Bezeichnung, Preis und Steuersatz angeben', path: ['name'] });
 
 // ---------- Antworttypen ----------
-export interface CategoryDto extends PersonPricing { longStayNights: number; longStayDiscountCents: number; id: string; name: string; description: string; maxPersons: number; basePriceCents: number; sort: number; version: number }
+export interface CategoryDto extends PersonPricing { longStayNights: number; longStayDiscountCents: number; longStaySingleDiscountCents: number; id: string; name: string; description: string; maxPersons: number; basePriceCents: number; sort: number; version: number }
 /** Personenabhängige Preisbestandteile einer Kategorie, je Nacht in Cent (brutto). */
 export interface PersonPricing { stdOccupancy: number; singleDiscountCents: number; extraAdultCents: number; extraChildCents: number }
 /**
@@ -357,3 +360,9 @@ export const guestGuideInput = z.object({
   inMails: z.boolean(), onGuestPage: z.boolean(),
 }).refine((v) => !v.enabled || v.url !== '', { message: 'Bitte die Adresse der Gästemappe eintragen', path: ['url'] });
 export type GuestGuide = z.infer<typeof guestGuideInput>;
+
+/** Nachlass je Nacht bei längerem Aufenthalt – eigener Betrag, wenn eine Person ein Mehrbettzimmer allein nutzt. */
+export function longStayDiscount(c: { stdOccupancy: number; longStayNights: number; longStayDiscountCents: number; longStaySingleDiscountCents: number }, nights: number, persons: number | null): number {
+  if (c.longStayNights < 2 || nights < c.longStayNights) return 0;
+  return persons === 1 && c.stdOccupancy > 1 ? c.longStaySingleDiscountCents : c.longStayDiscountCents;
+}

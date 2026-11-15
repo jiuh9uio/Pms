@@ -274,4 +274,32 @@ describe('Restaurant: Tischreservierungen', () => {
     expect((await call('PUT', `/restaurant/reservations/${b}`, admin, { ...data, time: '19:00' })).statusCode).toBe(409);
     await ok('PUT', `/restaurant/reservations/${b}`, admin, { ...data, time: '16:00', durationMin: 90 });
   });
+
+  it('lässt nur den Administrator Messstellen, Bereiche und alles löschen', async () => {
+    const area = (await ok('POST', '/hygiene/areas', admin, { name: 'Löschtest', active: true })).id as string;
+    const point = (await ok('POST', '/hygiene/points', admin, { areaId: area, name: 'Kühltruhe Keller', minC: null, maxC: -18, active: true })).id as string;
+    const point2 = (await ok('POST', '/hygiene/points', admin, { areaId: area, name: 'Kühlschrank', minC: 0, maxC: 7, active: true })).id as string;
+    const task = (await ok('POST', '/cleaning/tasks', admin, { areaId: area, name: 'Wischen', intervalDays: 1, active: true })).id as string;
+    await ok('POST', `/hygiene/areas/${area}/confirm`, user, {});
+    await ok('POST', `/cleaning/tasks/${task}/done`, user, {});
+    // umbenennen geht weiterhin über Bearbeiten
+    const p = (await ok('GET', '/hygiene/areas', admin)).find((a: { id: string }) => a.id === area).points.find((x: { id: string }) => x.id === point);
+    await ok('PUT', `/hygiene/points/${point}`, admin, { areaId: area, name: 'Truhe Vorratsraum', minC: null, maxC: -18, active: true, version: p.version });
+    for (const path of [`/hygiene/points/${point}`, `/hygiene/areas/${area}`, `/cleaning/tasks/${task}`]) expect((await call('DELETE', path, user)).statusCode).toBe(403);
+    expect((await call('POST', '/hygiene/reset', user, {})).statusCode).toBe(403);
+    expect((await ok('DELETE', `/hygiene/points/${point}`, admin)).readings).toBe(1);
+    expect((await ok('GET', '/hygiene/areas', admin)).find((a: { id: string }) => a.id === area).points.map((x: { name: string }) => x.name)).toEqual(['Kühlschrank']);
+    await ok('DELETE', `/hygiene/areas/${area}`, admin);
+    expect((await ok('GET', '/hygiene/areas', admin)).some((a: { id: string }) => a.id === area)).toBe(false);
+    expect((await db.execute(sql`select count(*)::int as n from hygiene_readings where point_id = ${point2}`))[0]!.n).toBe(0);
+    expect((await db.execute(sql`select count(*)::int as n from cleaning_log where task_id = ${task}`))[0]!.n).toBe(0);
+    // alles zurücksetzen: Unterlagen und Kontrollbesuche bleiben
+    await ok('POST', '/hygiene/areas', admin, { name: 'Rest', active: true });
+    const types = (await ok('GET', '/inspection-types', admin)).length;
+    const r = await ok('POST', '/hygiene/reset', admin, {});
+    expect(r.areas).toBeGreaterThan(0);
+    expect(await ok('GET', '/hygiene/areas', admin)).toEqual([]);
+    expect(await ok('GET', '/hygiene/open', user)).toEqual([]);
+    expect((await ok('GET', '/inspection-types', admin)).length).toBe(types);
+  });
 });

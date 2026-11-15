@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { intervalLabel, rangeLabel, type CleaningDueDto, type HygieneOpenDto, type InspectionTypeDto } from '../../../src/shared/controls.js';
+import { todayBerlin } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
 import { useData } from '../data.tsx';
 import { Button, Dialog, useLoad, useToast } from '../ui.tsx';
 
+const STORE = 'pms-eigenkontrolle-spaeter';
+
 /**
- * Kurzabfrage beim Öffnen der Kontrollen: Für jeden Bereich, in dem heute noch nichts eingetragen ist,
+ * Kurzabfrage beim Start des Programms (im Startmenü): Für jeden Bereich, in dem heute noch nichts eingetragen ist,
  * genügt ein Tipp auf „Ja“. Gespeichert wird die Bestätigung mit Namen und Uhrzeit, kein Zahlenwert.
  */
 export function HygienePrompt() {
@@ -18,9 +21,10 @@ export function HygienePrompt() {
     // Reihenfolge: erst alle Temperaturen, dann die fällige Reinigung
     type Q = { key: string; kind: 'temp'; area: HygieneOpenDto } | { key: string; kind: 'clean'; area: CleaningDueDto };
     return [...temp.map((a): Q => ({ key: 't' + a.areaId, kind: 'temp', area: a })), ...clean.map((a): Q => ({ key: 'c' + a.areaId, kind: 'clean', area: a }))];
-    // Nur einmal beim Öffnen der Kontrollen fragen – nicht erneut, während jemand Bereiche oder Messstellen einrichtet.
+    // Nur beim Start fragen – „Später“ gilt, bis das Programmfenster geschlossen wird (und höchstens für heute).
   }, []);
-  const [skipped, setSkipped] = useState<string[]>([]);
+  const [skipped, setSkippedState] = useState<string[]>(() => { try { const v = JSON.parse(sessionStorage.getItem(STORE) ?? 'null') as { day: string; keys: string[] } | null; return v && v.day === todayBerlin() ? v.keys : []; } catch { return []; } });
+  const setSkipped = (keys: string[]) => { setSkippedState(keys); try { sessionStorage.setItem(STORE, JSON.stringify({ day: todayBerlin(), keys })); } catch { /* ohne Speicher gilt es bis zum Neuladen */ } };
   const [busy, setBusy] = useState(false);
   const open = (data ?? []).filter((q) => !skipped.includes(q.key));
   const q = open[0];

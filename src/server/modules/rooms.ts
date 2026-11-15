@@ -1,6 +1,6 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
-import { eachNight, personAdjust, weekdayOf, type CategoryDto, type RateRuleDto, type RoomDto, type ServiceDto } from '../../shared/hotel.js';
+import { eachNight, personAdjust, weekdayOf, type CategoryDto, type RateRuleDto, type RoomDto, type ServiceDto, longStayDiscount } from '../../shared/hotel.js';
 import type { Db, Exec } from '../db/client.js';
 import { bookingRooms, rateRules, roomAllocations, roomBlocks, roomCategories, rooms, services, taxRates } from '../db/schema.js';
 import { AppError, conflict, notFound, stale } from '../lib/errors.js';
@@ -149,7 +149,7 @@ export async function priceNights(db: Exec, roomId: string, categoryId: string, 
   const adj = persons ? personAdjust(cat, persons.adults, persons.children) : { cents: 0, label: '' };
   const all = eachNight(from, to);
   // Nachlass bei längerem Aufenthalt: gilt für jede Nacht, sobald der Aufenthalt lang genug ist
-  const long = cat.longStayNights >= 2 && cat.longStayDiscountCents > 0 && all.length >= cat.longStayNights ? cat.longStayDiscountCents : 0;
+  const long = longStayDiscount(cat, all.length, persons ? persons.adults + persons.children : null);
   return all.map((date) => {
     let price = base;
     const names: string[] = [];

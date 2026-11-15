@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { HygienePrompt } from './HygienePrompt.tsx';
 import { ROLE_LABEL, hasModule, type Module, type OverviewItem } from '../../../src/shared/schemas.js';
 import { useAuth, useLogout } from '../App.tsx';
 import { api } from '../api.ts';
@@ -85,6 +86,7 @@ export function Launcher() {
           </section>
         );
       })}
+      {hasModule(user, 'kontrollen') && <HygienePrompt />}
       {tiles.length === 0 && <p className="notice">Für dieses Konto ist noch kein Bereich freigegeben. Bitte den Administrator ansprechen.</p>}
     </div>
   );
