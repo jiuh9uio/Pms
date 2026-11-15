@@ -795,4 +795,46 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect((await ok('GET', `/housekeeping?date=${day}`, user)).manual).toEqual([]);
     expect((await call('POST', '/housekeeping/manual', {}, { date: day, roomId: roomIds[0], kind: 'full' })).statusCode).toBe(401);
   });
+
+  it('importiert die Kundendatei des alten Programms (Testdatei mit erfundenen Namen)', async () => {
+    // Aufbau wie Kunden.dat: Datensätze zu 512 Byte, Textfelder als Längenbyte + Latin-1-Text
+    const rec = (f: Record<number, string>) => {
+      const b = Buffer.alloc(512);
+      for (const [o, t] of Object.entries(f)) { const x = Buffer.from(t, 'latin1'); b[Number(o)] = x.length; x.copy(b, Number(o) + 1); }
+      return b;
+    };
+    const file = Buffer.concat([
+      rec({ 4: 'K-10000000', 21: '***  Beispiel, Muster  ***' }),
+      rec({ 4: 'K-10000001', 21: 'Frau Erika Testfrau', 103: 'Lindenweg 3', 144: '12345', 151: 'Musterstadt', 192: '0123-45678' }),
+      rec({ 4: 'K-10000002', 21: 'Otto Probemann', 103: 'Am Bach 1', 144: '23456', 151: 'Beispieldorf', 267: 'otto@example.org' }),
+      rec({ 4: 'K-10000003', 21: 'Kühn, Jürgen', 144: '3456', 151: 'Wien' }),
+      rec({ 4: 'K-10000004', 21: 'Muster Bau GmbH', 62: 'Herr Bauleiter', 103: 'Industriestr. 9', 144: '54321', 151: 'Werkstadt' }),
+      rec({ 4: 'K-10000005', 21: 'Testladen Schmidt', 62: 'Frau Anna Schmidt', 144: '11111', 151: 'Ort' }),
+      rec({ 4: 'K-10000006' }),
+    ]);
+    const send = (dry: string, who = admin, body: Buffer = file) => app.inject({ method: 'POST', url: `/api/v1/guests/import-legacy?dryRun=${dry}`, headers: { 'content-type': 'application/octet-stream', cookie: `pms_session=${(who as { pms_session: string }).pms_session}` }, payload: body });
+    expect((await send('1', user)).statusCode).toBe(403);
+    expect((await send('1', admin, Buffer.from('kein altes Programm'))).json().error.code).toBe('bad_file');
+    const before = Number((await db.execute(sql`select count(*)::int as n from guests`))[0]!.n);
+    const dry = (await send('1')).json();
+    expect(dry).toMatchObject({ records: 7, guests: 3, companies: 2, duplicates: 0, skipped: { placeholder: 1, empty: 1 }, dryRun: true });
+    expect(dry.sample.guests).toEqual(expect.arrayContaining([
+      expect.objectContaining({ salutation: 'Frau', firstName: 'Erika', lastName: 'Testfrau', zip: '12345', country: 'Deutschland' }),
+      expect.objectContaining({ firstName: 'Otto', lastName: 'Probemann' }),
+      expect.objectContaining({ firstName: 'Jürgen', lastName: 'Kühn', country: '' }), // Umlaute, 4-stellige PLZ: Land offen
+    ]));
+    expect(dry.sample.companies).toEqual(expect.arrayContaining([expect.objectContaining({ name: 'Muster Bau GmbH', contactName: 'Herr Bauleiter' }), expect.objectContaining({ name: 'Testladen Schmidt', contactName: 'Frau Anna Schmidt' })]));
+    expect(Number((await db.execute(sql`select count(*)::int as n from guests`))[0]!.n)).toBe(before); // Prüfung ändert nichts
+    const done = (await send('0')).json();
+    expect(done).toMatchObject({ guests: 3, companies: 2, dryRun: false });
+    const g = await db.execute(sql`select first_name, last_name, phone, email, notes from guests where last_name in ('Testfrau', 'Probemann') order by last_name`);
+    expect(g).toEqual([
+      expect.objectContaining({ last_name: 'Probemann', email: 'otto@example.org', notes: expect.stringContaining('K-10000002') }),
+      expect.objectContaining({ last_name: 'Testfrau', phone: '0123-45678' }),
+    ]);
+    // zweiter Lauf: nichts doppelt
+    expect((await send('0')).json()).toMatchObject({ guests: 0, companies: 0, duplicates: 5 });
+    const log = await db.execute(sql`select after from audit_log where action = 'import' order by at desc limit 1`);
+    expect(JSON.stringify(log[0])).not.toContain('Testfrau'); // keine Namen im Protokoll
+  });
 });

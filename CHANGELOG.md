@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.68.0
+
+- Neu: Kunden aus dem alten Programm importieren (Gäste → „Kunden importieren“, nur Administrator). Die Datei Kunden.dat auswählen; das Programm zeigt zuerst nur an, was übernommen würde (Anzahl, Beispiele), erst „Jetzt importieren“ legt an. Privatpersonen werden Gäste (Anrede, Vor- und Nachname, Straße, PLZ, Ort, Telefon, E-Mail), Firmen (erkannt an Rechtsform/Stichwort oder Ansprechpartner „Herr/Frau …“) werden Firmen mit Ansprechpartner. Die alte Kundennummer steht in den Bemerkungen. Platzhalter („*** … ***“) und leere Datensätze werden übersprungen, schon vorhandene Gäste/Firmen (gleicher Name und PLZ) ebenfalls – ein zweiter Lauf legt nichts doppelt an. Im Protokoll stehen nur die Anzahlen.
+
 ## 1.67.0
 
 - Daten löschen: neuer Knopf „Alles auf Null“ – wählt mit einem Klick alles aus: Rechnungen, Zahlungen und Umsätze, alle Buchungen und Sperren, Gäste, Firmen, E-Mail-Posteingang; Rechnungs- und Buchungsnummern beginnen wieder bei 1, alle Zimmer gelten wieder als sauber, von Hand eingetragene Reinigungen entfallen. Die Einrichtung (Zimmer, Preise, Benutzer, Einstellungen) bleibt. Wie bisher: erst „Prüfen“, dann Passwort und LÖSCHEN eintippen; vorher wird automatisch eine Datensicherung geschrieben.

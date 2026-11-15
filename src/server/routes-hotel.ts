@@ -8,7 +8,9 @@ import * as breakfast from './modules/breakfast.js';
 import * as guestguide from './modules/guestguide.js';
 import * as checkinSheet from './modules/checkinsheet.js';
 import * as registrations from './modules/registrations.js';
+import { AppError } from './lib/errors.js';
 import * as cleanManual from './modules/cleanmanual.js';
+import { importKundenDat } from './modules/legacyimport.js';
 import { manualCleanInput } from '../shared/team.js';
 import * as lookup from './modules/lookup.js';
 import * as guestlink from './modules/guestlink.js';
@@ -122,6 +124,11 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   api.get('/guests/duplicates', admin, () => guests.guestDuplicates(db));
   api.post('/guests/:id/merge', admin, (req) => guests.mergeGuests(db, actor(req), idOf(req), H.guestMergeInput.parse(req.body).otherId));
   api.get('/guests/:id', user, async (req) => ({ guest: await guests.getGuest(db, idOf(req)), bookings: await bookings.guestBookings(db, idOf(req)) }));
+  // Kundendatei des alten Programms (Kunden.dat) importieren – nur Administrator; dryRun=1 prüft nur
+  api.post('/guests/import-legacy', { ...admin, bodyLimit: 10 * 1024 * 1024 }, (req) => {
+    if (!Buffer.isBuffer(req.body)) throw new AppError(400, 'bad_file', 'Bitte die Datei Kunden.dat auswählen');
+    return importKundenDat(db, actor(req), req.body, z.object({ dryRun: z.enum(['0', '1']).default('1') }).parse(req.query).dryRun === '1');
+  });
   api.post('/guests', user, (req) => db.transaction((tx) => guests.createGuest(tx, actor(req), H.guestInput.parse(req.body))));
   api.get('/guests/:id/export.json', admin, async (req, reply) => {
     reply.header('Content-Disposition', `attachment; filename="datenauskunft-${idOf(req).slice(0, 8)}.json"`);

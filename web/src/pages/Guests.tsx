@@ -5,15 +5,18 @@ import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
 import { Badge, Button, LoadState, PageHeader, useLoad, useToast } from '../ui.tsx';
+import { LegacyImportDialog } from './LegacyImportDialog.tsx';
 
 export function Guests() {
   const { user } = useAuth();
   const { rev, openGuest, newBooking } = useData();
   const [q, setQ] = useState('');
+  const [imp, setImp] = useState(false);
   const { data, error } = useLoad(() => api<GuestDto[]>('GET', '/guests?q=' + encodeURIComponent(q.trim())), [q, rev]);
   return (
     <>
-      <PageHeader title="Gäste" actions={<Button variant="primary" onClick={() => openGuest(null)}>Gast anlegen</Button>} />
+      <PageHeader title="Gäste" actions={<>{user.role === 'admin' && <Button onClick={() => setImp(true)}>Kunden importieren</Button>}<Button variant="primary" onClick={() => openGuest(null)}>Gast anlegen</Button></>} />
+      {imp && <LegacyImportDialog onClose={() => setImp(false)} />}
       <div className="filters"><input type="search" placeholder="Name, Firma, E-Mail, Telefon, Ort …" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Suche" /></div>
       <LoadState error={error} loading={!data} />
       {data && (data.length === 0 ? <p className="muted">{q ? 'Kein Gast gefunden.' : 'Noch keine Gäste angelegt. Gäste entstehen auch automatisch beim Anlegen einer Reservierung.'}</p> : (
