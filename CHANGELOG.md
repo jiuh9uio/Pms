@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.42.1
+
+- Internet → Geräte: Die FRITZ!Box hängt an jeden Gerätenamen „.fritz.box“ an – dadurch wurden alle Geräte als Router eingeschätzt. Der angehängte Netzname (auch „.lan“, „.local“, „.speedport.ip“ u. a.) wird jetzt vor der Einschätzung entfernt und in der Liste und bei „im Internet suchen“ nicht mehr mitgeführt.
+
 ## 1.42.0
 
 - Internet → Geräte: neue Spalte „Vermutlich“ – das Programm schätzt aus dem Namen, mit dem sich ein Gerät im Netz meldet, was es ist (Handy, Tablet, Computer, Drucker, Bondrucker, EC-Gerät, Fernseher, Router …) und nennt den Grund. Dafür wird nichts ins Internet gesendet; „im Internet suchen“ öffnet auf Klick eine Suche nach dem Gerätenamen.

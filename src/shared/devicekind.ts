@@ -37,12 +37,22 @@ const PATTERNS: [RegExp, DeviceKind, string?][] = [
   [/gigaset|snom|yealink|grandstream|\bsip[-_ ]|voip|telefon|fritz\.?fon|auerswald|agfeo/, 'voip'],
 ];
 
+const LOCAL_DOMAIN = /\.(fritz\.box|speedport\.ip|easy\.box|o2\.box|kabel\.box|vodafone\.box|box|lan|local|localdomain|home|home\.arpa|internal|intern|heimnetz|fritz|station)\.?$/i;
+/** Entfernt den vom Router angehängten Netznamen; der Router selbst („fritz.box“) bleibt erkennbar. */
+export function stripLocalDomain(name: string): string {
+  if (/^(fritz\.box|speedport\.ip|easy\.box|o2\.box|kabel\.box|vodafone\.box)\.?$/i.test(name.trim())) return name;
+  let n = name;
+  for (let i = 0; i < 2; i++) { const m = LOCAL_DOMAIN.exec(n); if (m && m.index > 0) n = n.slice(0, m.index); }
+  return n;
+}
+
 /** Schätzt die Art eines Geräts. `names` sind alle bekannten Namen (Netzname, Name in der FRITZ!Box, eigener Name). */
 export function guessDevice(d: { names: string[]; kind?: string; randomMac?: boolean; self?: boolean; gateway?: boolean; wlan?: boolean | null }, rules: DeviceRule[] = []): DeviceGuess {
   const made = (kind: DeviceKind, basis: DeviceGuess['basis'], reason: string): DeviceGuess => ({ kind, label: DEVICE_KINDS[kind], basis, reason });
   if (d.kind && isDeviceKind(d.kind)) return made(d.kind, 'set', 'von Ihnen festgelegt');
   const names = d.names.map((n) => n.trim()).filter(Boolean);
-  const low = names.join(' | ').toLowerCase();
+  // Router hängen ihren eigenen Netznamen an jedes Gerät an („handy.fritz.box“) – der sagt nichts über das Gerät
+  const low = names.map((n) => stripLocalDomain(n.toLowerCase())).join(' | ');
   for (const r of rules) if (r.contains.trim() && low.includes(r.contains.trim().toLowerCase())) return made(r.kind, 'rule', `eigene Regel: Name enthält „${r.contains.trim()}“`);
   if (d.self) return made('computer', 'name', 'dieser Rechner');
   if (d.gateway) return made('router', 'name', 'über dieses Gerät geht es ins Internet');

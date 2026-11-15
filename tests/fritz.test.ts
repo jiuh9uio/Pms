@@ -161,6 +161,14 @@ describe('FRITZ!Box steuern', () => {
     expect(guessDevice({ names: ['', 'EPSON TM-T20III'] })).toMatchObject({ kind: 'bon' });
     expect(guessDevice({ names: ['NPI1A2B3C'] }).kind).toBe('printer');
     expect(guessDevice({ names: ['fritz.box'] }).kind).toBe('router');
+    // die FRITZ!Box hängt „.fritz.box“ an jeden Namen – das macht ein Gerät nicht zum Router
+    expect(guessDevice({ names: ['iPhone-von-Anna.fritz.box'] }).kind).toBe('phone');
+    expect(guessDevice({ names: ['EPSON123456.fritz.box'] }).kind).toBe('printer');
+    expect(guessDevice({ names: ['DESKTOP-AB12.fritz.box', ''] }).kind).toBe('computer');
+    expect(guessDevice({ names: ['pc-192-168-178-40.fritz.box'] }).kind).toBe('computer');
+    expect(guessDevice({ names: ['abc123.fritz.box'] })).toMatchObject({ kind: null });
+    expect(guessDevice({ names: ['fritz.repeater.fritz.box'] }).kind).toBe('router');
+    expect(guessDevice({ names: ['wohnzimmer-tv.lan'] }).kind).toBe('tv');
     expect(guessDevice({ names: ['DESKTOP-4KQ12'] }).kind).toBe('computer');
     expect(guessDevice({ names: [], randomMac: true })).toMatchObject({ kind: 'phone', basis: 'hint' });
     expect(guessDevice({ names: ['xyz-123'] })).toMatchObject({ kind: null, basis: 'none' });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { DEVICE_KINDS, type DeviceKind } from '../../../src/shared/devicekind.js';
+import { DEVICE_KINDS, stripLocalDomain, type DeviceKind } from '../../../src/shared/devicekind.js';
 import { fritzSettingsInput, netRulesInput, wifiSettingsInput, type FritzInfoDto, type FritzSettingsDto, type InternetStatusDto, type NetDeviceDto, type NetOutagesDto, type NetRules, type NetScanDto, type NetUsageDto, type WifiDto } from '../../../src/shared/schemas.js';
 import { useAuth } from '../App.tsx';
 import { api } from '../api.ts';
@@ -209,7 +209,7 @@ function DeviceList() {
           <div className="tablewrap card flush"><table>
             <thead><tr><th>Name</th><th>Vermutlich</th><th>IP-Adresse</th><th className="hide-sm">Gerätename im Netz</th><th className="hide-sm">Anschluss</th><th className="hide-sm">Geräteadresse (MAC)</th><th /></tr></thead>
             <tbody>{s.devices.map((d) => {
-              const netName = d.box?.name || d.hostname;
+              const netName = stripLocalDomain(d.box?.name || d.hostname);
               return (
                 <tr key={d.mac} className={d.online ? undefined : 'faded'}>
                   <td className="strong">{d.self ? 'Dieser Rechner (PMS)' : d.name || <span className="muted">unbenannt</span>} {d.self && d.name && <small className="muted">{d.name}</small>}</td>
