@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { checkinSheetInput, type CheckinSheet } from '../../../src/shared/hotel.js';
+import { checkinSheetInput, type CheckinSheet, type CheckinSheetDto } from '../../../src/shared/hotel.js';
 import { wifiSettingsInput, type WifiDto, type WifiSettings } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { Button, Field, LoadState, useLoad, useToast } from '../ui.tsx';
@@ -8,8 +8,9 @@ import { Button, Field, LoadState, useLoad, useToast } from '../ui.tsx';
 export function CheckinSheetCard() {
   const toast = useToast();
   const { data, error } = useLoad(async () => {
-    const [sheet, wifi] = await Promise.all([api<CheckinSheet>('GET', '/settings/checkin-sheet'), api<WifiDto>('GET', '/network/wifi').catch(() => null)]);
-    return { sheet, wifi };
+    const [sheet, wifi, print] = await Promise.all([api<CheckinSheet>('GET', '/settings/checkin-sheet'), api<WifiDto>('GET', '/network/wifi').catch(() => null),
+      api<CheckinSheetDto>('GET', '/checkin-sheet').catch(() => null)]);
+    return { sheet, wifi, bonName: print?.bonPrinter ?? null };
   });
   const [v, setV] = useState<CheckinSheet | null>(null);
   const [w, setW] = useState<WifiSettings | null>(null);
@@ -22,6 +23,7 @@ export function CheckinSheetCard() {
     if (data.wifi) { setW({ ssid: data.wifi.ssid, password: data.wifi.password, open: data.wifi.open, note: data.wifi.note }); setQr(data.wifi.qr); }
   }, [data]);
   if (!v) return <section className="card"><h2>Check-in &amp; Meldeschein</h2><LoadState error={error} loading /></section>;
+  const bonName = data?.bonName ?? null;
   const save = async () => {
     const a = checkinSheetInput.safeParse(v);
     const b = w ? wifiSettingsInput.safeParse(w) : null;
@@ -41,12 +43,19 @@ export function CheckinSheetCard() {
   return (
     <section className="card">
       <h2>Check-in &amp; Meldeschein</h2>
-      <p className="muted">Nach „Anreise bestätigen“ bietet das Programm an, den Meldeschein zu drucken. Unten auf dem Blatt stehen – zum Abtrennen für den Gast – WLAN-Zugang mit QR-Code und die Hausinformationen von hier.</p>
+      <p className="muted">Nach „Anreise bestätigen“ bietet das Programm an, den Meldeschein zu drucken. Gedruckt wird wahlweise als A4-Blatt (Gästeinformationen unten zum Abtrennen) oder auf dem Bondrucker (ein Bon Meldeschein, ein Bon für den Gast mit WLAN-Zugang, QR-Code und Hausinformationen).</p>
       <div className="formgrid">
         <label className="check wide"><input type="checkbox" checked={v.askAfterCheckin} onChange={(e) => setV({ ...v, askAfterCheckin: e.target.checked })} />
           <span>Nach dem Check-in fragen: „Meldeschein drucken?“<small>Ausgeschaltet geht es über „Meldeschein drucken“ in der Reservierung.</small></span></label>
+        <div className="field wide"><span className="label">Bevorzugter Druck nach dem Check-in</span>
+          <div className="segmented" role="radiogroup" aria-label="Bevorzugter Druck">
+            {([['a4', 'A4-Blatt (Gästeinfo zum Abtrennen)'], ['bon', 'Bondrucker (zwei Bons)']] as const).map(([k, l]) => (
+              <button key={k} type="button" role="radio" aria-checked={v.printMode === k} className={v.printMode === k ? 'on' : ''} onClick={() => setV({ ...v, printMode: k })}>{l}</button>))}
+          </div>
+          <span className="hint">{bonName ? `Nach dem Check-in stehen beide zur Wahl; die bevorzugte ist hervorgehoben. Bondrucker: ${bonName}.` : 'Für den Bondruck ist noch kein Bondrucker eingerichtet (Einstellungen → Geräte → Drucker).'}</span>
+        </div>
         <label className="check wide"><input type="checkbox" checked={v.showInfo} onChange={(e) => setV({ ...v, showInfo: e.target.checked })} />
-          <span>Gästeinformationen unten auf den Meldeschein drucken</span></label>
+          <span>Gästeinformationen mitdrucken (WLAN, Hausinformationen)</span></label>
       </div>
       {v.showInfo && <>
         <h3>WLAN für Gäste</h3>

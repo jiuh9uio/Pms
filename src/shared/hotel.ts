@@ -374,6 +374,8 @@ export const checkinSheetInput = z.object({
   /** Gästeinformationen unten auf dem Meldeschein (zum Abtrennen) */
   showInfo: z.boolean(),
   showWifi: z.boolean(),
+  /** bevorzugter Druck nach dem Check-in: A4-Blatt (mit Abtrennen) oder Bondrucker (zwei Bons) */
+  printMode: z.enum(['a4', 'bon']).default('a4'),
   title: z.string().trim().max(80),
   /** je Zeile „Bezeichnung | Angabe“, z. B. „Frühstück | 7:00 – 10:00 Uhr“; Zeilen ohne | erscheinen als Text */
   info: z.string().trim().max(1500),
@@ -381,9 +383,11 @@ export const checkinSheetInput = z.object({
 });
 export type CheckinSheet = z.infer<typeof checkinSheetInput>;
 export const CHECKIN_SHEET_DEFAULTS: CheckinSheet = {
-  askAfterCheckin: true, showInfo: true, showWifi: true, title: 'Herzlich willkommen!',
+  askAfterCheckin: true, showInfo: true, showWifi: true, printMode: 'a4', title: 'Herzlich willkommen!',
   info: 'Frühstück | 7:00 – 10:00 Uhr\nZimmerreinigung | täglich zwischen 10:00 und 14:00 Uhr – bitte Schild „Bitte nicht stören“ an die Tür hängen, wenn Sie keine Reinigung wünschen\nAbreise | bitte bis 11:00 Uhr das Zimmer freigeben\nRezeption | bei Fragen einfach anrufen oder vorbeikommen',
   closing: 'Wir wünschen Ihnen einen angenehmen Aufenthalt.',
 };
 /** Was der Meldeschein zum Drucken braucht: Einstellungen und – falls gewünscht und eingerichtet – das Gäste-WLAN. */
-export interface CheckinSheetDto extends CheckinSheet { lines: { label: string; value: string }[]; wifi: { ssid: string; password: string; open: boolean; qr: string } | null }
+export interface CheckinSheetDto extends CheckinSheet { lines: { label: string; value: string }[]; wifi: { ssid: string; password: string; open: boolean; qr: string } | null;
+  /** ein Bondrucker ist eingerichtet (vorne, sonst Küche) und sein Name */
+  bonPrinter: string | null }

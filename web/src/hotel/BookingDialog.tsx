@@ -194,6 +194,13 @@ function Checkin({ booking, room, onClose }: { booking: BookingDto; room: Bookin
   const [done, setDone] = useState<string | null>(null);
   const free = useLoad(() => api<FreeRoomDto[]>('GET', `/availability?from=${room.from}&to=${room.to}&exclude=${room.allocationId}`));
   const sheet = useLoad(() => api<CheckinSheetDto>('GET', '/checkin-sheet').catch(() => null));
+  const [bonBusy, setBonBusy] = useState(false);
+  const printBon = async () => {
+    setBonBusy(true);
+    try { const r = await api<{ guestSlip: boolean }>('POST', `/bookings/${booking.id}/registration/bon`, {}); toast(r.guestSlip ? 'Meldeschein und Gästeinformationen gedruckt' : 'Meldeschein gedruckt'); onClose(); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Druck fehlgeschlagen', 'error'); }
+    setBonBusy(false);
+  };
   const f = useSubmit(guestInput, async (d) => {
     if (JSON.stringify(toDraft(d as never)) !== JSON.stringify(toDraft(booking.guest)))
       await api('PUT', `/guests/${booking.guest.id}`, { ...d, version: booking.guest.version });
@@ -209,15 +216,21 @@ function Checkin({ booking, room, onClose }: { booking: BookingDto; room: Bookin
     else { toast(`${who} ist eingecheckt`); onClose(); }
   });
   if (done !== null) {
-    const info = sheet.data?.showInfo ? [sheet.data.wifi ? 'WLAN-Zugang mit QR-Code' : '', sheet.data.lines.length ? 'Hausinformationen' : ''].filter(Boolean) : [];
+    const sh = sheet.data;
+    const info = sh?.showInfo ? [sh.wifi ? 'WLAN-Zugang mit QR-Code' : '', sh.lines.length ? 'Hausinformationen' : ''].filter(Boolean) : [];
+    const bonFirst = sh?.printMode === 'bon' && !!sh.bonPrinter;
+    const a4 = <a key="a4" className={`btn${bonFirst ? '' : ' primary'}`} href={`/meldeschein/${booking.id}?druck=1`} target="_blank" rel="noopener" onClick={() => setTimeout(onClose, 300)}>A4 drucken</a>;
+    const bon = sh?.bonPrinter ? <Button key="bon" variant={bonFirst ? 'primary' : undefined} busy={bonBusy} onClick={() => void printBon()}>Bon drucken</Button> : null;
     return (
       <Dialog title="Eingecheckt" onClose={onClose}
-        footer={<><Button onClick={onClose}>Ohne Druck schließen</Button>
-          <a className="btn primary" href={`/meldeschein/${booking.id}?druck=1`} target="_blank" rel="noopener" onClick={() => setTimeout(onClose, 300)}>Meldeschein drucken</a></>}>
+        footer={<><Button onClick={onClose}>Nicht drucken</Button>{bonFirst ? <>{a4}{bon}</> : <>{bon}{a4}</>}</>}>
         <div className="ci-done">
           <div className="ci-done-mark" aria-hidden>✓</div>
           <p><b>{done || 'Der Gast'}</b> ist in Zimmer <b>{free.data?.find((r) => r.id === roomId)?.number ?? room.roomNumber}</b> eingecheckt.</p>
-          <p className="muted">Meldeschein jetzt drucken und unterschreiben lassen?{info.length ? ` Unten auf dem Blatt – zum Abtrennen für den Gast: ${info.join(' und ')}.` : ''}</p>
+          <p className="muted">Meldeschein jetzt drucken und unterschreiben lassen?{info.length ? ` Dazu für den Gast: ${info.join(' und ')}.` : ''}</p>
+          {sh?.bonPrinter
+            ? <p className="muted small">A4: ein Blatt, die Gästeinformationen unten zum Abtrennen. Bondrucker ({sh.bonPrinter}): zwei Bons – Meldeschein zum Unterschreiben und Gästeinformationen zum Mitgeben.</p>
+            : <p className="muted small">Für den Druck auf dem Bondrucker ist noch keiner eingerichtet (Einstellungen → Geräte → Drucker).</p>}
         </div>
       </Dialog>
     );

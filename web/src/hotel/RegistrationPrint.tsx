@@ -1,15 +1,23 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { isActiveStatus, type BookingDto, type CheckinSheetDto } from '../../../src/shared/hotel.js';
 import type { HotelSettings } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
-import { Button, LoadState, useLoad } from '../ui.tsx';
+import { Button, LoadState, useLoad, useToast } from '../ui.tsx';
 import { deDate } from './common.tsx';
 
 /** Meldeschein zum Ausdrucken und Unterschreiben – vorausgefüllt aus Reservierung und Gästeprofil. */
 export function RegistrationPrint() {
   const { id } = useParams();
   const [params] = useSearchParams();
+  const toast = useToast();
+  const [bonBusy, setBonBusy] = useState(false);
+  const printBon = async () => {
+    setBonBusy(true);
+    try { const r = await api<{ guestSlip: boolean }>('POST', `/bookings/${id}/registration/bon`, {}); toast(r.guestSlip ? 'Meldeschein und Gästeinformationen auf dem Bondrucker gedruckt' : 'Meldeschein auf dem Bondrucker gedruckt'); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Druck fehlgeschlagen', 'error'); }
+    setBonBusy(false);
+  };
   const { data, error } = useLoad(async () => {
     const [b, hotel, sheet] = await Promise.all([api<BookingDto>('GET', `/bookings/${id}`), api<HotelSettings>('GET', '/settings/hotel'), api<CheckinSheetDto>('GET', '/checkin-sheet').catch(() => null)]);
     return { b, hotel, sheet };
@@ -33,7 +41,8 @@ export function RegistrationPrint() {
   return (
     <div className="printpage">
       <div className="printbar noprint">
-        <Button variant="primary" onClick={() => window.print()}>Drucken</Button>
+        <Button variant="primary" onClick={() => window.print()}>Drucken (A4)</Button>
+        {data.sheet?.bonPrinter && <Button busy={bonBusy} onClick={() => void printBon()}>Stattdessen auf Bondrucker</Button>}
         <span className="muted">Leere Felder füllt der Gast von Hand aus. Ob und für welche Gäste ein Meldeschein nötig ist und wie lange er aufzubewahren ist, regelt das Melderecht – bitte selbst prüfen.</span>
       </div>
       <article className={`invoice regform${sheet ? ' withinfo' : ''}`}>

@@ -3,7 +3,11 @@ import { CHECKIN_SHEET_DEFAULTS, type CheckinSheet, type CheckinSheetDto } from 
 import type { Db, Exec } from '../db/client.js';
 import { settings } from '../db/schema.js';
 import { record, type Actor } from './audit.js';
-import { getWifi } from './network.js';
+import { isActiveStatus } from '../../shared/hotel.js';
+import { columns, wrap, type Line } from '../lib/escpos.js';
+import { getBooking } from './bookings.js';
+import { getWifi, wifiQrText } from './network.js';
+import { bonTarget, printLines } from './quickprint.js';
 import { getHotel } from './settings.js';
 
 /** Check-in-Blatt: Meldeschein mit abtrennbaren Gästeinformationen (WLAN mit QR-Code, Frühstück, Zimmerreinigung …). */
@@ -38,5 +42,54 @@ export async function checkinSheetForPrint(db: Exec): Promise<CheckinSheetDto> {
     const w = await getWifi(db);
     if (w.qr) wifi = { ssid: w.ssid, password: w.open ? '' : w.password, open: w.open, qr: w.qr };
   }
-  return { ...s, lines, wifi };
+  const bon = await bonTarget(db);
+  return { ...s, lines, wifi, bonPrinter: bon?.name ?? null };
+}
+
+const deDay = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
+const center = (text: string, w: number, o: { bold?: boolean; big?: boolean } = {}): Line[] => wrap(text, o.big ? Math.floor(w / 2) : w).map((t) => ({ text: t, align: 'center' as const, ...o }));
+
+/**
+ * Meldeschein auf dem Bondrucker: Bon 1 = Meldeschein zum Unterschreiben (bleibt im Haus), Bon 2 = Gästeinformationen (WLAN mit QR-Code, Hausinfos).
+ * Leere Angaben erscheinen als Linie zum Ausfüllen von Hand.
+ */
+export async function printCheckinBon(db: Db, actor: Actor, bookingId: string) {
+  const [b, h, sheet] = [await getBooking(db, bookingId), await getHotel(db), await checkinSheetForPrint(db)];
+  const g = b.guest;
+  const rooms = b.rooms.filter((r) => isActiveStatus(r.status));
+  const from = rooms.map((r) => r.from).sort()[0], to = rooms.map((r) => r.to).sort().at(-1);
+  const persons = rooms.reduce((n, r) => n + r.adults + r.children, 0);
+  const roomNo = rooms.map((r) => r.roomNumber).join(', ');
+  const field = (label: string, value: string | null | undefined, w: number): Line[] => value
+    ? [{ text: label }, ...wrap(value, w - 2).map((t) => ({ text: `  ${t}`, bold: true }))]
+    : [{ text: label }, { feed: 1 }, { text: '_'.repeat(w) }];
+  const address = [h.street, [h.zip, h.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  await printLines(db, (w) => [
+    ...center(h.name, w, { bold: true }), ...(address ? center(address, w) : []), { rule: true },
+    ...center('MELDESCHEIN', w, { bold: true, big: true }), { feed: 1 },
+    { text: columns('Ankunft', from ? deDay(from) : '', w) }, { text: columns('Abreise (voraussichtl.)', to ? deDay(to) : '', w) },
+    { text: columns('Zimmer', roomNo, w) }, { text: columns('Reservierung', b.number, w) }, { rule: true },
+    ...field('Familienname', g.lastName, w), ...field('Vornamen', g.firstName, w), ...field('Geburtsdatum', g.birthdate ? deDay(g.birthdate) : '', w),
+    ...field('Staatsangehörigkeit', g.nationality, w), ...field('Straße und Hausnummer', g.street, w), ...field('PLZ, Ort', [g.zip, g.city].filter(Boolean).join(' '), w),
+    ...field('Staat', g.country, w), ...field('Pass-/Ausweisnummer (ausländ. Gäste)', g.idNumber, w),
+    ...field('Mitreisende Personen', persons > 1 ? String(persons - 1) : '', w),
+    { feed: 2 }, { text: '_'.repeat(w) }, { text: 'Ort, Datum' }, { feed: 3 }, { text: '_'.repeat(w) }, { text: 'Unterschrift des Gastes' }, { feed: 1 },
+  ]);
+  let guest = false;
+  if (sheet.showInfo && (sheet.wifi || sheet.lines.length || sheet.title)) {
+    guest = true;
+    const wifi = sheet.wifi;
+    await printLines(db, (w) => [
+      ...center(h.name, w, { bold: true }), { rule: true },
+      ...(sheet.title ? [...center(sheet.title, w, { bold: true, big: true }), { feed: 1 } as Line] : []),
+      ...(roomNo ? center(`Ihr Zimmer: ${roomNo}`, w, { bold: true }) : []), { feed: 1 },
+      ...(wifi ? [{ text: 'WLAN', align: 'center', bold: true } as Line, { qr: wifiQrText({ ssid: wifi.ssid, password: wifi.password, open: wifi.open, note: '' }), size: 6 } as Line,
+        ...center(`Netz: ${wifi.ssid}`, w, { bold: true }), ...center(wifi.open ? 'ohne Passwort' : `Passwort: ${wifi.password}`, w, { bold: true }),
+        ...center('QR-Code mit der Handykamera scannen', w), { rule: true } as Line] : []),
+      ...sheet.lines.flatMap((l): Line[] => l.label ? [{ text: l.label, bold: true }, ...wrap(l.value, w - 2).map((t) => ({ text: `  ${t}` })), { feed: 1 }] : [...wrap(l.value, w).map((t) => ({ text: t })), { feed: 1 }]),
+      ...(sheet.closing ? [{ rule: true } as Line, ...center(sheet.closing, w, { bold: true })] : []),
+    ]);
+  }
+  await record(db, actor, { action: 'print', entity: 'booking', entityId: bookingId, after: { meldeschein: 'Bondrucker', gaesteinfo: guest } });
+  return { ok: true, guestSlip: guest };
 }

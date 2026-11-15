@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.61.0
+
+- Meldeschein wahlweise auf dem Bondrucker: Nach dem Check-in stehen „A4 drucken“ und „Bon drucken“ zur Wahl. Auf dem Bondrucker kommen zwei Bons: der Meldeschein zum Unterschreiben (fehlende Angaben als Linie zum Ausfüllen von Hand, Ort/Datum und Unterschrift) und die Gästeinformationen zum Mitgeben (Begrüßung, Zimmer, WLAN mit QR-Code, Hausinformationen, Schlusssatz).
+- Einstellungen → Haus → Check-in & Meldeschein: „Bevorzugter Druck nach dem Check-in“ (A4-Blatt oder Bondrucker) – die bevorzugte Möglichkeit ist nach dem Check-in hervorgehoben.
+- Auch auf der Druckseite des Meldescheins gibt es „Stattdessen auf Bondrucker“. Gedruckt wird auf dem Bondrucker vorne, sonst auf dem Küchendrucker.
+
 ## 1.60.0
 
 - Check-in: Nach „Anreise bestätigen“ erscheint „Eingecheckt – Meldeschein drucken?“. Ein Klick öffnet den Meldeschein und gleich das Druckfenster.

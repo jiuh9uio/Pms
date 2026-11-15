@@ -39,6 +39,8 @@ async function send(db: Exec, make: (width: number) => Line[], copies = 1) {
   try { for (let i = 0; i < copies; i++) await sendToPrinter(t.printer.host, t.printer.port, job); }
   catch (e) { throw new AppError(502, 'printer_failed', e instanceof Error ? e.message : 'Druckfehler'); }
 }
+/** Welcher Bondrucker benutzt würde (vorne, sonst Küche); null = keiner eingerichtet. */
+export const bonTarget = (db: Exec) => target(db);
 /** Druckt beliebige Zeilen auf dem Bondrucker (vorne, sonst Küche) – für andere Bereiche wie das TSE-Datenblatt. */
 export const printLines = (db: Exec, make: (width: number) => Line[]) => send(db, make);
 

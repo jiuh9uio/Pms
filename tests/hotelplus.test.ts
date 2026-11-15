@@ -673,5 +673,31 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     await ok('PUT', '/settings/checkin-sheet', admin, { ...def, showWifi: false });
     expect((await ok('GET', '/checkin-sheet', user)).wifi).toBeNull();
     expect((await call('GET', '/checkin-sheet', {})).statusCode).toBe(401);
+
+    // Bondrucker: Bon 1 Meldeschein (leere Angaben als Linie), Bon 2 Gästeinformationen mit WLAN-QR-Code
+    const { createServer } = await import('node:net');
+    const jobs: Buffer[][] = [];
+    const printer = createServer({ allowHalfOpen: true }, (sock) => { const j: Buffer[] = []; jobs.push(j); sock.on('data', (d) => j.push(d)); });
+    await new Promise<void>((r) => printer.listen(0, '127.0.0.1', () => r()));
+    const bid = await booking();
+    await ok('PUT', '/settings/kitchen-printer', admin, { enabled: false, host: '', port: 9100, width: 48 });
+    await ok('PUT', '/settings/front-printer', admin, { enabled: false, host: '', port: 9100, width: 48 });
+    expect((await ok('GET', '/checkin-sheet', user)).bonPrinter).toBeNull();
+    expect((await call('POST', `/bookings/${bid}/registration/bon`, user, {})).json().error.code).toBe('printer_not_configured');
+    await ok('PUT', '/settings/front-printer', admin, { enabled: true, host: '127.0.0.1', port: (printer.address() as { port: number }).port, width: 42 });
+    await ok('PUT', '/settings/checkin-sheet', admin, { ...def, printMode: 'bon' });
+    expect(await ok('GET', '/checkin-sheet', user)).toMatchObject({ bonPrinter: 'Bondrucker vorne', printMode: 'bon' });
+    expect(await ok('POST', `/bookings/${bid}/registration/bon`, user, {})).toEqual({ ok: true, guestSlip: true });
+    await new Promise((r) => setTimeout(r, 150));
+    expect(jobs).toHaveLength(2);
+    const [melde, info] = jobs.map((j) => Buffer.concat(j).toString('latin1'));
+    expect(melde).toContain('Mustermann');
+    expect(melde).toContain('Unterschrift des Gastes');
+    expect(melde).toContain('_'.repeat(42)); // leeres Geburtsdatum: Linie zum Ausfüllen
+    expect(info).toContain('Passwort: geheim123');
+    expect(info).toContain('Zimmerreinigung');
+    expect(info).toContain('WIFI:T:WPA;S:Gast-WLAN;P:geheim123;;'); // QR-Code-Inhalt
+    await ok('PUT', '/settings/front-printer', admin, { enabled: false, host: '', port: 9100, width: 48 });
+    printer.close();
   });
 });
