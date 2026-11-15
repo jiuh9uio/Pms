@@ -9,8 +9,6 @@ import { Button, Dialog, Field, useLoad, useSubmit, useToast } from '../ui.tsx';
 import { GuestFields, deDate, toDraft, type GuestDraft } from './common.tsx';
 import { CompanySelect } from './CompanySelect.tsx';
 import { catColorIndex, groupByFloor } from './roomgroups.ts';
-import { FloorPlanView, type PlanTile } from './FloorPlanView.tsx';
-import type { FloorPlanDto } from '../../../src/shared/floorplan.js';
 
 interface Pick { adults: string; children: string; price: string }
 
@@ -32,9 +30,6 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
   const [companyId, setCompanyId] = useState(preset.companyId ?? '');
   const [breakfast, setBreakfast] = useState(false);
   const [dropped, setDropped] = useState<string[]>([]);
-  // Zimmerwahl als Kacheln oder als Etagenplan (gemerkt je Gerät)
-  const [view, setView] = useState<'tiles' | 'plan'>(() => { try { return localStorage.getItem('pms.roompick') === 'plan' ? 'plan' : 'tiles'; } catch { return 'tiles'; } });
-  const switchView = (v: 'tiles' | 'plan') => { setView(v); try { localStorage.setItem('pms.roompick', v); } catch { /* ohne Speicher */ } };
 
   const valid = isIsoDate(from) && isIsoDate(to) && from < to;
   const nights = valid ? diffDays(from, to) : 0;
@@ -43,7 +38,6 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
     const [cats, services, rooms] = await Promise.all([api<CategoryDto[]>('GET', '/categories'), api<ServiceDto[]>('GET', '/services'), api<RoomDto[]>('GET', '/rooms')]);
     return { cats, breakfast: services.find((s) => s.isBreakfast && s.active) ?? null, rooms: rooms.filter((r) => r.active) };
   });
-  const fp = useLoad(async () => (view === 'plan' && isIsoDate(from) ? api<FloorPlanDto>('GET', `/floorplan?date=${from}`) : null), [view, from]);
   const std = (r: FreeRoomDto) => String(base.data?.cats.find((c) => c.id === r.categoryId)?.stdOccupancy ?? 2);
 
   // Auswahl an die freien Zimmer anpassen; Vorauswahl aus dem Belegungsplan übernehmen
@@ -117,21 +111,7 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
         {free.error && <p className="notice danger">{free.error}</p>}
         {dropped.length > 0 && <p className="notice warn">Im neuen Zeitraum belegt und deshalb abgewählt: Zimmer {dropped.join(', ')}.</p>}
         {valid && free.data?.length === 0 && <p className="notice warn">In diesem Zeitraum ist kein Zimmer frei.</p>}
-        <div className="segmented small fp-toggle" role="tablist" aria-label="Darstellung">
-          <button type="button" role="tab" aria-selected={view === 'tiles'} className={view === 'tiles' ? 'on' : ''} onClick={() => switchView('tiles')}>Kacheln</button>
-          <button type="button" role="tab" aria-selected={view === 'plan'} className={view === 'plan' ? 'on' : ''} onClick={() => switchView('plan')}>Etagenplan</button>
-        </div>
-        {view === 'plan' && fp.data && (
-          <FloorPlanView plan={fp.data.plan} selected={new Set(Object.keys(picks))}
-            tiles={fp.data.rooms.filter((r) => base.data?.rooms.some((x) => x.id === r.id)).map((r): PlanTile => {
-              const fr = free.data?.find((x) => x.id === r.id);
-              // frei im ganzen Zeitraum = wählbar; sonst der Status der ersten Nacht (belegt erst später = reserviert)
-              const status = fr ? 'free' : r.status === 'free' ? 'reserved' : r.status;
-              return { id: r.id, number: r.number, category: r.category, floor: r.floor, status, title: fr ? `${formatMoney(Math.round(fr.quoteCents / Math.max(1, nights)))}/Nacht` : 'im Zeitraum nicht frei', sub: fr ? `${formatMoney(Math.round(fr.quoteCents / Math.max(1, nights)))}` : r.category };
-            })}
-            onRoom={(t) => { const fr = free.data?.find((x) => x.id === t.id); if (fr) toggle(fr); else toast(`Zimmer ${t.number} ist im gewählten Zeitraum nicht frei`, 'error'); }} />
-        )}
-        {view === 'tiles' && groupByFloor(base.data?.rooms ?? []).map((g) => (
+        {groupByFloor(base.data?.rooms ?? []).map((g) => (
           <div key={g.floor} className="floorrow">
             <div className="floorlabel">{g.label}</div>
             <div className="roomtiles">

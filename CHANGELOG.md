@@ -3,16 +3,9 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
-## 1.68.1
+## 1.68.2
 
-- Etagenplan ruhiger gestaltet, passend zu den übrigen Seiten: weiße Zimmerkacheln mit dünnem Rahmen, Status nur als schmaler farbiger Streifen links (Legende mit kleinen Punkten), schlichter Gang ohne Muster, dezentes Treppen- und Fenstersymbol, keine bunten Flächen oder Schraffuren mehr.
-
-## 1.68.0
-
-- Neu: Etagenplan (Hotel → Heute → Etagenplan). Die Zimmer als schematischer Grundriss: je Flur oben die Straßenseite mit Fenstersymbol, in der Mitte der Gang, unten die Hofseite, dazu ein Treppenhaus. Farben: grün frei, rot belegt, gelb reserviert, grau gesperrt. Der Status kommt aus denselben Buchungen wie der Belegungsplan; die Seite aktualisiert sich alle 30 Sekunden. Klick auf ein belegtes/reserviertes Zimmer öffnet die Reservierung, auf ein freies eine neue Reservierung.
-- Ausgangsplan nur aus den bekannten Angaben: 111–118 auf einer Flurseite zur Straße; 124 gegenüber 228 (Hof); 224 Straßenseite und 120 Hofseite noch ohne Flur; Lage des Treppenhauses nur angenommen und im Plan so gekennzeichnet. Etagen sind leer.
-- „Plan bearbeiten“ (Administrator): Flure, Etage, Straßen- und Hofseite, Reihenfolge (gleicher Platz = gegenüber, „-“ = Lücke) und Treppenhaus einstellen. Gespeichert wird nur die Lage – Zimmer und Buchungen bleiben unverändert.
-- Neue Reservierung: Umschalter „Kacheln / Etagenplan“ für die Zimmerwahl (wird je Gerät gemerkt).
+- Etagenplan (aus 1.68.0/1.68.1) wieder entfernt: die Seite „Etagenplan“ und der Umschalter „Kacheln / Etagenplan“ bei „Neue Reservierung“ entfallen; die Zimmerwahl ist wie vorher (Kacheln nach Etage). Buchungen und Zimmer waren davon nie betroffen.
 
 ## 1.67.0
 

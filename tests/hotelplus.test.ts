@@ -795,37 +795,4 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect((await ok('GET', `/housekeeping?date=${day}`, user)).manual).toEqual([]);
     expect((await call('POST', '/housekeeping/manual', {}, { date: day, roomId: roomIds[0], kind: 'full' })).statusCode).toBe(401);
   });
-
-  it('zeigt den Etagenplan mit Status aus den bestehenden Buchungen und speichert nur die Lage', async () => {
-    const catId = (await ok('GET', '/categories', admin))[0].id as string;
-    await ok('POST', '/rooms/bulk', admin, { categoryId: catId, count: 4, firstNumber: 111, floor: '1' });
-    const all = await ok('GET', '/rooms', admin);
-    const id = (n: string) => all.find((r: { number: string }) => r.number === n).id as string;
-    const day = addDays(today, 50);
-    const mk = async (roomId: string) => (await ok('POST', '/bookings', user, { guest: { ...GUEST, lastName: `Plan${n++}` }, groupName: '', source: 'Telefon', paymentMethod: '', notes: '', breakfast: false,
-      rooms: [{ roomId, from: day, to: addDays(day, 2), adults: 1, children: 0, status: 'confirmed', pricePerNightCents: null }] })).id as string;
-    const reserved = await mk(id('111'));
-    const occupied = await mk(id('112'));
-    await db.execute(sql`update booking_rooms set status = 'checked_in' where booking_id = ${occupied}`);
-    await ok('POST', '/blocks', user, { roomId: id('113'), from: day, to: addDays(day, 1), reason: 'Wasserschaden' });
-    const before = await db.execute(sql`select count(*)::int as n from room_allocations`);
-    const fp = await ok('GET', `/floorplan?date=${day}`, user);
-    const st = (n: string) => fp.rooms.find((r: { number: string }) => r.number === n);
-    expect(st('111')).toMatchObject({ status: 'reserved', bookingId: reserved });
-    expect(st('112')).toMatchObject({ status: 'occupied', bookingId: occupied });
-    expect(st('113')).toMatchObject({ status: 'blocked', blockNote: 'Wasserschaden', bookingId: null });
-    expect(st('114')).toMatchObject({ status: 'free', bookingId: null });
-    // Ausgangsplan nur aus den bekannten Angaben
-    expect(fp.plan.corridors[0].street).toEqual(['111', '112', '113', '114', '115', '116', '117', '118']);
-    expect(fp.plan.corridors[1]).toMatchObject({ street: ['124'], court: ['228'] });
-    expect(fp.plan.sides).toEqual({ '224': 'street', '120': 'court' });
-    // Lage ändern: nur Administrator, verändert keine Belegung
-    const plan = { corridors: [{ id: 'x', name: 'Flur Ost', floor: '1', street: ['111', '-', '113'], court: ['112'], stairs: 'start' }], sides: {}, stairsAssumed: false };
-    expect((await call('PUT', '/settings/floor-plan', user, plan)).statusCode).toBe(403);
-    expect((await call('PUT', '/settings/floor-plan', admin, { ...plan, corridors: [{ ...plan.corridors[0], stairs: 'oben' }] })).statusCode).toBe(400);
-    await ok('PUT', '/settings/floor-plan', admin, plan);
-    expect((await ok('GET', `/floorplan?date=${day}`, user)).plan).toMatchObject(plan);
-    expect((await db.execute(sql`select count(*)::int as n from room_allocations`))[0]!.n).toBe(before[0]!.n);
-    expect((await call('GET', `/floorplan?date=${day}`, {})).statusCode).toBe(401);
-  });
 });

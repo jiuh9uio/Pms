@@ -9,8 +9,6 @@ import * as guestguide from './modules/guestguide.js';
 import * as checkinSheet from './modules/checkinsheet.js';
 import * as registrations from './modules/registrations.js';
 import * as cleanManual from './modules/cleanmanual.js';
-import * as floorplan from './modules/floorplan.js';
-import { floorPlanInput } from '../shared/floorplan.js';
 import { manualCleanInput } from '../shared/team.js';
 import * as lookup from './modules/lookup.js';
 import * as guestlink from './modules/guestlink.js';
@@ -165,10 +163,6 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   const dateOf = (v: unknown) => z.object({ date: z.string().refine(H.isIsoDate) }).parse(v).date;
   api.get('/breakfast', user, (req) => breakfast.breakfastList(db, dateOf(req.query)));
   api.get('/housekeeping', user, (req) => cleanList(db, dateOf(req.query)));
-  // Etagenplan: Status je Zimmer (nur lesend) und die Lage-Einstellungen (Administrator)
-  api.get('/floorplan', user, (req) => floorplan.floorPlanStatus(db, dateOf(req.query)));
-  api.get('/settings/floor-plan', admin, () => floorplan.getFloorPlan(db));
-  api.put('/settings/floor-plan', admin, (req) => floorplan.saveFloorPlan(db, actor(req), floorPlanInput.parse(req.body)));
   // von Hand eingetragene Reinigungen und Druck auf dem Bondrucker
   api.post('/housekeeping/manual', user, (req) => cleanManual.addManualClean(db, actor(req), manualCleanInput.parse(req.body)));
   api.post('/housekeeping/manual/:id/done', user, (req) => cleanManual.setManualDone(db, actor(req), z.uuid().parse((req.params as { id: string }).id), z.object({ done: z.boolean() }).parse(req.body).done));
