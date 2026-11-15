@@ -24,3 +24,26 @@ describe('Firmendaten aus dem Impressum', () => {
     expect(extractCompany('<h1>Impressum</h1><p>Gasthof Alpenblick e.U.</p><p>Dorfstraße 12</p><p>6020 Innsbruck</p><p>UID: ATU12345678</p>')).toMatchObject({ zip: '6020', city: 'Innsbruck', country: 'Österreich', vatId: 'ATU12345678', street: 'Dorfstraße 12' });
   });
 });
+
+import { addressFromText, isMapsLink, isShortMapsLink, parseMapsLink } from '../src/shared/mapslink.js';
+describe('Google-Maps-Links', () => {
+  it('liest Name und Anschrift aus einem Ortslink', () => {
+    const url = 'https://www.google.com/maps/place/Muster+Bau+GmbH,+Industriestra%C3%9Fe+5a,+54321+Beispielstadt/@50.1234,12.5678,17z/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d50.1236!4d12.5681';
+    expect(isMapsLink(url)).toBe(true);
+    const info = parseMapsLink(url)!;
+    expect(info).toEqual({ text: 'Muster Bau GmbH, Industriestraße 5a, 54321 Beispielstadt', lat: 50.1236, lng: 12.5681 });
+    expect(addressFromText(info.text)).toEqual({ name: 'Muster Bau GmbH', street: 'Industriestraße 5a', zip: '54321', city: 'Beispielstadt', country: 'Deutschland' });
+  });
+  it('versteht Suchlinks, Einwilligungsseite, Kurzlinks und reine Koordinaten', () => {
+    expect(parseMapsLink('https://maps.google.de/maps?q=Am+Markt+1,+01067+Dresden')?.text).toBe('Am Markt 1, 01067 Dresden');
+    expect(addressFromText('Am Markt 1, 01067 Dresden, Deutschland')).toMatchObject({ name: '', street: 'Am Markt 1', zip: '01067', city: 'Dresden' });
+    expect(addressFromText('Hauptplatz 3, 4020 Linz, Österreich')?.country).toBe('Österreich');
+    const consent = `https://consent.google.com/m?continue=${encodeURIComponent('https://www.google.com/maps/place/Hotel+Beispiel/@51.05,13.73,15z')}`;
+    expect(parseMapsLink(consent)).toEqual({ text: 'Hotel Beispiel', lat: 51.05, lng: 13.73 });
+    expect(addressFromText('Hotel Beispiel')).toBeNull();
+    expect(parseMapsLink('https://www.google.com/maps/search/51.0504,+13.7373')).toEqual({ text: '', lat: 51.0504, lng: 13.7373 });
+    expect(isShortMapsLink('https://maps.app.goo.gl/AbCdEf123')).toBe(true);
+    expect(isMapsLink('https://www.google.com/search?q=x')).toBe(false);
+    expect(isMapsLink('https://example.org/maps/place/x')).toBe(false);
+  });
+});

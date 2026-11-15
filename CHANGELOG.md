@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.56.0
+
+- Check-in und Gästeprofil: „Adresse nachschlagen“ direkt bei den Gastdaten – Google-Maps-Link einfügen, Impressum einer Website lesen oder über die Karte (OpenStreetMap) suchen. Übernommen werden Straße, PLZ, Ort und Land (bei leerem Feld auch die Firma).
+- Google-Maps-Links werden ausgelesen (auch bei Firmen): Name und Anschrift stehen meist im Link selbst. Bei Kurzlinks (maps.app.goo.gl) wird nur die Weiterleitung abgerufen; steht keine Anschrift im Link, wird über OpenStreetMap nach dem Namen bzw. den Koordinaten gesucht. Google selbst wird nicht nach Daten abgefragt.
+
 ## 1.55.2
 
 - Programm-Update: Lehnt die GitHub-Schnittstelle die Abfrage ab („Antwort 403 von api.github.com“ – Begrenzung auf 60 Abfragen je Stunde und Internetanschluss), sucht das Programm die neueste Version über die normale GitHub-Seite weiter. Die Prüfsumme wird wie bisher geprüft. Klappt auch das nicht, erscheint eine verständliche Meldung.

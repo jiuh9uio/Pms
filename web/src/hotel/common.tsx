@@ -1,5 +1,7 @@
 import { STATUS_LABEL, type GuestInput, type RoomStatus } from '../../../src/shared/hotel.js';
+import { useState } from 'react';
 import { Field } from '../ui.tsx';
+import { AddressLookup } from './AddressLookup.tsx';
 
 export const deDate = (s: string | null | undefined) => (s ? `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)}` : '–');
 export const deShort = (s: string) => `${s.slice(8, 10)}.${s.slice(5, 7)}.`;
@@ -25,6 +27,7 @@ export function GuestFields({ value, onChange, errors, prefix = '', compact }: {
       <input type={o.type ?? 'text'} value={value[k]} onChange={(e) => onChange({ ...value, [k]: e.target.value })} />
     </Field>
   );
+  const [lookup, setLookup] = useState(false);
   return (
     <div className="formgrid">
       <Field label="Anrede" error={errors[prefix + 'salutation']}>
@@ -35,6 +38,10 @@ export function GuestFields({ value, onChange, errors, prefix = '', compact }: {
       {f('firstName', 'Vorname')}{f('lastName', 'Nachname')}{f('company', 'Firma')}
       {f('email', 'E-Mail', { type: 'email' })}{f('phone', 'Telefon', { type: 'tel' })}
       {!compact && <>
+        {lookup
+          ? <AddressLookup forGuest onClose={() => setLookup(false)} onPick={(c) => onChange({ ...value, street: c.street || value.street, zip: c.zip || value.zip, city: c.city || value.city,
+              country: c.country || value.country, company: value.company || (c.source !== 'OpenStreetMap' && c.name ? c.name : '') })} />
+          : <div className="wide"><button type="button" className="linkbtn" onClick={() => setLookup(true)}>Adresse nachschlagen (Google-Maps-Link, Impressum oder Karte) …</button></div>}
         {f('street', 'Straße und Hausnummer', { wide: true })}{f('zip', 'PLZ')}{f('city', 'Ort')}{f('country', 'Land')}
         {f('birthdate', 'Geburtsdatum', { type: 'date' })}{f('nationality', 'Staatsangehörigkeit')}{f('idNumber', 'Ausweisnummer')}
         <Field label="Interne Bemerkungen" error={errors[prefix + 'notes']} wide>

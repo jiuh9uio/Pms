@@ -305,6 +305,8 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
       else if (req.url!.startsWith('/search')) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify([
         { name: 'Bäckerei Krume', display_name: 'Bäckerei Krume, Hauptstraße 2, Musterstadt', address: { road: 'Hauptstraße', house_number: '2', postcode: '12345', town: 'Musterstadt', country: 'Deutschland' }, extratags: { phone: '+49 30 55555' } },
         { name: 'Ohne Straße', display_name: 'x', address: { postcode: '12345', town: 'Musterstadt' }, extratags: null }])); }
+      else if (req.url!.startsWith('/reverse')) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(
+        { name: '', display_name: 'Lindenweg 7, Musterdorf', address: { road: 'Lindenweg', house_number: '7', postcode: '23456', village: 'Musterdorf', country: 'Deutschland' } })); }
       else { res.writeHead(404); res.end('nichts'); }
     });
     await new Promise<void>((r) => site.listen(0, '127.0.0.1', () => r()));
@@ -325,6 +327,18 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect(seen.at(-1)).toContain('SchuetzenhausPMS');
     expect(seen.at(-1)).toContain('q=B%C3%A4ckerei');
     expect((await call('GET', '/companies/lookup/search?q=ab', user)).statusCode).toBe(400);
+    // Google-Maps-Link: Anschrift direkt aus dem Link (ohne Abruf) …
+    const before = seen.length;
+    expect(await ok('POST', '/companies/lookup/maps', user, { url: 'https://www.google.de/maps/place/Muster+Bau+GmbH,+Industriestr.+5,+54321+Beispielstadt/@50.1,12.5,17z' }))
+      .toEqual([{ name: 'Muster Bau GmbH', street: 'Industriestr. 5', zip: '54321', city: 'Beispielstadt', country: 'Deutschland', phone: '', email: '', vatId: '', source: 'Google-Maps-Link', label: 'Muster Bau GmbH, Industriestr. 5, 54321 Beispielstadt' }]);
+    expect(seen.length).toBe(before);
+    // … nur Name im Link → Ortssuche; nur Koordinaten → Anschrift zu den Koordinaten
+    expect((await ok('POST', '/companies/lookup/maps', user, { url: 'https://www.google.com/maps/place/B%C3%A4ckerei+Krume/@50.1,12.5,17z' }))[0]).toMatchObject({ street: 'Hauptstraße 2', zip: '12345' });
+    expect(await ok('POST', '/companies/lookup/maps', user, { url: 'https://www.google.com/maps/search/50.1234,+12.5678' }))
+      .toEqual([expect.objectContaining({ street: 'Lindenweg 7', zip: '23456', city: 'Musterdorf', source: 'OpenStreetMap (Koordinaten aus dem Link)' })]);
+    expect(seen.at(-1)).toContain('/reverse?');
+    expect(seen.at(-1)).toContain('lat=50.1234');
+    expect((await call('POST', '/companies/lookup/maps', user, { url: 'https://example.org/irgendwas' })).statusCode).toBe(400);
     setLookupTest({ allowPrivate: false, searchBase: 'https://nominatim.openstreetmap.org/search' });
     site.close();
   });

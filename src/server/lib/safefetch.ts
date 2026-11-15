@@ -48,3 +48,20 @@ export async function fetchPublic(raw: string, o: { allowPrivate?: boolean; maxB
   }
   throw new FetchBlocked('Zu viele Weiterleitungen.');
 }
+
+/** Nur den Weiterleitungen eines Links folgen und die Zieladresse liefern – der Inhalt der Zielseite wird nicht gelesen. */
+export async function resolveRedirects(raw: string, o: { allowPrivate?: boolean; done?: (u: URL) => boolean; timeoutMs?: number } = {}): Promise<string> {
+  let url = new URL(raw);
+  const signal = AbortSignal.timeout(o.timeoutMs ?? 10_000);
+  for (let hop = 0; hop < 6; hop++) {
+    if (hop > 0 && o.done?.(url)) return url.toString();
+    await check(url, !!o.allowPrivate);
+    const res = await fetch(url, { method: 'GET', redirect: 'manual', signal, headers: { 'User-Agent': 'SchuetzenhausPMS (Adressabfrage)' } });
+    await res.body?.cancel().catch(() => {});
+    const loc = res.headers.get('location');
+    if (res.status >= 300 && res.status < 400 && loc) { url = new URL(loc, url); continue; }
+    if (!res.ok) throw new FetchBlocked(`Der Link antwortet mit Fehler ${res.status}.`);
+    return url.toString();
+  }
+  throw new FetchBlocked('Zu viele Weiterleitungen.');
+}

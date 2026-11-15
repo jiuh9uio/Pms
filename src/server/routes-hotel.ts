@@ -133,6 +133,7 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   api.get('/companies', user, (req) => companies.listCompanies(db, z.object({ q: z.string().max(100).default('') }).parse(req.query).q.trim()));
   // Adressdaten nachschlagen (auf Knopfdruck): Impressum der Website oder Ortssuche über OpenStreetMap
   api.post('/companies/lookup/imprint', user, (req) => lookup.fromImprint(z.object({ url: z.string().trim().min(4, 'Bitte die Adresse der Website eintragen').max(300) }).parse(req.body).url));
+  api.post('/companies/lookup/maps', user, (req) => lookup.fromMapsLink(z.object({ url: z.string().trim().min(10, 'Bitte den Google-Maps-Link einfügen').max(2000) }).parse(req.body).url));
   api.get('/companies/lookup/search', user, (req) => lookup.searchPlace(z.object({ q: z.string().trim().min(3, 'Bitte mindestens 3 Zeichen eingeben').max(120) }).parse(req.query).q));
   api.get('/companies/:id', user, (req) => companies.getCompany(db, idOf(req)));
   api.post('/companies', user, (req) => companies.saveCompany(db, actor(req), null, H.companyInput.parse(req.body)));

@@ -1,13 +1,15 @@
 import { extractCompany, findImprintLink, type CompanyFound } from '../../shared/imprint.js';
 import { AppError } from '../lib/errors.js';
-import { FetchBlocked, fetchPublic } from '../lib/safefetch.js';
+import { FetchBlocked, fetchPublic, resolveRedirects } from '../lib/safefetch.js';
+import { addressFromText, isMapsLink, isShortMapsLink, parseMapsLink } from '../../shared/mapslink.js';
 
 /**
  * Adressdaten einer Firma nachschlagen – nur auf ausdrücklichen Knopfdruck:
  *  - aus dem Impressum ihrer Website (die Seite wird abgerufen und ausgelesen),
  *  - über die Ortssuche von OpenStreetMap (Nominatim), frei nutzbar ohne Vertrag.
  * Dabei geht die eingegebene Adresse bzw. der Suchbegriff an die jeweilige Website bzw. an OpenStreetMap.
- * Google Maps wird nicht verwendet: Dessen Daten gibt es nur über eine kostenpflichtige Schnittstelle mit eigenem Zugang.
+ * Google Maps wird nicht abgefragt (dessen Daten gibt es nur über eine kostenpflichtige Schnittstelle). Ein eingefügter
+ * Google-Maps-Link wird aber ausgelesen: Name, Anschrift und Koordinaten stehen meist im Link selbst.
  */
 let allowPrivate = false;
 let searchBase = 'https://nominatim.openstreetmap.org/search';
@@ -56,4 +58,34 @@ export async function searchPlace(q: string): Promise<PlaceFound[]> {
       };
     }).filter((r) => r.zip && r.street);
   } catch (e) { return fail(e); }
+}
+
+/** Google-Maps-Link auswerten: Anschrift aus dem Link; fehlt sie, über OpenStreetMap nach dem Ortsnamen bzw. den Koordinaten suchen. */
+export async function fromMapsLink(input: string): Promise<PlaceFound[]> {
+  const raw = input.trim();
+  if (!isMapsLink(raw)) throw new AppError(400, 'validation', 'Das ist kein Google-Maps-Link. Bitte in Google Maps auf „Teilen“ → „Link kopieren“ tippen und hier einfügen.');
+  try {
+    // Kurzlink: nur der Weiterleitung folgen, bis die lange Maps-Adresse erreicht ist
+    const long = isShortMapsLink(raw) ? await resolveRedirects(raw, { allowPrivate, done: (u) => !!parseMapsLink(u.toString()) }) : raw;
+    const info = parseMapsLink(long);
+    if (!info) throw new AppError(404, 'lookup_empty', 'Im Link stehen weder Ort noch Koordinaten. Bitte den Ort in Google Maps öffnen und über „Teilen“ den Link kopieren.');
+    const a = info.text ? addressFromText(info.text) : null;
+    if (a) return [{ ...a, country: a.country || 'Deutschland', phone: '', email: '', vatId: '', source: 'Google-Maps-Link', label: info.text }];
+    let hits = info.text ? await searchPlace(info.text) : [];
+    if (!hits.length && info.lat !== null && info.lng !== null) hits = await reversePlace(info.lat, info.lng, info.text);
+    if (!hits.length) throw new AppError(404, 'lookup_empty', 'Zu diesem Link wurde keine vollständige Anschrift gefunden. Bitte die Daten von Hand eintragen.');
+    return hits;
+  } catch (e) { return fail(e); }
+}
+
+/** Anschrift zu Koordinaten (OpenStreetMap). */
+async function reversePlace(lat: number, lng: number, name: string): Promise<PlaceFound[]> {
+  const url = `${searchBase.replace(/\/search$/, '/reverse')}?format=jsonv2&addressdetails=1&accept-language=de&lat=${lat}&lon=${lng}`;
+  const page = await fetchPublic(url, { allowPrivate, maxBytes: 100_000, headers: { Accept: 'application/json' } });
+  const r = JSON.parse(page.text) as { name?: string; display_name?: string; address?: Record<string, string> };
+  const a = r.address ?? {};
+  const street = [a.road ?? a.pedestrian ?? a.square ?? '', a.house_number ?? ''].filter(Boolean).join(' ');
+  if (!street || !a.postcode) return [];
+  return [{ name: name || r.name || '', street, zip: a.postcode, city: a.city ?? a.town ?? a.village ?? a.municipality ?? '', country: a.country ?? 'Deutschland',
+    phone: '', email: '', vatId: '', source: 'OpenStreetMap (Koordinaten aus dem Link)', label: r.display_name ?? '' }];
 }
