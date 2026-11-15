@@ -549,6 +549,23 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     await ok('PUT', '/settings/site/image/hero', admin, { mime: 'image/png', dataBase64: png.toString('base64') });
     expect((await ok('GET', '/public/site', anon)).images.hero).not.toBe('');
     expect((await call('GET', '/public/site/image/hero', anon)).headers['content-type']).toBe('image/png');
+    // eigenes Logo der Webseite, getrennt vom Rechnungslogo
+    expect(await ok('GET', '/settings/site/logo', admin)).toEqual({ own: '', invoiceLogo: false });
+    expect((await ok('GET', '/public/site', anon)).logo).toBe('');
+    expect((await call('PUT', '/settings/site/logo', user, { mime: 'image/png', dataBase64: png.toString('base64') })).statusCode).toBe(403);
+    expect((await call('PUT', '/settings/site/logo', admin, { mime: 'image/png', dataBase64: Buffer.from('kein Bild').toString('base64') })).statusCode).toBe(400);
+    expect((await ok('PUT', '/settings/site/logo', admin, { mime: 'image/png', dataBase64: png.toString('base64') })).own).not.toBe('');
+    const withLogo = await ok('GET', '/public/site', anon);
+    expect(withLogo).toMatchObject({ hasLogo: true, logoSize: 'm', logoName: true });
+    expect(withLogo.logo).toMatch(/^s/);
+    expect((await call('GET', '/public/site/logo', anon)).headers['content-type']).toBe('image/png');
+    expect((await call('GET', '/settings/logo', admin)).statusCode).toBe(404); // Rechnungslogo bleibt leer
+    await ok('PUT', '/settings/site', admin, { ...full, enabled: true, logoSize: 'l', logoName: false });
+    expect(await ok('GET', '/public/site', anon)).toMatchObject({ logoSize: 'l', logoName: false });
+    await ok('PUT', '/settings/site', admin, { ...full, enabled: true, logoSize: 'none', logoName: false });
+    expect(await ok('GET', '/public/site', anon)).toMatchObject({ logo: '', hasLogo: false, logoName: true }); // kein Logo: Name bleibt sichtbar
+    await ok('DELETE', '/settings/site/logo', admin);
+    expect((await call('GET', '/public/site/logo', anon)).statusCode).toBe(404);
     await ok('PUT', '/settings/site', admin, { ...full, enabled: false });
     expect((await call('GET', '/public/site/image/hero', anon)).statusCode).toBe(404); // nicht freigeschaltet: kein Bild
     expect((await call('GET', '/public/site/image/hero', admin)).statusCode).toBe(200); // Vorschau

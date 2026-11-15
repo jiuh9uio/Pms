@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
 import { diffDays, todayBerlin } from '../../shared/hotel.js';
-import { FORM_DEFAULTS, IMAGE_KEYS, SECTION_KEYS, parseFaq, parseHours, siteFrom, type ImageKey, type SiteAvailability, type SitePublic, type SiteSettings } from '../../shared/site.js';
+import { FORM_DEFAULTS, IMAGE_KEYS, SECTION_KEYS, SITE_LOGO_KEY, parseFaq, parseHours, siteFrom, type ImageKey, type SiteAvailability, type SitePublic, type SiteSettings } from '../../shared/site.js';
 import type { Db, Exec } from '../db/client.js';
 import { categoryPhotos, roomCategories, rooms, settings, siteImages } from '../db/schema.js';
 import { AppError, notFound } from '../lib/errors.js';
@@ -37,7 +38,7 @@ export async function sitePublic(db: Exec, preview: boolean): Promise<SitePublic
   const blank = { show: false, kicker: '', title: '', titleEm: '', text: '', note: '' };
   const empty: SitePublic = {
     enabled: false, preview: false, hotel: { ...hotel, street: '', zip: '', city: '', phone: '', email: '', website: '' }, brandSubtitle: '', heroKicker: '', headline: '', headlineEm: '', heroText: '',
-    introKicker: '', introTitle: '', introTitleEm: '', intro: '', highlights: [], showPrices: false, showAvailability: false, imprintUrl: '', privacyUrl: '', hasLogo: false, requestEnabled: false, privacyText: '',
+    introKicker: '', introTitle: '', introTitleEm: '', intro: '', highlights: [], showPrices: false, showAvailability: false, imprintUrl: '', privacyUrl: '', hasLogo: false, logo: '', logoSize: 'm', logoName: true, requestEnabled: false, privacyText: '',
     sections: Object.fromEntries(SECTION_KEYS.map((k) => [k, blank])) as SitePublic['sections'], eventTypes: [], hours: [], hoursNote: '', faq: [], routeLink: false,
     images: Object.fromEntries(IMAGE_KEYS.map((k) => [k, ''])) as SitePublic['images'], video: '', form: FORM_DEFAULTS, categories: [],
   };
@@ -53,7 +54,7 @@ export async function sitePublic(db: Exec, preview: boolean): Promise<SitePublic
     highlights: s.highlights.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 12), showPrices: s.showPrices, showAvailability: s.showAvailability,
     sections: s.sections, eventTypes: s.eventTypes.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 8), hours: parseHours(s.hours), hoursNote: s.hoursNote, faq: parseFaq(s.faq), routeLink: s.routeLink,
     images: Object.fromEntries(IMAGE_KEYS.map((k) => [k, imgs.get(k) ?? ''])) as SitePublic['images'], video, form: s.form,
-    imprintUrl: s.imprintUrl, privacyUrl: s.privacyUrl, hasLogo: !!(await getLogo(db)), requestEnabled: req.enabled, privacyText: req.privacy,
+    imprintUrl: s.imprintUrl, privacyUrl: s.privacyUrl, ...(await logoInfo(db, s, imgs)), requestEnabled: req.enabled, privacyText: req.privacy,
     categories: cats.map((c) => ({
       id: c.id, name: c.name, text: s.categories[c.id]?.text || c.description, maxPersons: c.maxPersons, stdOccupancy: c.stdOccupancy,
       fromPriceCents: s.showPrices ? c.basePriceCents : null, hasPhoto: photos.has(c.id), photoVersion: photos.get(c.id) ?? '',
@@ -115,6 +116,36 @@ export async function saveCategoryPhoto(db: Db, actor: Actor, categoryId: string
 }
 
 // ---------- Bilder der Gästeseite ----------
+// ---------- Logo der Gästeseite ----------
+/** Welches Logo oben steht: das eigene der Gästeseite, sonst das Rechnungslogo, oder keins (Größe „kein Logo“). */
+async function logoInfo(db: Exec, s: SiteSettings, imgs: Map<string, string>) {
+  const own = imgs.get(SITE_LOGO_KEY);
+  const fallback = own ? null : await getLogo(db);
+  const v = s.logoSize === 'none' ? '' : own ? `s${own}` : fallback ? `r${createHash('sha1').update(fallback.data).digest('hex').slice(0, 10)}` : '';
+  return { hasLogo: !!v, logo: v, logoSize: s.logoSize === 'none' ? 'm' as const : s.logoSize, logoName: s.logoSize === 'none' || !v ? true : s.logoName };
+}
+/** Logo für die öffentliche Seite (eigenes, sonst Rechnungslogo) – nur bei freigeschalteter Seite, als Startseite oder in der Vorschau. */
+export async function publicSiteLogo(db: Exec, preview: boolean) {
+  const s = await getSite(db);
+  if (!(s.enabled || s.homepage || preview)) return null;
+  const [own] = await db.select().from(siteImages).where(eq(siteImages.key, SITE_LOGO_KEY));
+  return own ? { mime: own.mime, data: own.data } : getLogo(db);
+}
+/** Ob ein eigenes Logo hochgeladen ist (für die Einstellungen). */
+export async function siteLogoState(db: Exec) {
+  const [own] = await db.select({ at: siteImages.updatedAt }).from(siteImages).where(eq(siteImages.key, SITE_LOGO_KEY));
+  return { own: own ? own.at.getTime().toString(36) : '', invoiceLogo: !!(await getLogo(db)) };
+}
+export async function saveSiteLogo(db: Db, actor: Actor, v: { mime: 'image/png' | 'image/jpeg'; dataBase64: string } | null) {
+  if (!v) await db.delete(siteImages).where(eq(siteImages.key, SITE_LOGO_KEY));
+  else {
+    const data = checkImage(v);
+    await db.insert(siteImages).values({ key: SITE_LOGO_KEY, mime: v.mime, data }).onConflictDoUpdate({ target: siteImages.key, set: { mime: v.mime, data, updatedAt: new Date() } });
+  }
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: 'guest_site_logo', after: { logo: v ? 'hochgeladen' : 'entfernt' } });
+  return siteLogoState(db);
+}
+
 const checkImage = (v: { mime: 'image/png' | 'image/jpeg'; dataBase64: string }) => {
   const data = Buffer.from(v.dataBase64, 'base64');
   if (data.length > 1024 * 1024) throw new AppError(400, 'too_large', 'Das Bild ist zu groß (höchstens 1 MB)');

@@ -30,6 +30,8 @@ export const SECTION_DEFAULTS: Record<SectionKey, { kicker: string; title: strin
 
 export const IMAGE_KEYS = ['hero', 'restaurant', 'hotel', 'events'] as const;
 export type ImageKey = (typeof IMAGE_KEYS)[number];
+/** eigenes Logo der Gästeseite (getrennt vom Rechnungslogo) – liegt bei den Bildern der Seite */
+export const SITE_LOGO_KEY = 'logo';
 export const IMAGE_LABEL: Record<ImageKey, string> = { hero: 'Startbild (groß, oben)', restaurant: 'Restaurant', hotel: 'Hotel', events: 'Feiern & Tagen' };
 
 /** Anfrage von der Gästeseite – ein Formular für alles. Es wird nichts gebucht. */
@@ -67,6 +69,9 @@ export const siteSettingsInput = z.object({
   /** Besucher der Hauptadresse sehen die Gästeseite; Mitarbeiter melden sich über /anmelden an */
   homepage: z.boolean(),
   brandSubtitle: t(120, 'Hotel & Restaurant'),
+  /** Logo oben auf der Gästeseite: Größe (none = keins zeigen) und ob der Name des Hauses darunter steht */
+  logoSize: z.enum(['none', 's', 'm', 'l']).default('m'),
+  logoName: z.boolean().default(true),
   heroKicker: t(120, 'Traditionelle Gastlichkeit. Neu entdecken.'),
   headline: z.string().trim().max(120),
   headlineEm: t(120, 'Ein Ort für Sie.'),
@@ -103,6 +108,8 @@ export interface SitePublic {
   brandSubtitle: string; heroKicker: string; headline: string; headlineEm: string; heroText: string;
   introKicker: string; introTitle: string; introTitleEm: string; intro: string;
   highlights: string[]; showPrices: boolean; showAvailability: boolean; imprintUrl: string; privacyUrl: string; hasLogo: boolean;
+  /** Logo: Versionsstempel für den Abruf (leer = keins), Größe und ob der Name daneben steht */
+  logo: string; logoSize: 's' | 'm' | 'l'; logoName: boolean;
   requestEnabled: boolean; privacyText: string;
   sections: Record<SectionKey, SiteSection>;
   eventTypes: string[]; hours: { label: string; value: string }[]; hoursNote: string; faq: { q: string; a: string }[]; routeLink: boolean;

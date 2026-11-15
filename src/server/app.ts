@@ -186,9 +186,8 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
       if (start > end || start >= size) return reply.status(416).header('Content-Range', `bytes */${size}`).send();
       return reply.status(206).header('Content-Range', `bytes ${start}-${end}/${size}`).header('Content-Length', end - start + 1).send(v.data.subarray(start, end + 1));
     });
-    api.get('/public/site/logo', async (_req, reply) => {
-      const s = await site.getSite(db);
-      const logo = s.enabled || s.homepage ? await getLogo(db) : null;
+    api.get('/public/site/logo', async (req, reply) => {
+      const logo = await site.publicSiteLogo(db, await isAdminPreview(req));
       if (!logo) return reply.status(404).send({ error: { code: 'not_found', message: 'Kein Logo' } });
       return reply.header('Content-Type', logo.mime).header('Cache-Control', 'public, max-age=3600').send(logo.data);
     });
@@ -254,6 +253,9 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
       return site.saveSiteVideo(db, actor(req), req.body);
     });
     api.delete('/settings/site/video', { preHandler: requireAdmin }, (req) => site.saveSiteVideo(db, actor(req), null));
+    api.get('/settings/site/logo', { preHandler: requireAdmin }, () => site.siteLogoState(db));
+    api.put('/settings/site/logo', { preHandler: requireAdmin, bodyLimit: 1_500_000 }, (req) => site.saveSiteLogo(db, actor(req), SI.categoryPhotoInput.parse(req.body)));
+    api.delete('/settings/site/logo', { preHandler: requireAdmin }, (req) => site.saveSiteLogo(db, actor(req), null));
     api.put('/settings/site/image/:key', { preHandler: requireAdmin, bodyLimit: 1_500_000 }, (req) => site.saveSiteImage(db, actor(req), imageKey(req), SI.categoryPhotoInput.parse(req.body)));
     api.delete('/settings/site/image/:key', { preHandler: requireAdmin }, (req) => site.saveSiteImage(db, actor(req), imageKey(req), null));
     api.get('/categories/:id/photo', { preHandler: requireAdmin }, async (req, reply) => {

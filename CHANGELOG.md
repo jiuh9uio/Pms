@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.58.0
+
+- Gästeseite: eigenes Logo für die Webseite (Einstellungen → Online → Gästeseite → Kopf und Startbild), getrennt vom Logo auf den Rechnungen. PNG mit durchsichtigem Hintergrund bleibt durchsichtig. Größe wählbar (klein, mittel, groß, kein Logo); der Name des Hauses unter dem Logo lässt sich ausblenden, wenn er schon im Logo steht.
+- Ohne eigenes Logo wird wie bisher das Rechnungslogo gezeigt.
+
 ## 1.57.0
 
 - E-Mail-Posteingang: Nachrichten werden jetzt in sieben Arten eingeordnet – Zimmer, Tisch, Feier / Veranstaltung, Tagung / Versammlung, Gutschein, allgemeine Frage und Sonstiges (Werbung, Rechnungen, Newsletter, automatische Nachrichten). Oben im Posteingang gibt es eine Filterleiste mit der Anzahl je Art.

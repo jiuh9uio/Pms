@@ -61,6 +61,48 @@ function VideoField() {
   );
 }
 
+/** Logo verkleinern, ohne die Transparenz zu verlieren: PNG bleibt PNG (höchstens 1200 × 600 Pixel). */
+async function shrinkLogo(file: File): Promise<{ mime: 'image/png' | 'image/jpeg'; dataBase64: string }> {
+  const img = await createImageBitmap(file);
+  const png = file.type === 'image/png';
+  const scale = Math.min(1, 1200 / img.width, 600 / img.height);
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+  c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
+  return png ? { mime: 'image/png', dataBase64: c.toDataURL('image/png').split(',')[1]! } : { mime: 'image/jpeg', dataBase64: c.toDataURL('image/jpeg', 0.9).split(',')[1]! };
+}
+
+/** Eigenes Logo der Gästeseite – getrennt vom Logo auf den Rechnungen. */
+function LogoField({ v, setV }: { v: SiteSettings; setV: (x: SiteSettings) => void }) {
+  const toast = useToast();
+  const [st, setSt] = useState<{ own: string; invoiceLogo: boolean } | null>(null);
+  useEffect(() => { void api<{ own: string; invoiceLogo: boolean }>('GET', '/settings/site/logo').then(setSt).catch(() => setSt({ own: '', invoiceLogo: false })); }, []);
+  const upload = async (file: File) => {
+    try { setSt(await api('PUT', '/settings/site/logo', await shrinkLogo(file))); toast('Logo gespeichert'); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Logo konnte nicht gespeichert werden', 'error'); }
+  };
+  const remove = async () => { setSt(await api('DELETE', '/settings/site/logo')); toast('Eigenes Logo entfernt'); };
+  const shown = st && (st.own || st.invoiceLogo);
+  return (
+    <div className="site-admin-cat">
+      <div className="site-admin-photo logo-photo">{shown ? <img src={`/api/v1/public/site/logo?t=${st.own || 'r'}`} alt="" /> : <span>kein Logo</span>}</div>
+      <div><b>Logo oben auf der Seite</b>
+        <p className="muted small">{!st ? '…' : st.own ? 'Eigenes Logo für die Webseite.' : st.invoiceLogo ? 'Noch kein eigenes Logo – es wird das Logo von den Rechnungen gezeigt.' : 'Noch kein Logo hochgeladen – oben steht nur der Name.'}
+          {' '}Am besten ein PNG mit durchsichtigem Hintergrund, breiter als hoch. Das Rechnungslogo bleibt davon unberührt.</p>
+        <div className="btnrow" style={{ marginTop: 8 }}>
+          <label className="btn">Logo wählen<input type="file" accept="image/png,image/jpeg" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ''; }} /></label>
+          {st?.own && <Button onClick={() => void remove()}>Eigenes Logo entfernen</Button>}
+        </div>
+        <div className="formgrid" style={{ marginTop: 10 }}>
+          <Field label="Größe"><select value={v.logoSize} onChange={(e) => setV({ ...v, logoSize: e.target.value as SiteSettings['logoSize'] })}>
+            <option value="s">klein</option><option value="m">mittel</option><option value="l">groß</option><option value="none">kein Logo zeigen</option></select></Field>
+          <label className="check"><input type="checkbox" checked={v.logoName} disabled={v.logoSize === 'none'} onChange={(e) => setV({ ...v, logoName: e.target.checked })} /><span>Namen des Hauses unter dem Logo zeigen<small>Ausschalten, wenn der Name schon im Logo steht.</small></span></label>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const Group = ({ title, children, open = false }: { title: string; children: ReactNode; open?: boolean }) => (
   <details className="site-group" open={open}><summary>{title}</summary><div className="site-group-body">{children}</div></details>
 );
@@ -102,6 +144,7 @@ export function GuestSiteCard() {
       </div>
 
       <Group title="Kopf und Startbild" open>
+        <LogoField v={v} setV={setV} />
         <div className="formgrid">
           {txt('brandSubtitle', 'Zeile unter dem Namen', 'z. B. HOTEL & RESTAURANT · WILKAU-HASSLAU')}{txt('heroKicker', 'Kleine Zeile über der Überschrift')}
           {txt('headline', 'Überschrift, erste Zeile')}{txt('headlineEm', 'Überschrift, zweite Zeile (kursiv)')}

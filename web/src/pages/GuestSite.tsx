@@ -70,9 +70,9 @@ export function GuestSite({ staffLink = false }: { staffLink?: boolean }) {
       {data.preview && <div className="gs-preview">Vorschau – die Seite ist noch nicht freigeschaltet. Nur Sie als Administrator sehen sie.</div>}
       <header className="gs-header">
         <div className="gs-wrap">
-          <a className="gs-brand" href="#gs-start" onClick={(e) => { e.preventDefault(); go('gs-start'); }}>
-            {data.hasLogo && <img src="/api/v1/public/site/logo" alt="" />}
-            <span className="gs-brand-name">{brand}</span>{data.brandSubtitle && <span className="gs-brand-sub">{data.brandSubtitle}</span>}
+          <a className={`gs-brand logo-${data.logoSize}`} href="#gs-start" onClick={(e) => { e.preventDefault(); go('gs-start'); }} aria-label={data.logo && !data.logoName ? h.name : undefined}>
+            {data.logo && <img src={`/api/v1/public/site/logo?v=${data.logo}`} alt={data.logoName ? '' : h.name} />}
+            {(data.logoName || !data.logo) && <span className="gs-brand-name">{brand}</span>}{data.brandSubtitle && <span className="gs-brand-sub">{data.brandSubtitle}</span>}
           </a>
           <button type="button" className="gs-menu" aria-expanded={menuOpen} aria-controls="gs-nav" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? 'Menü schließen' : 'Menü öffnen'}</button>
           <nav id="gs-nav" className={`gs-nav ${menuOpen ? 'open' : ''}`} aria-label="Hauptnavigation">
