@@ -19,8 +19,10 @@ export const toDraft = (g: Partial<Record<keyof GuestInput, string | null>>): Gu
 });
 
 /** Eingabefelder eines Gastes. compact = nur das Nötigste für eine schnelle Buchung. */
-export function GuestFields({ value, onChange, errors, prefix = '', compact }: {
+export function GuestFields({ value, onChange, errors, prefix = '', compact, grouped }: {
   value: GuestDraft; onChange: (v: GuestDraft) => void; errors: Record<string, string>; prefix?: string; compact?: boolean;
+  /** übersichtliche Abschnitte (Name & Kontakt, Anschrift, Meldedaten) – z. B. beim Check-in */
+  grouped?: boolean;
 }) {
   const f = (k: keyof GuestDraft, label: string, o: { type?: string; wide?: boolean } = {}) => (
     <Field label={label} error={errors[prefix + k]} wide={o.wide}>
@@ -28,20 +30,40 @@ export function GuestFields({ value, onChange, errors, prefix = '', compact }: {
     </Field>
   );
   const [lookup, setLookup] = useState(false);
+  const salutation = (
+    <Field label="Anrede" error={errors[prefix + 'salutation']}>
+      <select value={value.salutation} onChange={(e) => onChange({ ...value, salutation: e.target.value })}>
+        <option value="">–</option><option>Herr</option><option>Frau</option>
+      </select>
+    </Field>
+  );
+  const lookupBox = lookup
+    ? <AddressLookup forGuest onClose={() => setLookup(false)} onPick={(c) => onChange({ ...value, street: c.street || value.street, zip: c.zip || value.zip, city: c.city || value.city,
+        country: c.country || value.country, company: value.company || (c.source !== 'OpenStreetMap' && c.name ? c.name : '') })} />
+    : <div className="wide"><button type="button" className="linkbtn" onClick={() => setLookup(true)}>Adresse nachschlagen (Google-Maps-Link, Impressum oder Karte) …</button></div>;
+  if (grouped) return (
+    <div className="guestgroups">
+      <fieldset className="gsec"><legend>Name &amp; Kontakt</legend>
+        <div className="formgrid cols3">{salutation}{f('firstName', 'Vorname')}{f('lastName', 'Nachname')}{f('company', 'Firma')}{f('email', 'E-Mail', { type: 'email' })}{f('phone', 'Telefon', { type: 'tel' })}</div>
+      </fieldset>
+      <fieldset className="gsec"><legend>Anschrift</legend>
+        <div className="formgrid cols3">{lookupBox}{f('street', 'Straße und Hausnummer', { wide: true })}{f('zip', 'PLZ')}{f('city', 'Ort')}{f('country', 'Land')}</div>
+      </fieldset>
+      <fieldset className="gsec"><legend>Meldedaten</legend>
+        <div className="formgrid cols3">{f('birthdate', 'Geburtsdatum', { type: 'date' })}{f('nationality', 'Staatsangehörigkeit')}{f('idNumber', 'Ausweisnummer')}</div>
+      </fieldset>
+      <Field label="Interne Bemerkungen" error={errors[prefix + 'notes']} wide>
+        <textarea rows={2} value={value.notes} onChange={(e) => onChange({ ...value, notes: e.target.value })} />
+      </Field>
+    </div>
+  );
   return (
     <div className="formgrid">
-      <Field label="Anrede" error={errors[prefix + 'salutation']}>
-        <select value={value.salutation} onChange={(e) => onChange({ ...value, salutation: e.target.value })}>
-          <option value="">–</option><option>Herr</option><option>Frau</option>
-        </select>
-      </Field>
+      {salutation}
       {f('firstName', 'Vorname')}{f('lastName', 'Nachname')}{f('company', 'Firma')}
       {f('email', 'E-Mail', { type: 'email' })}{f('phone', 'Telefon', { type: 'tel' })}
       {!compact && <>
-        {lookup
-          ? <AddressLookup forGuest onClose={() => setLookup(false)} onPick={(c) => onChange({ ...value, street: c.street || value.street, zip: c.zip || value.zip, city: c.city || value.city,
-              country: c.country || value.country, company: value.company || (c.source !== 'OpenStreetMap' && c.name ? c.name : '') })} />
-          : <div className="wide"><button type="button" className="linkbtn" onClick={() => setLookup(true)}>Adresse nachschlagen (Google-Maps-Link, Impressum oder Karte) …</button></div>}
+        {lookupBox}
         {f('street', 'Straße und Hausnummer', { wide: true })}{f('zip', 'PLZ')}{f('city', 'Ort')}{f('country', 'Land')}
         {f('birthdate', 'Geburtsdatum', { type: 'date' })}{f('nationality', 'Staatsangehörigkeit')}{f('idNumber', 'Ausweisnummer')}
         <Field label="Interne Bemerkungen" error={errors[prefix + 'notes']} wide>

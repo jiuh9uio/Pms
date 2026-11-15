@@ -202,6 +202,45 @@ textarea { width: 100%; height: auto; min-height: 38px; padding: 8px 11px; borde
 .hits { display: grid; border: 1px solid var(--line); border-radius: 8px; margin-top: 6px; overflow: hidden; background: var(--surface); }
 .hits button { text-align: left; border: 0; border-bottom: 1px solid var(--line); background: none; padding: 9px 11px; cursor: pointer; } .hits button:last-child { border-bottom: 0; } .hits button:hover { background: var(--accent-soft); }
 .roompick { display: grid; gap: 6px; }
+/* Check-in */
+.ci-summary { display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: center; padding: 14px 16px; border-radius: 12px; background: linear-gradient(135deg, var(--accent-soft), var(--surface-2)); margin-bottom: 12px; }
+.ci-room { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 96px; padding: 10px 14px; border-radius: 10px; background: var(--surface); box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.ci-room small { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; } .ci-room b { font-size: 30px; line-height: 1.1; } .ci-room span { font-size: 12px; color: var(--muted); }
+.ci-guest { font-size: 18px; font-weight: 600; margin-bottom: 6px; } .ci-guest small { font-weight: 400; color: var(--muted); }
+.ci-line { display: flex; flex-wrap: wrap; gap: 6px 20px; } .ci-line span { display: flex; flex-direction: column; font-size: 14px; } .ci-line small { font-size: 11px; color: var(--muted); }
+.ci-note { margin: 8px 0 0; font-size: 13px; }
+.ci-change { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); } .ci-change select { min-width: 200px; }
+.ci-checks { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.ci-chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); }
+.ci-chip.ok { color: var(--ok-text, #1f7a4d); background: color-mix(in srgb, #1f9d6b 10%, var(--surface)); border-color: color-mix(in srgb, #1f9d6b 35%, transparent); }
+.ci-chip.miss { color: var(--warn-text, #8a5a00); background: color-mix(in srgb, #c97a10 12%, var(--surface)); border-color: color-mix(in srgb, #c97a10 40%, transparent); }
+.guestgroups { display: grid; gap: 12px; }
+.gsec { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px 4px; margin: 0; min-width: 0; }
+.gsec legend { padding: 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+@media (max-width: 760px) { .ci-summary { grid-template-columns: 1fr; } .ci-room { flex-direction: row; gap: 10px; justify-content: flex-start; } }
+/* Zimmerwahl als Kacheln: nach Etage, Farbe je Kategorie */
+.cat-0 { --cat: #2f6fde; } .cat-1 { --cat: #1f9d6b; } .cat-2 { --cat: #c97a10; } .cat-3 { --cat: #8a4fd6; } .cat-4 { --cat: #0f8fa3; } .cat-5 { --cat: #d0476a; }
+.catdot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--cat); margin-right: 6px; vertical-align: 0; }
+.roomboard { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 6px; margin-bottom: 18px; background: var(--surface); }
+.roomboard-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.catlegend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+.floorrow { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: start; padding: 8px 0; border-top: 1px solid var(--line); }
+.floorrow:first-of-type { border-top: 0; }
+.floorlabel { font-size: 12px; font-weight: 600; color: var(--muted); padding-top: 14px; text-transform: uppercase; letter-spacing: .04em; }
+.roomtiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; }
+.roomtile { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 10px 8px 13px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface);
+  cursor: pointer; text-align: left; color: var(--text); overflow: hidden; transition: transform .12s, box-shadow .15s, background .15s, border-color .15s; }
+.roomtile::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--cat); }
+.roomtile b { font-size: 17px; line-height: 1.2; } .roomtile small { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.roomtile .rt-price { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.roomtile:hover:not(:disabled) { border-color: var(--cat); box-shadow: 0 2px 10px color-mix(in srgb, var(--cat) 25%, transparent); transform: translateY(-1px); }
+.roomtile.on { background: color-mix(in srgb, var(--cat) 14%, var(--surface)); border-color: var(--cat); box-shadow: 0 0 0 1px var(--cat) inset; }
+.roomtile.on small, .roomtile.on .rt-price { color: var(--text); }
+.roomtile .rt-check { position: absolute; top: 6px; right: 8px; width: 20px; height: 20px; border-radius: 50%; background: var(--cat); color: #fff; font-style: normal; font-size: 12px; display: grid; place-items: center; }
+.roomtile.taken { cursor: not-allowed; opacity: .45; background: repeating-linear-gradient(135deg, var(--surface-2) 0 6px, var(--surface) 6px 12px); }
+.roomtile.taken::before { opacity: .5; }
+.pickrow .pickname { flex: 1; min-width: 160px; } .pickrow.on[class*='cat-'] { border-color: var(--cat); background: color-mix(in srgb, var(--cat) 8%, var(--surface)); }
+@media (max-width: 640px) { .floorrow { grid-template-columns: 1fr; gap: 4px; } .floorlabel { padding-top: 0; } .roomtiles { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); } }
 .pickrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; flex-wrap: wrap; }
 .pickrow.on { border-color: var(--accent); background: var(--accent-soft); } .pickrow .check { flex: 1; min-width: 160px; align-items: center; } .pickrow .check input { margin: 0; }
 .pickedit { display: flex; gap: 8px; } .pickedit label { display: flex; flex-direction: column; font-size: 11px; } .pickedit input { width: 76px; height: 32px; padding: 0 8px; } .pickedit label:last-child input { width: 96px; }

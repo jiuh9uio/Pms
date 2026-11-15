@@ -206,20 +206,39 @@ function Checkin({ booking, room, onClose }: { booking: BookingDto; room: Bookin
     onClose();
   });
   const future = room.from > todayBerlin();
+  const target = free.data?.find((r) => r.id === roomId);
+  const name = [v.salutation, v.firstName, v.lastName].filter(Boolean).join(' ') || 'Gast';
+  const checks: [string, boolean][] = [
+    ['Name', !!v.lastName.trim()], ['Anschrift', !!(v.street.trim() && v.zip.trim() && v.city.trim())], ['Geburtsdatum', !!v.birthdate],
+    ['Staatsangehörigkeit', !!v.nationality.trim()], ['Kontakt', !!(v.email.trim() || v.phone.trim())],
+  ];
   return (
-    <Dialog title={`Check-in · Zimmer ${room.roomNumber}`} onClose={onClose} size="lg"
-      footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={f.busy} disabled={future} onClick={() => void f.submit(v)}>Anreise bestätigen</Button></>}>
+    <Dialog title="Check-in" onClose={onClose} size="xl"
+      footer={<><span className="left muted small">{checks.every(([, ok]) => ok) ? 'Alle Angaben vorhanden.' : `Noch offen: ${checks.filter(([, ok]) => !ok).map(([l]) => l).join(', ')} – einchecken geht trotzdem.`}</span>
+        <Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={f.busy} disabled={future} onClick={() => void f.submit(v)}>Anreise bestätigen</Button></>}>
       {future && <p className="notice warn">Die Anreise ist erst am {deDate(room.from)}. Bei früherer Anreise bitte zuerst über „Ändern“ das Anreisedatum anpassen.</p>}
-      <form onSubmit={(e) => void f.submit(v, e)} noValidate>
-        <div className="formgrid">
-          <Field label="Zimmer" wide hint={`${deDate(room.from)} – ${deDate(room.to)} · ${persons(room.adults, room.children)}`}>
-            <select value={roomId} onChange={(e) => setRoomId(e.target.value)}>
-              {(free.data ?? [{ id: room.roomId, number: room.roomNumber, categoryName: room.categoryName }]).map((r) => <option key={r.id} value={r.id}>{r.number} – {r.categoryName}</option>)}
+      <form onSubmit={(e) => void f.submit(v, e)} noValidate className="checkin">
+        <div className="ci-summary">
+          <div className="ci-room"><small>Zimmer</small><b>{target?.number ?? room.roomNumber}</b><span>{target?.categoryName ?? room.categoryName}</span></div>
+          <div className="ci-facts">
+            <div className="ci-guest">{name}{booking.companyName && <small> · {booking.companyName}</small>}</div>
+            <div className="ci-line">
+              <span><small>Anreise</small>{deDate(room.from)}</span><span><small>Abreise</small>{deDate(room.to)}</span>
+              <span><small>Nächte</small>{room.nights}</span><span><small>Personen</small>{persons(room.adults, room.children)}</span>
+              <span><small>Reservierung</small>{booking.number}</span>
+            </div>
+            {(booking.arrivalTime || booking.guestMessage) && <p className="ci-note">{booking.arrivalTime && <>Ankunft laut Gast: <b>{booking.arrivalTime}</b>. </>}{booking.guestMessage && <>Nachricht: „{booking.guestMessage}“</>}</p>}
+          </div>
+          <label className="ci-change"><small>Anderes Zimmer zuweisen</small>
+            <select value={roomId} onChange={(e) => setRoomId(e.target.value)} aria-label="Zimmer">
+              {(free.data ?? [{ id: room.roomId, number: room.roomNumber, categoryName: room.categoryName }]).map((r) => <option key={r.id} value={r.id}>{r.number} – {r.categoryName}{r.id === room.roomId ? ' (reserviert)' : ''}</option>)}
             </select>
-          </Field>
+          </label>
         </div>
-        <h3>Gastdaten prüfen</h3>
-        <GuestFields value={v} onChange={setV} errors={f.errors} />
+        <div className="ci-checks" aria-label="Vollständigkeit der Gastdaten">
+          {checks.map(([label, ok]) => <span key={label} className={`ci-chip ${ok ? 'ok' : 'miss'}`}>{ok ? '✓' : '!'} {label}</span>)}
+        </div>
+        <GuestFields value={v} onChange={setV} errors={f.errors} grouped />
         <p className="muted small">Ob und welche Meldedaten zu erfassen sind (z. B. bei ausländischen Gästen), richtet sich nach dem Melderecht – bitte Staatsangehörigkeit und Ausweisnummer nur erfassen, soweit erforderlich.</p>
         <button type="submit" hidden />
       </form>

@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.59.0
+
+- Neue Reservierung: Die Zimmer stehen jetzt oben als Kacheln zum Antippen, nach Etage geordnet (1. Etage, 2. Etage …) und farblich nach Kategorie (z. B. Einzelzimmer blau, Doppelzimmer grün) mit Legende. Belegte Zimmer sind ausgegraut. Darunter Zeitraum, Status und die gewählten Zimmer mit Personen und Preis; rechts wie bisher Gast und Angaben. Wird ein gewähltes Zimmer durch einen geänderten Zeitraum belegt, weist ein Hinweis darauf hin.
+- Etage: aus dem Feld „Etage“ des Zimmers; ist es leer, gilt bei dreistelligen Nummern die erste Ziffer (101 → 1. Etage).
+- Check-in übersichtlicher: oben eine Zusammenfassung (Zimmer groß, Gast, Anreise, Abreise, Nächte, Personen, Reservierungsnummer, Ankunftszeit und Nachricht des Gastes), daneben „Anderes Zimmer zuweisen“. Darunter ein Überblick, welche Angaben noch fehlen, und die Gastdaten in Abschnitten: Name & Kontakt, Anschrift (mit Adresssuche), Meldedaten.
+
 ## 1.58.0
 
 - Gästeseite: eigenes Logo für die Webseite (Einstellungen → Online → Gästeseite → Kopf und Startbild), getrennt vom Logo auf den Rechnungen. PNG mit durchsichtigem Hintergrund bleibt durchsichtig. Größe wählbar (klein, mittel, groß, kein Logo); der Name des Hauses unter dem Logo lässt sich ausblenden, wenn er schon im Logo steht.

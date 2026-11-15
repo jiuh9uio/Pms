@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   PAYMENT_METHODS, SOURCES, addDays, bookingCreateInput, diffDays, formatMoney, isIsoDate, parseMoney, personAdjust, todayBerlin,
-  type CategoryDto, type FreeRoomDto, type GuestDto, type ServiceDto,
+  type CategoryDto, type FreeRoomDto, type GuestDto, type RoomDto, type ServiceDto,
 } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
 import { useData, type NewPreset } from '../data.tsx';
 import { Button, Dialog, Field, useLoad, useSubmit, useToast } from '../ui.tsx';
-import { GuestFields, toDraft, type GuestDraft } from './common.tsx';
+import { GuestFields, deDate, toDraft, type GuestDraft } from './common.tsx';
 import { CompanySelect } from './CompanySelect.tsx';
+import { catColorIndex, groupByFloor } from './roomgroups.ts';
 
 interface Pick { adults: string; children: string; price: string }
 
-/** Neue Reservierung: Zeitraum → freie Zimmer anhaken → Gast wählen oder eintragen → anlegen. */
+/** Neue Reservierung: Zimmer oben antippen (nach Etage, Farbe je Kategorie) → Zeitraum → Gast wählen oder eintragen → anlegen. */
 export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: () => void }) {
   const { bump } = useData();
   const toast = useToast();
@@ -28,13 +29,14 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
   const [meta, setMeta] = useState({ source: preset.source ?? (preset.companyId ? 'Firma' : 'Telefon'), paymentMethod: preset.companyId ? 'Rechnung an Firma' : '', groupName: '', notes: preset.notes ?? '' });
   const [companyId, setCompanyId] = useState(preset.companyId ?? '');
   const [breakfast, setBreakfast] = useState(false);
+  const [dropped, setDropped] = useState<string[]>([]);
 
   const valid = isIsoDate(from) && isIsoDate(to) && from < to;
   const nights = valid ? diffDays(from, to) : 0;
   const free = useLoad(async () => (valid ? api<FreeRoomDto[]>('GET', `/availability?from=${from}&to=${to}${companyId ? `&companyId=${companyId}` : ''}`) : []), [from, to, companyId]);
   const base = useLoad(async () => {
-    const [cats, services] = await Promise.all([api<CategoryDto[]>('GET', '/categories'), api<ServiceDto[]>('GET', '/services')]);
-    return { cats, breakfast: services.find((s) => s.isBreakfast && s.active) ?? null };
+    const [cats, services, rooms] = await Promise.all([api<CategoryDto[]>('GET', '/categories'), api<ServiceDto[]>('GET', '/services'), api<RoomDto[]>('GET', '/rooms')]);
+    return { cats, breakfast: services.find((s) => s.isBreakfast && s.active) ?? null, rooms: rooms.filter((r) => r.active) };
   });
   const std = (r: FreeRoomDto) => String(base.data?.cats.find((c) => c.id === r.categoryId)?.stdOccupancy ?? 2);
 
@@ -44,6 +46,8 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
     setPicks((cur) => {
       const next: Record<string, Pick> = {};
       for (const r of free.data!) if (cur[r.id]) next[r.id] = cur[r.id]!;
+      const lost = Object.keys(cur).filter((id) => !next[id]);
+      setDropped(lost.map((id) => base.data?.rooms.find((x) => x.id === id)?.number ?? '').filter(Boolean));
       if (preset.roomId && !Object.keys(cur).length) {
         const r = free.data!.find((x) => x.id === preset.roomId);
         if (r) next[r.id] = { adults: std(r), children: '0', price: '' };
@@ -86,22 +90,54 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
     }),
   }, e);
   const otherErrors = Object.entries(f.errors).filter(([k]) => !k.startsWith('guest.')).map(([, m]) => m);
-  const toggle = (r: FreeRoomDto) => setPicks((cur) => {
+  const toggle = (r: FreeRoomDto) => { setDropped([]); setPicks((cur) => {
     const next = { ...cur };
     if (next[r.id]) delete next[r.id]; else next[r.id] = { adults: std(r), children: '0', price: '' };
     return next;
-  });
+  }); };
   const setPick = (id: string, patch: Partial<Pick>) => setPicks((cur) => ({ ...cur, [id]: { ...cur[id]!, ...patch } }));
 
   return (
     <Dialog title="Neue Reservierung" onClose={onClose} size="xl"
       footer={<><span className="left total">{selected.length > 0 && <>{selected.length} Zimmer · {nights} {nights === 1 ? 'Nacht' : 'Nächte'} · <b>{formatMoney(total)}</b> Logis</>}</span>
         <Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={f.busy} onClick={() => submit()}>Reservierung anlegen</Button></>}>
-      <form onSubmit={submit} noValidate className="split">
+      <form onSubmit={submit} noValidate>
+      <section className="roomboard" aria-label="Zimmer wählen">
+        <div className="roomboard-head">
+          <h3 className="first">Zimmer wählen{valid && free.data ? <small className="inl"> · {free.data.length} frei {deDate(from)} – {deDate(to)}</small> : null}</h3>
+          <div className="catlegend">{[...(base.data?.cats ?? [])].sort((a, b) => a.sort - b.sort).filter((c) => base.data?.rooms.some((r) => r.categoryId === c.id)).map((c) => (
+            <span key={c.id} className={`cat-${catColorIndex(base.data?.cats, c.id)}`}><i className="catdot" />{c.name}</span>))}</div>
+        </div>
+        {free.error && <p className="notice danger">{free.error}</p>}
+        {dropped.length > 0 && <p className="notice warn">Im neuen Zeitraum belegt und deshalb abgewählt: Zimmer {dropped.join(', ')}.</p>}
+        {valid && free.data?.length === 0 && <p className="notice warn">In diesem Zeitraum ist kein Zimmer frei.</p>}
+        {groupByFloor(base.data?.rooms ?? []).map((g) => (
+          <div key={g.floor} className="floorrow">
+            <div className="floorlabel">{g.label}</div>
+            <div className="roomtiles">
+              {g.rooms.map((room) => {
+                const fr = free.data?.find((x) => x.id === room.id);
+                const on = !!picks[room.id];
+                return (
+                  <button key={room.id} type="button" disabled={!fr} aria-pressed={on} onClick={() => fr && toggle(fr)}
+                    className={`roomtile cat-${catColorIndex(base.data?.cats, room.categoryId)}${on ? ' on' : ''}${fr ? '' : ' taken'}`}
+                    title={fr ? `${room.categoryName} – ${formatMoney(fr.quoteCents)} für ${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}` : `${room.categoryName} – im Zeitraum belegt`}>
+                    <b>{room.number}</b><small>{room.categoryName}</small>
+                    <span className="rt-price">{!valid ? '' : !free.data ? '…' : fr ? `${formatMoney(Math.round(fr.quoteCents / Math.max(1, nights)))}/Nacht` : 'belegt'}</span>
+                    {on && <i className="rt-check" aria-hidden>✓</i>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </section>
+      <div className="split">
         <div>
+          <h3 className="first">Zeitraum</h3>
           <div className="formgrid cols3">
             <Field label="Anreise"><input type="date" value={from} onChange={(e) => { setFrom(e.target.value); if (isIsoDate(e.target.value) && e.target.value >= to) setTo(addDays(e.target.value, 1)); }} /></Field>
-            <Field label="Abreise" error={!valid ? 'Muss nach der Anreise liegen' : undefined}><input type="date" value={to} min={isIsoDate(from) ? addDays(from, 1) : undefined} onChange={(e) => setTo(e.target.value)} /></Field>
+            <Field label="Abreise" error={!valid ? 'Muss nach der Anreise liegen' : undefined} hint={valid ? `${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}` : undefined}><input type="date" value={to} min={isIsoDate(from) ? addDays(from, 1) : undefined} onChange={(e) => setTo(e.target.value)} /></Field>
             <Field label="Status">
               <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
                 <option value="confirmed">Bestätigt</option><option value="tentative">Vorläufig</option>
@@ -109,31 +145,25 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
             </Field>
             {status === 'tentative' && <Field label="Option bis" hint="freiwillig – danach erinnert die Übersicht"><input type="date" value={optionUntil} min={todayBerlin()} max={isIsoDate(from) ? from : undefined} onChange={(e) => setOptionUntil(e.target.value)} /></Field>}
           </div>
-          <h3>Freie Zimmer{valid && free.data ? ` (${free.data.length})` : ''}</h3>
-          {free.error && <p className="notice danger">{free.error}</p>}
-          {valid && free.data?.length === 0 && <p className="notice warn">In diesem Zeitraum ist kein Zimmer frei.</p>}
+          <h3>Gewählte Zimmer</h3>
+          {selected.length === 0 && <p className="muted">Noch kein Zimmer gewählt – oben ein freies Zimmer antippen.</p>}
           <div className="roompick">
-            {(free.data ?? []).map((r) => {
-              const p = picks[r.id];
+            {selected.map((r) => {
+              const p = picks[r.id]!;
               return (
-                <div key={r.id} className={`pickrow${p ? ' on' : ''}`}>
-                  <label className="check">
-                    <input type="checkbox" checked={!!p} onChange={() => toggle(r)} />
-                    <span><b>Zimmer {r.number}</b> <small className="inl">{r.categoryName}</small></span>
-                  </label>
-                  {!p && <span className="num muted">{formatMoney(r.quoteCents)}</span>}
-                  {p && (
-                    <div className="pickedit">
-                      <label><small>Erw.</small><input type="number" min={1} value={p.adults} onChange={(e) => setPick(r.id, { adults: e.target.value })} /></label>
-                      <label><small>Kinder</small><input type="number" min={0} value={p.children} onChange={(e) => setPick(r.id, { children: e.target.value })} /></label>
-                      <label><small>Preis/Nacht</small><input inputMode="decimal" value={p.price} placeholder={(quoteFor(r, p) / nights / 100).toFixed(2).replace('.', ',')} onChange={(e) => setPick(r.id, { price: e.target.value })} /></label>
-                    </div>
-                  )}
+                <div key={r.id} className={`pickrow on cat-${catColorIndex(base.data?.cats, r.categoryId)}`}>
+                  <span className="pickname"><i className="catdot" /><b>Zimmer {r.number}</b> <small className="inl">{r.categoryName}</small></span>
+                  <div className="pickedit">
+                    <label><small>Erw.</small><input type="number" min={1} value={p.adults} onChange={(e) => setPick(r.id, { adults: e.target.value })} /></label>
+                    <label><small>Kinder</small><input type="number" min={0} value={p.children} onChange={(e) => setPick(r.id, { children: e.target.value })} /></label>
+                    <label><small>Preis/Nacht</small><input inputMode="decimal" value={p.price} placeholder={nights ? (quoteFor(r, p) / nights / 100).toFixed(2).replace('.', ',') : ''} onChange={(e) => setPick(r.id, { price: e.target.value })} /></label>
+                  </div>
+                  <button type="button" className="iconbtn" aria-label={`Zimmer ${r.number} abwählen`} title="abwählen" onClick={() => toggle(r)}>✕</button>
                 </div>
               );
             })}
           </div>
-          <p className="muted small">Preis/Nacht leer lassen = Preis nach Preisregeln und Personenzahl. Ein eingetragener Betrag gilt als Sonderpreis für alle Nächte.</p>
+          {selected.length > 0 && <p className="muted small">Preis/Nacht leer lassen = Preis nach Preisregeln und Personenzahl. Ein eingetragener Betrag gilt als Sonderpreis für alle Nächte.</p>}
         </div>
         <aside>
           <h3 className="first">Gast</h3>
@@ -171,6 +201,7 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
           </div>
           {otherErrors.length > 0 && <p className="notice danger" role="alert">{[...new Set(otherErrors)].join(' · ')}</p>}
         </aside>
+      </div>
         <button type="submit" hidden />
       </form>
     </Dialog>
