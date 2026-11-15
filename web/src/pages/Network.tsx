@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { fritzSettingsInput, wifiSettingsInput, type FritzInfoDto, type FritzSettingsDto, type InternetStatusDto, type NetDeviceDto, type NetOutagesDto, type NetScanDto, type WifiDto } from '../../../src/shared/schemas.js';
+import { DEVICE_KINDS, type DeviceKind } from '../../../src/shared/devicekind.js';
+import { fritzSettingsInput, netRulesInput, wifiSettingsInput, type FritzInfoDto, type FritzSettingsDto, type InternetStatusDto, type NetDeviceDto, type NetOutagesDto, type NetRules, type NetScanDto, type NetUsageDto, type WifiDto } from '../../../src/shared/schemas.js';
 import { useAuth } from '../App.tsx';
 import { api } from '../api.ts';
 import { netAlertOn, setNetAlertOn } from '../NetAlert.tsx';
@@ -168,7 +169,7 @@ export function Network() {
       {bar}
       {current === 'verbindung' && <><InternetCard /><FritzCard /></>}
       {current === 'wlan' && <WifiCard />}
-      {current === 'geraete' && <DeviceList />}
+      {current === 'geraete' && <><UsageCard /><DeviceList /><RulesCard /></>}
     </>
   );
 }
@@ -181,13 +182,14 @@ function DeviceList() {
   const [shown, setShown] = useState<NetScanDto | null>(null);
   const [edit, setEdit] = useState<NetDeviceDto | null>(null);
   const [name, setName] = useState('');
+  const [kind, setKind] = useState('');
   const [busy, setBusy] = useState(false);
   if (data && data !== shown) setShown(data);
   const loading = !data || data !== shown || busy;
   const rescan = () => { setBusy(true); setRev((r) => r + 1); setTimeout(() => setBusy(false), 300); };
   const save = async () => {
     if (!edit) return;
-    try { await api('PUT', `/network/devices/${edit.mac}`, { name: name.trim() }); toast('Gespeichert'); setEdit(null); setRev((r) => r + 1); }
+    try { await api('PUT', `/network/devices/${edit.mac}`, { name: name.trim(), kind }); toast('Gespeichert'); setEdit(null); setRev((r) => r + 1); }
     catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
   };
   const s = shown;
@@ -202,19 +204,27 @@ function DeviceList() {
       {s && (
         <>
           {s.note && <p className="notice warn">{s.note}</p>}
+          {s.boxNote && <p className="notice warn">{s.boxNote}</p>}
           <p className="muted">{found} {found === 1 ? 'Gerät' : 'Geräte'} gefunden{unknown ? `, davon ${unknown} ohne Namen` : ''}{off ? ` · ${off} benannte${off === 1 ? 's Gerät' : ' Geräte'} nicht erreichbar` : ''}{s.gateway && <> · <a href={`http://${s.gateway}`} target="_blank" rel="noopener noreferrer">Router-Oberfläche öffnen ({s.gateway})</a></>} · Netz {s.networks.join(', ') || '–'} · Stand {fmtDateTime(s.scannedAt)}{loading ? ' · sucht …' : ''}</p>
           <div className="tablewrap card flush"><table>
-            <thead><tr><th>Name</th><th>IP-Adresse</th><th className="hide-sm">Gerätename im Netz</th><th className="hide-sm">Geräteadresse (MAC)</th><th /></tr></thead>
-            <tbody>{s.devices.map((d) => (
-              <tr key={d.mac} className={d.online ? undefined : 'faded'}>
-                <td className="strong">{d.self ? 'Dieser Rechner (PMS)' : d.name || <span className="muted">unbenannt</span>} {d.self && d.name && <small className="muted">{d.name}</small>}</td>
-                <td className="nowrap">{d.online ? <>{d.ip}{d.ip === s.gateway && <> <Badge tone="accent">Router</Badge></>}</> : <Badge tone="warn">nicht erreichbar</Badge>}</td><td className="hide-sm">{d.hostname || '–'}</td>
-                <td className="hide-sm nowrap"><code>{d.mac}</code> {d.randomMac && <Badge>private Adresse</Badge>}</td>
-                <td><button type="button" className="linkbtn" onClick={() => { setEdit(d); setName(d.name); }}>{d.name ? 'umbenennen' : 'benennen'}</button></td>
-              </tr>
-            ))}</tbody>
+            <thead><tr><th>Name</th><th>Vermutlich</th><th>IP-Adresse</th><th className="hide-sm">Gerätename im Netz</th><th className="hide-sm">Anschluss</th><th className="hide-sm">Geräteadresse (MAC)</th><th /></tr></thead>
+            <tbody>{s.devices.map((d) => {
+              const netName = d.box?.name || d.hostname;
+              return (
+                <tr key={d.mac} className={d.online ? undefined : 'faded'}>
+                  <td className="strong">{d.self ? 'Dieser Rechner (PMS)' : d.name || <span className="muted">unbenannt</span>} {d.self && d.name && <small className="muted">{d.name}</small>}</td>
+                  <td title={d.guess.reason}>{d.guess.kind ? <Badge tone={d.guess.basis === 'set' || d.guess.basis === 'rule' ? 'ok' : d.guess.basis === 'name' ? 'accent' : undefined}>{d.guess.basis === 'set' ? '' : d.guess.basis === 'hint' ? 'evtl. ' : ''}{d.guess.label}</Badge> : <span className="muted">unbekannt</span>}<br /><small className="muted">{d.guess.reason}</small></td>
+                  <td className="nowrap">{d.online ? <>{d.ip}{d.ip === s.gateway && <> <Badge tone="accent">Router</Badge></>}</> : <Badge tone="warn">nicht erreichbar</Badge>}</td>
+                  <td className="hide-sm">{netName || '–'}{netName && <> <a className="small" href={`https://www.google.com/search?q=${encodeURIComponent(`${netName} Gerät`)}`} target="_blank" rel="noopener noreferrer" title="Öffnet eine Internetsuche nach diesem Namen">im Internet suchen</a></>}</td>
+                  <td className="hide-sm nowrap">{d.box ? <>{d.box.link || '–'}{d.box.guest && <> <Badge tone="warn">Gastnetz</Badge></>}{d.box.speedMbit ? <small className="muted"> · {d.box.speedMbit} Mbit/s</small> : null}</> : '–'}</td>
+                  <td className="hide-sm nowrap"><code>{d.mac}</code> {d.randomMac && <Badge>private Adresse</Badge>}</td>
+                  <td><button type="button" className="linkbtn" onClick={() => { setEdit(d); setName(d.name); setKind(d.kind); }}>bearbeiten</button></td>
+                </tr>
+              );
+            })}</tbody>
           </table></div>
           <p className="muted small">
+            <b>„Vermutlich“</b> ist eine Schätzung aus dem Namen, mit dem sich das Gerät im Netz meldet – sie kann falsch sein und lässt sich je Gerät („bearbeiten“) oder über eigene Regeln festlegen. Dafür wird nichts ins Internet gesendet; „im Internet suchen“ öffnet erst auf Ihren Klick eine Suche nach dem Gerätenamen.
             Gefunden werden Geräte, die im selben Netz wie dieser Rechner sind und auf Netzwerkebene antworten. <b>Nicht sichtbar</b> sind Geräte in einem getrennten Gäste-WLAN,
             Geräte hinter einer Abschottung des Routers („Geräte dürfen untereinander nicht kommunizieren“) und Geräte im Ruhezustand. Die vollständige Liste führt nur der Router selbst.
             Zu sehen sind Geräte, keine Personen: Handys melden sich meist mit einer zufälligen „privaten Adresse“, die sich je WLAN und teils regelmäßig ändert.
@@ -224,14 +234,78 @@ function DeviceList() {
         </>
       )}
       {edit && (
-        <Dialog title={`Gerät ${edit.ip || edit.name} benennen`} onClose={() => setEdit(null)}
+        <Dialog title={`Gerät ${edit.ip || edit.name} bearbeiten`} onClose={() => setEdit(null)}
           footer={<><Button onClick={() => setEdit(null)}>Abbrechen</Button><Button variant="primary" onClick={() => void save()}>Speichern</Button></>}>
           <form className="formgrid" onSubmit={(e) => { e.preventDefault(); void save(); }}>
             <Field label="Name" wide hint="z. B. Kasse, Drucker Rezeption, Tablet Küche – leer lassen, um den Namen zu entfernen"><input value={name} maxLength={60} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
+            <Field label="Was ist es?" wide hint={kind ? 'von Ihnen festgelegt' : `automatisch: ${edit.guess.basis === 'set' ? 'noch keine Schätzung' : edit.guess.label} (${edit.guess.reason})`}>
+              <select value={kind} onChange={(e) => setKind(e.target.value)}><option value="">automatisch schätzen</option>{Object.entries(DEVICE_KINDS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}</select>
+            </Field>
             <p className="muted small wide">Der Name hängt an der Geräteadresse {edit.mac}. {edit.randomMac && 'Dieses Gerät verwendet eine private Adresse; ändert sie sich, erscheint es wieder als unbenannt.'}</p>
           </form>
         </Dialog>
       )}
     </>
+  );
+}
+
+const mbit = (bps: number) => (bps >= 1_000_000 ? `${(bps / 1_000_000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} Mbit/s` : `${Math.round(bps / 1000).toLocaleString('de-DE')} kbit/s`);
+
+/** Datendurchsatz des Internetanschlusses laut FRITZ!Box – alle Geräte zusammen. */
+function UsageCard() {
+  const fritz = useLoad(() => api<FritzSettingsDto>('GET', '/network/fritz')).data;
+  const [u, setU] = useState<NetUsageDto | null>(null);
+  const [fail, setFail] = useState<string | null>(null);
+  const on = !!fritz?.enabled;
+  useEffect(() => {
+    if (!on) return;
+    let stop = false;
+    const tick = () => api<NetUsageDto>('GET', '/network/usage').then((r) => { if (!stop) { setU(r); setFail(null); } }).catch((e) => { if (!stop) setFail(e instanceof Error ? e.message : 'Fehler'); });
+    void tick();
+    const t = setInterval(tick, 10_000);
+    return () => { stop = true; clearInterval(t); };
+  }, [on]);
+  if (!fritz) return null;
+  const bars = (series: number[], max: number) => <div className="spark" aria-hidden>{series.slice(-20).map((v, i) => <i key={i} style={{ height: `${Math.max(4, Math.round((v / max) * 100))}%` }} />)}</div>;
+  const peak = u ? Math.max(1, ...u.downSeries, ...u.upSeries) : 1;
+  return (
+    <section className="card">
+      <h2>Datenverbrauch</h2>
+      {!on && <p className="muted">Wie viel gerade über den Internetanschluss läuft, weiß nur der Router. Ist die FRITZ!Box unter „Verbindung“ eingerichtet, zeigt das Programm hier den aktuellen Durchsatz.</p>}
+      {on && fail && <p className="notice warn">{fail}</p>}
+      {on && u && (
+        <div className="usage">
+          <div><small className="muted">Herunterladen gerade</small><b>{mbit(u.downBps)}</b>{u.maxDownBps ? <small className="muted">von höchstens {mbit(u.maxDownBps)}</small> : null}{bars(u.downSeries, peak)}</div>
+          <div><small className="muted">Hochladen gerade</small><b>{mbit(u.upBps)}</b>{u.maxUpBps ? <small className="muted">von höchstens {mbit(u.maxUpBps)}</small> : null}{bars(u.upSeries, peak)}</div>
+        </div>
+      )}
+      <p className="muted small"><b>Je Gerät</b> gibt die FRITZ!Box über ihre Programmschnittstelle keine verbrauchte Datenmenge heraus – das Programm kann deshalb nur den Anschluss insgesamt zeigen. Welches Gerät gerade viel lädt, sehen Sie in der Oberfläche der FRITZ!Box unter Heimnetz → Netzwerk bzw. Internet → Online-Monitor. Mit einer echten FRITZ!Box noch nicht erprobt.</p>
+    </section>
+  );
+}
+
+/** Eigene Regeln für die Einordnung: „Name enthält … → ist ein …“. */
+function RulesCard() {
+  const toast = useToast();
+  const { user } = useAuth();
+  const { data } = useLoad(() => api<NetRules>('GET', '/network/rules'));
+  const [rules, setRules] = useState<NetRules['rules'] | null>(null);
+  useEffect(() => { if (data) setRules(data.rules); }, [data]);
+  const f = useSubmit(netRulesInput, async (d) => { await api('PUT', '/network/rules', d); toast('Regeln gespeichert – „Neu suchen“ wendet sie an'); });
+  if (!rules || user?.role !== 'admin') return null;
+  const set = (i: number, patch: Partial<NetRules['rules'][number]>) => setRules(rules.map((r, k) => (k === i ? { ...r, ...patch } : r)));
+  return (
+    <form className="card" onSubmit={(e) => void f.submit({ rules }, e)} noValidate>
+      <h2>Eigene Regeln für „Vermutlich“</h2>
+      <p className="muted">Wenn die automatische Einschätzung bei Ihren Geräten nicht passt: Legen Sie fest, woran ein Gerät am Namen zu erkennen ist. Eigene Regeln gehen der automatischen Einschätzung vor; was Sie bei einem einzelnen Gerät festlegen, geht allem vor.</p>
+      {rules.map((r, i) => (
+        <div className="formgrid cols3" key={i}>
+          <Field label="Name enthält" error={f.errors[`rules.${i}.contains`]}><input value={r.contains} maxLength={40} onChange={(e) => set(i, { contains: e.target.value })} placeholder="z. B. kasse" /></Field>
+          <Field label="ist ein" error={f.errors[`rules.${i}.kind`]}><select value={r.kind} onChange={(e) => set(i, { kind: e.target.value as DeviceKind })}>{Object.entries(DEVICE_KINDS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}</select></Field>
+          <div className="formactions"><Button onClick={() => setRules(rules.filter((_, k) => k !== i))}>Entfernen</Button></div>
+        </div>
+      ))}
+      <div className="formactions"><Button onClick={() => setRules([...rules, { contains: '', kind: 'computer' }])}>Regel hinzufügen</Button><Button type="submit" variant="primary" busy={f.busy}>Speichern</Button></div>
+    </form>
   );
 }

@@ -299,9 +299,13 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.get('/network/wifi', internet, () => network.getWifi(db));
     api.put('/network/wifi', { preHandler: requireAdmin }, (req) => network.saveWifi(db, actor(req), S.wifiSettingsInput.parse(req.body)));
     api.get('/network/devices', internet, () => network.scan(db));
+    api.get('/network/rules', internet, () => network.getRules(db));
+    api.put('/network/rules', { preHandler: requireAdmin }, (req) => network.saveRules(db, actor(req), S.netRulesInput.parse(req.body)));
+    api.get('/network/usage', internet, () => network.fritzUsage(db));
     api.put('/network/devices/:mac', internet, async (req) => {
       const mac = network.normMac(z.object({ mac: z.string().max(17) }).parse(req.params).mac);
-      await network.nameDevice(db, actor(req), mac, S.netDeviceNameInput.parse(req.body).name);
+      const b = S.netDeviceNameInput.parse(req.body);
+      await network.nameDevice(db, actor(req), mac, b.name, b.kind);
       return { ok: true };
     });
 

@@ -481,3 +481,7 @@ a.btn.primary { background: var(--accent); border-color: var(--accent); color: v
 .swatches { display: flex; gap: 8px; flex-wrap: wrap; padding: 4px 0; } .swatches button { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); cursor: pointer; padding: 0; }
 .swatches button.on { box-shadow: 0 0 0 3px var(--accent, #2b6cb0); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Internet → Geräte: Datendurchsatz */
+.usage { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin: 8px 0 12px; } .usage > div { display: grid; gap: 2px; } .usage b { font-size: 22px; }
+.spark { display: flex; align-items: flex-end; gap: 2px; height: 36px; margin-top: 6px; } .spark i { flex: 1; background: var(--accent, #2b6cb0); opacity: .55; border-radius: 1px; }

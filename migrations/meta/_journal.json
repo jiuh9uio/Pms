@@ -225,6 +225,13 @@
       "when": 1794671193412,
       "tag": "0031_tse_aufzeichnung",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794706466253,
+      "tag": "0032_geraeteart",
+      "breakpoints": true
     }
   ]
 }

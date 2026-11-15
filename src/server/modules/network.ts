@@ -5,7 +5,8 @@ import { readFile } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
 import { desc, eq, isNull, lt } from 'drizzle-orm';
 import QRCode from 'qrcode';
-import type { FritzInfoDto, FritzSettingsDto, InternetStatusDto, NetAlertDto, NetDeviceDto, NetOutagesDto, NetScanDto, WifiDto, WifiSettings } from '../../shared/schemas.js';
+import { guessDevice, isDeviceKind, type DeviceRule } from '../../shared/devicekind.js';
+import type { FritzInfoDto, FritzSettingsDto, InternetStatusDto, NetAlertDto, NetDeviceDto, NetOutagesDto, NetRules, NetScanDto, NetUsageDto, WifiDto, WifiSettings } from '../../shared/schemas.js';
 import type { Db, Exec } from '../db/client.js';
 import { netDevices, netOutages, settings } from '../db/schema.js';
 import { getHotel } from './settings.js';
@@ -83,35 +84,64 @@ export function scan(db: Exec): Promise<NetScanDto> {
 
 async function doScan(db: Exec): Promise<NetScanDto> {
   // Auf einem gemieteten Server gehört das umgebende Netz dem Rechenzentrum – dort wird nicht gesucht.
-  if (process.env.PMS_HOSTED === 'true') return { scannedAt: new Date().toISOString(), networks: [], devices: [], note: 'Das Programm läuft auf einem Server im Internet. Die Gerätesuche gibt es nur, wenn es auf einem Rechner im Haus läuft.', gateway: null };
+  if (process.env.PMS_HOSTED === 'true') return { scannedAt: new Date().toISOString(), networks: [], devices: [], note: 'Das Programm läuft auf einem Server im Internet. Die Gerätesuche gibt es nur, wenn es auf einem Rechner im Haus läuft.', boxNote: null, gateway: null };
   const nets = localNets();
-  if (nets.length === 0) return { scannedAt: new Date().toISOString(), networks: [], devices: [], note: 'Dieser Rechner hat gerade keine Netzwerkverbindung.', gateway: null };
+  if (nets.length === 0) return { scannedAt: new Date().toISOString(), networks: [], devices: [], note: 'Dieser Rechner hat gerade keine Netzwerkverbindung.', boxNote: null, gateway: null };
   await probe(nets);
   const inNet = (ip: string) => nets.some((n) => { const a = ipToInt(ip); return a > n.net && a < n.net + n.size - 1; });
   const found = parseNeighbors(await neighborTable()).filter((d) => inNet(d.ip));
   for (const n of nets) if (!found.some((d) => d.mac === n.mac)) found.push({ ip: n.address, mac: n.mac });
-  const names = new Map((await db.select().from(netDevices)).map((d) => [d.mac, d.name]));
-  const devices: NetDeviceDto[] = await Promise.all(found.map(async (d) => ({
-    ...d, hostname: (await withTimeout(reverse(d.ip), 1500, [] as string[]))[0] ?? '', name: names.get(d.mac) ?? '',
-    self: nets.some((n) => n.mac === d.mac), online: true, randomMac: (parseInt(d.mac.slice(0, 2), 16) & 2) === 2,
-  })));
+  const gw = await gateway();
+  const gwIp = gw && inNet(gw) ? gw : null;
+  const saved = new Map((await db.select().from(netDevices)).map((d) => [d.mac, d]));
+  const rules = (await getRules(db)).rules as DeviceRule[];
+  // Geräteliste der FRITZ!Box (wenn eingerichtet): Namen, Anschlussart, Gastnetz
+  let boxHosts = new Map<string, BoxHost>(), boxNote: string | null = null;
+  if ((await fritzLoad(db)).enabled) {
+    try { boxHosts = await fritzHosts(await fritzConfig(db)); }
+    catch (e) { boxNote = `Die Geräteliste der FRITZ!Box ließ sich nicht lesen: ${e instanceof Error ? e.message : 'Fehler'}`; }
+  }
+  for (const [mac, h] of boxHosts) if (h.active && h.ip && !found.some((d) => d.mac === mac)) found.push({ ip: h.ip, mac });
+  const build = (d: { ip: string; mac: string }, hostname: string, online: boolean): NetDeviceDto => {
+    const sv = saved.get(d.mac), h = boxHosts.get(d.mac);
+    const self = nets.some((n) => n.mac === d.mac), randomMac = (parseInt(d.mac.slice(0, 2), 16) & 2) === 2;
+    const box = h ? { name: h.name, link: h.link, guest: h.guest, speedMbit: h.speedMbit } : null;
+    return {
+      ...d, hostname, name: sv?.name ?? '', self, online, randomMac, kind: sv?.kind ?? '', box,
+      guess: guessDevice({ names: [hostname, h?.name ?? '', sv?.name ?? ''], kind: sv?.kind, randomMac, self, gateway: !!gwIp && d.ip === gwIp }, rules),
+    };
+  };
+  const devices: NetDeviceDto[] = await Promise.all(found.map(async (d) => build(d, (await withTimeout(reverse(d.ip), 1500, [] as string[]))[0] ?? '', true)));
   devices.sort((a, b) => ipToInt(a.ip) - ipToInt(b.ip));
   // benannte Geräte, die gerade nicht antworten (z. B. ausgeschalteter Drucker), ans Ende
-  for (const [mac, name] of names) if (!devices.some((d) => d.mac === mac))
-    devices.push({ ip: '', mac, hostname: '', name, self: false, online: false, randomMac: (parseInt(mac.slice(0, 2), 16) & 2) === 2 });
-  const gw = await gateway();
+  for (const [mac, sv] of saved) if (sv.name && !devices.some((d) => d.mac === mac)) devices.push(build({ ip: '', mac }, '', false));
   const big = nets.some((n) => n.size - 2 > MAX_HOSTS);
-  return { scannedAt: new Date().toISOString(), networks: nets.map((n) => n.cidr), devices, note: big ? `Das Netz ist sehr groß – geprüft wurden je Netz die ersten ${MAX_HOSTS} Adressen.` : null, gateway: gw && inNet(gw) ? gw : null };
+  return { scannedAt: new Date().toISOString(), networks: nets.map((n) => n.cidr), devices, note: big ? `Das Netz ist sehr groß – geprüft wurden je Netz die ersten ${MAX_HOSTS} Adressen.` : null, boxNote, gateway: gwIp };
 }
 
-export async function nameDevice(db: Db, actor: Actor, mac: string, name: string) {
+// ---------- eigene Regeln für die Einordnung ----------
+export async function getRules(db: Exec): Promise<NetRules> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'net_rules'));
+  return { rules: ((row?.value as NetRules | undefined)?.rules ?? []) };
+}
+export async function saveRules(db: Db, actor: Actor, v: NetRules) {
+  const bad = v.rules.findIndex((r) => !isDeviceKind(r.kind));
+  if (bad >= 0) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { [`rules.${bad}.kind`]: 'Bitte eine Geräteart wählen' });
+  await db.insert(settings).values({ key: 'net_rules', value: v }).onConflictDoUpdate({ target: settings.key, set: { value: v, updatedAt: new Date() } });
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: 'net_rules', after: { rules: v.rules.length } });
+  return v;
+}
+
+export async function nameDevice(db: Db, actor: Actor, mac: string, name: string, kind?: string) {
   if (!/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(mac)) throw new AppError(400, 'validation', 'Ungültige Geräteadresse');
-  if (name) await db.insert(netDevices).values({ mac, name }).onConflictDoUpdate({ target: netDevices.mac, set: { name, updatedAt: new Date() } });
+  if (kind && !isDeviceKind(kind)) throw new AppError(400, 'validation', 'Unbekannte Geräteart');
+  const [cur] = await db.select().from(netDevices).where(eq(netDevices.mac, mac));
+  const k = kind ?? cur?.kind ?? '';
+  if (name || k) await db.insert(netDevices).values({ mac, name, kind: k }).onConflictDoUpdate({ target: netDevices.mac, set: { name, kind: k, updatedAt: new Date() } });
   else await db.delete(netDevices).where(eq(netDevices.mac, mac));
-  await record(db, actor, { action: 'update', entity: 'net_device', entityId: mac, after: { name } });
+  await record(db, actor, { action: 'update', entity: 'net_device', entityId: mac, after: { name, kind: k } });
 }
 
-/** Internetverbindung prüfen: eine kurze Anfrage an die Adresse, die auch das Programm-Update verwendet. */
 export async function internetStatus(): Promise<InternetStatusDto> {
   const addresses = localNets().map((n) => n.address);
   const start = Date.now();
@@ -232,6 +262,47 @@ const WAN = [
 ];
 
 /** Modell, Version, Laufzeit und – soweit die Box sie nennt – Zustand der Internetverbindung. Dient auch als Verbindungstest. */
+// ---------- FRITZ!Box: Geräteliste und Datendurchsatz ----------
+interface BoxHost { name: string; ip: string; active: boolean; link: 'LAN' | 'WLAN' | ''; guest: boolean; speedMbit: number | null }
+/**
+ * Liest die Geräteliste der FRITZ!Box (Hosts-Dienst, X_AVM-DE_GetHostListPath). Nach AVMs Beschreibung aus dem Gedächtnis
+ * umgesetzt, mit einer echten Box nicht erprobt. Die Box liefert je Gerät keine verbrauchte Datenmenge.
+ */
+async function fritzHosts(c: Tr064Config): Promise<Map<string, BoxHost>> {
+  const r = await tr064(c, '/upnp/control/hosts', 'urn:dslforum-org:service:Hosts:1', 'X_AVM-DE_GetHostListPath', 6000);
+  const path = r['NewX_AVM-DE_HostListPath'];
+  if (!path || !path.startsWith('/')) throw new Tr064Error('Die FRITZ!Box hat keine Geräteliste geliefert.');
+  const res = await fetch(`http://${c.host}:${c.port}${path.replace(/&amp;/g, '&')}`, { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Tr064Error(`Die Geräteliste der FRITZ!Box war nicht abrufbar (${res.status}).`);
+  const xml = await res.text();
+  const out = new Map<string, BoxHost>();
+  for (const m of xml.matchAll(/<Item>([\s\S]*?)<\/Item>/g)) {
+    const tag = (k: string) => new RegExp(`<${k}>([^<]*)</${k}>`).exec(m[1]!)?.[1]?.trim() ?? '';
+    const mac = tag('MACAddress');
+    if (!/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(mac)) continue;
+    const type = tag('InterfaceType'), speed = Number(tag('X_AVM-DE_Speed'));
+    out.set(normMac(mac), {
+      name: tag('HostName').replace(/&amp;/g, '&'), ip: tag('IPAddress'), active: tag('Active') === '1',
+      link: /802\.11|wlan/i.test(type) ? 'WLAN' : /ethernet/i.test(type) ? 'LAN' : '', guest: tag('X_AVM-DE_Guest') === '1', speedMbit: Number.isFinite(speed) && speed > 0 ? speed : null,
+    });
+  }
+  return out;
+}
+
+/** Aktueller Datendurchsatz des Internetanschlusses (alle Geräte zusammen) aus dem Online-Monitor der FRITZ!Box. */
+export async function fritzUsage(db: Exec): Promise<NetUsageDto> {
+  const c = await fritzConfig(db);
+  let r: Record<string, string>;
+  try { r = await tr064(c, '/upnp/control/wancommonifconfig1', 'urn:dslforum-org:service:WANCommonInterfaceConfig:1', 'X_AVM-DE_GetOnlineMonitor', 8000, { NewSyncGroupIndex: 0 }); }
+  catch (e) { throw new AppError(502, 'fritz_failed', e instanceof Error ? e.message : 'FRITZ!Box nicht erreichbar'); }
+  // Die Box nennt Bytes je Sekunde (trotz „bps“ im Namen), neuester Wert zuerst
+  const list = (k: string) => (r[k] ?? '').split(',').map((x) => Number(x)).filter((n) => Number.isFinite(n)).map((n) => n * 8);
+  const down = list('Newds_current_bps'), up = list('Newus_current_bps');
+  if (!down.length && !up.length) throw new AppError(502, 'fritz_failed', 'Die FRITZ!Box hat keine Durchsatzwerte geliefert.');
+  const max = (k: string) => { const n = Number(r[k]); return Number.isFinite(n) && n > 0 ? n * 8 : null; };
+  return { downBps: down[0] ?? 0, upBps: up[0] ?? 0, maxDownBps: max('Newmax_ds'), maxUpBps: max('Newmax_us'), downSeries: [...down].reverse(), upSeries: [...up].reverse(), readAt: new Date().toISOString() };
+}
+
 export async function fritzInfo(db: Exec): Promise<FritzInfoDto> {
   try {
     const c = await fritzConfig(db);

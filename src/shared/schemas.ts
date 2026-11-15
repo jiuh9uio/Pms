@@ -75,14 +75,22 @@ export interface AuditDto {
 export interface ApiError { error: { code: string; message: string; fields?: Record<string, string> } }
 
 // ---------- Netzwerk: Geräte im Hausnetz ----------
-export const netDeviceNameInput = z.object({ name: text(60) });
+export const netDeviceNameInput = z.object({ name: text(60), kind: z.string().max(20).optional() });
+export const netRulesInput = z.object({ rules: z.array(z.object({ contains: z.string().trim().min(2, 'Mindestens 2 Zeichen').max(40), kind: z.string().max(20) })).max(50) });
+export type NetRules = z.infer<typeof netRulesInput>;
+/** Datendurchsatz des Internetanschlusses laut FRITZ!Box (alle Geräte zusammen), in Bit je Sekunde */
+export interface NetUsageDto { downBps: number; upBps: number; maxDownBps: number | null; maxUpBps: number | null; /** letzte Werte, ältester zuerst */ downSeries: number[]; upSeries: number[]; readAt: string }
 export interface NetDeviceDto {
   ip: string; mac: string; hostname: string; name: string;
   /** dieser Rechner */ self: boolean;
   /** false = benanntes Gerät, das bei dieser Suche nicht gefunden wurde */ online: boolean;
   /** zufällige (private) Geräteadresse, wie sie Handys je WLAN verwenden */ randomMac: boolean;
+  /** vom Administrator festgelegte Art ('' = automatisch schätzen) */ kind: string;
+  /** Einschätzung, was das Gerät vermutlich ist */ guess: { kind: string | null; label: string; basis: 'set' | 'rule' | 'name' | 'hint' | 'none'; reason: string };
+  /** Angaben der FRITZ!Box, wenn sie eingerichtet ist: Name dort, Anschlussart, Gastnetz, Verbindungsgeschwindigkeit in Mbit/s */
+  box: { name: string; link: 'LAN' | 'WLAN' | ''; guest: boolean; speedMbit: number | null } | null;
 }
-export interface NetScanDto { scannedAt: string; networks: string[]; devices: NetDeviceDto[]; note: string | null; /** Adresse des Routers, falls ermittelbar */ gateway: string | null }
+export interface NetScanDto { scannedAt: string; networks: string[]; devices: NetDeviceDto[]; note: string | null; /** Hinweis, falls die Geräteliste der FRITZ!Box nicht gelesen werden konnte; null = gelesen oder Box nicht eingerichtet */ boxNote: string | null; /** Adresse des Routers, falls ermittelbar */ gateway: string | null }
 export interface InternetStatusDto { online: boolean; ms: number | null; checkedAt: string; addresses: string[]; error: string | null }
 
 // ---------- Gäste-WLAN (Aushang mit QR-Code) und Ausfallprotokoll ----------

@@ -21,9 +21,9 @@ export function digestHeader(www: string, method: string, path: string, user: st
 }
 
 /** Ruft eine Aktion auf und liefert die Ausgabewerte (New…) der Antwort. */
-export async function tr064(c: Tr064Config, path: string, service: string, action: string, timeoutMs = 10_000): Promise<Record<string, string>> {
+export async function tr064(c: Tr064Config, path: string, service: string, action: string, timeoutMs = 10_000, args: Record<string, string | number> = {}): Promise<Record<string, string>> {
   const url = `http://${c.host}:${c.port}${path}`;
-  const body = `<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:${action} xmlns:u="${service}"/></s:Body></s:Envelope>`;
+  const body = `<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body>${Object.keys(args).length ? `<u:${action} xmlns:u="${service}">${Object.entries(args).map(([k, v]) => `<${k}>${v}</${k}>`).join('')}</u:${action}>` : `<u:${action} xmlns:u="${service}"/>`}</s:Body></s:Envelope>`;
   const headers: Record<string, string> = { 'Content-Type': 'text/xml; charset="utf-8"', SOAPACTION: `"${service}#${action}"` };
   const post = (extra: Record<string, string> = {}) => fetch(url, { method: 'POST', headers: { ...headers, ...extra }, body, signal: AbortSignal.timeout(timeoutMs) });
   let res: Response;

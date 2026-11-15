@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.42.0
+
+- Internet → Geräte: neue Spalte „Vermutlich“ – das Programm schätzt aus dem Namen, mit dem sich ein Gerät im Netz meldet, was es ist (Handy, Tablet, Computer, Drucker, Bondrucker, EC-Gerät, Fernseher, Router …) und nennt den Grund. Dafür wird nichts ins Internet gesendet; „im Internet suchen“ öffnet auf Klick eine Suche nach dem Gerätenamen.
+- Einstellbar: je Gerät festlegen, was es ist („bearbeiten“), und eigene Regeln „Name enthält … → ist ein …“.
+- Ist die FRITZ!Box eingerichtet, kommen deren Gerätenamen, LAN/WLAN, Gastnetz und Verbindungsgeschwindigkeit dazu, außerdem der aktuelle Datendurchsatz des Anschlusses. Eine Datenmenge je Gerät gibt die FRITZ!Box über ihre Schnittstelle nicht heraus. Mit einer echten FRITZ!Box noch nicht erprobt.
+
 ## 1.41.0
 
 - Rechnungslayout mit mehr Gestaltung: drei Stile (klassisch, modern mit Farbbalken und farbiger Kopfzeile, elegant mit feinen Linien), sechs Farben (Schwarz, Dunkelblau, Tannengrün, Weinrot, Gold, Petrol), Schrift mit oder ohne Serifen, Logo rechts, links oder mittig, Positionen mit Trennlinien, abwechselnd hinterlegt oder ohne Linien. Die Vorschau zeigt jede Kombination sofort.

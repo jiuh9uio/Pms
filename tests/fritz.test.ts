@@ -40,6 +40,13 @@ beforeAll(async () => {
   await ok('POST', '/users', admin, { username: 'rezeption', name: 'Rezeption', password: 'rezeption-123', role: 'user', modules: ['internet'] });
   user = session(await call('POST', '/auth/login', {}, { username: 'rezeption', password: 'rezeption-123' }));
   box = createServer((req, res) => {
+    if (req.method === 'GET' && req.url === '/devicehostlist.lua?sid=abc&x=1') {
+      res.writeHead(200, { 'Content-Type': 'text/xml' });
+      res.end(`<List><Item><Index>1</Index><IPAddress>127.0.0.77</IPAddress><MACAddress>AA:BB:CC:00:11:22</MACAddress><Active>1</Active><HostName>EPSON-TM-T20</HostName><InterfaceType>Ethernet</InterfaceType><X_AVM-DE_Speed>100</X_AVM-DE_Speed><X_AVM-DE_Guest>0</X_AVM-DE_Guest></Item>
+        <Item><Index>2</Index><IPAddress>127.0.0.78</IPAddress><MACAddress>DA:11:22:33:44:55</MACAddress><Active>1</Active><HostName>Galaxy-S23</HostName><InterfaceType>802.11</InterfaceType><X_AVM-DE_Speed>433</X_AVM-DE_Speed><X_AVM-DE_Guest>1</X_AVM-DE_Guest></Item>
+        <Item><Index>3</Index><IPAddress></IPAddress><MACAddress>AA:BB:CC:00:11:99</MACAddress><Active>0</Active><HostName>alt</HostName><InterfaceType></InterfaceType></Item></List>`);
+      return;
+    }
     let body = '';
     req.on('data', (d) => { body += d; });
     req.on('end', () => {
@@ -50,13 +57,15 @@ beforeAll(async () => {
         res.writeHead(401, { 'WWW-Authenticate': 'Digest realm="F!Box SOAP-Auth", nonce="n0nce", qop="auth", algorithm=MD5' }); res.end('unauthorized'); return;
       }
       const action = String(req.headers.soapaction).replace(/"/g, '');
-      expect(body).toContain(`<u:${action.split('#')[1]} xmlns:u="${action.split('#')[0]}"/>`);
+      expect(body).toContain(`<u:${action.split('#')[1]} xmlns:u="${action.split('#')[0]}"${action.endsWith('GetOnlineMonitor') ? '><NewSyncGroupIndex>0</NewSyncGroupIndex>' : '/>'}`);
       calls.push(`${req.url} ${action.split('#')[1]}`);
       const send = (status: number, xml: string) => { res.writeHead(status, { 'Content-Type': 'text/xml' }); res.end(xml); };
       if (req.url === '/upnp/control/deviceinfo') send(200, envelope('<u:GetInfoResponse><NewModelName>FRITZ!Box 7590</NewModelName><NewSoftwareVersion>154.07.57</NewSoftwareVersion><NewUpTime>93784</NewUpTime></u:GetInfoResponse>'));
       else if (req.url === '/upnp/control/deviceconfig') send(200, envelope('<u:RebootResponse></u:RebootResponse>'));
       else if (req.url === '/upnp/control/wanpppconn1' && dsl) send(action.endsWith('GetInfo') ? 200 : 500, action.endsWith('GetInfo') ? envelope('<u:GetInfoResponse><NewConnectionStatus>Connected</NewConnectionStatus><NewExternalIPAddress>203.0.113.7</NewExternalIPAddress></u:GetInfoResponse>') : fault(707, 'DisconnectInProgress'));
       else if (req.url === '/upnp/control/wanipconnection1' && !dsl) send(200, action.endsWith('GetInfo') ? envelope('<u:GetInfoResponse><NewConnectionStatus>Connected</NewConnectionStatus><NewExternalIPAddress>198.51.100.9</NewExternalIPAddress></u:GetInfoResponse>') : envelope('<u:ForceTerminationResponse></u:ForceTerminationResponse>'));
+      else if (req.url === '/upnp/control/hosts') send(200, envelope(`<u:X_AVM-DE_GetHostListPathResponse><NewX_AVM-DE_HostListPath>/devicehostlist.lua?sid=abc&amp;x=1</NewX_AVM-DE_HostListPath></u:X_AVM-DE_GetHostListPathResponse>`));
+      else if (req.url === '/upnp/control/wancommonifconfig1') send(200, envelope('<u:X_AVM-DE_GetOnlineMonitorResponse><Newmax_ds>12500000</Newmax_ds><Newmax_us>5000000</Newmax_us><Newds_current_bps>250000,125000,0</Newds_current_bps><Newus_current_bps>12500,0,0</Newus_current_bps></u:X_AVM-DE_GetOnlineMonitorResponse>'));
       else send(500, fault(401, 'Invalid Action'));
     });
   });
@@ -144,5 +153,37 @@ describe('FRITZ!Box steuern', () => {
     expect(alert.since).toBeTruthy();
     up = true; await tick();
     expect((await ok('GET', '/network/alert', user)).offline).toBe(false);
+  });
+
+  it('ordnet Geräte ein: Schätzung aus dem Namen, eigene Regeln, Festlegung je Gerät, Angaben der FRITZ!Box', async () => {
+    const { guessDevice } = await import('../src/shared/devicekind.js');
+    expect(guessDevice({ names: ['iPhone-von-Anna'] })).toMatchObject({ kind: 'phone', basis: 'name' });
+    expect(guessDevice({ names: ['', 'EPSON TM-T20III'] })).toMatchObject({ kind: 'bon' });
+    expect(guessDevice({ names: ['NPI1A2B3C'] }).kind).toBe('printer');
+    expect(guessDevice({ names: ['fritz.box'] }).kind).toBe('router');
+    expect(guessDevice({ names: ['DESKTOP-4KQ12'] }).kind).toBe('computer');
+    expect(guessDevice({ names: [], randomMac: true })).toMatchObject({ kind: 'phone', basis: 'hint' });
+    expect(guessDevice({ names: ['xyz-123'] })).toMatchObject({ kind: null, basis: 'none' });
+    expect(guessDevice({ names: ['xyz-123'] }, [{ contains: 'XYZ', kind: 'terminal' }])).toMatchObject({ kind: 'terminal', basis: 'rule' });
+    expect(guessDevice({ names: ['iPhone'], kind: 'tablet' })).toMatchObject({ kind: 'tablet', basis: 'set' });
+
+    await ok('PUT', '/network/fritz', admin, { enabled: true, host: '127.0.0.1', port, user: 'pms', password: 'box-geheim' });
+    expect((await call('PUT', '/network/rules', user, { rules: [] })).statusCode).toBe(403);
+    expect((await call('PUT', '/network/rules', admin, { rules: [{ contains: 'galaxy', kind: 'quatsch' }] })).statusCode).toBe(400);
+    await ok('PUT', '/network/rules', admin, { rules: [{ contains: 'galaxy', kind: 'tablet' }] });
+    const scan = await ok('GET', '/network/devices', user);
+    expect(scan.boxNote).toBeNull();
+    const dev = (mac: string) => scan.devices.find((d: { mac: string }) => d.mac === mac);
+    expect(dev('aa:bb:cc:00:11:22')).toMatchObject({ ip: '127.0.0.77', box: { name: 'EPSON-TM-T20', link: 'LAN', guest: false, speedMbit: 100 }, guess: { kind: 'bon', label: 'Bondrucker', basis: 'name' } });
+    expect(dev('da:11:22:33:44:55')).toMatchObject({ box: { link: 'WLAN', guest: true }, guess: { kind: 'tablet', basis: 'rule' }, randomMac: true });
+    expect(dev('aa:bb:cc:00:11:99')).toBeUndefined(); // in der Box bekannt, aber nicht aktiv
+    // Festlegung je Gerät geht vor; sie bleibt auch ohne Namen gespeichert
+    await ok('PUT', '/network/devices/da:11:22:33:44:55', user, { name: '', kind: 'phone' });
+    expect((await call('PUT', '/network/devices/da:11:22:33:44:55', user, { name: '', kind: 'unsinn' })).statusCode).toBe(400);
+    const again = await ok('GET', '/network/devices', user);
+    expect(again.devices.find((d: { mac: string }) => d.mac === 'da:11:22:33:44:55')).toMatchObject({ kind: 'phone', guess: { kind: 'phone', basis: 'set' } });
+
+    // Durchsatz: die Box nennt Bytes je Sekunde, angezeigt werden Bit je Sekunde
+    expect(await ok('GET', '/network/usage', user)).toMatchObject({ downBps: 2_000_000, upBps: 100_000, maxDownBps: 100_000_000, maxUpBps: 40_000_000, downSeries: [0, 1_000_000, 2_000_000] });
   });
 });

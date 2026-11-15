@@ -421,6 +421,8 @@ export const tableReservations = pgTable('table_reservations', {
 export const netDevices = pgTable('net_devices', {
   mac: text('mac').primaryKey(),
   name: text('name').notNull(),
+  /** vom Administrator festgelegte Geräteart; leer = automatisch schätzen */
+  kind: text('kind').notNull().default(''),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 });
 

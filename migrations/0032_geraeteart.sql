@@ -1,0 +1,1 @@
+ALTER TABLE "net_devices" ADD COLUMN "kind" text DEFAULT '' NOT NULL;
