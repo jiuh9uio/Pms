@@ -697,3 +697,11 @@ export const categoryPhotos = pgTable('category_photos', {
   data: bytea('data').notNull(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 });
+
+/** Bilder der Gästeseite (Startbild, Restaurant, Hotel, Feiern) */
+export const siteImages = pgTable('site_images', {
+  key: text('key').primaryKey(),
+  mime: text('mime').notNull(),
+  data: bytea('data').notNull(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});

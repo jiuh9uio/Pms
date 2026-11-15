@@ -1,8 +1,8 @@
 import { asc, eq } from 'drizzle-orm';
 import { diffDays, todayBerlin } from '../../shared/hotel.js';
-import { SITE_DEFAULTS, type SiteAvailability, type SitePublic, type SiteSettings } from '../../shared/site.js';
+import { IMAGE_KEYS, SITE_DEFAULTS, SECTION_KEYS, parseFaq, parseHours, siteSettingsInput, type ImageKey, type SiteAvailability, type SitePublic, type SiteSettings } from '../../shared/site.js';
 import type { Db, Exec } from '../db/client.js';
-import { categoryPhotos, roomCategories, rooms, settings } from '../db/schema.js';
+import { categoryPhotos, roomCategories, rooms, settings, siteImages } from '../db/schema.js';
 import { AppError, notFound } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 import { getLogo } from './billing.js';
@@ -16,7 +16,9 @@ import { getHotel } from './settings.js';
  */
 export async function getSite(db: Exec): Promise<SiteSettings> {
   const [row] = await db.select().from(settings).where(eq(settings.key, 'guest_site'));
-  return { ...SITE_DEFAULTS, ...((row?.value as Partial<SiteSettings>) ?? {}) };
+  // ältere Stände ohne die neuen Felder: fehlende Werte aus den Vorgaben ergänzen
+  const v = siteSettingsInput.safeParse({ ...SITE_DEFAULTS, ...((row?.value as Partial<SiteSettings>) ?? {}) });
+  return v.success ? v.data : SITE_DEFAULTS;
 }
 export async function saveSite(db: Db, actor: Actor, v: SiteSettings) {
   await db.insert(settings).values({ key: 'guest_site', value: v }).onConflictDoUpdate({ target: settings.key, set: { value: v, updatedAt: new Date() } });
@@ -34,14 +36,24 @@ async function shownCategories(db: Exec, s: SiteSettings) {
 export async function sitePublic(db: Exec, preview: boolean): Promise<SitePublic> {
   const [s, h] = [await getSite(db), await getHotel(db)];
   const hotel = { name: h.name, street: h.street, zip: h.zip, city: h.city, phone: h.phone, email: h.email, website: h.website };
-  const empty: SitePublic = { enabled: false, preview: false, hotel: { ...hotel, street: '', zip: '', city: '', phone: '', email: '', website: '' }, headline: '', intro: '', highlights: [], showPrices: false, imprintUrl: '', privacyUrl: '', hasLogo: false, requestEnabled: false, privacyText: '', categories: [] };
+  const blank = { show: false, kicker: '', title: '', titleEm: '', text: '', note: '' };
+  const empty: SitePublic = {
+    enabled: false, preview: false, hotel: { ...hotel, street: '', zip: '', city: '', phone: '', email: '', website: '' }, brandSubtitle: '', heroKicker: '', headline: '', headlineEm: '', heroText: '',
+    introKicker: '', introTitle: '', introTitleEm: '', intro: '', highlights: [], showPrices: false, showAvailability: false, imprintUrl: '', privacyUrl: '', hasLogo: false, requestEnabled: false, privacyText: '',
+    sections: Object.fromEntries(SECTION_KEYS.map((k) => [k, blank])) as SitePublic['sections'], eventTypes: [], hours: [], hoursNote: '', faq: [], routeLink: false,
+    images: Object.fromEntries(IMAGE_KEYS.map((k) => [k, ''])) as SitePublic['images'], categories: [],
+  };
   if (!s.enabled && !preview) return empty;
   const cats = await shownCategories(db, s);
   const photos = new Map((await db.select({ id: categoryPhotos.categoryId, at: categoryPhotos.updatedAt }).from(categoryPhotos)).map((p) => [p.id, p.at.getTime().toString(36)]));
   const req = await getWebRequest(db);
+  const imgs = new Map((await db.select({ k: siteImages.key, at: siteImages.updatedAt }).from(siteImages)).map((i) => [i.k, i.at.getTime().toString(36)]));
   return {
-    enabled: s.enabled, preview: preview && !s.enabled, hotel, headline: s.headline, intro: s.intro,
-    highlights: s.highlights.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 12), showPrices: s.showPrices,
+    enabled: s.enabled, preview: preview && !s.enabled, hotel, brandSubtitle: s.brandSubtitle, heroKicker: s.heroKicker, headline: s.headline, headlineEm: s.headlineEm, heroText: s.heroText,
+    introKicker: s.introKicker, introTitle: s.introTitle, introTitleEm: s.introTitleEm, intro: s.intro,
+    highlights: s.highlights.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 12), showPrices: s.showPrices, showAvailability: s.showAvailability,
+    sections: s.sections, eventTypes: s.eventTypes.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 8), hours: parseHours(s.hours), hoursNote: s.hoursNote, faq: parseFaq(s.faq), routeLink: s.routeLink,
+    images: Object.fromEntries(IMAGE_KEYS.map((k) => [k, imgs.get(k) ?? ''])) as SitePublic['images'],
     imprintUrl: s.imprintUrl, privacyUrl: s.privacyUrl, hasLogo: !!(await getLogo(db)), requestEnabled: req.enabled, privacyText: req.privacy,
     categories: cats.map((c) => ({
       id: c.id, name: c.name, text: s.categories[c.id]?.text || c.description, maxPersons: c.maxPersons, stdOccupancy: c.stdOccupancy,
@@ -55,6 +67,7 @@ const MAX_NIGHTS = 30;
 export async function siteAvailability(db: Exec, q: { from: string; to: string; adults: number; children: number }, preview: boolean): Promise<SiteAvailability> {
   const s = await getSite(db);
   if (!s.enabled && !preview) throw new AppError(409, 'site_off', 'Die Seite ist derzeit nicht verfügbar');
+  if (!s.showAvailability && !preview) throw new AppError(409, 'availability_off', 'Die Verfügbarkeitsabfrage ist ausgeschaltet');
   const today = todayBerlin();
   const bad = (field: string, msg: string) => new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { [field]: msg });
   if (q.from < today) throw bad('from', 'Die Anreise liegt in der Vergangenheit');
@@ -99,5 +112,31 @@ export async function saveCategoryPhoto(db: Db, actor: Actor, categoryId: string
     await db.insert(categoryPhotos).values({ categoryId, mime: v.mime, data }).onConflictDoUpdate({ target: categoryPhotos.categoryId, set: { mime: v.mime, data, updatedAt: new Date() } });
   }
   await record(db, actor, { action: 'update', entity: 'category', entityId: categoryId, after: { foto: v ? 'hochgeladen' : 'entfernt', kategorie: c.name } });
+  return { ok: true };
+}
+
+// ---------- Bilder der Gästeseite ----------
+const checkImage = (v: { mime: 'image/png' | 'image/jpeg'; dataBase64: string }) => {
+  const data = Buffer.from(v.dataBase64, 'base64');
+  if (data.length > 1024 * 1024) throw new AppError(400, 'too_large', 'Das Bild ist zu groß (höchstens 1 MB)');
+  const png = data.subarray(0, 8).toString('hex') === '89504e470d0a1a0a', jpg = data[0] === 0xff && data[1] === 0xd8;
+  if ((v.mime === 'image/png' && !png) || (v.mime === 'image/jpeg' && !jpg)) throw new AppError(400, 'bad_image', 'Die Datei ist kein gültiges PNG- oder JPEG-Bild');
+  return data;
+};
+export async function siteImage(db: Exec, key: ImageKey) {
+  const [p] = await db.select().from(siteImages).where(eq(siteImages.key, key));
+  return p ? { mime: p.mime, data: p.data } : null;
+}
+export async function publicSiteImage(db: Exec, key: ImageKey, preview: boolean) {
+  const s = await getSite(db);
+  return s.enabled || preview ? siteImage(db, key) : null;
+}
+export async function saveSiteImage(db: Db, actor: Actor, key: ImageKey, v: { mime: 'image/png' | 'image/jpeg'; dataBase64: string } | null) {
+  if (!v) await db.delete(siteImages).where(eq(siteImages.key, key));
+  else {
+    const data = checkImage(v);
+    await db.insert(siteImages).values({ key, mime: v.mime, data }).onConflictDoUpdate({ target: siteImages.key, set: { mime: v.mime, data, updatedAt: new Date() } });
+  }
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: `guest_site_image_${key}`, after: { bild: v ? 'hochgeladen' : 'entfernt' } });
   return { ok: true };
 }

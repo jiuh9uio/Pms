@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.50.0
+
+- Gästeseite neu gestaltet nach der Gestaltungsvorlage des Hauses: warme Cremetöne, Serifen-Überschriften mit kursiver zweiter Zeile, Name und Untertitel mittig mit Navigation, großes Startbild mit Monogramm, Begrüßung, Restaurant, Hotel & Zimmer (mit Verfügbarkeit, Preis und Anfrage), Speisekarte, Feiern & Tagen, Gutscheine, Tischreservierung, Kontakt mit Öffnungszeiten und „Route planen“, häufige Fragen, dunkler Fußbereich. Bereiche blenden beim Scrollen weich ein; auf dem Handy mit Menü-Knopf.
+- Einstellungen → Online → Gästeseite: je Bereich ein- und ausblenden, Texte ändern (mit Vorschlagstext aus der Vorlage), Bilder für Startbild, Restaurant, Hotel und Feiern hochladen, Öffnungszeiten, häufige Fragen, Verfügbarkeitsabfrage ein/aus.
+- Telefon, E-Mail und Adresse kommen aus Einstellungen → Haus. Feiern- und Gutschein-Anfragen öffnen das E-Mail-Programm des Gastes; es werden keine Bilder oder Schriften von fremden Servern geladen.
+
 ## 1.49.0
 
 - Neue Gästeseite (Adresse /willkommen): eine öffentliche Seite für Gäste mit Überschrift, Einleitung, „Das bieten wir“, Zimmerkategorien mit Foto, Beschreibung und „ab … / Nacht“, Verfügbarkeitsprüfung für Reisedaten und Personen (mit Preis für den Aufenthalt nach Ihren Preisregeln) und unverbindlicher Anfrage, die mit der gewünschten Kategorie in den E-Mail-Posteingang kommt. Kontakt, Impressum- und Datenschutz-Link unten. Gebucht oder bezahlt wird darüber nichts.

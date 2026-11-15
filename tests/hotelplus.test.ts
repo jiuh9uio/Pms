@@ -521,6 +521,26 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect((await call('GET', `/public/site/photo/${catId}`, anon)).statusCode).toBe(404);
     expect((await ok('GET', '/public/site', anon)).categories).toEqual([]);
 
+    // Bereiche, Öffnungszeiten, Fragen und Bilder der Seite
+    const full = await ok('GET', '/settings/site', admin);
+    expect(full.sections.restaurant).toMatchObject({ show: true, title: 'Mit Zeit genießen.' }); // Vorschlagstexte für ältere Stände
+    await ok('PUT', '/settings/site', admin, { ...full, enabled: true, hours: 'Mittwoch – Samstag | 17:00 – 22:00 Uhr\nSonntag | Ruhetag', faq: 'Wie reserviere ich?\nBitte anrufen.\n\nOhne Antwort', sections: { ...full.sections, vouchers: { ...full.sections.vouchers, show: false } } });
+    const pub2 = await ok('GET', '/public/site', anon);
+    expect(pub2.hours).toEqual([{ label: 'Mittwoch – Samstag', value: '17:00 – 22:00 Uhr' }, { label: 'Sonntag', value: 'Ruhetag' }]);
+    expect(pub2.faq).toEqual([{ q: 'Wie reserviere ich?', a: 'Bitte anrufen.' }]);
+    expect(pub2.sections.vouchers.show).toBe(false);
+    expect(pub2.images.hero).toBe('');
+    expect((await call('PUT', '/settings/site/image/hero', user, { mime: 'image/png', dataBase64: png.toString('base64') })).statusCode).toBe(403);
+    expect((await call('PUT', '/settings/site/image/keller', admin, { mime: 'image/png', dataBase64: png.toString('base64') })).statusCode).toBe(400);
+    await ok('PUT', '/settings/site/image/hero', admin, { mime: 'image/png', dataBase64: png.toString('base64') });
+    expect((await ok('GET', '/public/site', anon)).images.hero).not.toBe('');
+    expect((await call('GET', '/public/site/image/hero', anon)).headers['content-type']).toBe('image/png');
+    await ok('PUT', '/settings/site', admin, { ...full, enabled: false });
+    expect((await call('GET', '/public/site/image/hero', anon)).statusCode).toBe(404); // nicht freigeschaltet: kein Bild
+    expect((await call('GET', '/public/site/image/hero', admin)).statusCode).toBe(200); // Vorschau
+    await ok('PUT', '/settings/site', admin, { ...full, enabled: true, showAvailability: false });
+    expect((await call('GET', `/public/site/availability?from=${addDays(today, 320)}&to=${addDays(today, 321)}&adults=1`, anon)).statusCode).toBe(409);
+
     // Anfrage mit gewünschter Kategorie landet im Posteingang
     await ok('PUT', '/settings/web-request', admin, { enabled: true, intro: '', privacy: 'Wir verwenden Ihre Angaben nur für die Anfrage.' });
     await ok('POST', '/public/booking-request', anon, { name: 'Erika Gast', email: 'erika@example.org', phone: '', from: addDays(today, 330), to: addDays(today, 332), adults: 2, children: 0, message: '', category: 'Doppelzimmer', consent: true, website: '' });

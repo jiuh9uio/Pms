@@ -157,6 +157,12 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
       if (!p) return reply.status(404).send({ error: { code: 'not_found', message: 'Kein Foto' } });
       return reply.header('Content-Type', p.mime).header('Cache-Control', 'public, max-age=86400').send(p.data);
     });
+    const imageKey = (req: FastifyRequest) => z.object({ key: z.enum(SI.IMAGE_KEYS) }).parse(req.params).key;
+    api.get('/public/site/image/:key', async (req, reply) => {
+      const p = await site.publicSiteImage(db, imageKey(req), await isAdminPreview(req));
+      if (!p) return reply.status(404).send({ error: { code: 'not_found', message: 'Kein Bild' } });
+      return reply.header('Content-Type', p.mime).header('Cache-Control', 'public, max-age=86400').send(p.data);
+    });
     api.get('/public/site/logo', async (_req, reply) => {
       const s = await site.getSite(db);
       const logo = s.enabled || s.homepage ? await getLogo(db) : null;
@@ -207,6 +213,8 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     // Gästeseite einrichten (Administrator)
     api.get('/settings/site', { preHandler: requireAdmin }, () => site.getSite(db));
     api.put('/settings/site', { preHandler: requireAdmin }, (req) => site.saveSite(db, actor(req), SI.siteSettingsInput.parse(req.body)));
+    api.put('/settings/site/image/:key', { preHandler: requireAdmin, bodyLimit: 1_500_000 }, (req) => site.saveSiteImage(db, actor(req), imageKey(req), SI.categoryPhotoInput.parse(req.body)));
+    api.delete('/settings/site/image/:key', { preHandler: requireAdmin }, (req) => site.saveSiteImage(db, actor(req), imageKey(req), null));
     api.get('/categories/:id/photo', { preHandler: requireAdmin }, async (req, reply) => {
       const p = await site.categoryPhoto(db, idParam(req));
       if (!p) return reply.status(404).send({ error: { code: 'not_found', message: 'Kein Foto' } });
