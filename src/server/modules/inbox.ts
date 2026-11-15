@@ -2,7 +2,7 @@ import { and, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import type { MailDraft } from '../../shared/hotel.js';
-import type { InboxMailDto, InboxSettingsDto, InboxState, InboxStatus, MailRules, ReplyTemplate, WebRequestPublic, WebRequestSettings } from '../../shared/inbox.js';
+import { MAIL_KINDS, type InboxCounts, type InboxMailDto, type InboxSettingsDto, type InboxState, type InboxStatus, type MailRules, type ReplyTemplate, type WebRequestPublic, type WebRequestSettings } from '../../shared/inbox.js';
 import { extract, type MailExtract, type MailKind } from '../../shared/mailextract.js';
 import type { Db, Exec } from '../db/client.js';
 import { REQUEST_LABEL, siteFrom, type SiteRequest } from '../../shared/site.js';
@@ -51,7 +51,7 @@ export async function inboxState(db: Exec): Promise<InboxState> {
 }
 
 // ---------- Regeln ----------
-const RULES0: MailRules = { hideOther: false, hotelWords: [], tableWords: [], ignoreSenders: [] };
+const RULES0: MailRules = { hideOther: false, hotelWords: [], tableWords: [], eventWords: [], meetingWords: [], voucherWords: [], questionWords: [], ignoreSenders: [] };
 export const getMailRules = (db: Exec) => read(db, 'mail_rules', RULES0);
 export async function saveMailRules(db: Db, actor: Actor, v: MailRules) {
   await write(db, 'mail_rules', v);
@@ -60,17 +60,39 @@ export async function saveMailRules(db: Db, actor: Actor, v: MailRules) {
 }
 /** Art und Angaben einer Nachricht nach den Regeln bestimmen. */
 function judge(rules: MailRules, m: { fromName: string; fromAddr: string; subject: string; body: string; day: string }) {
-  const ex = extract(m.subject, m.body, m.day, { hotel: rules.hotelWords, table: rules.tableWords });
+  const ex = extract(m.subject, m.body, m.day, {
+    hotel: rules.hotelWords, table: rules.tableWords, event: rules.eventWords, meeting: rules.meetingWords, voucher: rules.voucherWords, question: rules.questionWords,
+  });
   const who = `${m.fromName} ${m.fromAddr}`.toLowerCase();
   if (rules.ignoreSenders.some((x) => who.includes(x.toLowerCase()))) ex.kind = 'other';
   return { ex, hidden: rules.hideOther && ex.kind === 'other' };
 }
 const BY_RULE = 'Regel';
-/** Regeln auf vorhandene, noch unbearbeitete Nachrichten neu anwenden (z. B. nach einer Änderung der Regeln). Online-Anfragen bleiben, wie sie sind. */
+/** Art einer Anfrage über die Gästeseite – steht fest im Betreff, den das Programm selbst geschrieben hat. */
+export function webKind(subject: string): MailKind | null {
+  if (subject.startsWith('Zimmeranfrage')) return 'hotel';
+  if (subject.startsWith('Tischanfrage')) return 'table';
+  if (subject.startsWith('Veranstaltungsanfrage')) return 'event';
+  if (subject.startsWith('Gutscheinanfrage')) return 'voucher';
+  if (subject.startsWith('Frage über die Gästeseite')) return 'question';
+  if (/^[^:]{2,60}: Anfrage von .+ Teilnehmer$/.test(subject)) return 'meeting';
+  return null;
+}
+/**
+ * Regeln auf vorhandene, noch unbearbeitete Nachrichten neu anwenden (z. B. nach einer Änderung der Regeln).
+ * Online-Anfragen werden nicht nach Stichwörtern beurteilt; ältere, die noch als „Sonstiges“ geführt sind, bekommen ihre Art aus dem festen Betreff.
+ */
 export async function reclassify(db: Db, actor: Actor) {
   const rules = await getMailRules(db);
-  const rows = await db.select().from(inboxMails).where(sql`${inboxMails.uidValidity} <> 'web' and ${inboxMails.linkKind} is null and (${inboxMails.status} = 'new' or (${inboxMails.status} = 'ignored' and ${inboxMails.handledBy} = ${BY_RULE}))`);
+  const open = sql`${inboxMails.linkKind} is null and (${inboxMails.status} = 'new' or (${inboxMails.status} = 'ignored' and ${inboxMails.handledBy} = ${BY_RULE}))`;
+  const rows = await db.select().from(inboxMails).where(sql`${inboxMails.uidValidity} <> 'web' and ${open}`);
   let changed = 0;
+  for (const w of await db.select().from(inboxMails).where(sql`${inboxMails.uidValidity} = 'web' and ${inboxMails.kind} = 'other' and ${open}`)) {
+    const k = webKind(w.subject);
+    if (!k) continue;
+    await db.update(inboxMails).set({ kind: k, extract: { ...(w.extract as MailExtract), kind: k } }).where(eq(inboxMails.id, w.id));
+    changed++;
+  }
   for (const r of rows) {
     const { ex, hidden } = judge(rules, { fromName: r.fromName, fromAddr: r.fromAddr, subject: r.subject, body: r.body, day: berlinDay(r.receivedAt) });
     const status = hidden ? 'ignored' : 'new';
@@ -192,6 +214,17 @@ export async function listInbox(db: Exec, f: { status: InboxStatus | 'all'; kind
   )).orderBy(desc(inboxMails.receivedAt)).limit(200);
   return rows.map((r) => dto(r));
 }
+/** Anzahl je Art für die Filterleiste (gleicher Status und Suchbegriff wie die Liste). */
+export async function inboxCounts(db: Exec, f: { status: InboxStatus | 'all'; q: string }): Promise<InboxCounts> {
+  const q = f.q.trim();
+  const rows = await db.select({ kind: inboxMails.kind, n: sql<number>`count(*)::int` }).from(inboxMails).where(and(
+    f.status === 'all' ? undefined : eq(inboxMails.status, f.status),
+    q ? or(ilike(inboxMails.subject, `%${q}%`), ilike(inboxMails.fromName, `%${q}%`), ilike(inboxMails.fromAddr, `%${q}%`), ilike(inboxMails.body, `%${q}%`)) : undefined,
+  )).groupBy(inboxMails.kind);
+  const out = Object.fromEntries(['all', ...MAIL_KINDS].map((k) => [k, 0])) as InboxCounts;
+  for (const r of rows) { out[r.kind as MailKind] = r.n; out.all += r.n; }
+  return out;
+}
 export async function getInboxMail(db: Exec, id: string): Promise<InboxMailDto> {
   const [r] = await db.select().from(inboxMails).where(eq(inboxMails.id, id));
   if (!r) throw notFound('E-Mail');
@@ -249,7 +282,9 @@ export async function replyDraft(db: Exec, id: string, template: ReplyTemplate, 
     throw conflict('Aus dieser Nachricht wurde noch keine Reservierung angelegt – erst übernehmen, dann bestätigen', 'not_linked');
   }
   if (template === 'decline') {
-    const what = r.kind === 'table' ? 'zu dem gewünschten Zeitpunkt leider keinen Tisch mehr frei' : r.kind === 'hotel' ? 'in dem gewünschten Zeitraum leider kein Zimmer mehr frei' : 'leider keine Möglichkeit, Ihrem Wunsch nachzukommen';
+    const what = r.kind === 'table' ? 'zu dem gewünschten Zeitpunkt leider keinen Tisch mehr frei' : r.kind === 'hotel' ? 'in dem gewünschten Zeitraum leider kein Zimmer mehr frei'
+      : r.kind === 'event' ? 'an dem gewünschten Termin leider keine Räumlichkeiten für Ihre Feier mehr frei' : r.kind === 'meeting' ? 'an dem gewünschten Termin leider keinen Tagungsraum mehr frei'
+      : 'leider keine Möglichkeit, Ihrem Wunsch nachzukommen';
     const text = [hello, '', `vielen Dank für Ihre Anfrage. Wir haben ${what}.`, '', 'Gern suchen wir mit Ihnen nach einem anderen Termin – rufen Sie uns einfach an oder antworten Sie auf diese Nachricht.', '', signature(h)].join('\n') + quote(r);
     return { ...base, subject: re, text };
   }
@@ -354,7 +389,7 @@ export async function submitSiteRequest(db: Db, v: SiteRequest, ip: string | nul
     past(v.date, 'date');
     subject = `Veranstaltungsanfrage${v.occasion ? `: ${v.occasion}` : ''}${v.date ? ` am ${deDay(v.date)}` : ''}`;
     lines = [...who, ...(v.occasion ? [`Anlass: ${v.occasion}`] : []), `Wunschtermin: ${v.date ? deDay(v.date) : 'noch offen'}`, `Gäste (ungefähr): ${v.guests}`];
-    ex = { ...ex, dates: v.date ? [v.date] : [], persons: v.guests };
+    kind = 'event'; ex = { ...ex, kind, dates: v.date ? [v.date] : [], from: v.date || null, persons: v.guests };
   } else if (v.type === 'meeting') {
     past(v.from, 'from');
     const days = v.to && v.to > v.from ? `${deDay(v.from)} bis ${deDay(v.to)}` : deDay(v.from);
@@ -362,12 +397,12 @@ export async function submitSiteRequest(db: Db, v: SiteRequest, ip: string | nul
     lines = [...who, `Veranstalter: ${v.organization}`, ...(v.kind ? [`Art: ${v.kind}`] : []), `Termin: ${days}`, `Teilnehmer (ungefähr): ${v.participants}`,
       `Übernachtungen: ${v.rooms ? `${v.rooms} ${v.rooms === 1 ? 'Zimmer' : 'Zimmer'} je Nacht` : 'keine'}`,
       ...(v.layout ? [`Bestuhlung: ${v.layout}`] : []), ...(v.equipment.length ? [`Technik: ${v.equipment.join(', ')}`] : []), ...(v.catering.length ? [`Verpflegung: ${v.catering.join(', ')}`] : [])];
-    ex = { ...ex, dates: v.to && v.to > v.from ? [v.from, v.to] : [v.from], persons: v.participants };
+    kind = 'meeting'; ex = { ...ex, kind, dates: v.to && v.to > v.from ? [v.from, v.to] : [v.from], from: v.from, to: v.to && v.to > v.from ? v.to : null, persons: v.participants };
   } else if (v.type === 'voucher') {
     subject = `Gutscheinanfrage${v.value ? `: ${v.value}` : ''}`;
-    lines = [...who, ...(v.value ? [`Wert / Wunsch: ${v.value}`] : [])];
+    lines = [...who, ...(v.value ? [`Wert / Wunsch: ${v.value}`] : [])]; kind = 'voucher'; ex = { ...ex, kind };
   } else {
-    subject = 'Frage über die Gästeseite'; lines = who;
+    subject = 'Frage über die Gästeseite'; lines = who; kind = 'question'; ex = { ...ex, kind };
   }
   const body = ['Anfrage über die Gästeseite', '', ...lines, ...msg].join('\n');
   await db.transaction(async (tx) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classify, extract, findDates, findPersons, findPhone, findTime, ownText } from '../src/shared/mailextract.js';
+import { classify, extract, score, findDates, findPersons, findPhone, findTime, ownText } from '../src/shared/mailextract.js';
 
 const REF = '2026-11-14';
 describe('E-Mail-Erkennung', () => {
@@ -45,5 +45,36 @@ describe('E-Mail-Erkennung', () => {
     const body = 'Dann bitte am 20.12. um 19 Uhr.\n\nAm 01.11.2026 um 10:00 schrieb Hotel:\n> Wir haben am 05.11. geschlossen.';
     expect(ownText(body)).not.toContain('05.11.');
     expect(extract('Re: Tisch reservieren', body, REF)).toMatchObject({ kind: 'table', dates: ['2026-12-20'], time: '19:00' });
+  });
+
+  it('ordnet Anfragen nach Art: Zimmer, Tisch, Feier, Tagung, Gutschein, allgemeine Frage, Sonstiges', () => {
+    const cases: [string, string, string][] = [
+      ['Zimmeranfrage', 'Hallo, haben Sie vom 12.-14.05. ein Doppelzimmer frei?', 'hotel'],
+      ['Übernachtung', 'Wir bräuchten 2 Übernachtungen für 3 Personen mit Frühstück.', 'hotel'],
+      ['Anfrage', 'Ich suche eine Schlafmöglichkeit für eine Nacht am Freitag.', 'hotel'],
+      ['Tisch', 'Guten Tag, ich möchte für Samstag 19 Uhr einen Tisch für 4 Personen reservieren.', 'table'],
+      ['Geburtstag', 'Wir möchten zum Geburtstag meiner Mutter am Sonntag mit 6 Personen zum Mittagessen kommen. Haben Sie einen Tisch frei?', 'table'],
+      ['Geburtstagsfeier', 'Wir planen den 60. Geburtstag meines Mannes mit ca. 45 Gästen im Saal, gern mit Buffet. Ist der 12.09. noch frei?', 'event'],
+      ['Hochzeit', 'Wir heiraten im Juni 2027 und suchen eine Location für 80 Gäste, dazu 10 Zimmer für die Gäste.', 'event'],
+      ['Trauerfeier', 'Für die Beerdigung am Donnerstag bräuchten wir einen Trauerkaffee für etwa 30 Personen.', 'event'],
+      ['Weihnachtsfeier', 'Wir möchten unsere Weihnachtsfeier mit 25 Kollegen bei Ihnen machen, mit Menü.', 'event'],
+      ['Jahreshauptversammlung', 'Die Innung möchte ihre Jahreshauptversammlung bei Ihnen abhalten, ca. 35 Teilnehmer, Beamer wird benötigt.', 'meeting'],
+      ['Seminar mit Übernachtung', 'Wir planen ein zweitägiges Seminar für 12 Mitarbeiter inkl. Übernachtung und Tagungspauschale.', 'meeting'],
+      ['Qualitätszirkel', 'Für unseren Ärzte-Stammtisch bzw. Qualitätszirkel suchen wir einen Raum für 15 Personen mit Leinwand.', 'meeting'],
+      ['Gutschein', 'Ich möchte einen Gutschein über 100 € verschenken. Wie bekomme ich den?', 'voucher'],
+      ['Frage', 'Haben Sie am Montag geöffnet? Und darf mein Hund mit?', 'question'],
+      ['Parkplatz', 'Gibt es bei Ihnen Parkplätze für einen Kleinbus?', 'question'],
+      ['Allergie', 'Bieten Sie auch glutenfreie Speisen an?', 'question'],
+      ['Newsletter März', 'Unsere neuen Angebote! Zum Abmelden hier klicken.', 'other'],
+      ['Ihre Bestellung', 'Vielen Dank für Ihre Bestellung. Diese E-Mail wurde automatisch erstellt.', 'other'],
+      ['Hallo', 'Vielen Dank für den schönen Abend gestern!', 'other'],
+    ];
+    for (const [subject, body, want] of cases) expect(`${subject}: ${score(subject, body).kind}`).toBe(`${subject}: ${want}`);
+  });
+  it('versteht Umlaute an Wortgrenzen und nimmt eigene Stichwörter dazu', () => {
+    expect(score('Menü', 'Wir hätten gern ein Menü für die Ärzte-Runde.').scores.event).toBeGreaterThan(0);
+    expect(score('Anfrage', 'Wir möchten mit den Landfrauen bei Ihnen zusammenkommen.').kind).not.toBe('meeting');
+    expect(score('Anfrage', 'Wir möchten mit den Landfrauen bei Ihnen zusammenkommen.', { meeting: ['Landfrauen'] }).kind).toBe('meeting');
+    expect(extract('Tagung', 'Seminar am 10.03. und 11.03. mit 20 Teilnehmern', REF)).toMatchObject({ kind: 'meeting', from: '2027-03-10', to: '2027-03-11', persons: 20 });
   });
 });

@@ -97,7 +97,7 @@ describe('E-Mail-Posteingang', () => {
     expect(done).toMatchObject({ status: 'done', linkKind: 'table', linkId, handledBy: 'Chefin' });
     expect(await ok('GET', '/inbox?kind=table', admin)).toHaveLength(0); // Standard: nur neue
     expect(await ok('GET', '/inbox?kind=table&status=done', admin)).toHaveLength(1);
-    const [other] = await ok('GET', '/inbox?kind=other&q=Frage', admin);
+    const [other] = await ok('GET', '/inbox?kind=question&q=Frage', admin); // „Wann haben Sie geöffnet?“ = allgemeine Frage
     expect((await ok('PATCH', `/inbox/${other.id}`, admin, { kind: 'hotel' })).kind).toBe('hotel');
     await ok('DELETE', `/inbox/${other.id}`, admin);
     expect(await ok('POST', '/inbox/fetch', admin)).toEqual({ added: 0 }); // Entferntes kommt nicht wieder
@@ -151,15 +151,15 @@ describe('E-Mail-Posteingang', () => {
 
   it('wendet die E-Mail-Regeln an: nur Anfragen zeigen, eigene Stichwörter, Absender ausschließen', async () => {
     expect((await call('PUT', '/settings/mail-rules', user, {})).statusCode).toBe(403);
-    await ok('PUT', '/settings/mail-rules', admin, { hideOther: true, hotelWords: [], tableWords: ['Stammtisch'], ignoreSenders: ['newsletter@'] });
+    await ok('PUT', '/settings/mail-rules', admin, { hideOther: true, hotelWords: [], tableWords: ['Vereinsabend'], ignoreSenders: ['newsletter@'] });
     box.push(
       raw(6, 'Werbung <newsletter@example.com>', 'Zimmer frei? Jetzt buchen', 'Haben Sie ein Zimmer frei? Buchen Sie unsere Software.'),
-      raw(7, 'Verein <verein@example.com>', 'Stammtisch', 'Wir möchten am 10.12. um 19 Uhr mit 12 Personen kommen.'),
+      raw(7, 'Verein <verein@example.com>', 'Vereinsabend', 'Wir möchten am 10.12. um 19 Uhr mit 12 Personen kommen.'),
       raw(8, 'Bank <bank@example.com>', 'Kontoauszug', 'Ihr Kontoauszug liegt bereit.'),
     );
     expect(await ok('POST', '/inbox/fetch', admin)).toEqual({ added: 3 });
     const fresh = await ok('GET', '/inbox?status=new', admin);
-    expect(fresh.find((m: { subject: string }) => m.subject === 'Stammtisch')).toMatchObject({ kind: 'table', extract: { dates: ['2026-12-10'], time: '19:00', persons: 12 } });
+    expect(fresh.find((m: { subject: string }) => m.subject === 'Vereinsabend')).toMatchObject({ kind: 'table', extract: { dates: ['2026-12-10'], time: '19:00', persons: 12 } });
     expect(fresh.some((m: { subject: string }) => m.subject === 'Kontoauszug' || m.subject.startsWith('Zimmer frei? Jetzt'))).toBe(false);
     const hidden = await ok('GET', '/inbox?status=ignored', admin);
     expect(hidden.filter((m: { handledBy: string }) => m.handledBy === 'Regel').map((m: { subject: string }) => m.subject).sort()).toEqual(['Kontoauszug', 'Zimmer frei? Jetzt buchen']);
@@ -170,8 +170,16 @@ describe('E-Mail-Posteingang', () => {
     expect(re.changed).toBeGreaterThanOrEqual(3);
     const back = await ok('GET', '/inbox?status=new', admin);
     expect(back.find((m: { subject: string }) => m.subject === 'Zimmer frei? Jetzt buchen').kind).toBe('hotel');
-    expect(back.find((m: { subject: string }) => m.subject === 'Stammtisch').kind).toBe('other');
+    expect(back.find((m: { subject: string }) => m.subject === 'Vereinsabend').kind).toBe('other');
     expect(back.some((m: { subject: string }) => m.subject === 'Kontoauszug')).toBe(true);
+    // Zähler je Art für die Filterleiste
+    const counts = await ok('GET', '/inbox/counts?status=new', admin);
+    expect(counts.all).toBe(back.length);
+    expect(counts.hotel).toBe(back.filter((m: { kind: string }) => m.kind === 'hotel').length);
+    // ältere Online-Anfragen, die noch als „Sonstiges“ geführt sind, bekommen ihre Art aus dem festen Betreff
+    await db.execute(sql`insert into inbox_mails (uid_validity, uid, subject, received_at, kind, extract) values ('web', 990, 'Gutscheinanfrage: 50 €', now(), 'other', '{"kind":"other","dates":[],"from":null,"to":null,"time":null,"persons":null,"children":null,"phone":""}'::jsonb)`);
+    await ok('POST', '/inbox/reclassify', admin);
+    expect((await ok('GET', '/inbox?kind=voucher', admin)).map((m: { subject: string }) => m.subject)).toContain('Gutscheinanfrage: 50 €');
   });
 
   it('entfernt Erledigtes nach der eingestellten Frist und leert den Posteingang über „Daten löschen“', async () => {

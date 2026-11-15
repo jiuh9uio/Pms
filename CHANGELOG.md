@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.57.0
+
+- E-Mail-Posteingang: Nachrichten werden jetzt in sieben Arten eingeordnet – Zimmer, Tisch, Feier / Veranstaltung, Tagung / Versammlung, Gutschein, allgemeine Frage und Sonstiges (Werbung, Rechnungen, Newsletter, automatische Nachrichten). Oben im Posteingang gibt es eine Filterleiste mit der Anzahl je Art.
+- Die Erkennung arbeitet mit gewichteten Stichwörtern (Betreff zählt doppelt) und Alltagsregeln: kleiner Geburtstag am Tisch = Tischanfrage, Geburtstag im Saal oder mit Buffet = Feier, Tagung oder Feier mit Übernachtung bleibt Tagung bzw. Feier, eine Frage ohne Anfrage-Stichwort = allgemeine Frage. Umlaute an Wortgrenzen (Menü, Ärzte, Übernachtung) werden richtig erkannt; „Teilnehmer“, „Mitarbeiter“ und „Kollegen“ zählen als Personenangabe.
+- Anfragen über die Gästeseite bekommen ihre Art direkt (bisher landeten Feier, Tagung, Gutschein und Frage unter „Sonstiges“). „Speichern und auf vorhandene Nachrichten anwenden“ ordnet auch ältere Online-Anfragen nachträglich richtig ein.
+- Einstellungen → Algorithmen → E-Mail: eigene Stichwörter für jede Art; „Sonstiges gleich ausblenden“ blendet allgemeine Fragen nicht mehr aus.
+- Feier und Tagung: Anzeige der erkannten Angaben (Termin, Personen, Telefon) und eine passende Absage-Vorlage.
+
 ## 1.56.0
 
 - Check-in und Gästeprofil: „Adresse nachschlagen“ direkt bei den Gastdaten – Google-Maps-Link einfügen, Impressum einer Website lesen oder über die Karte (OpenStreetMap) suchen. Übernommen werden Straße, PLZ, Ort und Land (bei leerem Feld auch die Firma).

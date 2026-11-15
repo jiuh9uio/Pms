@@ -3,8 +3,13 @@ import type { MailExtract, MailKind } from './mailextract.js';
 
 export const INBOX_STATUSES = ['new', 'done', 'ignored'] as const;
 export type InboxStatus = (typeof INBOX_STATUSES)[number];
-export const MAIL_KINDS = ['hotel', 'table', 'other'] as const;
-export const MAIL_KIND_LABEL: Record<MailKind, string> = { hotel: 'Zimmer', table: 'Tisch', other: 'Sonstiges' };
+export const MAIL_KINDS = ['hotel', 'table', 'event', 'meeting', 'voucher', 'question', 'other'] as const;
+export const MAIL_KIND_LABEL: Record<MailKind, string> = {
+  hotel: 'Zimmer', table: 'Tisch', event: 'Feier / Veranstaltung', meeting: 'Tagung / Versammlung', voucher: 'Gutschein', question: 'Allgemeine Frage', other: 'Sonstiges',
+};
+/** Kurzform für Abzeichen und Filter */
+export const MAIL_KIND_SHORT: Record<MailKind, string> = { hotel: 'Zimmer', table: 'Tisch', event: 'Feier', meeting: 'Tagung', voucher: 'Gutschein', question: 'Frage', other: 'Sonstiges' };
+export type InboxCounts = Record<MailKind | 'all', number>;
 
 export const inboxSettingsInput = z.object({
   enabled: z.boolean(),
@@ -41,9 +46,10 @@ export type ReplyTemplate = (typeof REPLY_TEMPLATES)[number];
 // ---------- E-Mail-Regeln (Einstellungen → Algorithmen → E-Mail) ----------
 const words = z.array(z.string().trim().min(2).max(60)).max(50);
 export const mailRulesInput = z.object({
-  /** Nachrichten, die keine Zimmer- oder Tischanfrage sind, gleich unter „Ignoriert“ ablegen */
+  /** Nachrichten, die keine Anfrage und keine Frage sind („Sonstiges“), gleich unter „Ignoriert“ ablegen */
   hideOther: z.boolean(),
   hotelWords: words, tableWords: words,
+  eventWords: words.default([]), meetingWords: words.default([]), voucherWords: words.default([]), questionWords: words.default([]),
   /** Absender (Teil der Adresse oder des Namens), deren Nachrichten nie als Anfrage gelten */
   ignoreSenders: words,
 });

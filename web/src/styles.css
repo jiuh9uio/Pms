@@ -420,6 +420,10 @@ table.kv td { padding: 8px 0; border-bottom: 1px solid var(--line); } .wrapcode 
 .inline2 { display: grid; grid-template-columns: 1fr 80px; gap: 8px; }
 
 /* E-Mail-Posteingang */
+.kindfilter { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.kindchip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line-strong); background: var(--surface); border-radius: 999px; padding: 5px 12px; cursor: pointer; font-size: 13px; color: var(--text); transition: background .15s, border-color .15s, color .15s; }
+.kindchip:hover { border-color: var(--accent); } .kindchip .n { font-size: 11px; min-width: 18px; padding: 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--muted); text-align: center; }
+.kindchip.on { background: var(--accent); border-color: var(--accent); color: #fff; } .kindchip.on .n { background: rgba(255,255,255,.25); color: #fff; }
 .inboxfilter { display: flex; gap: 10px; margin: 0 0 14px; } .inboxfilter input { flex: 1; max-width: 420px; } .inboxfilter select { width: auto; }
 .inbox { display: grid; grid-template-columns: minmax(280px, 380px) 1fr; gap: 16px; align-items: start; }
 .inboxlist { display: flex; flex-direction: column; gap: 8px; max-height: 75vh; overflow: auto; }

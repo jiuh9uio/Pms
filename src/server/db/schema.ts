@@ -640,7 +640,7 @@ export const inboxMails = pgTable('inbox_mails', {
   subject: text('subject').notNull().default(''),
   receivedAt: ts('received_at').notNull(),
   body: text('body').notNull().default(''),
-  kind: text('kind', { enum: ['hotel', 'table', 'other'] }).notNull(),
+  kind: text('kind', { enum: ['hotel', 'table', 'event', 'meeting', 'voucher', 'question', 'other'] }).notNull(),
   extract: jsonb('extract').notNull(),
   status: text('status', { enum: ['new', 'done', 'ignored'] }).notNull().default('new'),
   linkKind: text('link_kind', { enum: ['booking', 'table'] }),

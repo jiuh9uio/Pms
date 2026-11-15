@@ -375,6 +375,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     const email = { preHandler: requireModule('email') };
     api.get('/inbox', email, (req) => inbox.listInbox(db, I.inboxListQuery.parse(req.query)));
     api.get('/inbox/state', email, () => inbox.inboxState(db));
+    api.get('/inbox/counts', email, (req) => inbox.inboxCounts(db, I.inboxListQuery.parse(req.query)));
     api.post('/inbox/fetch', email, (req) => inbox.fetchInbox(db, actor(req)));
     api.get('/inbox/:id', email, (req) => inbox.getInboxMail(db, z.uuid().parse((req.params as { id: string }).id)));
     api.patch('/inbox/:id', email, (req) => inbox.updateInboxMail(db, actor(req), z.uuid().parse((req.params as { id: string }).id), I.inboxUpdateInput.parse(req.body)));

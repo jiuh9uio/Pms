@@ -591,12 +591,13 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect((await ask({ type: 'table', date: addDays(today, 5), time: '25:00', persons: 4 })).json().error.fields.time).toBeTruthy();
     expect((await ask({ type: 'table', date: addDays(today, -2), time: '19:00', persons: 2 })).json().error.fields.date).toContain('Vergangenheit');
     expect((await ask({ type: 'event', date: '', guests: 40, occasion: 'Hochzeit', message: '' })).statusCode).toBe(200);
-    expect(await last()).toMatchObject({ kind: 'other', body: expect.stringContaining('Anlass: Hochzeit') });
+    expect(await last()).toMatchObject({ kind: 'event', body: expect.stringContaining('Anlass: Hochzeit') });
     expect((await ask({ type: 'event', date: '', guests: 40, occasion: '', message: '' })).json().error.fields.message).toBeTruthy();
     // Tagung (z. B. Ärzte-Fortbildung): Veranstalter, Tage, Teilnehmer, Zimmer, Bestuhlung, Technik, Verpflegung
     const meeting = { type: 'meeting', organization: 'Ärztlicher Qualitätszirkel', kind: 'Seminar / Fortbildung / Schulung', from: addDays(today, 40), to: addDays(today, 41), participants: 25, rooms: 8, layout: 'U-Form', equipment: ['Beamer und Leinwand', 'Flipchart'], catering: ['Mittagessen', 'Kaffeepause nachmittags'] };
     expect((await ask(meeting)).statusCode).toBe(200);
     const mt = await last();
+    expect(mt.kind).toBe('meeting');
     expect(mt.subject).toBe(`Seminar: Anfrage von Ärztlicher Qualitätszirkel, ${addDays(today, 40).split('-').reverse().join('.')} bis ${addDays(today, 41).split('-').reverse().join('.')}, 25 Teilnehmer`);
     expect(mt.body).toContain('Art: Seminar / Fortbildung / Schulung');
     expect((await ask({ ...meeting, organization: 'Bäckerinnung Zwickau', kind: 'Innungs- oder Mitgliederversammlung', equipment: ['Rednerpult'] })).statusCode).toBe(200);
@@ -611,8 +612,9 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect((await ask({ ...meeting, to: '', rooms: 0, layout: '', equipment: [], catering: [] })).statusCode).toBe(200);
     expect((await last()).body).toContain('Übernachtungen: keine');
     expect((await ask({ type: 'voucher', value: '50 €' })).statusCode).toBe(200);
-    expect((await last()).subject).toBe('Gutscheinanfrage: 50 €');
+    expect(await last()).toMatchObject({ subject: 'Gutscheinanfrage: 50 €', kind: 'voucher' });
     expect((await ask({ type: 'question', message: 'Gibt es Parkplätze?' })).statusCode).toBe(200);
+    expect((await last()).kind).toBe('question');
     expect((await ask({ type: 'question', message: '' })).statusCode).toBe(400);
     expect((await ask({ type: 'question', message: 'Ohne Häkchen', consent: false })).statusCode).toBe(400);
     expect((await ask({ type: 'unbekannt', message: 'x' })).statusCode).toBe(400);

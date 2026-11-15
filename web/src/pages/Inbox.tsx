@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { MAIL_KINDS, MAIL_KIND_LABEL, type InboxMailDto, type InboxState, type InboxStatus } from '../../../src/shared/inbox.js';
+import { MAIL_KINDS, MAIL_KIND_LABEL, MAIL_KIND_SHORT, type InboxCounts, type InboxMailDto, type InboxState, type InboxStatus } from '../../../src/shared/inbox.js';
 import type { MailKind } from '../../../src/shared/mailextract.js';
 import { tableReservationInput } from '../../../src/shared/restaurant.js';
 import { hasModule } from '../../../src/shared/schemas.js';
@@ -11,7 +11,7 @@ import { MailDialog } from '../hotel/MailDialog.tsx';
 import { Badge, Button, Field, LoadState, PageHeader, fmtDateTime, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
 
 export const INBOX_TABS = [['new', 'Neu'], ['done', 'Erledigt'], ['ignored', 'Ignoriert'], ['all', 'Alle']] as const;
-const tone = (k: MailKind) => (k === 'hotel' ? 'accent' : k === 'table' ? 'ok' : 'neutral');
+const tone = (k: MailKind) => (k === 'hotel' || k === 'meeting' ? 'accent' : k === 'table' || k === 'event' ? 'ok' : k === 'voucher' ? 'warn' : 'neutral');
 /** „Erika Beispiel“ oder „Beispiel, Erika“ → Vor- und Nachname */
 function splitName(name: string, addr: string) {
   const n = name.replace(/["']/g, '').trim();
@@ -32,6 +32,7 @@ export function Inbox() {
   const [busy, setBusy] = useState(false);
   const state = useLoad(() => api<InboxState>('GET', '/inbox/state'), [rev]);
   const list = useLoad(() => api<InboxMailDto[]>('GET', `/inbox?status=${current}&kind=${kind}&q=${encodeURIComponent(q)}`), [current, kind, q, rev]);
+  const counts = useLoad(() => api<InboxCounts>('GET', `/inbox/counts?status=${current}&q=${encodeURIComponent(q)}`), [current, q, rev]);
   const fetchNow = async () => {
     setBusy(true);
     try { const r = await api<{ added: number }>('POST', '/inbox/fetch', {}); toast(r.added ? `${r.added} neue ${r.added === 1 ? 'Nachricht' : 'Nachrichten'}` : 'Keine neuen Nachrichten'); bump(); }
@@ -46,10 +47,15 @@ export function Inbox() {
       {st && !st.ready && <p className="notice">Der E-Mail-Empfang ist noch nicht eingerichtet. Das geht unter Verwaltung → Einstellungen → E-Mail (nur Administrator).</p>}
       {st?.lastError && <p className="notice danger">Letzter Abruf fehlgeschlagen: {st.lastError}</p>}
       {bar}
+      <div className="kindfilter" role="group" aria-label="Nach Art filtern">
+        {(['all', ...MAIL_KINDS] as const).map((k) => {
+          const n = counts.data?.[k] ?? 0;
+          if (k !== 'all' && k !== kind && n === 0) return null;
+          return <button key={k} type="button" className={`kindchip k-${k}${kind === k ? ' on' : ''}`} aria-pressed={kind === k} title={k === 'all' ? 'Alle Arten' : MAIL_KIND_LABEL[k]}
+            onClick={() => setKind(k)}>{k === 'all' ? 'Alle' : MAIL_KIND_SHORT[k]}<span className="n">{n}</span></button>;
+        })}
+      </div>
       <div className="inboxfilter">
-        <select value={kind} onChange={(e) => setKind(e.target.value as MailKind | 'all')} aria-label="Art">
-          <option value="all">alle Arten</option>{MAIL_KINDS.map((k) => <option key={k} value={k}>{MAIL_KIND_LABEL[k]}</option>)}
-        </select>
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Suchen in Absender, Betreff, Text" aria-label="Suchen" />
       </div>
       <div className="inbox">
@@ -59,14 +65,14 @@ export function Inbox() {
           {list.data?.map((m) => (
             <button key={m.id} type="button" className={`card inboxitem${m.id === openId ? ' on' : ''}`} onClick={() => setOpenId(m.id)}>
               <span className="top"><b>{m.fromName || m.fromAddr}</b><small>{fmtDateTime(m.receivedAt)}</small></span>
-              <span className="subject">{m.subject || '(ohne Betreff)'} <Badge tone={tone(m.kind)}>{MAIL_KIND_LABEL[m.kind]}</Badge>{m.status === 'done' && <> <Badge tone="ok">erledigt</Badge></>}{m.repliedAt && <> <Badge>beantwortet</Badge></>}</span>
+              <span className="subject">{m.subject || '(ohne Betreff)'} <Badge tone={tone(m.kind)}>{MAIL_KIND_SHORT[m.kind]}</Badge>{m.status === 'done' && <> <Badge tone="ok">erledigt</Badge></>}{m.repliedAt && <> <Badge>beantwortet</Badge></>}</span>
               <small className="muted">{m.snippet}</small>
             </button>
           ))}
         </div>
         <div className="inboxdetail">{openId ? <MailDetail key={openId} id={openId} onGone={() => setOpenId(null)} /> : <p className="card muted">Links eine Nachricht wählen.</p>}</div>
       </div>
-      <p className="muted small">Die Einordnung (Zimmer, Tisch, Sonstiges) und die erkannten Angaben sind Vorschläge des Programms nach festen Mustern – bitte vor dem Übernehmen mit dem Text vergleichen. Im Postfach selbst wird nichts verändert.</p>
+      <p className="muted small">Die Einordnung (Zimmer, Tisch, Feier, Tagung, Gutschein, allgemeine Frage, Sonstiges) und die erkannten Angaben sind Vorschläge des Programms nach festen Mustern – bitte vor dem Übernehmen mit dem Text vergleichen. Im Postfach selbst wird nichts verändert.</p>
     </>
   );
 }
@@ -119,7 +125,7 @@ function MailDetail({ id, onGone }: { id: string; onGone: () => void }) {
           {data.status !== 'new' && <Button onClick={() => status('new', 'Wieder offen')}>Wieder öffnen</Button>}
           <Button onClick={() => setMail('reply')}>Antworten</Button>
           {data.linkKind && <Button variant="primary" onClick={() => setMail('confirm')}>Bestätigung senden</Button>}
-          {!data.linkKind && data.kind !== 'other' && <Button onClick={() => setMail('decline')}>Absage senden</Button>}
+          {!data.linkKind && ['hotel', 'table', 'event', 'meeting'].includes(data.kind) && <Button onClick={() => setMail('decline')}>Absage senden</Button>}
           <Button variant="danger" onClick={() => void remove()}>Entfernen</Button>
         </div>
         {data.repliedAt && <p className="muted small">Beantwortet am {fmtDateTime(data.repliedAt)}{data.repliedBy && ` von ${data.repliedBy}`}.</p>}
@@ -128,6 +134,13 @@ function MailDetail({ id, onGone }: { id: string; onGone: () => void }) {
         {data.linkKind && <p className="notice">Daraus angelegt: {data.linkKind === 'booking'
           ? <button type="button" className="linkbtn" onClick={() => data.linkId && openBooking(data.linkId)}>Zimmerreservierung öffnen</button> : 'eine Tischreservierung (im Modul Restaurant zu finden)'}{data.handledBy && ` · bearbeitet von ${data.handledBy}`}</p>}
       </section>
+      {(data.kind === 'event' || data.kind === 'meeting') && (
+        <section className="card">
+          <h2>{data.kind === 'event' ? 'Feier / Veranstaltung' : 'Tagung / Versammlung'} – erkannte Angaben</h2>
+          <p>{x.dates.length ? `Termin: ${x.dates.slice(0, 3).map(deDate).join(', ')}` : 'Kein Termin erkannt'}{x.time ? ` · ${x.time} Uhr` : ''}{x.persons ? ` · etwa ${x.persons} ${data.kind === 'meeting' ? 'Teilnehmer' : 'Gäste'}` : ''}{x.phone ? ` · Tel. ${x.phone}` : ''}</p>
+          <p className="muted small">Für Feiern und Tagungen gibt es noch keine eigene Planung im Programm. Bitte über „Antworten“ ein Angebot schicken; benötigte Zimmer lassen sich wie gewohnt im Hotel reservieren. Die Angaben sind Vorschläge – bitte mit dem Text vergleichen.</p>
+        </section>
+      )}
       {data.kind === 'hotel' && !data.linkKind && (
         <section className="card">
           <h2>Als Zimmerreservierung übernehmen</h2>

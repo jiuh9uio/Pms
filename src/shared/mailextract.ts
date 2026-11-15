@@ -1,9 +1,9 @@
 /**
- * E-Mails lesen: Art der Anfrage schätzen (Hotel, Tisch, Sonstiges) und Angaben herausziehen
+ * E-Mails lesen: Art der Anfrage schätzen (Zimmer, Tisch, Feier, Tagung, Gutschein, allgemeine Frage, Sonstiges) und Angaben herausziehen
  * (Datum, Uhrzeit, Personen, Telefon). Reine Mustererkennung – das Ergebnis ist ein Vorschlag,
  * den ein Mensch prüft, bevor daraus eine Reservierung wird.
  */
-export type MailKind = 'hotel' | 'table' | 'other';
+export type MailKind = 'hotel' | 'table' | 'event' | 'meeting' | 'voucher' | 'question' | 'other';
 export interface MailExtract {
   kind: MailKind;
   /** gefundene Tage in Reihenfolge des Textes, ohne Doppelte (ISO) */
@@ -99,7 +99,7 @@ export function findPersons(text: string): { persons: number | null; children: n
   const kids = new RegExp(String.raw`${NUM}\s*(?:Kind(?:er|ern)?|Kleinkind(?:er)?)\b`, 'i').exec(text);
   const children = kids ? num(kids[1]!) : null;
   if (adults) return { persons: num(adults[1]!), children };
-  const p = new RegExp(String.raw`${NUM}\s*(?:Personen|Person|Pers\.?|Gäste|Gästen|Leute|Leuten|Mann)\b`, 'i').exec(text);
+  const p = new RegExp(String.raw`${NUM}\s*(?:Personen|Person|Pers\.?|Gäste|Gästen|Leute|Leuten|Mann|Teilnehmer(?:n|innen)?|Teilnehmende(?:n)?|Mitarbeiter(?:n)?|Kollegen)\b`, 'i').exec(text);
   if (p) return { persons: num(p[1]!), children };
   const zu = /\bzu\s+(zweit|dritt|viert|fünft|sechst|siebt|acht|zehnt)\b/i.exec(text);
   if (zu) return { persons: zu[1]!.toLowerCase() === 'acht' ? 8 : WORDS[zu[1]!.toLowerCase()] ?? null, children };
@@ -112,22 +112,97 @@ export function findPhone(text: string): string {
   return m ? m[1]!.replace(/\s+/g, ' ').trim() : '';
 }
 
-const HOTEL = /zimmer|übernacht|uebernacht|anreise|abreise|\bnächte\b|\bnacht\b|check-?in|unterkunft|\bhotel\b|frühstück|doppelzimmer|einzelzimmer|ferienwohnung/gi;
-const TABLE = /\btisch|mittagessen|abendessen|zum essen|essen gehen|brunch|\brestaurant\b|speisen|\bgeburtstagsessen\b|\bplätze\b|tischreserv/gi;
+/**
+ * Einordnung nach Stichwörtern mit Gewicht. Jede Art hat starke Wörter (eindeutig, Gewicht 3) und schwache (Gewicht 1);
+ * Treffer im Betreff zählen doppelt. Danach entscheiden einige Regeln aus dem Alltag, z. B.:
+ *  - „Tisch für 4 zum Geburtstag“ ist eine Tischreservierung, „Geburtstagsfeier mit 40 Gästen im Saal“ eine Feier,
+ *  - eine Tagung oder Feier mit Übernachtung bleibt eine Tagung bzw. Feier (die Zimmer gehören dazu),
+ *  - ohne Treffer: Steht eine Frage im Text, ist es eine allgemeine Frage, sonst „Sonstiges“,
+ *  - Newsletter, automatische Benachrichtigungen und Werbung sind „Sonstiges“.
+ */
+/** \b und \w verstehen in JavaScript keine Umlaute – hier eine Fassung, die „Übernachtung“, „Menü“ und „Ärzte“ richtig trennt. */
+const WCH = String.raw`[\p{L}\p{N}_]`;
+const U = (re: RegExp) => new RegExp(re.source.replace(/\\b/g, String.raw`(?:(?<!${WCH})(?=${WCH})|(?<=${WCH})(?!${WCH}))`).replace(/\\w/g, WCH), re.flags.includes('u') ? re.flags : `${re.flags}u`);
+type Scored = Exclude<MailKind, 'question' | 'other'>;
+const W0: Record<Scored, { strong: RegExp; weak: RegExp }> = {
+  hotel: {
+    strong: /\b(?:doppel|einzel|dreibett|familien|mehrbett|monteur|zwei?bett)?zimmer(?:anfrage|reservierung|buchung|preis|preise)?\b|übernacht\w*|uebernacht\w*|\bnächte\b|\bnacht\b|\banreise\b|\babreise\b|\bcheck-?in\b|\bcheck-?out\b|\bunterkunft\b|ferienwohnung|zimmerkategorie|\bschlafen\b|\bschlafmöglichkeit\w*/gi,
+    weak: /\bhotel\b|frühstück|\bbetten?\b|\bbleiben\b|\baufenthalt\b|\bwochenende\b/gi,
+  },
+  table: {
+    strong: /\btisch(?:e|reservierung|anfrage)?\b|tischreserv\w*|\bmittagessen\b|\babendessen\b|\bmittagstisch\b|essen gehen|zum essen|\bbrunch\b|\bplätze\b|sonntagsessen|\bà la carte\b|\ba la carte\b/gi,
+    weak: /\brestaurant\b|\bspeisen\b|\bspeisekarte\b|\bessen\b|\bmittag\b|\babends?\b|\bkaffee und kuchen\b|\bgeburtstagsessen\b/gi,
+  },
+  event: {
+    strong: /\bfeier\b|\w+feier\b|\bfeiern\b|\bhochzeit\w*|\bheirat\w*|\blocation\b|\bpolterabend\b|\bjubiläum\b|\btaufe\b|\bkonfirmation\b|\bjugendweihe\b|\bkommunion\b|\btrauerfeier\b|\btrauerkaffee\b|\bleichenschmaus\b|\bverlobung\b|\bklassentreffen\b|\bfestsaal\b|\bsaal\b|\bgesellschaft\b|\bveranstaltung\w*|\bparty\b|\bbankett\b/gi,
+    weak: /\bgeburtstag\w*|\bbuffet\b|\bbüfett\b|\bmenü\b|\bfestessen\b|\bfeierlichkeit\w*|\bgäste\b|\bdeko\w*|\bdj\b|\bmusik\b|\bsilvester\b|\bweihnachts\w*/gi,
+  },
+  meeting: {
+    strong: /\btagung\w*|\bseminar\w*|\bkonferenz\w*|\bversammlung\w*|\bjahreshauptversammlung\b|\bmitgliederversammlung\b|\binnung\w*|\bschulung\w*|\bworkshop\w*|\bfortbildung\w*|\bweiterbildung\w*|\bqualitätszirkel\b|\bsitzung\w*|\bklausur\w*|\bbesprechungsraum\b|\btagungsraum\b|\btagungspauschale\b|\bstammtisch\b/gi,
+    weak: /\bbeamer\b|\bleinwand\b|\bflipchart\b|\bpinnwand\b|\bmoderationskoffer\b|\bbestuhlung\b|\bteilnehmer\w*|\bvortrag\w*|\breferent\w*|\bkaffeepause\b|\bärzte\w*|\bverein\b|\bvorstand\b|\bfirma\b|\bkollegen\b/gi,
+  },
+  voucher: {
+    strong: /\bgutschein\w*|\bgeschenkgutschein\w*|\bwertgutschein\w*|\bgutscheincode\b|\bgeschenkkarte\b/gi,
+    weak: /\bverschenken\b|\bschenken\b|\beinlösen\b|\bgeschenk\b/gi,
+  },
+};
+const W = Object.fromEntries(Object.entries(W0).map(([k, v]) => [k, { strong: U(v.strong), weak: U(v.weak) }])) as typeof W0;
+const ASKS = U(/reserv|buch|anfrage|\bfrei\b|verfügbar|möchte|möchten|würde|würden|hätten|haben sie|planen|suchen|interesse|angebot|anfragen|bitte um|können sie|kann man/i);
+const QUESTION = U(/\?|\bfrage\b|\bfragen\b|\bwissen\b|\binformation\w*\b|\bauskunft\b|\böffnungszeit\w*|\bgeöffnet\b|\bruhetag\w*|\bparkpl\w*|\bhund\w*|\bbarrierefrei\w*|\brollstuhl\w*|\ballergi\w*|\bvegan\w*|\bvegetari\w*|\bgluten\w*|\bladestation\b|\bwlan\b|\bbezahl\w*|\bkartenzahlung\b|\bfundsache\b|\bverloren\b|\bvergessen\b/i);
+const AUTOMATIC = U(/\bnewsletter\b|\babmelden\b|\bunsubscribe\b|\bno-?reply\b|\bnicht auf diese (e-?mail|nachricht) antworten\b|\bautomatisch erstellt\b|\bwerbung\b|\bgewinnspiel\b|\brechnung nr\b|\bihre bestellung\b|\bversandbestätigung\b|\bmailer-daemon\b|\bunzustellbar\b|\bdelivery status\b|\bout of office\b|\babwesenheitsnotiz\b/i);
+const STRONG_EVENT = U(/\bsaal\b|\bfestsaal\b|\bhochzeit|\btrauer|\bleichenschmaus|\bjugendweihe|\bkonfirmation|\bkommunion|\btaufe\b|\bpolterabend|\bbuffet|\bbüfett|\bgesellschaft\b|\bveranstaltung|\bjubiläum/i);
+
 /** Zusätzliche Stichwörter aus den Einstellungen (Algorithmen → E-Mail) */
-export interface ExtraWords { hotel: string[]; table: string[] }
-const hits = (text: string, words: string[]) => { const low = text.toLowerCase(); return words.filter((w) => w.trim() && low.includes(w.trim().toLowerCase())).length; };
-export function classify(text: string, extra: ExtraWords = { hotel: [], table: [] }): MailKind {
-  const h = (text.match(HOTEL) ?? []).length + hits(text, extra.hotel), t = (text.match(TABLE) ?? []).length + hits(text, extra.table);
-  const asks = /reserv|buch|anfrage|frei|verfügbar|möchte|würde|hätten|haben sie/i.test(text);
-  if (!asks || (h === 0 && t === 0)) return 'other';
-  return h > t ? 'hotel' : 'table';
+export type ExtraWords = Partial<Record<Scored | 'question', string[]>>;
+const count = (text: string, re: RegExp) => (text.match(re) ?? []).length;
+const hits = (text: string, words: string[] = []) => { const low = text.toLowerCase(); return words.filter((w) => w.trim() && low.includes(w.trim().toLowerCase())).length; };
+
+export interface Scores { kind: MailKind; scores: Record<Scored, number> }
+/** Punkte je Art (für die Anzeige „warum so eingeordnet“ und für Tests). */
+export function score(subject: string, body: string, extra: ExtraWords = {}): Scores {
+  const text = `${subject}\n${body}`;
+  const scores = {} as Record<Scored, number>;
+  for (const k of Object.keys(W) as Scored[]) {
+    const { strong, weak } = W[k];
+    scores[k] = 3 * (count(text, strong) + count(subject, strong)) + count(text, weak) + count(subject, weak) + 3 * hits(text, extra[k]);
+  }
+  return { kind: decide(subject, text, { ...scores }, extra), scores };
+}
+
+function decide(subject: string, text: string, s: Record<Scored, number>, extra: ExtraWords): MailKind {
+  const max = Math.max(...Object.values(s));
+  // Automatische Nachrichten und Werbung (nur wenn keine deutliche Anfrage drinsteht)
+  if (AUTOMATIC.test(text) && max < 6) return 'other';
+  if (max === 0) return QUESTION.test(text) || hits(text, extra.question) ? 'question' : 'other';
+  const { persons } = findPersons(text);
+  // Geburtstag & Co. mit Tisch: kleine Runde ohne Saal/Buffet = Tischreservierung
+  if (s.event > 0 && s.table > 0 && !STRONG_EVENT.test(text) && (persons ?? 0) <= 12) s.event = Math.min(s.event, s.table - 1);
+  // Tagung/Feier mit Übernachtung bleibt Tagung/Feier
+  if (s.meeting >= 3 && s.hotel > 0) s.hotel = Math.min(s.hotel, s.meeting - 1);
+  if (s.event >= 3 && s.hotel > 0 && STRONG_EVENT.test(text)) s.hotel = Math.min(s.hotel, s.event - 1);
+  // „Stammtisch“ zählt als Treffen, nicht als Tisch
+  if (/stammtisch/i.test(text)) s.table = Math.max(0, s.table - 3 * count(text, /stammtisch/gi));
+  // Gutschein im Betreff ist eindeutig
+  if (/gutschein/i.test(subject)) return 'voucher';
+  const order: Scored[] = ['voucher', 'meeting', 'event', 'hotel', 'table'];
+  const best = order.reduce((a, b) => (s[b] > s[a] ? b : a));
+  if (s[best] === 0) return QUESTION.test(text) ? 'question' : 'other';
+  // Nur schwache Treffer und keine Bitte/Frage: keine Anfrage
+  if (s[best] < 3 && !ASKS.test(text) && !QUESTION.test(text)) return 'other';
+  if (s[best] < 3 && !ASKS.test(text)) return 'question';
+  return best;
+}
+
+export function classify(text: string, extra: ExtraWords = {}): MailKind {
+  const [subject, ...rest] = text.split('\n');
+  return score(subject ?? '', rest.join('\n'), extra).kind;
 }
 
 /** ref = Tag, an dem die Mail einging (für Angaben ohne Jahr und für „morgen“). */
 export function extract(subject: string, body: string, ref: string, extra?: ExtraWords): MailExtract {
   const text = `${subject}\n${ownText(body)}`;
-  const kind = classify(text, extra);
+  const body0 = ownText(body);
+  const kind = score(subject, body0, extra).kind;
   const dates = findDates(text, ref);
   const { persons, children } = findPersons(text);
   let from: string | null = null, to: string | null = null;
@@ -137,5 +212,6 @@ export function extract(subject: string, body: string, ref: string, extra?: Extr
     const nights = new RegExp(String.raw`${NUM}\s*(?:Nächte|Nacht|Übernachtung(?:en)?)`, 'i').exec(text);
     if (!to && nights && num(nights[1]!)) to = addDays(from, num(nights[1]!)!);
   }
-  return { kind, dates, from, to, time: kind === 'hotel' ? null : findTime(text), persons, children, phone: findPhone(text) };
+  if ((kind === 'meeting' || kind === 'event') && dates.length) { from = dates[0]!; to = dates.find((d) => d > from!) ?? null; }
+  return { kind, dates, from, to, time: kind === 'hotel' || kind === 'voucher' ? null : findTime(text), persons, children, phone: findPhone(text) };
 }
