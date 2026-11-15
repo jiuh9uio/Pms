@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.ts';
 import { Badge, Button, LoadState, fmtDateTime, useLoad, useToast } from '../ui.tsx';
 
@@ -47,6 +47,9 @@ export function UpdateCard() {
   const [busy, setBusy] = useState<'' | 'check' | 'install'>('');
   const [phase, setPhase] = useState('');
   const [fail, setFail] = useState<string | null>(null);
+  // läuft schon ein Update (z. B. Seite neu geladen): Fortschritt weiter anzeigen. Hooks stehen vor jeder frühen Rückgabe.
+  const followRef = useRef<((target: string) => Promise<void>) | null>(null);
+  useEffect(() => { if (data?.installing && data.latest) void followRef.current?.(data.latest); }, [data]);
   const s = fresh ?? data;
   if (!s) return <section className="card"><h2>Programm-Update</h2><LoadState error={error} loading /></section>;
 
@@ -82,8 +85,7 @@ export function UpdateCard() {
     setBusy(''); setPhase('');
     setFail('Das Programm hat sich nach dem Update nicht wieder gemeldet. Bitte am PMS-Rechner „PMS starten“ ausführen; das Protokoll liegt im Ordner update (update.log).');
   };
-  // läuft schon ein Update (z. B. Seite neu geladen): Fortschritt weiter anzeigen
-  useEffect(() => { if (data?.installing && data.latest && busy === '') void follow(data.latest); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [data]);
+  followRef.current = follow;
 
   const install = async () => {
     if (!window.confirm(`Version ${s.latest} jetzt einspielen?\n\nVorher wird automatisch eine Datensicherung geschrieben. Das Programm ist danach für etwa eine Minute nicht erreichbar – bitte vorher alle offenen Eingaben an anderen Geräten speichern.`)) return;

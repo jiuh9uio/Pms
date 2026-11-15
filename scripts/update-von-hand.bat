@@ -28,11 +28,15 @@ if not exist "%HOME_DIR%\pms.exe" (
   exit /b 1
 )
 where curl.exe >nul 2>&1
-if errorlevel 1 (
-  echo curl.exe fehlt - dafuer ist mindestens Windows 10 noetig.
-  pause
-  exit /b 1
-)
+if errorlevel 1 goto nocurl
+where tar.exe >nul 2>&1
+if errorlevel 1 goto nocurl
+goto tools_ok
+:nocurl
+echo curl.exe oder tar.exe fehlt - dafuer ist mindestens Windows 10, Version 1803 noetig.
+pause
+exit /b 1
+:tools_ok
 if not exist "%UPD%" mkdir "%UPD%"
 echo [%date% %time%] Update von Hand gestartet >> "%LOG%"
 
@@ -52,7 +56,7 @@ set /a TRY=0
 set /a FAIL22=0
 :download
 if exist "%UPD%\manual.zip" (
-  powershell -NoProfile -NonInteractive -Command "$e=((Get-Content '%UPD%\manual.zip.sha256' -Raw).Trim() -split '\s+')[0].ToLower(); $h=(Get-FileHash '%UPD%\manual.zip' -Algorithm SHA256).Hash.ToLower(); if ($e -ne $h) { exit 1 }"
+  call :hashok
   if not errorlevel 1 goto downloaded
 )
 set /a TRY+=1
@@ -82,7 +86,13 @@ goto download
 echo.
 echo  Schritt 2 von 5: Pruefsumme stimmt - Paket wird entpackt
 if exist "%UPD%\manual" rmdir /s /q "%UPD%\manual"
-powershell -NoProfile -NonInteractive -Command "Expand-Archive -LiteralPath '%UPD%\manual.zip' -DestinationPath '%UPD%\manual' -Force"
+mkdir "%UPD%\manual"
+tar -xf "%UPD%\manual.zip" -C "%UPD%\manual"
+if errorlevel 1 (
+  echo Das Paket konnte nicht entpackt werden.
+  pause
+  exit /b 1
+)
 set "NEW_DIR=%UPD%\manual\SchuetzenhausPMS"
 if not exist "%NEW_DIR%\pms.exe" set "NEW_DIR=%UPD%\manual"
 if not exist "%NEW_DIR%\pms.exe" (
@@ -95,7 +105,9 @@ if not exist "%NEW_DIR%\app\version.json" (
   pause
   exit /b 1
 )
-for /f "usebackq delims=" %%v in (`powershell -NoProfile -Command "(Get-Content '%NEW_DIR%\app\version.json' | ConvertFrom-Json).version"`) do set "NEWVER=%%v"
+rem version.json beginnt mit {"version":"1.2.3", ...
+set "NEWVER="
+for /f usebackq^ tokens^=4^ delims^=^" %%v in ("%NEW_DIR%\app\version.json") do if not defined NEWVER set "NEWVER=%%v"
 echo Neue Version: %NEWVER%
 
 echo.
@@ -141,3 +153,17 @@ echo  Fertig: Version %NEWVER% ist eingespielt. Das PMS wird gestartet.
 start "Schuetzenhaus PMS" /D "%HOME_DIR%" "%HOME_DIR%\pms.exe"
 timeout /t 5 /nobreak >nul
 endlocal
+exit /b 0
+
+rem ---------------------------------------------------------------------------
+rem Prueft die Datei manual.zip gegen manual.zip.sha256 (errorlevel 0 = stimmt).
+rem Nur Windows-Bordmittel: certutil gibt die Pruefsumme in der zweiten Zeile aus.
+:hashok
+set "EXP="
+set "GOT="
+for /f "usebackq tokens=1" %%e in ("%UPD%\manual.zip.sha256") do if not defined EXP set "EXP=%%e"
+for /f "skip=1 delims=" %%h in ('certutil -hashfile "%UPD%\manual.zip" SHA256') do if not defined GOT set "GOT=%%h"
+if not defined GOT exit /b 1
+set "GOT=%GOT: =%"
+if /i "%GOT%"=="%EXP%" exit /b 0
+exit /b 1

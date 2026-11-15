@@ -2,6 +2,7 @@ import { Fragment, createContext, useCallback, useContext, useEffect, useRef, us
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { ROLE_LABEL, hasModule, type Module, type UserDto } from '../../src/shared/schemas.js';
 import { api } from './api.ts';
+import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { Account } from './pages/Account.tsx';
 import { GuestSite } from './pages/GuestSite.tsx';
 import { Audit } from './pages/Audit.tsx';
@@ -192,6 +193,7 @@ function Shell({ user }: { user: UserDto }) {
         <div className="whoami"><b>{user.name}</b><span>{ROLE_LABEL[user.role]}</span><button type="button" className="linkbtn" onClick={() => void logout()}>Abmelden</button></div>
       </aside>
       <main className="content">
+        <ErrorBoundary resetKey={pathname}>
         <Routes>
           {hotel && <Route path="/hotel" element={<Dashboard />} />}
           {erechnung && <Route path="/erechnung" element={<EInvoice />} />}
@@ -220,6 +222,7 @@ function Shell({ user }: { user: UserDto }) {
           {isAdmin && <Route path="/einstellungen" element={<Settings />} />}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </ErrorBoundary>
       </main>
     </div>
     </DataProvider>

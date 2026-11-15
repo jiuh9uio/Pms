@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.61.3
+
+- Behoben: Die Seite „Programm-Update“ blieb seit 1.61.1 leer (Programmierfehler in der Seite).
+- Tritt beim Anzeigen einer Seite ein Fehler auf, erscheint jetzt ein Hinweis mit „Neu laden“ statt einer leeren Seite; die anderen Seiten bleiben über das Menü erreichbar.
+- Neue automatische Code-Prüfung (oxlint) für die Oberfläche; sie läuft bei jedem Windows-Bau und hätte diesen Fehler verhindert.
+- „Update von Hand.bat“: arbeitet jetzt nur mit Windows-Bordmitteln (curl, certutil, tar) – die erste Fassung scheiterte an der Prüfsummen-Kontrolle über PowerShell.
+
 ## 1.61.2
 
 - Neu im Programmordner: „Update von Hand.bat“ – der Notweg, falls das Update im Programm nicht klappt. Doppelklick lädt die neueste Version (setzt bei Verbindungsabbruch fort, bis zu 15 Versuche), prüft die Prüfsumme, beendet das PMS, schreibt eine Datensicherung, kopiert die neuen Programmdateien (data, backups und pms.env bleiben unverändert, die bisherigen Dateien liegen in update\previous) und startet das PMS wieder. Der Windows-Bau prüft diesen Weg automatisch mit.

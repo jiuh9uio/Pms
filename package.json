@@ -1,6 +1,6 @@
 {
   "name": "schuetzenhaus-pms",
-  "version": "1.61.2",
+  "version": "1.61.3",
   "private": true,
   "type": "module",
   "engines": {
@@ -10,6 +10,7 @@
     "dev": "concurrently -n api,web \"tsx watch src/server/index.ts\" \"vite\"",
     "build": "tsc -p tsconfig.server.json && vite build",
     "start": "node dist/server/index.js",
+    "lint": "oxlint --react-plugin -A all -D react-hooks/rules-of-hooks web/src",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
@@ -46,6 +47,7 @@
     "concurrently": "^10.0.7",
     "drizzle-kit": "^0.31.11",
     "esbuild": "^0.28.2",
+    "oxlint": "^1.93.0",
     "postject": "^1.0.0-alpha.6",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
