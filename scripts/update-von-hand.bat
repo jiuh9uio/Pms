@@ -54,11 +54,15 @@ if errorlevel 1 (
 )
 set /a TRY=0
 set /a FAIL22=0
+set "JUSTDONE=0"
 :download
 if exist "%UPD%\manual.zip" (
   call :hashok
   if not errorlevel 1 goto downloaded
+  rem curl meldete fertig, aber die Pruefsumme passt nicht: Datei ist beschaedigt - neu laden
+  if "%JUSTDONE%"=="1" del /q "%UPD%\manual.zip" >nul 2>&1
 )
+set "JUSTDONE=0"
 set /a TRY+=1
 if %TRY% GTR 15 (
   echo.
@@ -70,6 +74,7 @@ if %TRY% GTR 15 (
 )
 curl.exe -L --fail --connect-timeout 30 --speed-limit 1 --speed-time 120 -C - -o "%UPD%\manual.zip" "%URL%"
 set "RC=%errorlevel%"
+if "%RC%"=="0" set "JUSTDONE=1"
 if "%RC%"=="0" goto download
 rem Fortsetzen nicht moeglich oder Datei passt nicht (z. B. alte Version): neu anfangen
 if "%RC%"=="22" set /a FAIL22+=1

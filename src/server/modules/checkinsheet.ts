@@ -54,7 +54,7 @@ const center = (text: string, w: number, o: { bold?: boolean; big?: boolean } = 
  * Leere Angaben erscheinen als Linie zum Ausfüllen von Hand.
  */
 export async function printCheckinBon(db: Db, actor: Actor, bookingId: string) {
-  const [b, h, sheet] = [await getBooking(db, bookingId), await getHotel(db), await checkinSheetForPrint(db)];
+  const [b, h, sheet] = await Promise.all([getBooking(db, bookingId), getHotel(db), checkinSheetForPrint(db)]);
   const g = b.guest;
   const rooms = b.rooms.filter((r) => isActiveStatus(r.status));
   const from = rooms.map((r) => r.from).sort()[0], to = rooms.map((r) => r.to).sort().at(-1);

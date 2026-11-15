@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
 import { diffDays, todayBerlin } from '../../shared/hotel.js';
 import { FORM_DEFAULTS, IMAGE_KEYS, SECTION_KEYS, SITE_LOGO_KEY, parseFaq, parseHours, siteFrom, type ImageKey, type SiteAvailability, type SitePublic, type SiteSettings } from '../../shared/site.js';
@@ -120,8 +119,9 @@ export async function saveCategoryPhoto(db: Db, actor: Actor, categoryId: string
 /** Welches Logo oben steht: das eigene der Gästeseite, sonst das Rechnungslogo, oder keins (Größe „kein Logo“). */
 async function logoInfo(db: Exec, s: SiteSettings, imgs: Map<string, string>) {
   const own = imgs.get(SITE_LOGO_KEY);
-  const fallback = own ? null : await getLogo(db);
-  const v = s.logoSize === 'none' ? '' : own ? `s${own}` : fallback ? `r${createHash('sha1').update(fallback.data).digest('hex').slice(0, 10)}` : '';
+  // Version des Rechnungslogos über den Zeitstempel der Einstellung (ohne das Bild zu laden)
+  const [inv] = own ? [] : await db.select({ at: settings.updatedAt }).from(settings).where(eq(settings.key, 'logo'));
+  const v = s.logoSize === 'none' ? '' : own ? `s${own}` : inv ? `r${inv.at.getTime().toString(36)}` : '';
   return { hasLogo: !!v, logo: v, logoSize: s.logoSize === 'none' ? 'm' as const : s.logoSize, logoName: s.logoSize === 'none' || !v ? true : s.logoName };
 }
 /** Logo für die öffentliche Seite (eigenes, sonst Rechnungslogo) – nur bei freigeschalteter Seite, als Startseite oder in der Vorschau. */

@@ -70,7 +70,7 @@ export async function fromMapsLink(input: string): Promise<PlaceFound[]> {
     const info = parseMapsLink(long);
     if (!info) throw new AppError(404, 'lookup_empty', 'Im Link stehen weder Ort noch Koordinaten. Bitte den Ort in Google Maps öffnen und über „Teilen“ den Link kopieren.');
     const a = info.text ? addressFromText(info.text) : null;
-    if (a) return [{ ...a, country: a.country || 'Deutschland', phone: '', email: '', vatId: '', source: 'Google-Maps-Link', label: info.text }];
+    if (a) return [{ ...a, phone: '', email: '', vatId: '', source: 'Google-Maps-Link', label: info.text }]; // Land leer = unbekannt (z. B. 4-stellige PLZ: Österreich oder Schweiz)
     let hits = info.text ? await searchPlace(info.text) : [];
     if (!hits.length && info.lat !== null && info.lng !== null) hits = await reversePlace(info.lat, info.lng, info.text);
     if (!hits.length) throw new AppError(404, 'lookup_empty', 'Zu diesem Link wurde keine vollständige Anschrift gefunden. Bitte die Daten von Hand eintragen.');

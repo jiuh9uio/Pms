@@ -3,6 +3,18 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.61.4
+
+Ergebnisse einer Fehlerprüfung aller Änderungen seit 1.55.2:
+
+- E-Mail-Erkennung: „Stammtisch“ mit Tischwunsch wird wieder als Tischanfrage erkannt; eigene Stichwörter aus den Einstellungen zählen stärker als die festen; bei Gleichstand gewinnt die konkretere Anfrage (Tisch, Zimmer). Werbe-Newsletter mit „Gutschein“ im Betreff landen unter „Sonstiges“ statt als Gutscheinanfrage.
+- Programm-Update: Ein zweiter Klick auf „Jetzt aktualisieren“ (z. B. an einem anderen Gerät) während der Prüfung startet kein zweites Update mehr.
+- „Update von Hand.bat“: Eine vollständig geladene, aber beschädigte Datei wird gelöscht und neu geladen, statt 15-mal erfolglos zu prüfen.
+- Google-Maps-Link: Bei 4-stelliger Postleitzahl ohne Länderangabe (Österreich/Schweiz) wird nicht mehr „Deutschland“ eingetragen.
+- Check-in & Meldeschein (Einstellungen): Ist der WLAN-Abschnitt ausgeblendet, werden die WLAN-Angaben beim Speichern nicht mehr geprüft und gespeichert (vorher konnte das Speichern ohne Meldung scheitern).
+- Webseiten-Logo: Sehr große PNG-Logos werden notfalls weiter verkleinert, statt abgelehnt zu werden.
+- Kleinere Verbesserungen: Maps-Erkennung an einer Stelle, Gästeseite lädt das Rechnungslogo nicht mehr bei jedem Aufruf, Bondruck lädt seine Daten gleichzeitig.
+
 ## 1.61.3
 
 - Behoben: Die Seite „Programm-Update“ blieb seit 1.61.1 leer (Programmierfehler in der Seite).

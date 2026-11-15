@@ -65,11 +65,16 @@ function VideoField() {
 async function shrinkLogo(file: File): Promise<{ mime: 'image/png' | 'image/jpeg'; dataBase64: string }> {
   const img = await createImageBitmap(file);
   const png = file.type === 'image/png';
-  const scale = Math.min(1, 1200 / img.width, 600 / img.height);
-  const c = document.createElement('canvas');
-  c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
-  c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
-  return png ? { mime: 'image/png', dataBase64: c.toDataURL('image/png').split(',')[1]! } : { mime: 'image/jpeg', dataBase64: c.toDataURL('image/jpeg', 0.9).split(',')[1]! };
+  // höchstens ~900 kB, damit der Server (Grenze 1 MB) es annimmt: notfalls kleiner rechnen
+  for (const [mw, mh] of [[1200, 600], [900, 450], [600, 300], [400, 200]] as const) {
+    const scale = Math.min(1, mw / img.width, mh / img.height);
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+    c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
+    const out = png ? { mime: 'image/png' as const, dataBase64: c.toDataURL('image/png').split(',')[1]! } : { mime: 'image/jpeg' as const, dataBase64: c.toDataURL('image/jpeg', 0.9).split(',')[1]! };
+    if (out.dataBase64.length * 0.75 <= 900_000) return out;
+  }
+  throw new Error('Das Logo ist zu groß. Bitte als kleineres PNG oder als JPEG speichern.');
 }
 
 /** Eigenes Logo der Gästeseite – getrennt vom Logo auf den Rechnungen. */

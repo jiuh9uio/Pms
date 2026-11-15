@@ -26,7 +26,8 @@ export function CheckinSheetCard() {
   const bonName = data?.bonName ?? null;
   const save = async () => {
     const a = checkinSheetInput.safeParse(v);
-    const b = w ? wifiSettingsInput.safeParse(w) : null;
+    // WLAN nur prüfen und speichern, wenn der Abschnitt sichtbar ist
+    const b = w && v.showInfo && v.showWifi ? wifiSettingsInput.safeParse(w) : null;
     const e: Record<string, string> = {};
     if (!a.success) for (const i of a.error.issues) e[String(i.path[0])] = i.message;
     if (b && !b.success) for (const i of b.error.issues) e[`wifi.${String(i.path[0])}`] = i.message;
@@ -35,7 +36,7 @@ export function CheckinSheetCard() {
     setBusy(true);
     try {
       setV(await api<CheckinSheet>('PUT', '/settings/checkin-sheet', a.data));
-      if (w && b?.success) { const r = await api<WifiDto>('PUT', '/network/wifi', b.data); setQr(r.qr); }
+      if (b?.success) { const r = await api<WifiDto>('PUT', '/network/wifi', b.data); setQr(r.qr); }
       toast('Check-in-Einstellungen gespeichert');
     } catch (x) { toast(x instanceof Error ? x.message : 'Fehler', 'error'); }
     setBusy(false);

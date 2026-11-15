@@ -206,11 +206,13 @@ const dto = (r: Row, full = false): InboxMailDto => ({
   linkKind: r.linkKind, linkId: r.linkId, handledBy: r.handledBy, repliedAt: r.repliedAt?.toISOString() ?? null, repliedBy: r.repliedBy, ...(full ? { body: r.body } : {}),
 });
 
+/** Suche in Betreff, Absender und Text (für Liste und Zähler gleich). */
+const searchFilter = (q: string) => (q ? or(ilike(inboxMails.subject, `%${q}%`), ilike(inboxMails.fromName, `%${q}%`), ilike(inboxMails.fromAddr, `%${q}%`), ilike(inboxMails.body, `%${q}%`)) : undefined);
 export async function listInbox(db: Exec, f: { status: InboxStatus | 'all'; kind: MailKind | 'all'; q: string }): Promise<InboxMailDto[]> {
   const q = f.q.trim();
   const rows = await db.select().from(inboxMails).where(and(
     f.status === 'all' ? undefined : eq(inboxMails.status, f.status), f.kind === 'all' ? undefined : eq(inboxMails.kind, f.kind),
-    q ? or(ilike(inboxMails.subject, `%${q}%`), ilike(inboxMails.fromName, `%${q}%`), ilike(inboxMails.fromAddr, `%${q}%`), ilike(inboxMails.body, `%${q}%`)) : undefined,
+    searchFilter(q),
   )).orderBy(desc(inboxMails.receivedAt)).limit(200);
   return rows.map((r) => dto(r));
 }
@@ -219,7 +221,7 @@ export async function inboxCounts(db: Exec, f: { status: InboxStatus | 'all'; q:
   const q = f.q.trim();
   const rows = await db.select({ kind: inboxMails.kind, n: sql<number>`count(*)::int` }).from(inboxMails).where(and(
     f.status === 'all' ? undefined : eq(inboxMails.status, f.status),
-    q ? or(ilike(inboxMails.subject, `%${q}%`), ilike(inboxMails.fromName, `%${q}%`), ilike(inboxMails.fromAddr, `%${q}%`), ilike(inboxMails.body, `%${q}%`)) : undefined,
+    searchFilter(q),
   )).groupBy(inboxMails.kind);
   const out = Object.fromEntries(['all', ...MAIL_KINDS].map((k) => [k, 0])) as InboxCounts;
   for (const r of rows) { out[r.kind as MailKind] = r.n; out.all += r.n; }

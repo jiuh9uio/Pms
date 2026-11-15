@@ -138,8 +138,8 @@ const W0: Record<Scored, { strong: RegExp; weak: RegExp }> = {
     weak: /\bgeburtstag\w*|\bbuffet\b|\bbüfett\b|\bmenü\b|\bfestessen\b|\bfeierlichkeit\w*|\bgäste\b|\bdeko\w*|\bdj\b|\bmusik\b|\bsilvester\b|\bweihnachts\w*/gi,
   },
   meeting: {
-    strong: /\btagung\w*|\bseminar\w*|\bkonferenz\w*|\bversammlung\w*|\bjahreshauptversammlung\b|\bmitgliederversammlung\b|\binnung\w*|\bschulung\w*|\bworkshop\w*|\bfortbildung\w*|\bweiterbildung\w*|\bqualitätszirkel\b|\bsitzung\w*|\bklausur\w*|\bbesprechungsraum\b|\btagungsraum\b|\btagungspauschale\b|\bstammtisch\b/gi,
-    weak: /\bbeamer\b|\bleinwand\b|\bflipchart\b|\bpinnwand\b|\bmoderationskoffer\b|\bbestuhlung\b|\bteilnehmer\w*|\bvortrag\w*|\breferent\w*|\bkaffeepause\b|\bärzte\w*|\bverein\b|\bvorstand\b|\bfirma\b|\bkollegen\b/gi,
+    strong: /\btagung\w*|\bseminar\w*|\bkonferenz\w*|\bversammlung\w*|\bjahreshauptversammlung\b|\bmitgliederversammlung\b|\binnung\w*|\bschulung\w*|\bworkshop\w*|\bfortbildung\w*|\bweiterbildung\w*|\bqualitätszirkel\b|\bsitzung\w*|\bklausur\w*|\bbesprechungsraum\b|\btagungsraum\b|\btagungspauschale\b/gi,
+    weak: /\bstammtisch\w*|\bbeamer\b|\bleinwand\b|\bflipchart\b|\bpinnwand\b|\bmoderationskoffer\b|\bbestuhlung\b|\bteilnehmer\w*|\bvortrag\w*|\breferent\w*|\bkaffeepause\b|\bärzte\w*|\bverein\b|\bvorstand\b|\bfirma\b|\bkollegen\b/gi,
   },
   voucher: {
     strong: /\bgutschein\w*|\bgeschenkgutschein\w*|\bwertgutschein\w*|\bgutscheincode\b|\bgeschenkkarte\b/gi,
@@ -150,6 +150,7 @@ const W = Object.fromEntries(Object.entries(W0).map(([k, v]) => [k, { strong: U(
 const ASKS = U(/reserv|buch|anfrage|\bfrei\b|verfügbar|möchte|möchten|würde|würden|hätten|haben sie|planen|suchen|interesse|angebot|anfragen|bitte um|können sie|kann man/i);
 const QUESTION = U(/\?|\bfrage\b|\bfragen\b|\bwissen\b|\binformation\w*\b|\bauskunft\b|\böffnungszeit\w*|\bgeöffnet\b|\bruhetag\w*|\bparkpl\w*|\bhund\w*|\bbarrierefrei\w*|\brollstuhl\w*|\ballergi\w*|\bvegan\w*|\bvegetari\w*|\bgluten\w*|\bladestation\b|\bwlan\b|\bbezahl\w*|\bkartenzahlung\b|\bfundsache\b|\bverloren\b|\bvergessen\b/i);
 const AUTOMATIC = U(/\bnewsletter\b|\babmelden\b|\bunsubscribe\b|\bno-?reply\b|\bnicht auf diese (e-?mail|nachricht) antworten\b|\bautomatisch erstellt\b|\bwerbung\b|\bgewinnspiel\b|\brechnung nr\b|\bihre bestellung\b|\bversandbestätigung\b|\bmailer-daemon\b|\bunzustellbar\b|\bdelivery status\b|\bout of office\b|\babwesenheitsnotiz\b/i);
+const PERSONAL = U(/\b(ich|wir) (möchte|möchten|würde|würden|hätte|hätten|suche|suchen|planen|brauche|brauchen)\b|\bbitte um\b|\bkönnten sie\b|\bkönnen sie\b/i);
 const STRONG_EVENT = U(/\bsaal\b|\bfestsaal\b|\bhochzeit|\btrauer|\bleichenschmaus|\bjugendweihe|\bkonfirmation|\bkommunion|\btaufe\b|\bpolterabend|\bbuffet|\bbüfett|\bgesellschaft\b|\bveranstaltung|\bjubiläum/i);
 
 /** Zusätzliche Stichwörter aus den Einstellungen (Algorithmen → E-Mail) */
@@ -164,15 +165,15 @@ export function score(subject: string, body: string, extra: ExtraWords = {}): Sc
   const scores = {} as Record<Scored, number>;
   for (const k of Object.keys(W) as Scored[]) {
     const { strong, weak } = W[k];
-    scores[k] = 3 * (count(text, strong) + count(subject, strong)) + count(text, weak) + count(subject, weak) + 3 * hits(text, extra[k]);
+    scores[k] = 3 * (count(text, strong) + count(subject, strong)) + count(text, weak) + count(subject, weak) + 4 * hits(text, extra[k]);
   }
   return { kind: decide(subject, text, { ...scores }, extra), scores };
 }
 
 function decide(subject: string, text: string, s: Record<Scored, number>, extra: ExtraWords): MailKind {
   const max = Math.max(...Object.values(s));
-  // Automatische Nachrichten und Werbung (nur wenn keine deutliche Anfrage drinsteht)
-  if (AUTOMATIC.test(text) && max < 6) return 'other';
+  // Automatische Nachrichten und Werbung – außer es steht eine deutliche persönliche Anfrage darin
+  if (AUTOMATIC.test(text) && (max < 6 || !PERSONAL.test(text))) return 'other';
   if (max === 0) return QUESTION.test(text) || hits(text, extra.question) ? 'question' : 'other';
   const { persons } = findPersons(text);
   // Geburtstag & Co. mit Tisch: kleine Runde ohne Saal/Buffet = Tischreservierung
@@ -180,11 +181,10 @@ function decide(subject: string, text: string, s: Record<Scored, number>, extra:
   // Tagung/Feier mit Übernachtung bleibt Tagung/Feier
   if (s.meeting >= 3 && s.hotel > 0) s.hotel = Math.min(s.hotel, s.meeting - 1);
   if (s.event >= 3 && s.hotel > 0 && STRONG_EVENT.test(text)) s.hotel = Math.min(s.hotel, s.event - 1);
-  // „Stammtisch“ zählt als Treffen, nicht als Tisch
-  if (/stammtisch/i.test(text)) s.table = Math.max(0, s.table - 3 * count(text, /stammtisch/gi));
-  // Gutschein im Betreff ist eindeutig
+  // Gutschein im Betreff ist eindeutig (Werbung mit Gutschein wurde oben schon als „Sonstiges“ erkannt)
   if (/gutschein/i.test(subject)) return 'voucher';
-  const order: Scored[] = ['voucher', 'meeting', 'event', 'hotel', 'table'];
+  // bei Gleichstand gewinnt die konkretere Anfrage (Tisch, Zimmer) vor Feier und Tagung
+  const order: Scored[] = ['voucher', 'table', 'hotel', 'event', 'meeting'];
   const best = order.reduce((a, b) => (s[b] > s[a] ? b : a));
   if (s[best] === 0) return QUESTION.test(text) ? 'question' : 'other';
   // Nur schwache Treffer und keine Bitte/Frage: keine Anfrage

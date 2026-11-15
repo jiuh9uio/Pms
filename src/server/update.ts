@@ -262,11 +262,14 @@ cd "${home}" && nohup ./pms --no-browser >> "${home}/update/restart.log" 2>&1 &
 export async function installUpdate(): Promise<{ version: string }> {
   if (!ctx) throw new AppError(409, 'update_unsupported', 'Das automatische Update gibt es nur in der Windows-Version (pms.exe)');
   if (status.installing) throw new AppError(409, 'update_running', 'Das Update läuft bereits');
-  await checkForUpdate();
-  if (status.error) throw new AppError(502, 'update_check', `Update-Prüfung fehlgeschlagen: ${status.error}`);
-  if (!release || !status.available) throw new AppError(409, 'update_none', 'Es ist keine neuere Version verfügbar');
-  const rel = release;
+  // sofort sperren: ein zweiter Klick (anderes Gerät, Doppelklick) während der Prüfung startet kein zweites Update
   status = { ...status, installing: true, installError: null, progress: { step: 'download', received: 0, total: null, attempt: 1 } };
+  try {
+    await checkForUpdate();
+    if (status.error) throw new AppError(502, 'update_check', `Update-Prüfung fehlgeschlagen: ${status.error}`);
+    if (!release || !status.available) throw new AppError(409, 'update_none', 'Es ist keine neuere Version verfügbar');
+  } catch (e) { status = { ...status, installing: false, progress: null }; throw e; }
+  const rel = release!;
   void runInstall(ctx, rel).catch(() => { /* Fehler steht in status.installError */ });
   return { version: rel.version };
 }

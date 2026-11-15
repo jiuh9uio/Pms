@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { api } from '../api.ts';
 import { Button } from '../ui.tsx';
+import { isMapsLink } from '../../../src/shared/mapslink.js';
 
 export type Found = { name: string; street: string; zip: string; city: string; country: string; phone: string; email: string; vatId: string; source: string; label?: string };
 type Kind = 'imprint' | 'map' | 'maps';
-const MAPS = /^(https?:\/\/)?((www\.|maps\.)?google\.[a-z.]{2,6}\/maps|maps\.google\.[a-z.]{2,6}|maps\.app\.goo\.gl|goo\.gl\/maps|g\.co\/kgs)/i;
 const SITE = /^(https?:\/\/)?[\w-]+(\.[\w-]+)+(\/\S*)?$/i;
 
 /**
@@ -17,7 +17,7 @@ export function AddressLookup({ onPick, forGuest, onClose }: { onPick: (c: Found
   const [hits, setHits] = useState<Found[] | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const t = q.trim();
-  const isMaps = MAPS.test(t), isSite = !isMaps && SITE.test(t);
+  const isMaps = isMapsLink(/^https?:\/\//i.test(t) ? t : `https://${t}`), isSite = !isMaps && SITE.test(t);
   const auto: Kind = isMaps ? 'maps' : isSite ? 'imprint' : 'map';
   const run = async (kind: Kind) => {
     if (t.length < 3) return;

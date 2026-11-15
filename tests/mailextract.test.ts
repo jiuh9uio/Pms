@@ -71,6 +71,12 @@ describe('E-Mail-Erkennung', () => {
     ];
     for (const [subject, body, want] of cases) expect(`${subject}: ${score(subject, body).kind}`).toBe(`${subject}: ${want}`);
   });
+  it('Stammtisch mit Tischwunsch ist eine Tischanfrage, Werbung mit Gutschein ist Sonstiges, eigene Stichwörter gewinnen', () => {
+    expect(score('Stammtisch', 'Wir möchten für unseren Stammtisch am Freitag einen Tisch für 8 Personen reservieren.').kind).toBe('table');
+    expect(score('Stammtisch', 'Unser Treffen am Freitag', { table: ['Stammtisch'] }).kind).toBe('table');
+    expect(score('Ihr 10 € Gutschein – jetzt einlösen', 'Nur diese Woche! Newsletter abmelden: hier klicken.').kind).toBe('other');
+    expect(score('Gutschein', 'Ich möchte einen Gutschein über 50 € bestellen. Zum Abmelden vom Newsletter ...').kind).toBe('voucher');
+  });
   it('versteht Umlaute an Wortgrenzen und nimmt eigene Stichwörter dazu', () => {
     expect(score('Menü', 'Wir hätten gern ein Menü für die Ärzte-Runde.').scores.event).toBeGreaterThan(0);
     expect(score('Anfrage', 'Wir möchten mit den Landfrauen bei Ihnen zusammenkommen.').kind).not.toBe('meeting');
