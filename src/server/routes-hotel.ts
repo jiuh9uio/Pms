@@ -8,6 +8,8 @@ import * as breakfast from './modules/breakfast.js';
 import * as guestguide from './modules/guestguide.js';
 import * as checkinSheet from './modules/checkinsheet.js';
 import * as registrations from './modules/registrations.js';
+import * as cleanManual from './modules/cleanmanual.js';
+import { manualCleanInput } from '../shared/team.js';
 import * as lookup from './modules/lookup.js';
 import * as guestlink from './modules/guestlink.js';
 import * as stats from './modules/stats.js';
@@ -161,6 +163,11 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   const dateOf = (v: unknown) => z.object({ date: z.string().refine(H.isIsoDate) }).parse(v).date;
   api.get('/breakfast', user, (req) => breakfast.breakfastList(db, dateOf(req.query)));
   api.get('/housekeeping', user, (req) => cleanList(db, dateOf(req.query)));
+  // von Hand eingetragene Reinigungen und Druck auf dem Bondrucker
+  api.post('/housekeeping/manual', user, (req) => cleanManual.addManualClean(db, actor(req), manualCleanInput.parse(req.body)));
+  api.post('/housekeeping/manual/:id/done', user, (req) => cleanManual.setManualDone(db, actor(req), z.uuid().parse((req.params as { id: string }).id), z.object({ done: z.boolean() }).parse(req.body).done));
+  api.post('/housekeeping/manual/:id/remove', user, (req) => cleanManual.removeManualClean(db, actor(req), z.uuid().parse((req.params as { id: string }).id)));
+  api.post('/housekeeping/print', user, (req) => cleanManual.printCleanList(db, actor(req), dateOf(req.body)));
   api.get('/reports/day', user, (req) => dayReport(db, dateOf(req.query)));
   api.get('/breakfast/week', user, (req) => breakfast.breakfastWeek(db, dateOf(req.query)));
   api.post('/breakfast/print', user, (req) => breakfast.printBreakfast(db, actor(req), dateOf(req.body)));

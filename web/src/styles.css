@@ -217,6 +217,13 @@ textarea { width: 100%; height: auto; min-height: 38px; padding: 8px 11px; borde
 .bk-more > div { padding: 0 14px 12px; }
 .paybig { display: flex; flex-direction: column; justify-content: center; } .paybig small { font-size: 12px; color: var(--muted); } .paybig b { font-size: 26px; }
 @media (max-width: 860px) { .bk-hero { grid-template-columns: 1fr; } .bk-act { min-width: 0; } }
+/* Reinigung: von Hand eingetragen */
+.manualclean { margin: 4px 0 12px; } .mc-list { margin: 0 0 8px; display: grid; gap: 6px; }
+.manualclean .mc-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 12px; border: 1px solid var(--line); border-left: 4px solid #c97a10; border-radius: 8px; background: var(--surface); }
+.manualclean .mc-list li.done { opacity: .6; border-left-color: #1f9d6b; } .mc-list .btnrow { flex-wrap: nowrap; }
+.manualclean .mc-list li:last-child { border-bottom: 1px solid var(--line); }
+.mc-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; border: 1px dashed var(--line-strong); border-radius: 10px; background: var(--surface-2); }
+.mc-form select { width: auto; min-width: 180px; } .mc-form input { flex: 1 1 220px; }
 /* Zettel für die Buchhaltung */
 .acctbox { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; padding: 12px 14px; border: 1px dashed var(--line-strong); border-radius: 10px; background: var(--surface-2); }
 .acctslip header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #222; padding-bottom: 8px; margin-bottom: 6px; } .acctslip header span { font-weight: 600; }

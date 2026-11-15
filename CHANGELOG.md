@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.65.0
+
+- Reinigung: „+ Reinigung von Hand eintragen“ – Zimmer wählen, Komplettreinigung oder Zwischenreinigung (Gäste noch da), optional eine Notiz (z. B. „Handtücher wechseln“). Die Einträge stehen über der Liste, lassen sich mit „Fertig“ abhaken oder entfernen.
+- Reinigung: „Bon drucken“ druckt die Reinigungsliste des Tages auf dem Bondrucker – was laut Belegung ansteht (Endreinigung, Zwischenreinigung, danach Anreise) und darunter die von Hand eingetragenen, noch offenen Reinigungen, je mit „[ ] erledigt“ zum Abhaken.
+
 ## 1.64.0
 
 Reservierung übersichtlicher, Bezahlen in einem Schritt:

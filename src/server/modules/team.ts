@@ -114,8 +114,9 @@ export async function cleanList(db: Exec, date: string): Promise<CleanList> {
     guest: ((x.dep_guest ?? x.stay_guest) as string | null) ?? '', persons: Number(x.dep_persons ?? x.stay_persons ?? 0),
     nextGuest: (x.arr_guest as string | null) ?? '', nextPersons: Number(x.arr_persons ?? 0), note: x.note as string,
   })).sort((a, b) => a.room.localeCompare(b.room, 'de', { numeric: true }));
+  const { manualFor } = await import('./cleanmanual.js');
   return {
-    date, rows: list,
+    date, rows: list, manual: await manualFor(db, date),
     total: { departures: list.filter((r) => r.departing).length, stays: list.filter((r) => r.staying).length, arrivals: list.filter((r) => r.arriving).length, dirty: list.filter((r) => r.housekeeping === 'dirty').length },
   };
 }

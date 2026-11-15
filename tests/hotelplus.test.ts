@@ -767,4 +767,32 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect((await autoCheckoutTick(db, late)).checkedOut).toBe(0);
     await ok('PUT', '/settings/checkin-sheet', admin, { ...sheet, autoCheckout: true });
   });
+
+  it('trägt Reinigungen von Hand ein und druckt die Reinigungsliste auf dem Bondrucker', async () => {
+    const day = addDays(today, 3);
+    const e = await ok('POST', '/housekeeping/manual', user, { date: day, roomId: roomIds[0], kind: 'interim', note: 'Handtücher wechseln' });
+    expect(e).toMatchObject({ kind: 'interim', note: 'Handtücher wechseln', done: false, room: expect.any(String) });
+    expect((await ok('GET', `/housekeeping?date=${day}`, user)).manual).toEqual([expect.objectContaining({ id: e.id })]);
+    expect((await ok('GET', `/housekeeping?date=${addDays(day, 1)}`, user)).manual).toEqual([]);
+    expect((await call('POST', '/housekeeping/manual', user, { date: day, roomId: roomIds[0], kind: 'sauna' })).statusCode).toBe(400);
+    expect((await ok('POST', `/housekeeping/manual/${e.id}/done`, user, { done: true })).done).toBe(true);
+    // Bondruck: von Hand eingetragene, noch offene Reinigungen stehen mit auf dem Bon
+    await ok('POST', `/housekeeping/manual/${e.id}/done`, user, { done: false });
+    const { createServer } = await import('node:net');
+    const jobs: Buffer[] = [];
+    const printer = createServer({ allowHalfOpen: true }, (sock) => sock.on('data', (d) => jobs.push(d)));
+    await new Promise<void>((r) => printer.listen(0, '127.0.0.1', () => r()));
+    await ok('PUT', '/settings/front-printer', admin, { enabled: true, host: '127.0.0.1', port: (printer.address() as { port: number }).port, width: 42 });
+    await ok('POST', '/housekeeping/print', user, { date: day });
+    await new Promise((r) => setTimeout(r, 150));
+    const bon = Buffer.concat(jobs).toString('latin1');
+    expect(bon).toContain('REINIGUNG');
+    expect(bon).toContain('Zwischenreinigung');
+    expect(bon).toContain('Handt');
+    await ok('PUT', '/settings/front-printer', admin, { enabled: false, host: '', port: 9100, width: 48 });
+    printer.close();
+    await ok('POST', `/housekeeping/manual/${e.id}/remove`, user, {});
+    expect((await ok('GET', `/housekeeping?date=${day}`, user)).manual).toEqual([]);
+    expect((await call('POST', '/housekeeping/manual', {}, { date: day, roomId: roomIds[0], kind: 'full' })).statusCode).toBe(401);
+  });
 });

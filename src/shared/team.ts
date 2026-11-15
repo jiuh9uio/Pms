@@ -26,7 +26,15 @@ export interface CleanRow {
   /** was heute mit dem Zimmer passiert: reist jemand ab, bleibt jemand, reist jemand an */
   departing: boolean; staying: boolean; arriving: boolean; guest: string; persons: number; nextGuest: string; nextPersons: number; note: string;
 }
-export interface CleanList { date: string; rows: CleanRow[]; total: { departures: number; stays: number; arrivals: number; dirty: number } }
+export interface CleanList { date: string; rows: CleanRow[]; total: { departures: number; stays: number; arrivals: number; dirty: number }; manual: ManualClean[] }
+/** Von Hand eingetragene Reinigung für einen Tag (z. B. zusätzliche Zwischenreinigung) */
+export const MANUAL_CLEAN_KINDS = ['full', 'interim'] as const;
+export const MANUAL_CLEAN_LABEL: Record<(typeof MANUAL_CLEAN_KINDS)[number], string> = { full: 'Komplettreinigung', interim: 'Zwischenreinigung' };
+export interface ManualClean { id: string; date: string; roomId: string; room: string; kind: (typeof MANUAL_CLEAN_KINDS)[number]; note: string; by: string; at: string; done: boolean }
+export const manualCleanInput = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Bitte ein Datum wählen'), roomId: z.uuid('Bitte ein Zimmer wählen'),
+  kind: z.enum(MANUAL_CLEAN_KINDS), note: z.string().trim().max(200).default(''),
+});
 
 // ---------- Tagesabschluss ----------
 export interface DayReport {
