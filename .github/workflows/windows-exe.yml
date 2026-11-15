@@ -244,6 +244,51 @@ jobs:
             Stop-Process -Id $web.Id -Force -ErrorAction SilentlyContinue
           }
 
+      - name: Test „Update von Hand.bat“ (Notweg, wenn das Update im Programm nicht klappt)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $old = "$PWD\updtest2\SchuetzenhausPMS"
+          $base = "http://127.0.0.1:3000/api/v1"
+          New-Item -ItemType Directory updtest2 | Out-Null
+          Copy-Item -Recurse release\SchuetzenhausPMS $old
+          $info = Get-Content "$old\app\version.json" | ConvertFrom-Json
+          $info.version = '0.0.1'
+          [System.IO.File]::WriteAllText("$old\app\version.json", ($info | ConvertTo-Json))
+          [System.IO.File]::WriteAllText("$old\pms.env", "PORT=3000`r`nHOST=127.0.0.1`r`nPMS_UPDATE_CHECK=off`r`n")
+          $web = Start-Process python -ArgumentList '-m', 'http.server', '8099', '--bind', '127.0.0.1' -WorkingDirectory updsrv -PassThru
+          function Post($path, $body, $s) { Invoke-RestMethod -Method Post -Uri "$base$path" -ContentType 'application/json' -Body ($body | ConvertTo-Json -Depth 6) -WebSession $s }
+          try {
+            # alte Version mit Daten laufen lassen – die Datei muss sie selbst beenden
+            Start-Process -FilePath "$old\pms.exe" -ArgumentList '--no-browser' -WorkingDirectory $old | Out-Null
+            foreach ($i in 1..45) { try { Invoke-RestMethod "$base/health" -TimeoutSec 2 | Out-Null; break } catch { Start-Sleep 1 } }
+            $s = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+            Post '/auth/setup' @{ username = 'chef'; name = 'Test'; password = 'sehr-geheim-123' } $s | Out-Null
+            Post '/categories' @{ name = 'Einzelzimmer'; description = ''; stdOccupancy = 1; maxPersons = 1; basePriceCents = 6500; sort = 1 } $s | Out-Null
+            $env:PMS_UPDATE_ZIP = 'http://127.0.0.1:8099/SchuetzenhausPMS-Windows.zip'
+            # nur auf die Datei selbst warten, nicht auf das von ihr gestartete PMS
+            $p = Start-Process cmd -ArgumentList '/c', "`"$old\Update von Hand.bat`" < nul" -WorkingDirectory $old -PassThru -NoNewWindow
+            if (-not $p.WaitForExit(900000)) { throw 'Update von Hand.bat ist nach 15 Minuten nicht fertig' }
+            Write-Host "Datei beendet mit $($p.ExitCode)"
+            $done = $false
+            foreach ($i in 1..60) { Start-Sleep 2; try { $st = Invoke-RestMethod "$base/health" -TimeoutSec 3; $done = $true; break } catch { } }
+            if (-not $done) { throw 'Das PMS ist nach dem Update von Hand nicht wieder gestartet' }
+            $v = (Get-Content "$old\app\version.json" | ConvertFrom-Json).version
+            if ($v -ne $env:PMS_VERSION) { throw "Version nach dem Update von Hand: $v statt $env:PMS_VERSION" }
+            $s2 = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+            Post '/auth/login' @{ username = 'chef'; password = 'sehr-geheim-123' } $s2 | Out-Null
+            $cats = @(Invoke-RestMethod "$base/categories" -WebSession $s2)
+            if ($cats.Count -ne 1) { throw 'Daten nach dem Update von Hand nicht vorhanden' }
+            if (-not (Get-ChildItem "$old\backups\*.dump")) { throw 'Vor dem Update von Hand wurde keine Sicherung geschrieben' }
+            if (-not (Test-Path "$old\update\previous\pms.exe")) { throw 'Vorherige Programmdateien wurden nicht aufbewahrt' }
+            Get-Content "$old\update\update.log"
+            Write-Host 'Test „Update von Hand“ bestanden'
+          } catch { Get-ChildItem "$old\update\*.log", "$old\data\*.log" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "===== $($_.Name)"; Get-Content $_.FullName -Tail 60 }; throw } finally {
+            Get-Process pms -ErrorAction SilentlyContinue | Stop-Process -Force
+            if (Test-Path "$old\data\postgres\postmaster.pid") { & "$old\pgsql\bin\pg_ctl.exe" stop -D "$old\data\postgres" -m fast -w }
+            Stop-Process -Id $web.Id -Force -ErrorAction SilentlyContinue
+          }
+
       - uses: actions/upload-artifact@v4
         with:
           name: SchuetzenhausPMS-Windows

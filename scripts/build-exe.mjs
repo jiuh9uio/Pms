@@ -51,6 +51,7 @@ for (const d of [['share', 'doc'], ['share', 'man'], ['share', 'locale']]) rmSyn
 
 // 4) Hilfsdateien für Windows
 const crlf = (s) => s.replace(/\n/g, '\r\n');
+writeFileSync(join(out, 'Update von Hand.bat'), crlf(readFileSync(join('scripts', 'update-von-hand.bat'), 'utf8').replace(/\r\n/g, '\n')));
 writeFileSync(join(out, 'Sicherung.bat'), crlf('@echo off\ncd /d "%~dp0"\npms.exe --backup\npause\n'));
 writeFileSync(join(out, 'Autostart einrichten.bat'), crlf(
   '@echo off\nrem Startet das PMS bei jeder Anmeldung an Windows und sichert taeglich um 02:00 Uhr.\n' +

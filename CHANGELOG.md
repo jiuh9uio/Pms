@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.61.2
+
+- Neu im Programmordner: „Update von Hand.bat“ – der Notweg, falls das Update im Programm nicht klappt. Doppelklick lädt die neueste Version (setzt bei Verbindungsabbruch fort, bis zu 15 Versuche), prüft die Prüfsumme, beendet das PMS, schreibt eine Datensicherung, kopiert die neuen Programmdateien (data, backups und pms.env bleiben unverändert, die bisherigen Dateien liegen in update\previous) und startet das PMS wieder. Der Windows-Bau prüft diesen Weg automatisch mit.
+
 ## 1.61.1
 
 - Programm-Update: Der Download brach bei langsamem Internet nach 60 Sekunden ab („The operation was aborted due to timeout“). Jetzt gibt es keine feste Gesamtzeit mehr – abgebrochen wird nur, wenn 90 Sekunden lang gar keine Daten kommen. Bricht die Verbindung ab, setzt das Programm bis zu fünfmal neu an, wo möglich an der Stelle, an der es aufgehört hat; auch ein späterer neuer Versuch macht dort weiter.
