@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.47.0
+
+- Einstellungen → Betrieb → neuer Reiter „Mitteilungen“: Für das ganze Haus lässt sich ein- und ausschalten, was das Programm von sich aus meldet – die Abfragen der Eigenkontrolle beim Start (Temperatur, Reinigung), der Hinweis „Internet ausgefallen“, die Zähler an den Kacheln E-Mail und Team sowie die Hinweise für den Administrator (Datensicherung, Programm-Update, Einrichtung).
+
 ## 1.46.0
 
 - Zimmer & Preise → Kategorie: Der Nachlass bei längerem Aufenthalt lässt sich für Einzelbelegung getrennt festlegen („… – Einzelbelegung“). Er gilt, wenn nur eine Person in einem Mehrbettzimmer wohnt, zusätzlich zum Nachlass bei Einzelbelegung. Bestehende Kategorien behalten ihren bisherigen Betrag für beide Fälle.

@@ -7,6 +7,7 @@ import { GuideCard } from './GuideCard.tsx';
 import { InboxSettings } from './InboxSettings.tsx';
 import { InvoiceLayoutCard } from './InvoiceLayoutCard.tsx';
 import { InvoiceNumberCard } from './InvoiceNumberCard.tsx';
+import { NoticesCard } from './NoticesCard.tsx';
 import { MailSettings } from './MailSettings.tsx';
 import { BackupCard } from './BackupCard.tsx';
 import { KitchenPrinterCard } from './KitchenPrinterCard.tsx';
@@ -21,12 +22,12 @@ import { Changelog, UpdateCard } from './UpdateCard.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
 
 export const SETTINGS_TABS = [
-  ['haus', 'Haus'], ['email', 'E-Mail'], ['drucker', 'Drucker'], ['ecgeraet', 'EC-Gerät'], ['tse', 'TSE'], ['steuern', 'Steuern & Nummern'], ['algorithmen', 'Algorithmen'], ['netz', 'Hausnetz'], ['sicherung', 'Datensicherung'], ['update', 'Programm-Update'], ['loeschen', 'Daten löschen'],
+  ['haus', 'Haus'], ['email', 'E-Mail'], ['drucker', 'Drucker'], ['ecgeraet', 'EC-Gerät'], ['tse', 'TSE'], ['steuern', 'Steuern & Nummern'], ['algorithmen', 'Algorithmen'], ['mitteilungen', 'Mitteilungen'], ['netz', 'Hausnetz'], ['sicherung', 'Datensicherung'], ['update', 'Programm-Update'], ['loeschen', 'Daten löschen'],
 ] as const;
 
 /** Die Reiter in vier Gruppen – so stehen nie mehr als vier nebeneinander. */
 const SETTINGS_GROUPS = [
-  { key: 'betrieb', label: 'Betrieb', sub: 'Angaben zum Haus, Rechnungslayout, Steuersätze, Rechnungsnummern und Regeln', tabs: ['haus', 'steuern', 'algorithmen'] },
+  { key: 'betrieb', label: 'Betrieb', sub: 'Angaben zum Haus, Rechnungslayout, Steuersätze, Rechnungsnummern, Regeln und Mitteilungen', tabs: ['haus', 'steuern', 'algorithmen', 'mitteilungen'] },
   { key: 'geraete', label: 'Geräte', sub: 'Bondrucker, EC-Gerät, TSE und die Geräte im Hausnetz', tabs: ['drucker', 'ecgeraet', 'tse', 'netz'] },
   { key: 'kommunikation', label: 'E-Mail', sub: 'Versand, Posteingang und Online-Anfrage', tabs: ['email'] },
   { key: 'system', label: 'System', sub: 'Datensicherung, Programm-Update und Aufräumen', tabs: ['sicherung', 'update', 'loeschen'] },
@@ -57,6 +58,7 @@ export function Settings() {
       {current === 'tse' && <TseCard />}
       {current === 'steuern' && <><TaxRates /><InvoiceNumberCard /></>}
       {current === 'algorithmen' && <Algorithms />}
+      {current === 'mitteilungen' && <NoticesCard />}
       {current === 'netz' && <NetworkCard />}
       {current === 'sicherung' && <BackupCard />}
       {current === 'update' && <><UpdateCard /><Changelog /></>}

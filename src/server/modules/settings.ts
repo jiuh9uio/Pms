@@ -1,5 +1,5 @@
 import { and, asc, eq, ne } from 'drizzle-orm';
-import { HOTEL_DEFAULTS, type HotelSettings, type TaxRateDto } from '../../shared/schemas.js';
+import { DEFAULT_NOTICES, HOTEL_DEFAULTS, type HotelSettings, type Notices, type TaxRateDto } from '../../shared/schemas.js';
 import type { Db, Exec } from '../db/client.js';
 import { settings, taxRates } from '../db/schema.js';
 import { notFound, stale } from '../lib/errors.js';
@@ -62,4 +62,15 @@ export async function updateTaxRate(
     await record(tx, actor, { action: 'update', entity: 'tax_rate', entityId: id, before: toDto(before), after: toDto(after!) });
     return toDto(after!);
   });
+}
+
+// ---------- Mitteilungen ----------
+export async function getNotices(db: Exec): Promise<Notices> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'notices'));
+  return { ...DEFAULT_NOTICES, ...((row?.value as Partial<Notices>) ?? {}) };
+}
+export async function saveNotices(db: Db, actor: Actor, v: Notices) {
+  await db.insert(settings).values({ key: 'notices', value: v }).onConflictDoUpdate({ target: settings.key, set: { value: v, updatedAt: new Date() } });
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: 'notices', after: v });
+  return v;
 }

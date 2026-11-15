@@ -203,6 +203,16 @@ export interface TseRecordDto {
   transactionNumber: number | null; signatureCounter: number | null; startTime: string; finishTime: string; processData: string; error: string;
 }
 
+// ---------- Mitteilungen: was das Programm von sich aus meldet (gilt für das ganze Haus) ----------
+export const NOTICE_KEYS = ['hygieneTemp', 'hygieneClean', 'netAlert', 'mailCount', 'teamCount', 'backupWarn', 'updateHint', 'setupHint'] as const;
+export type NoticeKey = (typeof NOTICE_KEYS)[number];
+export const noticesInput = z.object({
+  hygieneTemp: z.boolean(), hygieneClean: z.boolean(), netAlert: z.boolean(), mailCount: z.boolean(), teamCount: z.boolean(),
+  backupWarn: z.boolean(), updateHint: z.boolean(), setupHint: z.boolean(),
+});
+export type Notices = z.infer<typeof noticesInput>;
+export const DEFAULT_NOTICES: Notices = { hygieneTemp: true, hygieneClean: true, netAlert: true, mailCount: true, teamCount: true, backupWarn: true, updateHint: true, setupHint: true };
+
 // ---------- FRITZ!Box (Internet → Internetverbindung) ----------
 export const fritzSettingsInput = z.object({
   enabled: z.boolean(),

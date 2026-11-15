@@ -194,6 +194,9 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
 
     // ---------- Einstellungen ----------
     api.get('/settings/hotel', { preHandler: requireUser }, () => settings.getHotel(db));
+    // Mitteilungen: lesen dürfen alle (die Oberfläche richtet sich danach), ändern nur der Administrator
+    api.get('/settings/notices', { preHandler: requireUser }, () => settings.getNotices(db));
+    api.put('/settings/notices', { preHandler: requireAdmin }, (req) => settings.saveNotices(db, actor(req), S.noticesInput.parse(req.body)));
     api.put('/settings/hotel', { preHandler: requireAdmin }, (req) => settings.saveHotel(db, actor(req), S.hotelSettings.parse(req.body)));
     api.get('/tax-rates', { preHandler: requireUser }, () => settings.listTaxRates(db));
     api.post('/tax-rates', { preHandler: requireAdmin }, (req) => settings.createTaxRate(db, actor(req), S.taxRateCreateInput.parse(req.body)));

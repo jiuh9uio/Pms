@@ -4,6 +4,7 @@ import { fritzSettingsInput, netRulesInput, wifiSettingsInput, type FritzInfoDto
 import { useAuth } from '../App.tsx';
 import { api } from '../api.ts';
 import { netAlertOn, setNetAlertOn } from '../NetAlert.tsx';
+import { useNotices } from '../notices.ts';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, fmtDateTime, printOnly, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
 
 const duration = (a: string, b: string) => {
@@ -121,6 +122,7 @@ function InternetCard() {
   const { data, error } = useLoad(() => api<InternetStatusDto>('GET', '/network/status'), [rev]);
   const log = useLoad(() => api<NetOutagesDto>('GET', '/network/outages'), [rev]).data;
   const [hint, setHint] = useState(netAlertOn);
+  const house = useNotices();
   const [perm, setPerm] = useState(() => ('Notification' in window ? Notification.permission : 'unsupported'));
   const allow = async () => { try { setPerm(await Notification.requestPermission()); } catch { setPerm('unsupported'); } };
   return (
@@ -132,7 +134,7 @@ function InternetCard() {
             {data.online ? `Antwort aus dem Internet nach ${data.ms} ms.` : data.error} <span className="muted">Geprüft {fmtDateTime(data.checkedAt)}.</span></p>
           <p className="muted small">Adresse dieses Rechners im Hausnetz: {data.addresses.join(', ') || 'keine Netzwerkverbindung'}. Geprüft wird die Verbindung dieses Rechners (eine kurze Anfrage an api.github.com) – nicht die Geschwindigkeit und nicht das Gäste-WLAN.</p>
           <h3>Hinweis bei Ausfall</h3>
-          <label className="check"><input type="checkbox" checked={hint} onChange={(e) => { setHint(e.target.checked); setNetAlertOn(e.target.checked); }} /><span>Auf diesem Gerät ein Hinweisfenster zeigen, wenn das Internet ausfällt<small>erscheint im Programm, solange es in einem Browserfenster geöffnet ist; dazu ein roter Balken bis das Internet wieder da ist</small></span></label>
+          <label className="check"><input type="checkbox" checked={hint} onChange={(e) => { setHint(e.target.checked); setNetAlertOn(e.target.checked); }} /><span>Auf diesem Gerät ein Hinweisfenster zeigen, wenn das Internet ausfällt<small>erscheint im Programm, solange es in einem Browserfenster geöffnet ist; dazu ein roter Balken bis das Internet wieder da ist</small></span></label>{house && !house.netAlert && <p className="notice warn">Der Hinweis ist für das ganze Haus ausgeschaltet (Einstellungen → Mitteilungen).</p>}
           {hint && perm === 'default' && <p><Button onClick={() => void allow()}>Zusätzlich Meldung von Windows erlauben</Button> <span className="muted small">zeigt die Meldung auch, wenn gerade ein anderes Fenster im Vordergrund ist</span></p>}
           {hint && perm === 'granted' && <p className="muted small">Die Meldung von Windows ist für diesen Browser erlaubt.</p>}
           {hint && perm === 'denied' && <p className="muted small">Die Meldung von Windows ist in diesem Browser gesperrt; sie lässt sich nur in den Browser-Einstellungen wieder erlauben. Das Hinweisfenster im Programm erscheint trotzdem.</p>}

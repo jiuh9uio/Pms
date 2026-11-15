@@ -402,4 +402,13 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     // eine untergeschobene Adresse mit Sonderzeichen wird nicht in die Datei geschrieben
     expect((await app.inject({ method: 'GET', url: '/api/v1/desktop-shortcut.bat', headers: { host: 'x" & calc & "' }, remoteAddress: '10.9.9.1' })).statusCode).toBe(400);
   });
+
+  it('speichert, welche Mitteilungen das Programm von sich aus zeigt', async () => {
+    const all = await ok('GET', '/settings/notices', user);
+    expect(all).toEqual({ hygieneTemp: true, hygieneClean: true, netAlert: true, mailCount: true, teamCount: true, backupWarn: true, updateHint: true, setupHint: true });
+    expect((await call('PUT', '/settings/notices', user, all)).statusCode).toBe(403);
+    expect((await call('PUT', '/settings/notices', admin, { hygieneTemp: false })).statusCode).toBe(400); // immer alle Schalter
+    await ok('PUT', '/settings/notices', admin, { ...all, hygieneClean: false, teamCount: false });
+    expect(await ok('GET', '/settings/notices', user)).toMatchObject({ hygieneTemp: true, hygieneClean: false, teamCount: false, backupWarn: true });
+  });
 });

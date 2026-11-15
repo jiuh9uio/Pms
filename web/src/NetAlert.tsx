@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { NetAlertDto } from '../../src/shared/schemas.js';
+import { useNotices } from './notices.ts';
 import { api } from './api.ts';
 import { Button, Dialog, useToast } from './ui.tsx';
 
@@ -24,7 +25,10 @@ function systemNote(title: string, body: string) {
  */
 export function NetAlert() {
   const toast = useToast();
-  const [on, setOn] = useState(netAlertOn);
+  const [mine, setOn] = useState(netAlertOn);
+  // haus-weit ausgeschaltet (Einstellungen → Mitteilungen) geht der eigenen Wahl vor
+  const house = useNotices();
+  const on = mine && !!house?.netAlert;
   const [a, setA] = useState<NetAlertDto | null>(null);
   const [popup, setPopup] = useState(false);
   const seen = useRef<string | null>(seenGet());

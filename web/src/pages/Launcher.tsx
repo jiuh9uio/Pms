@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useNotices } from '../notices.ts';
 import { HygienePrompt } from './HygienePrompt.tsx';
 import { ROLE_LABEL, hasModule, type Module, type OverviewItem } from '../../../src/shared/schemas.js';
 import { useAuth, useLogout } from '../App.tsx';
@@ -45,6 +46,7 @@ export function Launcher() {
   const mailNew = useLoad(() => (hasModule(user, 'email') ? api<{ newCount: number; ready: boolean }>('GET', '/inbox/state') : Promise.resolve(null))).data;
   // Start-Checkliste: Hinweis für den Administrator, solange Grundlagen fehlen
   const setup = useLoad(() => (user.role === 'admin' ? api<{ ready: boolean; open: number }>('GET', '/setup/checklist') : Promise.resolve(null))).data;
+  const notices = useNotices();
   const teamNew = useLoad(() => api<{ unread: number; openTasks: number }>('GET', '/team/state')).data;
   const tiles = TILES.filter((t) => (!t.admin || user.role === 'admin') && allowed(user, t.module))
     .map((t) => (t.alt && Array.isArray(t.module) && !hasModule(user, t.module[0]!) ? { ...t, to: t.alt } : t));
@@ -55,9 +57,9 @@ export function Launcher() {
         <p className="muted">{user.name} · {ROLE_LABEL[user.role]} <button type="button" className="btn" onClick={() => void logout()}>Abmelden</button> <Link className="small" to="/als-programm">Als Programm öffnen (Symbol einrichten)</Link></p>
       </header>
       <Search variant="big" />
-      {upd?.available && <p className="notice warn">Programm-Update verfügbar: Version {upd.latest}. <Link to="/einstellungen?ansicht=update">Jetzt ansehen und einspielen</Link></p>}
-      {setup && !setup.ready && <p className="notice warn">Vor dem Start {setup.open === 1 ? 'fehlt noch ein Punkt' : `fehlen noch ${setup.open} Punkte`} bei der Einrichtung. <Link to="/erste-schritte">Zur Checkliste „Erste Schritte“</Link></p>}
-      {bakWarn && <p className="notice danger">{bakWarn} <Link to="/einstellungen?ansicht=sicherung">Zur Datensicherung</Link></p>}
+      {notices?.updateHint && upd?.available && <p className="notice warn">Programm-Update verfügbar: Version {upd.latest}. <Link to="/einstellungen?ansicht=update">Jetzt ansehen und einspielen</Link></p>}
+      {notices?.setupHint && setup && !setup.ready && <p className="notice warn">Vor dem Start {setup.open === 1 ? 'fehlt noch ein Punkt' : `fehlen noch ${setup.open} Punkte`} bei der Einrichtung. <Link to="/erste-schritte">Zur Checkliste „Erste Schritte“</Link></p>}
+      {notices?.backupWarn && bakWarn && <p className="notice danger">{bakWarn} <Link to="/einstellungen?ansicht=sicherung">Zur Datensicherung</Link></p>}
       <p className="todaytoggle"><button type="button" className="linkbtn" aria-expanded={showToday} onClick={toggleToday}>{showToday ? 'Heute im Haus ausblenden' : 'Heute im Haus anzeigen'}</button></p>
       {showToday && today && today.length > 0 && (
         <section className="todaystrip" aria-label="Heute im Haus">
@@ -77,7 +79,7 @@ export function Launcher() {
                 <Link key={t.to} to={t.to} className="tile">
                   <span className="tile-icon" aria-hidden>{t.icon}</span>
                   <span className="tile-body">
-                    <span className="tile-title">{t.title}{t.to === '/email' && mailNew && mailNew.newCount > 0 && <span className="tile-count" aria-label={`${mailNew.newCount} offen`}>{mailNew.newCount}</span>}{t.to === '/team' && teamNew && teamNew.unread > 0 && <span className="tile-count" aria-label={`${teamNew.unread} ungelesen`}>{teamNew.unread}</span>}</span>
+                    <span className="tile-title">{t.title}{t.to === '/email' && notices?.mailCount && mailNew && mailNew.newCount > 0 && <span className="tile-count" aria-label={`${mailNew.newCount} offen`}>{mailNew.newCount}</span>}{t.to === '/team' && notices?.teamCount && teamNew && teamNew.unread > 0 && <span className="tile-count" aria-label={`${teamNew.unread} ungelesen`}>{teamNew.unread}</span>}</span>
                     <span className="tile-text">{t.text}</span>
                   </span>
                 </Link>
@@ -86,7 +88,7 @@ export function Launcher() {
           </section>
         );
       })}
-      {hasModule(user, 'kontrollen') && <HygienePrompt />}
+      {notices && (notices.hygieneTemp || notices.hygieneClean) && hasModule(user, 'kontrollen') && <HygienePrompt temp={notices.hygieneTemp} clean={notices.hygieneClean} />}
       {tiles.length === 0 && <p className="notice">Für dieses Konto ist noch kein Bereich freigegeben. Bitte den Administrator ansprechen.</p>}
     </div>
   );

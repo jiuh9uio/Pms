@@ -12,12 +12,12 @@ const STORE = 'pms-eigenkontrolle-spaeter';
  * Kurzabfrage beim Start des Programms (im Startmenü): Für jeden Bereich, in dem heute noch nichts eingetragen ist,
  * genügt ein Tipp auf „Ja“. Gespeichert wird die Bestätigung mit Namen und Uhrzeit, kein Zahlenwert.
  */
-export function HygienePrompt() {
+export function HygienePrompt({ temp: askTemp = true, clean: askClean = true }: { temp?: boolean; clean?: boolean }) {
   const { bump } = useData();
   const toast = useToast();
   const navigate = useNavigate();
   const { data } = useLoad(async () => {
-    const [temp, clean] = await Promise.all([api<HygieneOpenDto[]>('GET', '/hygiene/open'), api<CleaningDueDto[]>('GET', '/cleaning/due')]);
+    const [temp, clean] = await Promise.all([askTemp ? api<HygieneOpenDto[]>('GET', '/hygiene/open') : Promise.resolve([]), askClean ? api<CleaningDueDto[]>('GET', '/cleaning/due') : Promise.resolve([])]);
     // Reihenfolge: erst alle Temperaturen, dann die fällige Reinigung
     type Q = { key: string; kind: 'temp'; area: HygieneOpenDto } | { key: string; kind: 'clean'; area: CleaningDueDto };
     return [...temp.map((a): Q => ({ key: 't' + a.areaId, kind: 'temp', area: a })), ...clean.map((a): Q => ({ key: 'c' + a.areaId, kind: 'clean', area: a }))];
