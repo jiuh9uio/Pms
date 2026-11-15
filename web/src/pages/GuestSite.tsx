@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { addDays, formatMoney, todayBerlin } from '../../../src/shared/hotel.js';
-import { REQUEST_LABEL, REQUEST_TYPES, type RequestType, type SiteAvailability, type SiteCategory, type SitePublic, type SiteSection } from '../../../src/shared/site.js';
+import { MEETING_CATERING, MEETING_EQUIPMENT, MEETING_LAYOUTS, REQUEST_LABEL, REQUEST_TYPES, type RequestType, type SiteAvailability, type SiteCategory, type SitePublic, type SiteSection } from '../../../src/shared/site.js';
 import { ApiFailure, api } from '../api.ts';
 import { LoadState, useLoad } from '../ui.tsx';
 
@@ -129,8 +129,8 @@ export function GuestSite({ staffLink = false }: { staffLink?: boolean }) {
           <Reveal id="gs-feiern" className="gs-section gs-soft"><div className="gs-wrap">
             <div className="gs-head"><div><span className="gs-kicker">{S.events.kicker}</span><Title s={S.events} /></div>{S.events.text && <p>{S.events.text}</p>}</div>
             <Pic src={img('events')} alt={`Feiern – ${h.name}`} letter={letter} className="gs-events-pic" />
-            {data.eventTypes.length > 0 && <div className="gs-types" style={{ ['--n' as string]: Math.min(4, data.eventTypes.length) }}>{data.eventTypes.map((x) => online ? <button type="button" key={x} className="gs-type" onClick={() => ask({ type: 'event', occasion: x })}>{x}</button> : <span key={x}>{x}</span>)}</div>}
-            {(online || h.email) && <div className="gs-actions">{online ? askBtn('event', 'Ihre Veranstaltung anfragen') : <a className="gs-btn" href={mail(h.email, 'Unverbindliche Veranstaltungsanfrage')}>Ihre Veranstaltung anfragen</a>}</div>}
+            {data.eventTypes.length > 0 && <div className="gs-types" style={{ ['--n' as string]: Math.min(4, data.eventTypes.length) }}>{data.eventTypes.map((x) => online ? <button type="button" key={x} className="gs-type" onClick={() => ask(MEETING_WORDS.test(x) ? { type: 'meeting' } : { type: 'event', occasion: x })}>{x}</button> : <span key={x}>{x}</span>)}</div>}
+            {(online || h.email) && <div className="gs-actions">{online && askBtn('meeting', 'Tagung anfragen', 'outline')}{online ? askBtn('event', 'Ihre Veranstaltung anfragen') : <a className="gs-btn" href={mail(h.email, 'Unverbindliche Veranstaltungsanfrage')}>Ihre Veranstaltung anfragen</a>}</div>}
             {S.events.note && <p className="gs-note">{S.events.note}</p>}
           </div></Reveal>
         )}
@@ -162,7 +162,7 @@ export function GuestSite({ staffLink = false }: { staffLink?: boolean }) {
             <div className="gs-copy">
               <span className="gs-kicker">Ihre Anfrage</span>
               <h2 id="gs-anfrage-titel">Schreiben Sie uns.<br /><em>Wir melden uns.</em></h2>
-              <p>Ob Zimmer, Tisch, Feier oder Gutschein: Erzählen Sie uns, was Sie sich wünschen. Wir prüfen Ihre Anfrage persönlich und antworten Ihnen so bald wie möglich.</p>
+              <p>Ob Zimmer, Tisch, Feier, Tagung oder Gutschein: Erzählen Sie uns, was Sie sich wünschen. Wir prüfen Ihre Anfrage persönlich und antworten Ihnen so bald wie möglich.</p>
               <p className="gs-note">Eine Anfrage ist unverbindlich und noch keine Buchung oder Reservierung. Erst unsere Bestätigung macht sie verbindlich.{h.phone && <> Eilig? Rufen Sie uns an: <a className="gs-link" href={tel(h.phone)}>{h.phone}</a></>}</p>
             </div>
             <RequestForm site={data} want={want} />
@@ -301,6 +301,9 @@ function Hotel({ data, img, letter, ask: askUp }: { data: SitePublic; img: strin
   );
 }
 
+/** Anlässe, die eher eine Tagung sind – führen zum Tagungsformular */
+const MEETING_WORDS = /tagung|seminar|fortbildung|schulung|konferenz|workshop|kongress|firmen/i;
+
 interface Want { type: RequestType; category?: string; from?: string; to?: string; adults?: string; children?: string; occasion?: string; message?: string; n?: number }
 
 /** Ein Anfrageformular für alles: Zimmer, Tisch, Feier, Gutschein, Frage. Es wird nichts gebucht. */
@@ -308,7 +311,8 @@ function RequestForm({ site, want }: { site: SitePublic; want: Want | null }) {
   const today = todayBerlin();
   const first: RequestType = site.categories.length && site.sections.hotel.show ? 'room' : 'table';
   const empty = { type: first as RequestType, name: '', email: '', phone: '', message: '', consent: false, website: '', from: addDays(today, 1), to: addDays(today, 3), adults: '2', children: '0', category: '',
-    date: addDays(today, 1), time: '19:00', persons: '2', guests: '', occasion: '', value: '' };
+    date: addDays(today, 1), time: '19:00', persons: '2', guests: '', occasion: '', value: '',
+    organization: '', participants: '', rooms: '0', layout: '', equipment: [] as string[], catering: [] as string[] };
   const [v, setV] = useState(empty);
   const [err, setErr] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -319,10 +323,10 @@ function RequestForm({ site, want }: { site: SitePublic; want: Want | null }) {
     setV((x) => ({ ...x, type: want.type, category: want.category ?? x.category, from: want.from ?? x.from, to: want.to ?? x.to, adults: want.adults ?? x.adults, children: want.children ?? x.children, occasion: want.occasion ?? x.occasion, message: want.message ?? x.message }));
   }, [want]);
   const types = REQUEST_TYPES.filter((t) => t !== 'room' || (site.categories.length > 0 && site.sections.hotel.show)).filter((t) => t !== 'table' || site.sections.reservation.show || site.sections.restaurant.show)
-    .filter((t) => t !== 'event' || site.sections.events.show).filter((t) => t !== 'voucher' || site.sections.vouchers.show);
+    .filter((t) => (t !== 'event' && t !== 'meeting') || site.sections.events.show).filter((t) => t !== 'voucher' || site.sections.vouchers.show);
   const send = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true); setErr({});
-    try { await api('POST', '/public/site/request', { ...v, guests: v.guests === '' ? undefined : v.guests }); setDone(v.type); setV({ ...empty, type: v.type, name: v.name, email: v.email, phone: v.phone }); }
+    try { await api('POST', '/public/site/request', v.type === 'meeting' ? { ...v, to: v.to === v.from ? '' : v.to, participants: v.participants === '' ? undefined : v.participants } : { ...v, guests: v.guests === '' ? undefined : v.guests }); setDone(v.type); setV({ ...empty, type: v.type, name: v.name, email: v.email, phone: v.phone }); }
     catch (x) { setErr(x instanceof ApiFailure && Object.keys(x.fields).length ? x.fields : { form: x instanceof Error ? x.message : 'Fehler' }); }
     setBusy(false);
   };
@@ -361,11 +365,21 @@ function RequestForm({ site, want }: { site: SitePublic; want: Want | null }) {
           {f('guests', 'Gäste (ungefähr)', <input inputMode="numeric" value={v.guests} onChange={set('guests')} />)}
           <datalist id="gs-anlaesse">{site.eventTypes.map((x) => <option key={x} value={x} />)}</datalist>
         </>}
+        {v.type === 'meeting' && <>
+          {f('organization', 'Praxis, Klinik, Firma oder Veranstalter', <input autoComplete="organization" value={v.organization} onChange={set('organization')} placeholder="z. B. Ärztlicher Qualitätszirkel" />, 'full')}
+          {f('from', 'Erster Tag', <input type="date" min={today} value={v.from} onChange={(e) => setV({ ...v, from: e.target.value, to: v.to < e.target.value ? e.target.value : v.to })} />, 'wide')}
+          {f('to', 'Letzter Tag', <input type="date" min={v.from || today} value={v.to} onChange={set('to')} />, 'wide')}
+          {f('participants', 'Teilnehmer, ungefähr', <input inputMode="numeric" value={v.participants} onChange={set('participants')} />, 'wide')}
+          {f('rooms', 'Zimmer je Nacht (0 = keine)', <input inputMode="numeric" value={v.rooms} onChange={set('rooms')} />, 'wide')}
+          {f('layout', 'Bestuhlung', <select value={v.layout} onChange={set('layout')}><option value="">egal / bitte beraten</option>{MEETING_LAYOUTS.map((x) => <option key={x}>{x}</option>)}</select>, 'full')}
+          <fieldset className="gs-chips full"><legend>Technik</legend>{MEETING_EQUIPMENT.map((x) => <label key={x}><input type="checkbox" checked={v.equipment.includes(x)} onChange={(e) => setV({ ...v, equipment: e.target.checked ? [...v.equipment, x] : v.equipment.filter((y) => y !== x) })} /><span>{x}</span></label>)}</fieldset>
+          <fieldset className="gs-chips full"><legend>Verpflegung</legend>{MEETING_CATERING.map((x) => <label key={x}><input type="checkbox" checked={v.catering.includes(x)} onChange={(e) => setV({ ...v, catering: e.target.checked ? [...v.catering, x] : v.catering.filter((y) => y !== x) })} /><span>{x}</span></label>)}</fieldset>
+        </>}
         {v.type === 'voucher' && f('value', 'Wert oder Wunsch', <input value={v.value} onChange={set('value')} placeholder="z. B. 50 € oder „Abendessen für zwei“" />, 'full')}
         {f('name', 'Ihr Name', <input autoComplete="name" value={v.name} onChange={set('name')} />, 'wide')}
         {f('email', 'E-Mail', <input type="email" autoComplete="email" value={v.email} onChange={set('email')} />, 'wide')}
         {f('phone', 'Telefon (freiwillig)', <input type="tel" autoComplete="tel" value={v.phone} onChange={set('phone')} />, 'wide')}
-        {f('message', v.type === 'question' ? 'Ihre Frage' : v.type === 'event' ? 'Ihre Wünsche' : 'Nachricht (freiwillig)', <textarea rows={v.type === 'question' || v.type === 'event' ? 5 : 3} value={v.message} onChange={set('message')} />, 'full')}
+        {f('message', v.type === 'question' ? 'Ihre Frage' : v.type === 'event' ? 'Ihre Wünsche' : v.type === 'meeting' ? 'Ablauf, Zeiten, Wünsche (freiwillig)' : 'Nachricht (freiwillig)', <textarea rows={v.type === 'question' || v.type === 'event' ? 5 : 3} value={v.message} onChange={set('message')} />, 'full')}
         <input className="hp" tabIndex={-1} autoComplete="off" aria-hidden value={v.website} onChange={set('website')} />
         <label className="gs-check full"><input type="checkbox" checked={v.consent} onChange={(e) => setV({ ...v, consent: e.target.checked })} />
           <span>Ich habe den Hinweis zum Datenschutz gelesen.{site.privacyText && <><br /><small>{site.privacyText}</small></>}{site.privacyUrl && <> <a className="gs-link" href={site.privacyUrl} rel="noopener">Datenschutzerklärung</a></>}{err.consent && <><br /><span className="gs-err">{err.consent}</span></>}</span></label>

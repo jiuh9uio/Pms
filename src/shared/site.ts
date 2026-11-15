@@ -53,7 +53,7 @@ export const siteSettingsInput = z.object({
   sections: z.object(Object.fromEntries(SECTION_KEYS.map((k) => [k, section(SECTION_DEFAULTS[k])])) as Record<SectionKey, ReturnType<typeof section>>).default(
     Object.fromEntries(SECTION_KEYS.map((k) => [k, { show: true, ...SECTION_DEFAULTS[k], note: SECTION_DEFAULTS[k].note ?? '' }])) as never),
   /** Anlässe für „Feiern & Tagen“, je Zeile einer */
-  eventTypes: t(400, 'Familienfeiern\nHochzeiten\nGeburtstage\nFirmenveranstaltungen'),
+  eventTypes: t(400, 'Familienfeiern\nHochzeiten\nGeburtstage\nTagungen & Seminare'),
   /** Öffnungszeiten, je Zeile „Tage | Zeit“ */
   hours: t(800, ''), hoursNote: t(400, ''),
   /** Häufige Fragen: Frage in der ersten Zeile, Antwort darunter, Fragen durch eine Leerzeile getrennt */
@@ -94,9 +94,13 @@ export const parseHours = (s: string) => s.split('\n').map((l) => l.trim()).filt
 export const parseFaq = (s: string) => s.replace(/\r/g, '').split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean).slice(0, 20).map((b) => { const [q, ...a] = b.split('\n'); return { q: q!.trim(), a: a.join(' ').trim() }; }).filter((x) => x.q && x.a);
 
 /** Anfrage von der Gästeseite – ein Formular für alles. Es wird nichts gebucht. */
-export const REQUEST_TYPES = ['room', 'table', 'event', 'voucher', 'question'] as const;
+export const REQUEST_TYPES = ['room', 'table', 'event', 'meeting', 'voucher', 'question'] as const;
 export type RequestType = (typeof REQUEST_TYPES)[number];
-export const REQUEST_LABEL: Record<RequestType, string> = { room: 'Zimmer', table: 'Tisch im Restaurant', event: 'Feier oder Veranstaltung', voucher: 'Gutschein', question: 'Allgemeine Frage' };
+/** Tagung: Auswahl für Bestuhlung, Technik und Verpflegung */
+export const MEETING_LAYOUTS = ['Reihen (Kino)', 'U-Form', 'Parlament (Tische in Reihen)', 'Block / Konferenztisch', 'Stuhlkreis'] as const;
+export const MEETING_EQUIPMENT = ['Beamer und Leinwand', 'Flipchart', 'Moderationskoffer und Pinnwand', 'Mikrofon / Lautsprecher', 'WLAN für Teilnehmer'] as const;
+export const MEETING_CATERING = ['Begrüßungskaffee', 'Kaffeepause vormittags', 'Mittagessen', 'Kaffeepause nachmittags', 'Abendessen', 'Getränke im Raum'] as const;
+export const REQUEST_LABEL: Record<RequestType, string> = { room: 'Zimmer', table: 'Tisch im Restaurant', event: 'Feier oder Veranstaltung', meeting: 'Tagung oder Seminar', voucher: 'Gutschein', question: 'Allgemeine Frage' };
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Bitte ein Datum wählen');
 const opt = z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/).default('');
 const num = (min: number, max: number, msg: string) => z.coerce.number(msg).int(msg).min(min, msg).max(max, msg);
@@ -115,6 +119,14 @@ export const siteRequestInput = z.discriminatedUnion('type', [
   z.object({ type: z.literal('table'), ...base, date: day, time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Bitte eine Uhrzeit wählen'), persons: num(1, 60, 'Bitte die Personenzahl wählen') }),
   z.object({ type: z.literal('event'), ...base, date: opt, guests: num(1, 500, 'Bitte die ungefähre Gästezahl eintragen'), occasion: z.string().trim().max(80).default('') })
     .refine((v) => v.message.length >= 5 || v.occasion.length > 0, { message: 'Bitte kurz den Anlass oder Ihre Wünsche beschreiben', path: ['message'] }),
+  z.object({
+    type: z.literal('meeting'), ...base,
+    organization: z.string().trim().min(2, 'Bitte Praxis, Klinik, Firma oder Veranstalter eintragen').max(120),
+    from: day, to: opt, participants: num(1, 500, 'Bitte die ungefähre Teilnehmerzahl eintragen'), rooms: num(0, 200, 'Bitte eine Zahl eintragen').default(0),
+    layout: z.enum(['', ...MEETING_LAYOUTS]).default(''),
+    equipment: z.array(z.enum(MEETING_EQUIPMENT)).max(MEETING_EQUIPMENT.length).default([]),
+    catering: z.array(z.enum(MEETING_CATERING)).max(MEETING_CATERING.length).default([]),
+  }).refine((v) => !v.to || v.to >= v.from, { message: 'Das Ende liegt vor dem Beginn', path: ['to'] }),
   z.object({ type: z.literal('voucher'), ...base, value: z.string().trim().max(80).default('') })
     .refine((v) => v.message.length >= 3 || v.value.length > 0, { message: 'Bitte Wert oder Wunsch für den Gutschein angeben', path: ['value'] }),
   z.object({ type: z.literal('question'), ...base }).refine((v) => v.message.length >= 5, { message: 'Bitte Ihre Frage eintragen', path: ['message'] }),

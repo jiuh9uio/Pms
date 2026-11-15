@@ -339,6 +339,14 @@ export async function submitSiteRequest(db: Db, v: SiteRequest, ip: string | nul
     subject = `Veranstaltungsanfrage${v.occasion ? `: ${v.occasion}` : ''}${v.date ? ` am ${deDay(v.date)}` : ''}`;
     lines = [...who, ...(v.occasion ? [`Anlass: ${v.occasion}`] : []), `Wunschtermin: ${v.date ? deDay(v.date) : 'noch offen'}`, `Gäste (ungefähr): ${v.guests}`];
     ex = { ...ex, dates: v.date ? [v.date] : [], persons: v.guests };
+  } else if (v.type === 'meeting') {
+    past(v.from, 'from');
+    const days = v.to && v.to > v.from ? `${deDay(v.from)} bis ${deDay(v.to)}` : deDay(v.from);
+    subject = `Tagungsanfrage: ${v.organization}, ${days}, ${v.participants} Teilnehmer`;
+    lines = [...who, `Veranstalter: ${v.organization}`, `Termin: ${days}`, `Teilnehmer (ungefähr): ${v.participants}`,
+      `Übernachtungen: ${v.rooms ? `${v.rooms} ${v.rooms === 1 ? 'Zimmer' : 'Zimmer'} je Nacht` : 'keine'}`,
+      ...(v.layout ? [`Bestuhlung: ${v.layout}`] : []), ...(v.equipment.length ? [`Technik: ${v.equipment.join(', ')}`] : []), ...(v.catering.length ? [`Verpflegung: ${v.catering.join(', ')}`] : [])];
+    ex = { ...ex, dates: v.to && v.to > v.from ? [v.from, v.to] : [v.from], persons: v.participants };
   } else if (v.type === 'voucher') {
     subject = `Gutscheinanfrage${v.value ? `: ${v.value}` : ''}`;
     lines = [...who, ...(v.value ? [`Wert / Wunsch: ${v.value}`] : [])];

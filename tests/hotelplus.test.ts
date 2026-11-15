@@ -579,6 +579,19 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect((await ask({ type: 'event', date: '', guests: 40, occasion: 'Hochzeit', message: '' })).statusCode).toBe(200);
     expect(await last()).toMatchObject({ kind: 'other', body: expect.stringContaining('Anlass: Hochzeit') });
     expect((await ask({ type: 'event', date: '', guests: 40, occasion: '', message: '' })).json().error.fields.message).toBeTruthy();
+    // Tagung (z. B. Ärzte-Fortbildung): Veranstalter, Tage, Teilnehmer, Zimmer, Bestuhlung, Technik, Verpflegung
+    const meeting = { type: 'meeting', organization: 'Ärztlicher Qualitätszirkel', from: addDays(today, 40), to: addDays(today, 41), participants: 25, rooms: 8, layout: 'U-Form', equipment: ['Beamer und Leinwand', 'Flipchart'], catering: ['Mittagessen', 'Kaffeepause nachmittags'] };
+    expect((await ask(meeting)).statusCode).toBe(200);
+    const mt = await last();
+    expect(mt.subject).toBe(`Tagungsanfrage: Ärztlicher Qualitätszirkel, ${addDays(today, 40).split('-').reverse().join('.')} bis ${addDays(today, 41).split('-').reverse().join('.')}, 25 Teilnehmer`);
+    expect(mt.body).toContain('Technik: Beamer und Leinwand, Flipchart');
+    expect(mt.body).toContain('Verpflegung: Mittagessen, Kaffeepause nachmittags');
+    expect(mt.body).toContain('Übernachtungen: 8 Zimmer je Nacht');
+    expect((await ask({ ...meeting, organization: '' })).json().error.fields.organization).toBeTruthy();
+    expect((await ask({ ...meeting, to: addDays(today, 39) })).json().error.fields.to).toBeTruthy();
+    expect((await ask({ ...meeting, equipment: ['Hubschrauber'] })).statusCode).toBe(400);
+    expect((await ask({ ...meeting, to: '', rooms: 0, layout: '', equipment: [], catering: [] })).statusCode).toBe(200);
+    expect((await last()).body).toContain('Übernachtungen: keine');
     expect((await ask({ type: 'voucher', value: '50 €' })).statusCode).toBe(200);
     expect((await last()).subject).toBe('Gutscheinanfrage: 50 €');
     expect((await ask({ type: 'question', message: 'Gibt es Parkplätze?' })).statusCode).toBe(200);

@@ -773,3 +773,8 @@ tbody tr { transition: background .15s; }
 .site-admin-photo video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .uploadbar { position: relative; height: 30px; border-radius: 8px; background: var(--surface-2); overflow: hidden; margin-top: 8px; }
 .uploadbar i { position: absolute; inset: 0 auto 0 0; background: var(--accent-soft); transition: width .2s; } .uploadbar span { position: relative; padding: 0 10px; line-height: 30px; font-size: 13px; }
+
+.gs-chips { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; } .gs-chips legend { font-size: 12px; letter-spacing: .04em; color: var(--gs-text); margin-bottom: 6px; padding: 0; }
+.gs-chips label { cursor: pointer; } .gs-chips input { position: absolute; opacity: 0; width: 1px; height: 1px; min-height: 0; }
+.gs-chips span { display: inline-block; padding: 7px 12px; border: 1px solid var(--gs-line); font-size: 13px; background: #fff; transition: background .18s, color .18s, border-color .18s; }
+.gs-chips input:checked + span { background: var(--gs-dark); border-color: var(--gs-dark); color: #fff; } .gs-chips input:focus-visible + span { outline: 3px solid var(--gs-accent); outline-offset: 2px; }
