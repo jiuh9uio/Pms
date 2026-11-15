@@ -18,6 +18,7 @@ import { Registrations } from './pages/Registrations.tsx';
 import { Invoices } from './pages/Invoices.tsx';
 import { Companies } from './pages/Companies.tsx';
 import { RegistrationBatchPrint, RegistrationPrint } from './hotel/RegistrationPrint.tsx';
+import { AccountingSlipPrint } from './billing/AccountingSlipPrint.tsx';
 import { Launcher } from './pages/Launcher.tsx';
 import { Network } from './pages/Network.tsx';
 import { Login } from './pages/Login.tsx';
@@ -171,6 +172,7 @@ function Shell({ user }: { user: UserDto }) {
   useIdleLogout(logout);
   if (pathname === '/') return <DataProvider><NetAlert /><Launcher /></DataProvider>;
   if (hotel && pathname.startsWith('/meldeschein/')) return <Routes><Route path="/meldeschein/:id" element={<RegistrationPrint />} /></Routes>;
+  if (hotel && pathname.startsWith('/buchhaltung/')) return <Routes><Route path="/buchhaltung/:id" element={<AccountingSlipPrint />} /></Routes>;
   if (hotel && pathname === '/meldescheine-druck') return <Routes><Route path="/meldescheine-druck" element={<RegistrationBatchPrint />} /></Routes>;
   return (
     <DataProvider>

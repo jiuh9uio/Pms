@@ -718,4 +718,18 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect((await call('GET', '/registrations', {})).statusCode).toBe(401);
     expect((await call('GET', '/registrations?from=gestern', user)).statusCode).toBe(400);
   });
+
+  it('erstellt einen Zettel für die Buchhaltung mit Zahlungen, Rückgeld und offenem Betrag', async () => {
+    const bid = await booking();
+    await ok('POST', '/payments', user, { bookingId: bid, amountCents: 5000, method: 'Karte', date: today, payer: '', note: '' });
+    const paid = await ok('POST', '/payments', user, { bookingId: bid, amountCents: 10000, method: 'Bar', date: today, payer: '', note: '', givenCents: 12000 });
+    const recent = await ok('GET', `/bookings/${bid}/accounting-slip?payment=${paid.id}`, user);
+    expect(recent).toMatchObject({ onlyRecent: true, paymentsTotalCents: 10000, byMethod: [{ method: 'Bar', amountCents: 10000 }], totalCents: 19800, paidCents: 15000, openCents: 4800 });
+    expect(recent.payments).toEqual([expect.objectContaining({ method: 'Bar', amountCents: 10000, givenCents: 12000, recordedBy: expect.any(String) })]);
+    const all = await ok('GET', `/bookings/${bid}/accounting-slip`, user);
+    expect(all.onlyRecent).toBe(false);
+    expect(all.byMethod).toEqual(expect.arrayContaining([{ method: 'Karte', amountCents: 5000 }, { method: 'Bar', amountCents: 10000 }]));
+    expect((await call('GET', `/bookings/${bid}/accounting-slip?payment=gestern`, user)).statusCode).toBe(400);
+    expect((await call('GET', `/bookings/${bid}/accounting-slip`, {})).statusCode).toBe(401);
+  });
 });

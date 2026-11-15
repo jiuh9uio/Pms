@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.63.0
+
+- Neu: Zettel für die Buchhaltung. Nach „Bezahlen / Abrechnen“ gibt es „A4 drucken“ und „Bon drucken“. Der Zettel zeigt Reservierung, Gast, Aufenthalt, Zimmer, die eben gebuchte Zahlung (Zahlungsart, Betrag, bei Bar gegeben/Rückgeld, Rechnungsnummer, TSE-Vorgang, wer kassiert hat), Summe je Zahlungsart, die Rechnungen mit Steueraufteilung (netto, MwSt je Steuersatz, brutto), Gesamtbetrag, bezahlt und offen sowie ein Feld „Geprüft / abgelegt“.
+- In der Reservierung unter Abrechnung: „Zettel Buchhaltung“ mit allen Zahlungen und Rechnungen der Reservierung.
+- Der Zettel ist ein interner Vermerk zum Abheften – kein Kassenbeleg und keine Rechnung.
+
 ## 1.62.1
 
 - Meldeschein (A4): Lange WLAN-Namen liefen aus dem Kasten und über die Hausinformationen. Jetzt steht der WLAN-Kasten über die ganze Breite, darunter die Hausinformationen; lange Namen und Texte werden umbrochen. Passt weiterhin auf eine Seite.

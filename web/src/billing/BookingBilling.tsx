@@ -54,6 +54,7 @@ export function BookingBilling({ booking }: { booking: BookingDto }) {
       )}
       <div className="btnrow">
         {!settled && <Button variant="primary" onClick={() => setSettle(true)}>Bezahlen / Abrechnen</Button>}
+        {(data.payments.length > 0 || data.invoices.length > 0) && <a className="btn" href={`/buchhaltung/${booking.id}`} target="_blank" rel="noopener" title="Alle Zahlungen und Rechnungen dieser Reservierung für die Buchhaltung">Zettel Buchhaltung</a>}
         {drafts.length === 0 && data.uninvoicedCents > 0 && booking.chargesCents > 0 && <>
           <Button busy={busy === 'lodging'} onClick={() => void create('lodging')}>Rechnung nur Übernachtung</Button>
           <Button busy={busy === 'extras'} onClick={() => void create('extras')}>Rechnung nur Extras</Button>

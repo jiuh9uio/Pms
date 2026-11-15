@@ -5,6 +5,7 @@ import { isIsoDate } from '../shared/hotel.js';
 import type { Db } from './db/client.js';
 import type { Actor } from './modules/audit.js';
 import * as billing from './modules/billing.js';
+import * as slip from './modules/accountingslip.js';
 import * as terminal from './modules/terminal.js';
 import * as tsesign from './modules/tsesign.js';
 
@@ -85,6 +86,10 @@ export function registerBillingRoutes(api: FastifyInstance, { db, requireUser, r
   api.post('/settings/logo/remove', admin, async (req) => { await billing.saveLogo(db, actor(req), null); return { ok: true }; });
 
   api.get('/bookings/:id/billing', user, (req) => billing.bookingBilling(db, idOf(req)));
+  // Zettel für die Buchhaltung (A4-Ansicht und Bondrucker); payment = nur dieser Bezahlvorgang, sonst alle Zahlungen
+  const paymentOf = (req: FastifyRequest) => z.object({ payment: z.uuid().optional() }).parse(req.query).payment ?? null;
+  api.get('/bookings/:id/accounting-slip', user, (req) => slip.accountingSlip(db, actor(req), idOf(req), paymentOf(req)));
+  api.post('/bookings/:id/accounting-slip/bon', user, (req) => slip.printAccountingSlip(db, actor(req), idOf(req), paymentOf(req)));
   // ---------- EC-Gerät ----------
   api.get('/terminal/status', user, async () => ({ ready: await terminal.terminalReady(db) }));
   api.get('/terminal/progress', user, () => terminal.terminalProgress());

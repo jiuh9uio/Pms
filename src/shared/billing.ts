@@ -100,3 +100,16 @@ export const invoiceLayoutInput = z.object({
   table: z.enum(['lines', 'stripes', 'plain']).default('lines'),
 });
 export type InvoiceLayoutDto = z.infer<typeof invoiceLayoutInput>;
+
+// ---------- Zettel für die Buchhaltung (interner Vermerk, kein Kassenbeleg) ----------
+export interface AccountingSlipDto {
+  hotelName: string; createdAt: string; createdBy: string;
+  booking: { number: string; guest: string; company: string; from: string | null; to: string | null; rooms: string };
+  /** nur die Zahlung eines Vorgangs (z. B. der eben abgeschlossene Bezahlvorgang), sonst alle */
+  onlyRecent: boolean;
+  payments: { date: string; method: string; amountCents: number; givenCents: number | null; invoiceNumber: string | null; recordedBy: string; createdAt: string; tse: string | null; reversal: boolean }[];
+  byMethod: { method: string; amountCents: number }[];
+  paymentsTotalCents: number;
+  invoices: { number: string; kind: 'invoice' | 'cancellation'; issueDate: string | null; grossCents: number; status: string; taxes: { rate: number; netCents: number; taxCents: number; grossCents: number }[] }[];
+  totalCents: number; paidCents: number; openCents: number;
+}

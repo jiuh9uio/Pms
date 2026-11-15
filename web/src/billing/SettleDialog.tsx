@@ -7,7 +7,7 @@ import { useData } from '../data.tsx';
 import { Button, Dialog, Field, LoadState, useLoad } from '../ui.tsx';
 
 type Method = (typeof PAYMENT_METHODS_BILLING)[number];
-type Step = { kind: 'form' } | { kind: 'working'; text: string } | { kind: 'unknown'; amountCents: number; message: string } | { kind: 'done'; lines: string[]; invoiceId: string | null };
+type Step = { kind: 'form' } | { kind: 'working'; text: string } | { kind: 'unknown'; amountCents: number; message: string } | { kind: 'done'; lines: string[]; invoiceId: string | null; paid: boolean };
 const PHASE: Record<TerminalProgress['phase'], string> = {
   idle: 'Zahlung wird vorbereitet …', preparing: 'Zahlung wird vorbereitet …', connecting: 'Verbindung zum Terminal wird hergestellt …',
   payment: 'Zahlung läuft – der Betrag steht am Terminal, bitte den Gast dort zahlen lassen.',
@@ -27,6 +27,9 @@ export function SettleDialog({ booking, onClose }: { booking: BookingDto; onClos
   const [wantInvoice, setWantInvoice] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const running = useRef(false);
+  /** die eben gebuchte Zahlung – der Buchhaltungszettel zeigt genau diesen Vorgang */
+  const paidId = useRef<string | null>(null);
+  const [slipBusy, setSlipBusy] = useState(false);
 
   // während einer Terminalzahlung den Fortschritt abfragen
   const working = step.kind === 'working';
@@ -62,6 +65,7 @@ export function SettleDialog({ booking, onClose }: { booking: BookingDto; onClos
     if (!transfer && amountCents > balance) { setError(`Es sind nur noch ${formatMoney(balance)} offen`); return; }
     if (change != null && change < 0) { setError('Der gegebene Betrag ist kleiner als der Zahlbetrag'); return; }
     running.current = true;
+    paidId.current = null;
     const lines: string[] = [];
     let invoiceId: string | null = null;
     try {
@@ -69,11 +73,12 @@ export function SettleDialog({ booking, onClose }: { booking: BookingDto; onClos
       if (!transfer && amountCents > 0) {
         if (useTerminal && !manualCard) {
           setStep({ kind: 'working', text: PHASE.preparing });
-          const r = await api<{ message: string }>('POST', '/payments/terminal', { bookingId: booking.id, amountCents, payer: '', note: '' });
+          const r = await api<{ id: string; message: string }>('POST', '/payments/terminal', { bookingId: booking.id, amountCents, payer: '', note: '' });
+          paidId.current = r.id;
           lines.push(`${formatMoney(amountCents)}: ${r.message}`);
         } else {
           setStep({ kind: 'working', text: 'Zahlung wird gebucht …' });
-          await api('POST', '/payments', { bookingId: booking.id, amountCents, method, date: today, payer: '', note: manualCard ? 'Kartenzahlung am Gerät, von Hand bestätigt' : '', givenCents });
+          paidId.current = (await api<{ id: string }>('POST', '/payments', { bookingId: booking.id, amountCents, method, date: today, payer: '', note: manualCard ? 'Kartenzahlung am Gerät, von Hand bestätigt' : '', givenCents })).id;
           lines.push(`${formatMoney(amountCents)} (${method}) gebucht${change != null && change > 0 ? ` – Rückgeld ${formatMoney(change)}` : ''}`);
         }
       }
@@ -93,7 +98,7 @@ export function SettleDialog({ booking, onClose }: { booking: BookingDto; onClos
       }
       if (transfer) lines.push('Zahlung per Überweisung: bleibt offen, bis der Zahlungseingang gebucht wird');
       bump();
-      setStep({ kind: 'done', lines, invoiceId });
+      setStep({ kind: 'done', lines, invoiceId, paid: !transfer && amountCents > 0 });
     } catch (e) {
       bump();
       if (e instanceof ApiFailure && e.code === 'terminal_unknown') setStep({ kind: 'unknown', amountCents, message: e.message });
@@ -107,9 +112,9 @@ export function SettleDialog({ booking, onClose }: { booking: BookingDto; onClos
     if (running.current) return;
     running.current = true;
     try {
-      await api('POST', '/payments', { bookingId: booking.id, amountCents: amountOfCard, method: 'Karte', date: today, payer: '', note: 'Terminalergebnis ungeklärt – nach Prüfung am Gerät von Hand bestätigt' });
+      paidId.current = (await api<{ id: string }>('POST', '/payments', { bookingId: booking.id, amountCents: amountOfCard, method: 'Karte', date: today, payer: '', note: 'Terminalergebnis ungeklärt – nach Prüfung am Gerät von Hand bestätigt' })).id;
       bump();
-      setStep({ kind: 'done', lines: [`${formatMoney(amountOfCard)} (Karte) nach Prüfung am Gerät gebucht`], invoiceId: null });
+      setStep({ kind: 'done', lines: [`${formatMoney(amountOfCard)} (Karte) nach Prüfung am Gerät gebucht`], invoiceId: null, paid: true });
     } catch (e) { setError(e instanceof Error ? e.message : 'Fehler'); setStep({ kind: 'form' }); }
     running.current = false;
   };
@@ -137,6 +142,18 @@ export function SettleDialog({ booking, onClose }: { booking: BookingDto; onClos
     </>}>
       <p className="notice"><b>Erledigt.</b></p>
       <ul>{step.lines.map((l) => <li key={l}>{l}</li>)}</ul>
+      {(step.paid || step.invoiceId) && (
+        <div className="acctbox">
+          <b>Zettel für die Buchhaltung</b>
+          <span className="muted small">Zahlung, Rechnung mit Steuer und offener Betrag – zum Abheften.</span>
+          <div className="btnrow">
+            <a className="btn" href={`/buchhaltung/${booking.id}?${paidId.current ? `payment=${paidId.current}&` : ''}druck=1`} target="_blank" rel="noopener">A4 drucken</a>
+            <Button busy={slipBusy} onClick={() => { setSlipBusy(true); void api('POST', `/bookings/${booking.id}/accounting-slip/bon${paidId.current ? `?payment=${paidId.current}` : ''}`, {})
+              .then(() => setError(null)).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Druck fehlgeschlagen')).finally(() => setSlipBusy(false)); }}>Bon drucken</Button>
+          </div>
+          {error && <p className="notice danger small">{error}</p>}
+        </div>
+      )}
     </Dialog>
   );
 
