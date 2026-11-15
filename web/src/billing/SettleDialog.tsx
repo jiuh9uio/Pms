@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { PAYMENT_METHODS_BILLING, type BookingBillingDto, type InvoiceDto, type TerminalProgress } from '../../../src/shared/billing.js';
-import { formatMoney, isActiveStatus, moneyInput, parseMoney, todayBerlin, type BookingDto } from '../../../src/shared/hotel.js';
+import { formatMoney, isActiveStatus, parseMoney, todayBerlin, type BookingDto } from '../../../src/shared/hotel.js';
 import type { HotelSettings } from '../../../src/shared/schemas.js';
 import { ApiFailure, api } from '../api.ts';
 import { useData } from '../data.tsx';
@@ -8,6 +8,7 @@ import { Button, Dialog, Field, LoadState, useLoad } from '../ui.tsx';
 
 type Method = (typeof PAYMENT_METHODS_BILLING)[number];
 type Step = { kind: 'form' } | { kind: 'working'; text: string } | { kind: 'unknown'; amountCents: number; message: string } | { kind: 'done'; lines: string[]; invoiceId: string | null; paid: boolean };
+const deDay = (d: string) => d.split('-').reverse().join('.');
 const PHASE: Record<TerminalProgress['phase'], string> = {
   idle: 'Zahlung wird vorbereitet …', preparing: 'Zahlung wird vorbereitet …', connecting: 'Verbindung zum Terminal wird hergestellt …',
   payment: 'Zahlung läuft – der Betrag steht am Terminal, bitte den Gast dort zahlen lassen.',
@@ -22,9 +23,8 @@ export function SettleDialog({ booking, onClose }: { booking: BookingDto; onClos
   const terminal = useLoad(() => api<{ ready: boolean }>('GET', '/terminal/status')).data;
   const [step, setStep] = useState<Step>({ kind: 'form' });
   const [method, setMethod] = useState<Method>('Bar');
-  const [amount, setAmount] = useState<string | null>(null);
   const [given, setGiven] = useState('');
-  const [wantInvoice, setWantInvoice] = useState<boolean | null>(null);
+  const [checkoutNow, setCheckoutNow] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const running = useRef(false);
   /** die eben gebuchte Zahlung – der Buchhaltungszettel zeigt genau diesen Vorgang */
@@ -49,10 +49,14 @@ export function SettleDialog({ booking, onClose }: { booking: BookingDto; onClos
   const openOnInvoices = d.invoices.filter((i) => i.status === 'issued' && i.kind === 'invoice').reduce((s, i) => s + i.openCents, 0);
   const balance = Math.max(total - d.paidCents, openOnInvoices, 0);
   const arrived = rooms.some((r) => r.from <= today);
-  const invoiceNow = (wantInvoice ?? arrived) && d.uninvoicedCents > 0;
+  // Rechnung: sobald der Gast angereist ist; vorher wird die Zahlung als Vorauszahlung gebucht
+  const invoiceNow = arrived && d.uninvoicedCents > 0;
   const transfer = method === 'Überweisung';
-  const amountStr = amount ?? (balance > 0 ? moneyInput(balance) : '');
-  const amountCents = transfer ? 0 : parseMoney(amountStr);
+  // immer der ganze offene Betrag – keine Teilzahlungen, keine Überzahlung
+  const amountCents = transfer ? 0 : balance;
+  // abreisende Gäste (Abreise heute oder früher) beim Bezahlen gleich auschecken; spätere Abreise: automatisch am Abreisetag
+  const leaving = rooms.filter((r) => r.status === 'checked_in' && r.to <= today);
+  const staying = rooms.filter((r) => r.status === 'checked_in' && r.to > today);
   const givenCents = method === 'Bar' && given.trim() ? parseMoney(given) : null;
   const change = givenCents != null && Number.isFinite(givenCents) && Number.isFinite(amountCents) ? givenCents - amountCents : null;
   const useTerminal = method === 'Karte' && !!terminal?.ready;
@@ -61,8 +65,6 @@ export function SettleDialog({ booking, onClose }: { booking: BookingDto; onClos
   const run = async (manualCard = false) => {
     if (running.current) return; // Schutz gegen doppeltes Auslösen
     setError(null);
-    if (!transfer && amountStr.trim() && (!Number.isInteger(amountCents) || amountCents < 0)) { setError('Bitte einen gültigen Betrag eintragen'); return; }
-    if (!transfer && amountCents > balance) { setError(`Es sind nur noch ${formatMoney(balance)} offen`); return; }
     if (change != null && change < 0) { setError('Der gegebene Betrag ist kleiner als der Zahlbetrag'); return; }
     running.current = true;
     paidId.current = null;
@@ -97,6 +99,14 @@ export function SettleDialog({ booking, onClose }: { booking: BookingDto; onClos
         }
       }
       if (transfer) lines.push('Zahlung per Überweisung: bleibt offen, bis der Zahlungseingang gebucht wird');
+      // Check-out abreisender Gäste
+      if (checkoutNow && !transfer && leaving.length) {
+        setStep({ kind: 'working', text: 'Gast wird ausgecheckt …' });
+        for (const r of leaving) {
+          await api('POST', `/booking-rooms/${r.id}/status`, { status: 'checked_out', version: r.version });
+          lines.push(`Zimmer ${r.roomNumber} ausgecheckt`);
+        }
+      } else if (!transfer && staying.length && hotel) lines.push(`Abreise am ${staying.map((r) => r.to).sort().at(-1)!.split('-').reverse().join('.')}: Check-out dann automatisch nach ${hotel.checkoutTime} Uhr`);
       bump();
       setStep({ kind: 'done', lines, invoiceId, paid: !transfer && amountCents > 0 });
     } catch (e) {
@@ -177,10 +187,14 @@ export function SettleDialog({ booking, onClose }: { booking: BookingDto; onClos
             <tr className="sum"><td>Noch zu zahlen</td><td className="num">{formatMoney(balance)}</td></tr>
           </tbody></table>
           <h3>Rechnung</h3>
-          {d.uninvoicedCents > 0 ? (
-            <label className="check"><input type="checkbox" checked={invoiceNow} onChange={(e) => setWantInvoice(e.target.checked)} />
-              <span>Rechnung jetzt ausstellen <small>über {formatMoney(d.uninvoicedCents)} – noch nicht berechnete Leistungen. Ohne Haken wird eine Zahlung als Anzahlung gebucht.</small></span></label>
-          ) : <p className="muted">Alle Leistungen stehen bereits auf einer Rechnung{openOnInvoices > 0 ? `; darauf sind noch ${formatMoney(openOnInvoices)} offen` : ''}.</p>}
+          {d.uninvoicedCents > 0
+            ? <p className="muted">{invoiceNow ? `Beim Bezahlen wird die Rechnung über ${formatMoney(d.uninvoicedCents)} ausgestellt.` : 'Der Gast ist noch nicht angereist: Die Zahlung wird als Vorauszahlung gebucht und mit der Rechnung verrechnet.'}</p>
+            : <p className="muted">Alle Leistungen stehen bereits auf einer Rechnung{openOnInvoices > 0 ? `; darauf sind noch ${formatMoney(openOnInvoices)} offen` : ''}.</p>}
+          {!transfer && leaving.length > 0 && (
+            <label className="check"><input type="checkbox" checked={checkoutNow} onChange={(e) => setCheckoutNow(e.target.checked)} />
+              <span>Gast reist ab – nach dem Bezahlen auschecken <small>Zimmer {leaving.map((r) => r.roomNumber).join(', ')} wird danach als zu reinigen markiert.</small></span></label>
+          )}
+          {!transfer && staying.length > 0 && <p className="muted small">Abreise erst am {deDay(staying.map((r) => r.to).sort().at(-1)!)}: Der Check-out erfolgt dann automatisch{hotel ? ` nach ${hotel.checkoutTime} Uhr` : ''}, sofern alles bezahlt ist.</p>}
           {d.invoices.some((i) => i.status === 'draft') && <p className="notice warn">Es gibt einen Rechnungsentwurf zu dieser Reservierung. Seine Positionen gelten als berechnet – bitte den Entwurf ausstellen oder verwerfen.</p>}
         </div>
         <div>
@@ -199,7 +213,7 @@ export function SettleDialog({ booking, onClose }: { booking: BookingDto; onClos
             </>
           ) : (
             <div className="formgrid">
-              <Field label="Betrag" hint={balance > 0 ? `offen: ${formatMoney(balance)} – ein kleinerer Betrag ist eine Teilzahlung` : 'Es ist nichts mehr offen'}><input inputMode="decimal" value={amountStr} onChange={(e) => setAmount(e.target.value)} /></Field>
+              <div className="paybig"><small>Zu zahlen</small><b>{formatMoney(balance)}</b></div>
               {method === 'Bar' && <Field label="Gegeben (optional)" hint={change != null && change >= 0 ? `Rückgeld: ${formatMoney(change)}` : 'für die Rückgeld-Berechnung'}><input inputMode="decimal" value={given} onChange={(e) => setGiven(e.target.value)} /></Field>}
             </div>
           )}

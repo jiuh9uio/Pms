@@ -46,6 +46,8 @@ export function CheckinSheetCard() {
       <h2>Check-in &amp; Meldeschein</h2>
       <p className="muted">Nach „Anreise bestätigen“ bietet das Programm an, den Meldeschein zu drucken. Gedruckt wird wahlweise als A4-Blatt (Gästeinformationen unten zum Abtrennen) oder auf dem Bondrucker (ein Bon Meldeschein, ein Bon für den Gast mit WLAN-Zugang, QR-Code und Hausinformationen).</p>
       <div className="formgrid">
+        <label className="check wide"><input type="checkbox" checked={v.autoCheckout} onChange={(e) => setV({ ...v, autoCheckout: e.target.checked })} />
+          <span>Bezahlte Gäste am Abreisetag automatisch auschecken<small>Nach der Check-out-Zeit des Hauses (Einstellungen → Haus). Nur wenn alles berechnet und bezahlt ist – sonst bleibt der Gast zur Klärung eingecheckt.</small></span></label>
         <label className="check wide"><input type="checkbox" checked={v.askAfterCheckin} onChange={(e) => setV({ ...v, askAfterCheckin: e.target.checked })} />
           <span>Nach dem Check-in fragen: „Meldeschein drucken?“<small>Ausgeschaltet geht es über „Meldeschein drucken“ in der Reservierung.</small></span></label>
         <div className="field wide"><span className="label">Bevorzugter Druck nach dem Check-in</span>

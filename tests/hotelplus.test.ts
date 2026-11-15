@@ -732,4 +732,39 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect((await call('GET', `/bookings/${bid}/accounting-slip?payment=gestern`, user)).statusCode).toBe(400);
     expect((await call('GET', `/bookings/${bid}/accounting-slip`, {})).statusCode).toBe(401);
   });
+
+  it('checkt bezahlte Gäste am Abreisetag nach der Check-out-Zeit automatisch aus – unbezahlte nicht', async () => {
+    const { autoCheckoutTick } = await import('../src/server/modules/autocheckout.js');
+    const catId = (await ok('GET', '/categories', admin))[0].id as string;
+    await ok('POST', '/rooms/bulk', admin, { categoryId: catId, count: 2, firstNumber: 801, floor: '8' });
+    const extra = (await ok('GET', '/rooms', admin)).filter((r: { number: string }) => r.number === '801' || r.number === '802').map((r: { id: string }) => r.id);
+    const make = async (roomId: string) => {
+      const b = await ok('POST', '/bookings', user, { guest: { ...GUEST, lastName: `Abreise${n++}` }, groupName: '', source: 'Telefon', paymentMethod: '', notes: '', breakfast: false,
+        rooms: [{ roomId, from: addDays(today, -2), to: today, adults: 1, children: 0, status: 'confirmed', pricePerNightCents: 5000 }] });
+      await db.execute(sql`update booking_rooms set status = 'checked_in', checked_in_at = now() where booking_id = ${b.id}`);
+      return b.id as string;
+    };
+    const paidId = await make(extra[0]), openId = await make(extra[1]);
+    // bezahlen und Rechnung ausstellen
+    const inv = await ok('POST', '/invoices', user, { bookingId: paidId, include: 'all' });
+    const draft = await ok('GET', `/invoices/${inv.id}`, user);
+    await ok('POST', `/invoices/${inv.id}/issue`, user, { version: draft.version });
+    await ok('POST', '/payments', user, { bookingId: paidId, amountCents: draft.grossCents, method: 'Bar', date: today, payer: '', note: '' });
+    const status = async (id: string) => (await ok('GET', `/bookings/${id}`, user)).rooms[0].status;
+    // vor der Check-out-Zeit (06:00 Uhr Berlin) passiert nichts
+    const early = new Date(`${today}T05:00:00Z`);
+    expect((await autoCheckoutTick(db, early)).checkedOut).toBe(0);
+    expect(await status(paidId)).toBe('checked_in');
+    // nach der Check-out-Zeit: nur die bezahlte Reservierung
+    const late = new Date(`${today}T15:00:00Z`);
+    expect((await autoCheckoutTick(db, late)).checkedOut).toBe(1);
+    expect(await status(paidId)).toBe('checked_out');
+    expect(await status(openId)).toBe('checked_in');
+    // abschaltbar
+    const sheet = await ok('GET', '/settings/checkin-sheet', admin);
+    await ok('PUT', '/settings/checkin-sheet', admin, { ...sheet, autoCheckout: false });
+    await db.execute(sql`update booking_rooms set status = 'checked_in', checked_out_at = null where booking_id = ${paidId}`);
+    expect((await autoCheckoutTick(db, late)).checkedOut).toBe(0);
+    await ok('PUT', '/settings/checkin-sheet', admin, { ...sheet, autoCheckout: true });
+  });
 });

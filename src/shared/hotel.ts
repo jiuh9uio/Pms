@@ -374,6 +374,8 @@ export const checkinSheetInput = z.object({
   /** Gästeinformationen unten auf dem Meldeschein (zum Abtrennen) */
   showInfo: z.boolean(),
   showWifi: z.boolean(),
+  /** bezahlte Gäste am Abreisetag nach der Check-out-Zeit automatisch auschecken */
+  autoCheckout: z.boolean().default(true),
   /** bevorzugter Druck nach dem Check-in: A4-Blatt (mit Abtrennen) oder Bondrucker (zwei Bons) */
   printMode: z.enum(['a4', 'bon']).default('a4'),
   title: z.string().trim().max(80),
@@ -383,7 +385,7 @@ export const checkinSheetInput = z.object({
 });
 export type CheckinSheet = z.infer<typeof checkinSheetInput>;
 export const CHECKIN_SHEET_DEFAULTS: CheckinSheet = {
-  askAfterCheckin: true, showInfo: true, showWifi: true, printMode: 'a4', title: 'Herzlich willkommen!',
+  askAfterCheckin: true, autoCheckout: true, showInfo: true, showWifi: true, printMode: 'a4', title: 'Herzlich willkommen!',
   info: 'Frühstück | 7:00 – 10:00 Uhr\nZimmerreinigung | täglich zwischen 10:00 und 14:00 Uhr – bitte Schild „Bitte nicht stören“ an die Tür hängen, wenn Sie keine Reinigung wünschen\nAbreise | bitte bis 11:00 Uhr das Zimmer freigeben\nRezeption | bei Fragen einfach anrufen oder vorbeikommen',
   closing: 'Wir wünschen Ihnen einen angenehmen Aufenthalt.',
 };

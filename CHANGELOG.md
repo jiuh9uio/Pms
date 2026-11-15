@@ -3,6 +3,16 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.64.0
+
+Reservierung übersichtlicher, Bezahlen in einem Schritt:
+
+- Reservierungsfenster: oben der Gast (Name, Kontakt, Anschrift, „Gästeprofil“) mit Anreise, Abreise, Nächten, Zimmer, Personen und dem Stand („Anreise heute“, „Im Haus“, „Im Haus · bezahlt – Check-out am … automatisch“, „Abgeschlossen“). Daneben ein großer Knopf für den nächsten Schritt: Check-in → Bezahlen → (Check-out). Geldbeträge stehen nur noch klein darunter; Leistungen, Rechnungen/Zahlungen, Angaben und Verlauf sind aufklappbar.
+- Nach dem Check-in: „Weiter zum Bezahlen“ direkt im Fenster „Eingecheckt“.
+- Bezahlen: immer der ganze offene Betrag (keine Teilzahlung, keine Überzahlung); die Rechnung wird dabei ausgestellt, sobald der Gast angereist ist. Reist der Gast heute ab, wird er nach dem Bezahlen gleich ausgecheckt (Haken, vorbelegt).
+- Automatischer Check-out: Bezahlte Gäste werden am Abreisetag nach der Check-out-Zeit des Hauses ausgecheckt (Zimmer wird als zu reinigen markiert). Nur wenn alles berechnet und bezahlt ist; abschaltbar unter Einstellungen → Haus → Check-in & Meldeschein.
+- Vorzeitige Abreise: Hinweis, dass eine schon ausgestellte Rechnung danach nicht mehr passt.
+
 ## 1.63.0
 
 - Neu: Zettel für die Buchhaltung. Nach „Bezahlen / Abrechnen“ gibt es „A4 drucken“ und „Bon drucken“. Der Zettel zeigt Reservierung, Gast, Aufenthalt, Zimmer, die eben gebuchte Zahlung (Zahlungsart, Betrag, bei Bar gegeben/Rückgeld, Rechnungsnummer, TSE-Vorgang, wer kassiert hat), Summe je Zahlungsart, die Rechnungen mit Steueraufteilung (netto, MwSt je Steuersatz, brutto), Gesamtbetrag, bezahlt und offen sowie ein Feld „Geprüft / abgelegt“.

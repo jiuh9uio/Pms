@@ -9,6 +9,7 @@ import {
 import { api } from '../api.ts';
 import type { BookingBillingDto } from '../../../src/shared/billing.js';
 import { BookingBilling } from '../billing/BookingBilling.tsx';
+import { SettleDialog } from '../billing/SettleDialog.tsx';
 import { CompanySelect } from './CompanySelect.tsx';
 import { GuestFormDialog } from './GuestFormDialog.tsx';
 import { MailDialog } from './MailDialog.tsx';
@@ -41,49 +42,89 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
   };
 
   const guestName = b ? [b.guest.firstName, b.guest.lastName].filter(Boolean).join(' ') : '';
+  const billing = useLoad(() => api<BookingBillingDto>('GET', `/bookings/${id}/billing`), [id, rev]).data;
+  const [paying, setPaying] = useState(false);
+  const today = todayBerlin();
+  const active = b ? b.rooms.filter((r) => isActiveStatus(r.status)) : [];
+  // offen ist, was die Reservierung noch kostet – oder was auf ausgestellten Rechnungen noch fehlt
+  const openOnInvoices = billing ? billing.invoices.filter((i) => i.status === 'issued' && i.kind === 'invoice').reduce((x, i) => x + Math.max(0, i.openCents), 0) : 0;
+  const toPay = b && billing ? Math.max(b.totalCents - billing.paidCents, openOnInvoices, 0) : 0;
+  const needsPay = !!billing && (toPay > 0 || billing.uninvoicedCents > 0);
+  const toCheckin = active.find((r) => r.status === 'confirmed' && r.from <= today);
+  const toCheckout = active.find((r) => r.status === 'checked_in' && r.to <= today);
+  const inHouse = active.some((r) => r.status === 'checked_in');
+  const from = active.map((r) => r.from).sort()[0], to = active.map((r) => r.to).sort().at(-1);
+  const nights = from && to ? Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) : 0;
+  const pax = active.reduce((n, r) => n + r.adults + r.children, 0);
+  // Was als Nächstes zu tun ist – ein großer Knopf
+  const next = !b || !billing ? null
+    : toCheckin ? { label: 'Check-in', run: () => setSub({ kind: 'checkin', room: toCheckin }) }
+    : needsPay && (inHouse || active.some((r) => r.status === 'checked_out')) ? { label: `Bezahlen · ${formatMoney(toPay)}`, run: () => setPaying(true) }
+    : toCheckout ? { label: 'Check-out', run: () => setSub({ kind: 'checkout', room: toCheckout }) }
+    : null;
+  const state = !b ? '' : active.length === 0 ? 'Storniert'
+    : active.every((r) => r.status === 'checked_out') ? (needsPay ? 'Abgereist – noch offen' : 'Abgeschlossen')
+    : inHouse ? (needsPay ? 'Im Haus' : `Im Haus · bezahlt${to ? ` – Check-out am ${deDate(to)} automatisch` : ''}`)
+    : active.some((r) => r.status === 'tentative') ? 'Vorläufig' : (from && from > today ? 'Anreise erwartet' : 'Anreise heute');
   return (
-    <Dialog title={b ? <>Reservierung {b.number} <span className="muted light">· {guestName}</span></> : 'Reservierung'} onClose={onClose} size="xl"
+    <Dialog title={b ? <>Reservierung {b.number}</> : 'Reservierung'} onClose={onClose} size="xl"
       footer={<>{b && <a className="btn" href={`/meldeschein/${b.id}`} target="_blank" rel="noopener">Meldeschein drucken</a>}{b && <Button onClick={() => setQr(true)}>Meldeschein per QR</Button>}{b && <Button onClick={() => setMail(true)}>Bestätigung per E-Mail</Button>}<Button onClick={onClose}>Schließen</Button></>}>
       {!b ? <LoadState error={error} loading /> : (
-        <div className="split">
-          <div>
-            <div className="chosen">
-              <span><b>{guestName}</b>{b.guest.company && <> · {b.guest.company}</>}<br />
-                <small>{[b.guest.phone, b.guest.email, [b.guest.zip, b.guest.city].filter(Boolean).join(' ')].filter(Boolean).join(' · ') || 'Keine Kontaktdaten hinterlegt'}</small></span>
-              <Button onClick={() => openGuest(b.guest.id)}>Gästeprofil</Button>
+        <div className="bk">
+          <section className="bk-hero">
+            <div className="bk-guest">
+              <div className="bk-name">{guestName || '(ohne Namen)'}{b.guest.company && <small> · {b.guest.company}</small>}</div>
+              <div className="bk-contact">{[b.guest.phone, b.guest.email].filter(Boolean).join(' · ') || 'Keine Kontaktdaten'}</div>
+              <div className="bk-contact">{[b.guest.street, [b.guest.zip, b.guest.city].filter(Boolean).join(' ')].filter(Boolean).join(', ') || 'Noch keine Anschrift'}</div>
+              <div className="btnrow"><Button onClick={() => openGuest(b.guest.id)}>Gästeprofil</Button></div>
             </div>
+            <div className="bk-facts">
+              <span><small>Anreise</small>{deDate(from)}</span><span><small>Abreise</small>{deDate(to)}</span>
+              <span><small>Nächte</small>{nights}</span><span><small>Zimmer</small>{active.map((r) => r.roomNumber).join(', ') || '–'}</span>
+              <span><small>Personen</small>{pax}</span>
+              <span className="bk-state"><small>Stand</small>{state}</span>
+            </div>
+            <div className="bk-act">
+              {next && <Button variant="primary" onClick={next.run}>{next.label}</Button>}
+              {next?.label === 'Check-in' && needsPay && <Button onClick={() => setPaying(true)}>Gleich bezahlen</Button>}
+              {!next && needsPay && <Button onClick={() => setPaying(true)}>Bezahlen · {formatMoney(toPay)}</Button>}
+              <small className="muted">{b && billing ? `Gesamt ${formatMoney(b.totalCents)}${toPay > 0 ? ` · offen ${formatMoney(toPay)}` : ' · bezahlt'}` : ''}</small>
+            </div>
+          </section>
 
-            <h3>Zimmer</h3>
-            {b.rooms.map((r) => (
-              <RoomCard key={r.id} room={r} busy={busy === r.id} onStatus={setStatus}
-                onCheckin={() => setSub({ kind: 'checkin', room: r })} onCheckout={() => setSub({ kind: 'checkout', room: r })} onEdit={() => setSub({ kind: 'edit', room: r })} />
-            ))}
-            <p><Button onClick={() => setSub({ kind: 'add' })}>+ Weiteres Zimmer</Button></p>
+          <h3>Zimmer</h3>
+          {b.rooms.map((r) => (
+            <RoomCard key={r.id} room={r} busy={busy === r.id} onStatus={setStatus}
+              onCheckin={() => setSub({ kind: 'checkin', room: r })} onCheckout={() => setSub({ kind: 'checkout', room: r })} onEdit={() => setSub({ kind: 'edit', room: r })} />
+          ))}
+          <p><Button onClick={() => setSub({ kind: 'add' })}>+ Weiteres Zimmer</Button></p>
 
-            <Charges booking={b} />
-          </div>
-          <aside>
-            <h3 className="first">Summe</h3>
-            <table className="sums"><tbody>
-              <tr><td>Übernachtung</td><td className="num">{formatMoney(b.lodgingCents)}</td></tr>
-              <tr><td>Frühstück und Leistungen</td><td className="num">{formatMoney(b.chargesCents)}</td></tr>
-              <tr className="sum"><td>Gesamt (brutto)</td><td className="num">{formatMoney(b.totalCents)}</td></tr>
-            </tbody></table>
-            <BookingBilling booking={b} />
-            <Meta booking={b} />
-            <h3>Verlauf</h3>
+          <details className="bk-more"><summary>Frühstück und Leistungen{b.chargesCents ? ` · ${formatMoney(b.chargesCents)}` : ''}</summary><div><Charges booking={b} /></div></details>
+          <details className="bk-more"><summary>Rechnungen und Zahlungen{billing ? ` · ${billing.invoices.filter((i) => i.status === 'issued').length} Rechnung(en), ${billing.payments.length} Zahlung(en)` : ''}</summary>
+            <div>
+              <table className="sums"><tbody>
+                <tr><td>Übernachtung</td><td className="num">{formatMoney(b.lodgingCents)}</td></tr>
+                <tr><td>Frühstück und Leistungen</td><td className="num">{formatMoney(b.chargesCents)}</td></tr>
+                <tr className="sum"><td>Gesamt (brutto)</td><td className="num">{formatMoney(b.totalCents)}</td></tr>
+              </tbody></table>
+              <BookingBilling booking={b} />
+            </div>
+          </details>
+          <details className="bk-more"><summary>Angaben zur Buchung (Quelle, Zahlungsart, Bemerkungen)</summary><div><Meta booking={b} /></div></details>
+          <details className="bk-more"><summary>Verlauf</summary><div>
             <ul className="history">
               {history.data?.map((h) => <li key={h.id}><span>{describe(h)}</span><small>{fmtDateTime(h.at)} · {h.userName}</small></li>)}
             </ul>
-          </aside>
+          </div></details>
         </div>
       )}
       {b && qr && <GuestFormDialog bookingId={b.id} number={b.number} onClose={() => { setQr(false); bump(); }} />}
       {b && mail && <MailDialog path={`/bookings/${b.id}/mail`} title={`Bestätigung zu Reservierung ${b.number}`} onClose={() => setMail(false)} onSent={bump} />}
-      {b && sub?.kind === 'checkin' && <Checkin booking={b} room={sub.room} onClose={() => setSub(null)} />}
+      {b && sub?.kind === 'checkin' && <Checkin booking={b} room={sub.room} onClose={() => setSub(null)} onPay={needsPay ? () => { setSub(null); setPaying(true); } : undefined} />}
       {b && sub?.kind === 'checkout' && <Checkout booking={b} room={sub.room} onClose={() => setSub(null)} />}
       {b && sub?.kind === 'edit' && <RoomForm booking={b} room={sub.room} onClose={() => setSub(null)} />}
       {b && sub?.kind === 'add' && <RoomForm booking={b} room={null} onClose={() => setSub(null)} />}
+      {b && paying && <SettleDialog booking={b} onClose={() => { setPaying(false); bump(); }} />}
     </Dialog>
   );
 }
@@ -186,7 +227,7 @@ function RoomForm({ booking, room, onClose }: { booking: BookingDto; room: Booki
 }
 
 /** Check-in in einem Schritt: Gastdaten prüfen und ergänzen, Zimmer bestätigen, Anreise buchen. */
-function Checkin({ booking, room, onClose }: { booking: BookingDto; room: BookingRoomDto; onClose: () => void }) {
+function Checkin({ booking, room, onClose, onPay }: { booking: BookingDto; room: BookingRoomDto; onClose: () => void; onPay?: () => void }) {
   const { bump } = useData();
   const toast = useToast();
   const [v, setV] = useState<GuestDraft>(toDraft(booking.guest));
@@ -223,7 +264,7 @@ function Checkin({ booking, room, onClose }: { booking: BookingDto; room: Bookin
     const bon = sh?.bonPrinter ? <Button key="bon" variant={bonFirst ? 'primary' : undefined} busy={bonBusy} onClick={() => void printBon()}>Bon drucken</Button> : null;
     return (
       <Dialog title="Eingecheckt" onClose={onClose}
-        footer={<><Button onClick={onClose}>Nicht drucken</Button>{bonFirst ? <>{a4}{bon}</> : <>{bon}{a4}</>}</>}>
+        footer={<>{onPay && <Button onClick={onPay}>Weiter zum Bezahlen</Button>}<Button onClick={onClose}>Nicht drucken</Button>{bonFirst ? <>{a4}{bon}</> : <>{bon}{a4}</>}</>}>
         <div className="ci-done">
           <div className="ci-done-mark" aria-hidden>✓</div>
           <p><b>{done || 'Der Gast'}</b> ist in Zimmer <b>{free.data?.find((r) => r.id === roomId)?.number ?? room.roomNumber}</b> eingecheckt.</p>
@@ -303,7 +344,7 @@ function Checkout({ booking, room, onClose }: { booking: BookingDto; room: Booki
   return (
     <Dialog title={`Check-out · Zimmer ${room.roomNumber}`} onClose={onClose}
       footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={busy} onClick={() => void go()}>Abreise bestätigen</Button></>}>
-      {early && <p className="notice warn">Vorzeitige Abreise: geplant war der {deDate(room.to)}. Der Aufenthalt endet am {deDate(end)}, {diffDays(end, room.to)} Nacht/Nächte entfallen und das Zimmer wird ab dann frei.</p>}
+      {early && <p className="notice warn">Vorzeitige Abreise: geplant war der {deDate(room.to)}. Der Aufenthalt endet am {deDate(end)}, {diffDays(end, room.to)} Nacht/Nächte entfallen und das Zimmer wird ab dann frei. Ist schon eine Rechnung ausgestellt oder alles bezahlt, passt sie danach nicht mehr: bitte die Rechnung stornieren, neu ausstellen und zu viel Bezahltes erstatten.</p>}
       <h3 className="first">Leistungen prüfen</h3>
       <table className="sums"><tbody>
         <tr><td>Übernachtung {deShort(room.from)} – {deShort(early ? end : room.to)} ({diffDays(room.from, early ? end : room.to)} N.)</td><td className="num">{formatMoney(keptCents)}</td></tr>
