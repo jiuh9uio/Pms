@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseGateway, parseNeighbors, wifiQrText } from '../src/server/modules/network.js';
-import { getChangelog, getUpdateStatus, installUpdate, isNewer, parseChangelog } from '../src/server/update.js';
+import { downloadFile, getChangelog, getUpdateStatus, installUpdate, isNewer, parseChangelog, updateErrorText } from '../src/server/update.js';
 
 describe('Programm-Update', () => {
   it('vergleicht Versionsnummern', () => {
@@ -14,6 +14,41 @@ describe('Programm-Update', () => {
   it('ist außerhalb der gepackten Version abgeschaltet', async () => {
     expect(getUpdateStatus().supported).toBe(false);
     await expect(installUpdate()).rejects.toMatchObject({ code: 'update_unsupported' });
+  });
+});
+
+describe('Update-Download', () => {
+  it('lädt große Dateien ohne feste Gesamtzeit, setzt nach Abbruch fort und übersetzt Fehler', async () => {
+    const { createServer } = await import('node:http');
+    const { mkdtempSync, readFileSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const data = Buffer.alloc(3_000_000, 7); data.write('ANFANG', 0); data.write('ENDE', data.length - 4);
+    let hits = 0; const ranges: string[] = [];
+    const server = createServer((req, res) => {
+      hits++;
+      const m = /bytes=(\d+)-/.exec(String(req.headers.range ?? ''));
+      ranges.push(String(req.headers.range ?? ''));
+      if (req.url === '/stumm') { res.writeHead(200, { 'Content-Length': data.length }); res.write(data.subarray(0, 1000)); return; } // hängt
+      const from = m ? Number(m[1]) : 0;
+      res.writeHead(m ? 206 : 200, { 'Content-Length': data.length - from, ...(m ? { 'Content-Range': `bytes ${from}-${data.length - 1}/${data.length}` } : {}) });
+      if (hits === 1) { res.write(data.subarray(0, 1_000_000)); setTimeout(() => res.destroy(), 50); return; } // erster Versuch bricht ab
+      res.end(data.subarray(from));
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    const dir = mkdtempSync(join(tmpdir(), 'pms-dl-'));
+    const seen: number[] = [];
+    await downloadFile(`${base}/paket.zip`, join(dir, 'a.zip'), (_r, _t, attempt) => { seen.push(attempt); }, { idleMs: 2000 });
+    expect(readFileSync(join(dir, 'a.zip')).equals(data)).toBe(true);
+    expect(ranges[0]).toBe('');
+    expect(ranges[1]).toMatch(/^bytes=\d+-$/); // fortgesetzt statt neu
+    expect(Math.max(...seen)).toBe(2);
+    // keine Daten mehr: nach der Wartezeit Abbruch, Meldung auf Deutsch
+    const err = await downloadFile(`${base}/stumm`, join(dir, 'b.zip'), () => {}, { idleMs: 300, attempts: 1 }).catch((e) => e);
+    expect(updateErrorText(err)).toContain('zu langsam oder ist abgebrochen');
+    expect(updateErrorText(new Error('The operation was aborted due to timeout'))).not.toContain('operation');
+    server.closeAllConnections(); server.close(); rmSync(dir, { recursive: true, force: true });
   });
 });
 

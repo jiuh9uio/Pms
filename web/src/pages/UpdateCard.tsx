@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api.ts';
 import { Badge, Button, LoadState, fmtDateTime, useLoad, useToast } from '../ui.tsx';
 
 export interface UpdateStatus {
   supported: boolean; current: string; latest: string | null; available: boolean;
   checkedAt: string | null; error: string | null; notes: string; installing: boolean;
+  progress?: { step: 'download' | 'verify' | 'unpack' | 'backup' | 'restart'; received: number; total: number | null; attempt: number } | null;
+  installError?: string | null;
 }
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -24,6 +26,17 @@ export function Changelog({ current }: { current?: string }) {
       ))}
     </section>
   );
+}
+
+const mb = (n: number) => `${(n / 1_000_000).toLocaleString('de-DE', { maximumFractionDigits: 1, minimumFractionDigits: 1 })} MB`;
+function stepText(p: UpdateStatus['progress']): string {
+  switch (p?.step) {
+    case 'verify': return 'Download fertig – Prüfsumme wird kontrolliert …';
+    case 'unpack': return 'Update wird entpackt und geprüft …';
+    case 'backup': return 'Datensicherung wird geschrieben …';
+    case 'restart': return 'Das Programm wird neu gestartet …';
+    default: return p && p.attempt > 1 ? 'Verbindung war unterbrochen – Download wird fortgesetzt …' : 'Update wird heruntergeladen …';
+  }
 }
 
 /** Programm-Update: Version anzeigen, nach Updates suchen, mit einem Klick einspielen. */
@@ -47,9 +60,34 @@ export function UpdateCard() {
     setBusy('');
   };
 
+  /** Fortschritt verfolgen, bis die neue Version antwortet oder ein Fehler gemeldet wird. */
+  const follow = async (target: string) => {
+    setBusy('install'); setFail(null);
+    let gone = 0;
+    for (let i = 0; i < 3600; i++) {
+      await wait(1000);
+      try {
+        const r = await api<UpdateStatus>('GET', '/update/status');
+        gone = 0;
+        if (r.current === target) { window.location.reload(); return; }
+        setFresh(r);
+        if (!r.installing) { setFail(r.installError ?? 'Das Update wurde abgebrochen.'); setBusy(''); setPhase(''); return; }
+        setPhase(stepText(r.progress));
+      } catch {
+        // während des Neustarts nicht erreichbar – höchstens 5 Minuten warten
+        setPhase('Das Programm wird neu gestartet …');
+        if (++gone > 300) break;
+      }
+    }
+    setBusy(''); setPhase('');
+    setFail('Das Programm hat sich nach dem Update nicht wieder gemeldet. Bitte am PMS-Rechner „PMS starten“ ausführen; das Protokoll liegt im Ordner update (update.log).');
+  };
+  // läuft schon ein Update (z. B. Seite neu geladen): Fortschritt weiter anzeigen
+  useEffect(() => { if (data?.installing && data.latest && busy === '') void follow(data.latest); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [data]);
+
   const install = async () => {
     if (!window.confirm(`Version ${s.latest} jetzt einspielen?\n\nVorher wird automatisch eine Datensicherung geschrieben. Das Programm ist danach für etwa eine Minute nicht erreichbar – bitte vorher alle offenen Eingaben an anderen Geräten speichern.`)) return;
-    setBusy('install'); setFail(null); setPhase('Update wird heruntergeladen und geprüft …');
+    setBusy('install'); setFail(null); setPhase('Update wird gestartet …');
     let target: string;
     try {
       target = (await api<{ version: string }>('POST', '/update/install', {})).version;
@@ -57,18 +95,10 @@ export function UpdateCard() {
       setFail(e instanceof Error ? e.message : 'Fehler'); setBusy(''); setPhase('');
       return;
     }
-    setPhase('Das Programm wird neu gestartet …');
-    // warten, bis die neue Version antwortet (höchstens 5 Minuten)
-    for (let i = 0; i < 150; i++) {
-      await wait(2000);
-      try {
-        const r = await api<UpdateStatus>('GET', '/update/status');
-        if (r.current === target) { window.location.reload(); return; }
-      } catch { /* während des Neustarts nicht erreichbar */ }
-    }
-    setBusy(''); setPhase('');
-    setFail('Das Programm hat sich nach dem Update nicht wieder gemeldet. Bitte am PMS-Rechner „PMS starten“ ausführen; das Protokoll liegt im Ordner update (update.log).');
+    await follow(target);
   };
+  const pr = fresh?.installing ? fresh.progress : null;
+  const pct = pr?.step === 'download' && pr.total ? Math.min(100, Math.round((pr.received / pr.total) * 100)) : null;
 
   return (
     <section className="card">
@@ -82,7 +112,12 @@ export function UpdateCard() {
         {s.available && s.notes && <><h3>Neu in Version {s.latest}</h3><p className="pre">{s.notes}</p></>}
         {s.error && <p className="notice danger">Update-Prüfung fehlgeschlagen: {s.error}</p>}
         {fail && <p className="notice danger">{fail}</p>}
-        {phase && <p className="notice">{phase} Diese Seite bitte geöffnet lassen.</p>}
+        {phase && <div className="notice">
+          <p style={{ margin: 0 }}>{phase}</p>
+          {pr?.step === 'download' && <div className="uploadbar" role="progressbar" aria-valuenow={pct ?? undefined} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${pct ?? 5}%` }} />
+            <span>{mb(pr.received)}{pr.total ? ` von ${mb(pr.total)}` : ''}{pct !== null ? ` · ${pct} %` : ''}{pr.attempt > 1 ? ` · Versuch ${pr.attempt}` : ''}</span></div>}
+          <p className="muted small" style={{ margin: '6px 0 0' }}>Das Update läuft im Hintergrund weiter, auch wenn diese Seite geschlossen wird. Bei langsamem Internet kann der Download einige Minuten dauern.</p>
+        </div>}
         <p className="muted small">
           {s.checkedAt ? `Zuletzt geprüft: ${fmtDateTime(s.checkedAt)}. ` : ''}
           Das Programm sieht beim Start und zweimal täglich selbst nach. Eingespielt wird nur auf Knopfdruck: vorher Datensicherung, danach Neustart. Reservierungen, Rechnungen und Einstellungen bleiben erhalten.

@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { AppError } from './lib/errors.js';
 
@@ -22,6 +22,10 @@ export interface UpdateStatus {
   supported: boolean;
   current: string; latest: string | null; available: boolean; checkedAt: string | null; error: string | null;
   notes: string; installing: boolean;
+  /** Fortschritt eines laufenden Updates (läuft im Hintergrund weiter, auch wenn die Seite geschlossen wird) */
+  progress: { step: 'download' | 'verify' | 'unpack' | 'backup' | 'restart'; received: number; total: number | null; attempt: number } | null;
+  /** Fehler des letzten Update-Versuchs (z. B. Download abgebrochen) */
+  installError: string | null;
 }
 interface Ctx {
   home: string; version: string; pgMajor: string;
@@ -32,7 +36,7 @@ interface Release { version: string; zipUrl: string; shaUrl: string | null; note
 
 let ctx: Ctx | null = null;
 let release: Release | null = null;
-let status: UpdateStatus = { supported: false, current: 'Entwicklungsstand', latest: null, available: false, checkedAt: null, error: null, notes: '', installing: false };
+let status: UpdateStatus = { supported: false, current: 'Entwicklungsstand', latest: null, available: false, checkedAt: null, error: null, notes: '', installing: false, progress: null, installError: null };
 
 const parts = (v: string) => v.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
 export function isNewer(candidate: string, current: string) {
@@ -72,6 +76,72 @@ export function getChangelog(): ChangelogEntry[] {
   }
   return [];
 }
+
+/** Technische Fehlermeldungen (oft englisch) in verständliches Deutsch übersetzen. */
+export function updateErrorText(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/abort|timeout|timed out/i.test(msg)) return 'Die Verbindung war zu langsam oder ist abgebrochen. Bitte erneut versuchen – der Download setzt dort fort, wo er aufgehört hat.';
+  if (/fetch failed|ENOTFOUND|EAI_AGAIN|ECONNRESET|ECONNREFUSED|socket|network/i.test(msg)) return 'Keine Verbindung zum Update-Server (Internet erreichbar?). Bitte später erneut versuchen.';
+  return msg;
+}
+
+/**
+ * Großes Paket herunterladen: direkt in eine Datei, ohne feste Gesamtzeit (langsame Leitungen brauchen für ~80 MB mehrere Minuten).
+ * Abgebrochen wird nur, wenn 90 Sekunden lang keine Daten kommen. Bricht die Verbindung ab, wird bis zu fünfmal neu angesetzt –
+ * wenn der Server es erlaubt, ab der Stelle, an der es aufgehört hat (Range).
+ */
+export async function downloadFile(url: string, file: string, onProgress: (received: number, total: number | null, attempt: number) => void, o: { idleMs?: number; attempts?: number } = {}) {
+  const idleMs = o.idleMs ?? 90_000, attempts = o.attempts ?? 5;
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const have = existsSync(file) ? statSync(file).size : 0;
+    const ctl = new AbortController();
+    let out: ReturnType<typeof createWriteStream> | null = null;
+    let idle = setTimeout(() => ctl.abort(new Error('timeout')), idleMs);
+    const kick = () => { clearTimeout(idle); idle = setTimeout(() => ctl.abort(new Error('timeout')), idleMs); };
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': 'pms-updater', ...(have ? { Range: `bytes=${have}-` } : {}) }, signal: ctl.signal, redirect: 'follow' });
+      if (res.status === 416 && have) { clearTimeout(idle); return; } // schon vollständig
+      if (!res.ok) throw new Error(`Antwort ${res.status} von ${new URL(url).host}`);
+      const resumed = res.status === 206 && have > 0;
+      const len = Number(res.headers.get('content-length')) || null;
+      const total = len === null ? null : resumed ? have + len : len;
+      let received = resumed ? have : 0;
+      const w = createWriteStream(file, { flags: resumed ? 'a' : 'w' });
+      out = w;
+      const done = new Promise<void>((resolve, reject) => { w.on('finish', () => resolve()); w.on('error', reject); });
+      onProgress(received, total, attempt);
+      const reader = res.body!.getReader();
+      for (;;) {
+        const { done: end, value } = await reader.read();
+        if (end) break;
+        kick();
+        received += value.length;
+        if (!w.write(value)) await new Promise((r) => w.once('drain', r));
+        onProgress(received, total, attempt);
+      }
+      w.end();
+      await done;
+      out = null;
+      clearTimeout(idle);
+      if (total !== null && received < total) throw new Error('timeout');
+      return;
+    } catch (e) {
+      clearTimeout(idle);
+      // Datei schließen (Windows sperrt offene Dateien), damit der nächste Versuch weiterschreiben kann
+      if (out) { const o2 = out; await new Promise<void>((r) => { o2.once('close', () => r()); o2.end(); setTimeout(r, 2000); }); out = null; }
+      lastError = e;
+      if (/Antwort 4\d\d/.test(e instanceof Error ? e.message : '') && !/Antwort 416/.test(String(e))) break; // nicht gefunden o. ä.: Wiederholen hilft nicht
+      if (attempt < attempts) await new Promise((r) => setTimeout(r, Math.min(30_000, 2000 * attempt)));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+const sha256File = (file: string) => new Promise<string>((resolve, reject) => {
+  const h = createHash('sha256');
+  createReadStream(file).on('data', (d) => h.update(d)).on('end', () => resolve(h.digest('hex'))).on('error', reject);
+});
 
 async function get(url: string) {
   const res = await fetch(url, { headers: { 'User-Agent': 'pms-updater', Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(60_000), redirect: 'follow' });
@@ -171,53 +241,70 @@ cd "${home}" && nohup ./pms --no-browser >> "${home}/update/restart.log" 2>&1 &
     return { cmd: '/bin/sh', args: [file] };
 }
 
+/**
+ * Update anstoßen: prüft, ob eine neuere Version da ist, und startet Download, Prüfung, Sicherung und Neustart im Hintergrund.
+ * Antwortet sofort; den Fortschritt zeigt getUpdateStatus().progress, einen Fehler installError.
+ */
 export async function installUpdate(): Promise<{ version: string }> {
   if (!ctx) throw new AppError(409, 'update_unsupported', 'Das automatische Update gibt es nur in der Windows-Version (pms.exe)');
   if (status.installing) throw new AppError(409, 'update_running', 'Das Update läuft bereits');
   await checkForUpdate();
   if (status.error) throw new AppError(502, 'update_check', `Update-Prüfung fehlgeschlagen: ${status.error}`);
   if (!release || !status.available) throw new AppError(409, 'update_none', 'Es ist keine neuere Version verfügbar');
-  const { home } = ctx;
+  const rel = release;
+  status = { ...status, installing: true, installError: null, progress: { step: 'download', received: 0, total: null, attempt: 1 } };
+  void runInstall(ctx, rel).catch(() => { /* Fehler steht in status.installError */ });
+  return { version: rel.version };
+}
+
+async function runInstall(c: Ctx, rel: Release) {
+  const { home } = c;
   const dir = join(home, 'update');
   const log = (m: string) => appendFileSync(join(dir, 'update.log'), `${new Date().toISOString()} ${m}\n`);
-  status = { ...status, installing: true };
+  const step = (p: Partial<NonNullable<UpdateStatus['progress']>>) => { status = { ...status, progress: { ...(status.progress ?? { step: 'download', received: 0, total: null, attempt: 1 }), ...p } }; };
   try {
     mkdirSync(dir, { recursive: true });
-    log(`Update von ${ctx.version} auf ${release.version}`);
-    const zip = Buffer.from(await (await get(release.zipUrl)).arrayBuffer());
-    const sha = createHash('sha256').update(zip).digest('hex');
-    if (release.shaUrl) {
-      const expected = (await (await get(release.shaUrl)).text()).trim().split(/\s+/)[0]!.toLowerCase();
-      if (expected !== sha) throw new Error('Die Prüfsumme der heruntergeladenen Datei stimmt nicht – Update abgebrochen');
-    } else throw new Error('Zur Veröffentlichung fehlt die Prüfsumme – Update abgebrochen');
-    const zipFile = join(dir, 'download.zip');
-    writeFileSync(zipFile, zip);
+    log(`Update von ${c.version} auf ${rel.version}`);
+    // Teil-Download einer anderen Version verwerfen, sonst dort weitermachen
+    const zipFile = join(dir, 'download.zip'), marker = join(dir, 'download.version');
+    if (!existsSync(marker) || readFileSync(marker, 'utf8') !== rel.version) { rmSync(zipFile, { force: true }); writeFileSync(marker, rel.version); }
+    let lastLog = 0;
+    await downloadFile(rel.zipUrl, zipFile, (received, total, attempt) => {
+      step({ step: 'download', received, total, attempt });
+      if (attempt > 1 && Date.now() - lastLog > 10_000) { lastLog = Date.now(); log(`Download, Versuch ${attempt}: ${Math.round(received / 1e6)} MB`); }
+    });
+    step({ step: 'verify' });
+    const sha = await sha256File(zipFile);
+    if (!rel.shaUrl) throw new Error('Zur Veröffentlichung fehlt die Prüfsumme – Update abgebrochen');
+    const expected = (await (await get(rel.shaUrl)).text()).trim().split(/\s+/)[0]!.toLowerCase();
+    if (expected !== sha) { rmSync(zipFile, { force: true }); throw new Error('Die Prüfsumme der heruntergeladenen Datei stimmt nicht – Update abgebrochen. Bitte erneut versuchen.'); }
+    step({ step: 'unpack' });
     const target = join(dir, 'new');
     rmSync(target, { recursive: true, force: true });
     if (win) execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', `Expand-Archive -LiteralPath '${zipFile.replace(/'/g, "''")}' -DestinationPath '${target.replace(/'/g, "''")}' -Force`], { windowsHide: true, stdio: 'ignore' });
     else execFileSync('unzip', ['-q', zipFile, '-d', target], { stdio: 'ignore' });
-    rmSync(zipFile, { force: true });
+    rmSync(zipFile, { force: true }); rmSync(marker, { force: true });
 
     // Paket prüfen: enthält Programm und Versionsangabe, passt zur Datenbank
     const exeName = win ? 'pms.exe' : 'pms';
     const source = [target, join(target, 'SchuetzenhausPMS')].find((d) => existsSync(join(d, exeName)) && existsSync(join(d, 'app', 'version.json')));
     if (!source) throw new Error('Das heruntergeladene Paket ist unvollständig');
     const info = JSON.parse(readFileSync(join(source, 'app', 'version.json'), 'utf8')) as { version: string; pgMajor: string };
-    if (info.version !== release.version) throw new Error(`Das Paket enthält Version ${info.version} statt ${release.version}`);
-    if (info.pgMajor !== ctx.pgMajor)
-      throw new Error(`Die neue Version bringt eine andere Datenbank-Hauptversion mit (${info.pgMajor} statt ${ctx.pgMajor}). Dieses Update muss von Hand eingespielt werden – siehe README.`);
+    if (info.version !== rel.version) throw new Error(`Das Paket enthält Version ${info.version} statt ${rel.version}`);
+    if (info.pgMajor !== c.pgMajor)
+      throw new Error(`Die neue Version bringt eine andere Datenbank-Hauptversion mit (${info.pgMajor} statt ${c.pgMajor}). Dieses Update muss von Hand eingespielt werden – siehe README.`);
 
-    ctx.backup();
+    step({ step: 'backup' });
+    c.backup();
     log('Datensicherung geschrieben');
+    step({ step: 'restart' });
     const script = writeApplyScript(home, source);
     spawn(script.cmd, script.args, { detached: true, stdio: 'ignore', windowsHide: true, cwd: home }).unref();
     log('Hilfsskript gestartet, PMS wird beendet');
-    setTimeout(() => void ctx!.shutdown(), 1500);
-    return { version: release.version };
+    setTimeout(() => void c.shutdown(), 1500);
   } catch (e) {
-    status = { ...status, installing: false };
-    const msg = e instanceof Error ? e.message : String(e);
-    try { log(`FEHLER: ${msg}`); } catch { /* Ordner nicht beschreibbar */ }
-    throw e instanceof AppError ? e : new AppError(502, 'update_failed', msg);
+    const msg = updateErrorText(e);
+    status = { ...status, installing: false, progress: null, installError: msg };
+    try { log(`FEHLER: ${e instanceof Error ? e.message : String(e)}`); } catch { /* Ordner nicht beschreibbar */ }
   }
 }

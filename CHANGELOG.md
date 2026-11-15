@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.61.1
+
+- Programm-Update: Der Download brach bei langsamem Internet nach 60 Sekunden ab („The operation was aborted due to timeout“). Jetzt gibt es keine feste Gesamtzeit mehr – abgebrochen wird nur, wenn 90 Sekunden lang gar keine Daten kommen. Bricht die Verbindung ab, setzt das Programm bis zu fünfmal neu an, wo möglich an der Stelle, an der es aufgehört hat; auch ein späterer neuer Versuch macht dort weiter.
+- Das Update läuft im Hintergrund (auch wenn die Seite geschlossen wird) und zeigt einen Fortschrittsbalken mit MB und Prozent. Fehlermeldungen kommen auf Deutsch.
+
 ## 1.61.0
 
 - Meldeschein wahlweise auf dem Bondrucker: Nach dem Check-in stehen „A4 drucken“ und „Bon drucken“ zur Wahl. Auf dem Bondrucker kommen zwei Bons: der Meldeschein zum Unterschreiben (fehlende Angaben als Linie zum Ausfüllen von Hand, Ort/Datum und Unterschrift) und die Gästeinformationen zum Mitgeben (Begrüßung, Zimmer, WLAN mit QR-Code, Hausinformationen, Schlusssatz).
