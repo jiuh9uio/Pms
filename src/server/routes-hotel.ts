@@ -7,6 +7,7 @@ import * as bookings from './modules/bookings.js';
 import * as breakfast from './modules/breakfast.js';
 import * as guestguide from './modules/guestguide.js';
 import * as checkinSheet from './modules/checkinsheet.js';
+import * as registrations from './modules/registrations.js';
 import * as lookup from './modules/lookup.js';
 import * as guestlink from './modules/guestlink.js';
 import * as stats from './modules/stats.js';
@@ -132,6 +133,7 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
 
   // ---------- Check-in-Blatt (Meldeschein mit WLAN und Hausinformationen) ----------
   api.get('/checkin-sheet', user, () => checkinSheet.checkinSheetForPrint(db));
+  api.get('/registrations', user, (req) => registrations.listRegistrations(db, H.registrationQuery.parse(req.query)));
   api.post('/bookings/:id/registration/bon', user, (req) => checkinSheet.printCheckinBon(db, actor(req), idOf(req)));
   api.get('/settings/checkin-sheet', admin, () => checkinSheet.getCheckinSheet(db));
   api.put('/settings/checkin-sheet', admin, (req) => checkinSheet.saveCheckinSheet(db, actor(req), H.checkinSheetInput.parse(req.body)));

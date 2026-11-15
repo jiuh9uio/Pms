@@ -30,14 +30,7 @@ export function RegistrationPrint() {
     return () => clearTimeout(t);
   }, [data, params]);
   if (!data) return <div className="center"><LoadState error={error} loading /></div>;
-  const { b, hotel: h } = data;
-  const g = b.guest;
-  const rooms = b.rooms.filter((r) => isActiveStatus(r.status));
-  const from = rooms.map((r) => r.from).sort()[0];
-  const to = rooms.map((r) => r.to).sort().at(-1);
-  const persons = rooms.reduce((s, r) => s + r.adults + r.children, 0);
   const sheet = data.sheet?.showInfo && (data.sheet.wifi || data.sheet.lines.length || data.sheet.title || data.sheet.closing) ? data.sheet : null;
-  const row = (label: string, value: string | null | undefined) => <tr><th>{label}</th><td>{value || ' '}</td></tr>;
   return (
     <div className="printpage">
       <div className="printbar noprint">
@@ -45,6 +38,20 @@ export function RegistrationPrint() {
         {data.sheet?.bonPrinter && <Button busy={bonBusy} onClick={() => void printBon()}>Stattdessen auf Bondrucker</Button>}
         <span className="muted">Leere Felder füllt der Gast von Hand aus. Ob und für welche Gäste ein Meldeschein nötig ist und wie lange er aufzubewahren ist, regelt das Melderecht – bitte selbst prüfen.</span>
       </div>
+      <RegistrationSheet b={data.b} h={data.hotel} sheet={params.get('info') === '0' ? null : sheet} />
+    </div>
+  );
+}
+
+/** Ein Meldeschein (A4), auf Wunsch mit abtrennbaren Gästeinformationen. */
+export function RegistrationSheet({ b, h, sheet }: { b: BookingDto; h: HotelSettings; sheet: CheckinSheetDto | null }) {
+  const g = b.guest;
+  const rooms = b.rooms.filter((r) => isActiveStatus(r.status));
+  const from = rooms.map((r) => r.from).sort()[0];
+  const to = rooms.map((r) => r.to).sort().at(-1);
+  const persons = rooms.reduce((s, r) => s + r.adults + r.children, 0);
+  const row = (label: string, value: string | null | undefined) => <tr><th>{label}</th><td>{value || '\u00a0'}</td></tr>;
+  return (
       <article className={`invoice regform${sheet ? ' withinfo' : ''}`}>
         <header><b>{h.name}</b><br /><small>{[h.street, [h.zip, h.city].filter(Boolean).join(' ')].filter(Boolean).join(', ')}</small></header>
         <h1>Meldeschein</h1>
@@ -75,6 +82,26 @@ export function RegistrationPrint() {
           </section>
         )}
       </article>
+  );
+}
+
+/** Mehrere Meldescheine auf einmal drucken (aus dem Archiv), je einer pro Seite – ohne Gästeinformationen. */
+export function RegistrationBatchPrint() {
+  const [params] = useSearchParams();
+  const ids = (params.get('ids') ?? '').split(',').filter((x) => /^[0-9a-f-]{36}$/.test(x)).slice(0, 100);
+  const { data, error } = useLoad(async () => {
+    const [hotel, ...bookings] = await Promise.all([api<HotelSettings>('GET', '/settings/hotel'), ...ids.map((id) => api<BookingDto>('GET', `/bookings/${id}`))]);
+    return { hotel, bookings };
+  }, [params.get('ids')]);
+  useEffect(() => { document.title = `Meldescheine (${ids.length})`; }, [ids.length]);
+  if (!data) return <div className="center"><LoadState error={error} loading /></div>;
+  return (
+    <div className="printpage">
+      <div className="printbar noprint">
+        <Button variant="primary" onClick={() => window.print()}>Alle drucken ({data.bookings.length})</Button>
+        <span className="muted">Jeder Meldeschein kommt auf eine eigene Seite. Die Angaben stammen aus dem aktuellen Gästeprofil.</span>
+      </div>
+      {data.bookings.map((b) => <div key={b.id} className="pagebreak"><RegistrationSheet b={b} h={data.hotel} sheet={null} /></div>)}
     </div>
   );
 }

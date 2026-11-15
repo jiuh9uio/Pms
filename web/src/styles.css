@@ -202,6 +202,12 @@ textarea { width: 100%; height: auto; min-height: 38px; padding: 8px 11px; borde
 .hits { display: grid; border: 1px solid var(--line); border-radius: 8px; margin-top: 6px; overflow: hidden; background: var(--surface); }
 .hits button { text-align: left; border: 0; border-bottom: 1px solid var(--line); background: none; padding: 9px 11px; cursor: pointer; } .hits button:last-child { border-bottom: 0; } .hits button:hover { background: var(--accent-soft); }
 .roompick { display: grid; gap: 6px; }
+/* Meldeschein-Archiv */
+.regfilters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; } .regfilters .field { min-width: 150px; } .regfilters .check { margin-bottom: 8px; }
+.filters.regfilters input[type='search'] { flex: none; max-width: none; } .regfilters .field:has(input[type='search']) { flex: 1 1 240px; max-width: 420px; }
+.regtable th.sel, .regtable td.sel { width: 34px; } .regtable tr.on td { background: var(--accent-soft); } .linkbtn.strong { font-weight: 600; font-size: 14px; color: var(--text); text-align: left; }
+.pagebreak { break-after: page; page-break-after: always; } .pagebreak:last-child { break-after: auto; page-break-after: auto; }
+@media screen { .pagebreak + .pagebreak { margin-top: 24px; } }
 /* Check-in */
 .ci-done { text-align: center; padding: 8px 8px 0; } .ci-done-mark { width: 56px; height: 56px; margin: 0 auto 12px; border-radius: 50%; display: grid; place-items: center; font-size: 28px; color: #fff; background: #1f9d6b; animation: pop .35s ease-out; }
 @keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }

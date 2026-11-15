@@ -14,9 +14,10 @@ import { Controls } from './pages/Controls.tsx';
 import { Dashboard } from './pages/Dashboard.tsx';
 import { EInvoice } from './pages/EInvoice.tsx';
 import { Guests } from './pages/Guests.tsx';
+import { Registrations } from './pages/Registrations.tsx';
 import { Invoices } from './pages/Invoices.tsx';
 import { Companies } from './pages/Companies.tsx';
-import { RegistrationPrint } from './hotel/RegistrationPrint.tsx';
+import { RegistrationBatchPrint, RegistrationPrint } from './hotel/RegistrationPrint.tsx';
 import { Launcher } from './pages/Launcher.tsx';
 import { Network } from './pages/Network.tsx';
 import { Login } from './pages/Login.tsx';
@@ -65,6 +66,7 @@ const NAV: NavItem[] = [
   { to: '/reinigung', label: 'Reinigung', icon: '✧', module: 'hotel', group: 'Haus' },
   { to: '/gaeste', label: 'Gäste', icon: '☺', module: 'hotel', group: 'Kunden' },
   { to: '/firmen', label: 'Firmen', icon: '⌘', module: 'hotel', more: true, group: 'Kunden' },
+  { to: '/meldescheine', label: 'Meldeschein-Archiv', short: 'Meldescheine', icon: '▤', module: 'hotel', more: true, group: 'Kunden' },
   { to: '/rechnungen', label: 'Rechnungen', short: 'Rechn.', icon: '€', module: 'hotel', group: 'Abrechnung', jump: true },
   { to: '/tagesabschluss', label: 'Tagesabschluss', short: 'Abschluss', icon: '∑', module: 'hotel', more: true, group: 'Abrechnung' },
   { to: '/auswertung', label: 'Auswertung', icon: '◔', module: 'hotel', more: true, group: 'Abrechnung' },
@@ -169,6 +171,7 @@ function Shell({ user }: { user: UserDto }) {
   useIdleLogout(logout);
   if (pathname === '/') return <DataProvider><NetAlert /><Launcher /></DataProvider>;
   if (hotel && pathname.startsWith('/meldeschein/')) return <Routes><Route path="/meldeschein/:id" element={<RegistrationPrint />} /></Routes>;
+  if (hotel && pathname === '/meldescheine-druck') return <Routes><Route path="/meldescheine-druck" element={<RegistrationBatchPrint />} /></Routes>;
   return (
     <DataProvider>
     <NetAlert />
@@ -206,6 +209,7 @@ function Shell({ user }: { user: UserDto }) {
           {hotel && <Route path="/tagesabschluss" element={<DayReport />} />}
           <Route path="/team" element={<Team />} />
           {hotel && <Route path="/gaeste" element={<Guests />} />}
+          {hotel && <Route path="/meldescheine" element={<Registrations />} />}
           {hotel && <Route path="/rechnungen" element={<Invoices />} />}
           {hotel && <Route path="/firmen" element={<Companies />} />}
           {hotel && <Route path="/auswertung" element={<Report />} />}

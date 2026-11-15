@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.62.0
+
+- Neu: Meldeschein-Archiv (Hotel → Kunden → Meldeschein-Archiv). Alle Check-ins mit Anreise, Abreise, Gast, Zimmer, Personen und Reservierungsnummer; Suche nach Name, Ort, Zimmer oder Reservierung; Zeitraum wählbar.
+- Je Eintrag: ob Angaben fehlen (Anschrift, Geburtsdatum, Staatsangehörigkeit), ob der Gast sie online ausgefüllt hat, „Drucken“ (Nachdruck ohne Gästeinformationen) und ein Klick auf den Namen öffnet die Reservierung.
+- Sammeldruck: mehrere oder alle angezeigten Meldescheine auswählen und auf einmal drucken (je einer pro Seite).
+- Aufbewahrungsfrist je Eintrag (§ 30 Abs. 4 BMG: ein Jahr ab Anreise, danach innerhalb von drei Monaten vernichten – bitte selbst prüfen); Filter „Nur abgelaufene Aufbewahrungsfrist“. Gelöscht wird nichts automatisch.
+- Hinweis: Die Angaben kommen aus Reservierung und aktuellem Gästeprofil; eine eigene, unveränderliche Kopie wird nicht gespeichert (dafür wäre eine Erweiterung der Datenbank nötig).
+
 ## 1.61.4
 
 Ergebnisse einer Fehlerprüfung aller Änderungen seit 1.55.2:

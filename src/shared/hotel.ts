@@ -391,3 +391,22 @@ export const CHECKIN_SHEET_DEFAULTS: CheckinSheet = {
 export interface CheckinSheetDto extends CheckinSheet { lines: { label: string; value: string }[]; wifi: { ssid: string; password: string; open: boolean; qr: string } | null;
   /** ein Bondrucker ist eingerichtet (vorne, sonst Küche) und sein Name */
   bonPrinter: string | null }
+
+// ---------- Meldeschein-Archiv: alle Check-ins mit Nachdruck und Aufbewahrungsfrist ----------
+export interface RegistrationRow {
+  bookingId: string; number: string; guest: string; birthdate: string | null; nationality: string; city: string; country: string;
+  rooms: string; from: string; to: string; checkedInAt: string; persons: number;
+  /** Meldedaten vom Gast selbst online ausgefüllt */
+  onlineAt: string | null;
+  /** fehlende Angaben im Gästeprofil (Anschrift, Geburtsdatum, Staatsangehörigkeit) */
+  missing: string[];
+  /** Aufbewahrung: ein Jahr ab Anreise, danach innerhalb von drei Monaten vernichten (§ 30 Abs. 4 BMG – bitte selbst prüfen) */
+  keepUntil: string; destroyBy: string;
+}
+export const registrationQuery = z.object({
+  from: z.string().refine(isIsoDate, 'Bitte ein Datum wählen').optional(),
+  to: z.string().refine(isIsoDate, 'Bitte ein Datum wählen').optional(),
+  q: z.string().trim().max(100).default(''),
+  /** nur Meldescheine, deren Aufbewahrungsfrist abgelaufen ist */
+  expired: z.enum(['0', '1']).default('0'),
+});

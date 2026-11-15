@@ -700,4 +700,22 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     await ok('PUT', '/settings/front-printer', admin, { enabled: false, host: '', port: 9100, width: 48 });
     printer.close();
   });
+
+  it('zeigt eingecheckte Gäste im Meldeschein-Archiv mit Aufbewahrungsfrist', async () => {
+    const bid = await booking();
+    const b = await ok('GET', `/bookings/${bid}`, user);
+    const from = b.rooms[0].from as string;
+    expect((await ok('GET', `/registrations?from=${from}&to=${from}`, user)).some((r: { bookingId: string }) => r.bookingId === bid)).toBe(false); // noch nicht eingecheckt
+    await db.execute(sql`update booking_rooms set status = 'checked_in', checked_in_at = now() where booking_id = ${bid}`);
+    const rows = await ok('GET', `/registrations?from=${from}&to=${from}`, user);
+    const r = rows.find((x: { bookingId: string }) => x.bookingId === bid);
+    expect(r).toMatchObject({ number: b.number, from, rooms: expect.any(String), missing: ['Geburtsdatum', 'Staatsangehörigkeit'], onlineAt: null });
+    const y = Number(from.slice(0, 4)) + 1;
+    expect(r.keepUntil).toBe(`${y}${from.slice(4)}`);
+    expect(r.destroyBy > r.keepUntil).toBe(true);
+    expect((await ok('GET', `/registrations?q=${encodeURIComponent(b.guest.lastName)}`, user)).map((x: { bookingId: string }) => x.bookingId)).toContain(bid);
+    expect((await ok('GET', '/registrations?expired=1', user)).some((x: { bookingId: string }) => x.bookingId === bid)).toBe(false); // Frist läuft noch
+    expect((await call('GET', '/registrations', {})).statusCode).toBe(401);
+    expect((await call('GET', '/registrations?from=gestern', user)).statusCode).toBe(400);
+  });
 });
