@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.48.2
+
+- Zwei-Faktor-Anmeldung über die Benutzerverwaltung: Der Administrator öffnet unter Verwaltung → Benutzer den Benutzer, klickt „Einrichten“, der Benutzer scannt den QR-Code mit Microsoft Authenticator auf seinem Handy, der Administrator trägt den angezeigten Code ein. Aufheben ebenfalls dort.
+
 ## 1.48.1
 
 - Zwei-Faktor-Anmeldung: Anleitung und Beschriftungen auf „Microsoft Authenticator“ abgestimmt (Konto hinzufügen über „Anderes Konto“). Andere Authenticator-Apps funktionieren weiterhin.

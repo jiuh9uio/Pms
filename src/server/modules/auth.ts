@@ -130,21 +130,21 @@ export async function changeOwnPassword(db: Db, actor: Actor, sessionId: string,
 
 // ---------- Zwei-Faktor-Anmeldung (für das eigene Konto) ----------
 /** Beginnt die Einrichtung: erzeugt ein Geheimnis und den QR-Code. Eingeschaltet wird erst nach Bestätigung mit einem Code. */
-export async function totpBegin(db: Db, actor: Actor, issuer: string): Promise<TotpSetupDto> {
-  const [user] = await db.select().from(users).where(eq(users.id, actor.userId!));
+export async function totpBegin(db: Db, actor: Actor, issuer: string, targetId = actor.userId!): Promise<TotpSetupDto> {
+  const [user] = await db.select().from(users).where(eq(users.id, targetId));
   if (!user) throw new AppError(404, 'not_found', 'Benutzer nicht gefunden');
   if (user.totpEnabled) throw new AppError(409, 'conflict', 'Die Zwei-Faktor-Anmeldung ist bereits eingeschaltet');
   const secret = newSecret();
   await db.update(users).set({ totpSecretEnc: encrypt(secret), totpLastStep: null }).where(eq(users.id, user.id));
   return { secret, account: user.username, qr: await QRCode.toDataURL(otpauthUrl(secret, user.username, issuer), { margin: 1, width: 220 }) };
 }
-export async function totpConfirm(db: Db, actor: Actor, code: string) {
-  const [user] = await db.select().from(users).where(eq(users.id, actor.userId!));
+export async function totpConfirm(db: Db, actor: Actor, code: string, targetId = actor.userId!) {
+  const [user] = await db.select().from(users).where(eq(users.id, targetId));
   if (!user?.totpSecretEnc || user.totpEnabled) throw new AppError(409, 'conflict', 'Bitte die Einrichtung neu beginnen');
   const step = verifyCode(decrypt(user.totpSecretEnc), code);
   if (step == null) throw new AppError(400, 'validation', 'Eingaben prüfen', { code: 'Der Code stimmt nicht. Stimmt die Uhrzeit auf dem Handy?' });
   await db.update(users).set({ totpEnabled: true, totpLastStep: step, updatedAt: new Date() }).where(eq(users.id, user.id));
-  await record(db, actor, { action: 'totp_enabled', entity: 'user', entityId: user.id });
+  await record(db, actor, { action: 'totp_enabled', entity: 'user', entityId: user.id, after: { username: user.username, durch: targetId === actor.userId ? 'selbst' : 'Administrator' } });
   return { ok: true };
 }
 export async function totpDisable(db: Db, actor: Actor, password: string) {

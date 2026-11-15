@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { DEFAULT_MODULES, MODULES, MODULE_LABEL, ROLES, ROLE_LABEL, type Module, passwordResetInput, userCreateInput, userUpdateInput, type Role, type UserDto } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
+import { TwoFactorSetup } from './TwoFactorCard.tsx';
 import { useAuth } from '../App.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, fmtDateTime, useLoad, useSubmit, useToast } from '../ui.tsx';
 
@@ -115,9 +116,14 @@ function EditUser({ user, onClose, onDone }: { user: UserDto; onClose: () => voi
         <button type="submit" hidden />
       </form>
       <div className="subform">
-        <h3>Zwei-Faktor-Anmeldung</h3>
-        <p>{user.twoFactor ? <><Badge tone="ok">eingeschaltet</Badge> Der Benutzer meldet sich mit Passwort und Code aus seiner Authenticator-App an.</> : <><Badge>aus</Badge> Jeder Benutzer schaltet sie selbst unter „Mein Konto“ ein.</>}</p>
-        {user.twoFactor && <Button onClick={() => { if (window.confirm(`Zwei-Faktor-Anmeldung für ${user.name} aufheben? Danach genügt wieder das Passwort, bis sie neu eingerichtet wird.`)) void api('POST', `/users/${user.id}/totp-reset`, {}).then(async () => { toast('Zwei-Faktor-Anmeldung aufgehoben'); if (user.id === me.user.id) await me.refresh(); onDone(); }).catch((e) => toast(e instanceof Error ? e.message : 'Fehler', 'error')); }}>Aufheben (Handy verloren)</Button>}
+        <h3>Zwei-Faktor-Anmeldung (Microsoft Authenticator)</h3>
+        {user.twoFactor ? <>
+          <p><Badge tone="ok">eingeschaltet</Badge> {user.name} meldet sich mit Passwort und dem Code aus Microsoft Authenticator an.</p>
+          <Button onClick={() => { if (window.confirm(`Zwei-Faktor-Anmeldung für ${user.name} aufheben? Danach genügt wieder das Passwort, bis sie neu eingerichtet wird.`)) void api('POST', `/users/${user.id}/totp-reset`, {}).then(async () => { toast('Zwei-Faktor-Anmeldung aufgehoben'); if (user.id === me.user.id) await me.refresh(); onDone(); }).catch((e) => toast(e instanceof Error ? e.message : 'Fehler', 'error')); }}>Aufheben (z. B. Handy verloren)</Button>
+        </> : <>
+          <p className="muted"><Badge>aus</Badge> Hier richten Sie sie gemeinsam mit {user.name} ein: Er oder sie scannt den QR-Code mit dem eigenen Handy, Sie tragen den angezeigten Code ein.</p>
+          <TwoFactorSetup base={`/users/${user.id}/totp`} who={user.id === me.user.id ? undefined : user.name} onDone={async () => { if (user.id === me.user.id) await me.refresh(); onDone(); }} />
+        </>}
       </div>
       <form className="subform" onSubmit={(e) => void reset.submit({ password: pw }, e)} noValidate>
         <h3>Passwort zurücksetzen</h3>

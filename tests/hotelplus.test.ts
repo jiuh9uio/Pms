@@ -452,6 +452,17 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect((await ok('POST', `/users/${id}/totp-reset`, admin, {})).twoFactor).toBe(false);
     expect((await login({})).statusCode).toBe(200);
 
+    // Administrator richtet sie über die Benutzerverwaltung ein
+    expect((await call('POST', `/users/${id}/totp/begin`, user, {})).statusCode).toBe(403);
+    const byAdmin = await ok('POST', `/users/${id}/totp/begin`, admin, {});
+    expect(byAdmin.account).toBe('zweifaktor');
+    expect((await call('POST', `/users/${id}/totp/confirm`, admin, { code: '000000' })).statusCode).toBe(400);
+    expect((await ok('POST', `/users/${id}/totp/confirm`, admin, { code: codeAt(byAdmin.secret, stepOf()) })).ok).toBe(true);
+    expect((await ok('GET', '/users', admin)).find((u: { id: string }) => u.id === id).twoFactor).toBe(true);
+    expect((await login({})).json().error.code).toBe('totp_required');
+    expect((await login({ code: codeAt(byAdmin.secret, stepOf() + 1) })).statusCode).toBe(200);
+    await ok('POST', `/users/${id}/totp-reset`, admin, {});
+
     // automatisches Abmelden: Einstellung
     expect(await ok('GET', '/settings/security', user)).toEqual({ idleMinutes: 0 });
     expect((await call('PUT', '/settings/security', user, { idleMinutes: 15 })).statusCode).toBe(403);

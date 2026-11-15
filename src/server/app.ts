@@ -180,6 +180,9 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.post('/auth/totp/disable', { preHandler: requireUser }, (req) => auth.totpDisable(db, actor(req), S.totpDisableInput.parse(req.body).password));
     api.get('/settings/security', { preHandler: requireUser }, () => auth.getSecurity(db));
     api.put('/settings/security', { preHandler: requireAdmin }, (req) => auth.saveSecurity(db, actor(req), S.securityInput.parse(req.body)));
+    // Administrator richtet die Zwei-Faktor-Anmeldung für einen Benutzer ein (Benutzer scannt mit seinem Handy, Code wird hier bestätigt)
+    api.post('/users/:id/totp/begin', { preHandler: requireAdmin }, async (req) => auth.totpBegin(db, actor(req), (await settings.getHotel(db)).name || 'PMS', idParam(req)));
+    api.post('/users/:id/totp/confirm', { preHandler: requireAdmin }, (req) => auth.totpConfirm(db, actor(req), S.totpConfirmInput.parse(req.body).code, idParam(req)));
     api.post('/users/:id/totp-reset', { preHandler: requireAdmin }, (req) => usersMod.resetTwoFactor(db, actor(req), idParam(req)));
 
     // ---------- Benutzer (nur Administrator) ----------
