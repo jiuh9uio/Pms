@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.52.0
+
+- Gästeseite: Video im Startbild (z. B. ein Drohnenflug über das Haus). Läuft ohne Ton in Schleife hinter der Überschrift; das Startbild dient als Vorschaubild. Mit Knopf zum Anhalten; bei Gästen mit „Bewegung reduzieren“ oder Datensparen erscheint nur das Startbild. Hochladen unter Einstellungen → Online → Gästeseite → „Kopf und Startbild“ (MP4 oder WebM, höchstens 80 MB, mit Fortschrittsanzeige).
+
 ## 1.51.0
 
 - Gästeseite: ein gemeinsames Anfrageformular für Zimmer, Tisch im Restaurant, Feier oder Veranstaltung, Gutschein und allgemeine Fragen – jeweils mit den passenden Feldern (Reisedaten und Zimmerwunsch, Tag/Uhrzeit/Personen, Anlass/Termin/Gästezahl, Wert des Gutscheins). Alle Knöpfe der Seite führen dorthin und füllen die Art schon aus; nach einer Zimmersuche sind Reisedaten und Zimmer eingetragen. Es wird nichts gebucht.

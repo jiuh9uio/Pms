@@ -765,3 +765,11 @@ tbody tr { transition: background .15s; }
 #gs-anfrage .gs-request { box-shadow: 0 24px 50px -30px rgba(52, 41, 35, .45); }
 @media (max-width: 600px) { .gs-types .gs-type { border-bottom: 1px solid var(--gs-line); } }
 .gs-form > *, .gs-search > * { min-width: 0; } .gs input[type='date'] { min-width: 0; }
+
+.gs-hero > .gs-hero-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
+.gs-videobtn { position: absolute; right: 18px; bottom: 18px; width: 42px; height: 42px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .55); background: rgba(38, 29, 20, .45); color: #fff; font-size: 13px; cursor: pointer; backdrop-filter: blur(4px); transition: background .2s; }
+.gs-videobtn:hover { background: rgba(38, 29, 20, .7); }
+
+.site-admin-photo video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.uploadbar { position: relative; height: 30px; border-radius: 8px; background: var(--surface-2); overflow: hidden; margin-top: 8px; }
+.uploadbar i { position: absolute; inset: 0 auto 0 0; background: var(--accent-soft); transition: width .2s; } .uploadbar span { position: relative; padding: 0 10px; line-height: 30px; font-size: 13px; }

@@ -41,19 +41,20 @@ export async function sitePublic(db: Exec, preview: boolean): Promise<SitePublic
     enabled: false, preview: false, hotel: { ...hotel, street: '', zip: '', city: '', phone: '', email: '', website: '' }, brandSubtitle: '', heroKicker: '', headline: '', headlineEm: '', heroText: '',
     introKicker: '', introTitle: '', introTitleEm: '', intro: '', highlights: [], showPrices: false, showAvailability: false, imprintUrl: '', privacyUrl: '', hasLogo: false, requestEnabled: false, privacyText: '',
     sections: Object.fromEntries(SECTION_KEYS.map((k) => [k, blank])) as SitePublic['sections'], eventTypes: [], hours: [], hoursNote: '', faq: [], routeLink: false,
-    images: Object.fromEntries(IMAGE_KEYS.map((k) => [k, ''])) as SitePublic['images'], categories: [],
+    images: Object.fromEntries(IMAGE_KEYS.map((k) => [k, ''])) as SitePublic['images'], video: '', categories: [],
   };
   if (!s.enabled && !preview) return empty;
   const cats = await shownCategories(db, s);
   const photos = new Map((await db.select({ id: categoryPhotos.categoryId, at: categoryPhotos.updatedAt }).from(categoryPhotos)).map((p) => [p.id, p.at.getTime().toString(36)]));
   const req = await getWebRequest(db);
   const imgs = new Map((await db.select({ k: siteImages.key, at: siteImages.updatedAt }).from(siteImages)).map((i) => [i.k, i.at.getTime().toString(36)]));
+  const video = imgs.get('video') ?? '';
   return {
     enabled: s.enabled, preview: preview && !s.enabled, hotel, brandSubtitle: s.brandSubtitle, heroKicker: s.heroKicker, headline: s.headline, headlineEm: s.headlineEm, heroText: s.heroText,
     introKicker: s.introKicker, introTitle: s.introTitle, introTitleEm: s.introTitleEm, intro: s.intro,
     highlights: s.highlights.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 12), showPrices: s.showPrices, showAvailability: s.showAvailability,
     sections: s.sections, eventTypes: s.eventTypes.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 8), hours: parseHours(s.hours), hoursNote: s.hoursNote, faq: parseFaq(s.faq), routeLink: s.routeLink,
-    images: Object.fromEntries(IMAGE_KEYS.map((k) => [k, imgs.get(k) ?? ''])) as SitePublic['images'],
+    images: Object.fromEntries(IMAGE_KEYS.map((k) => [k, imgs.get(k) ?? ''])) as SitePublic['images'], video,
     imprintUrl: s.imprintUrl, privacyUrl: s.privacyUrl, hasLogo: !!(await getLogo(db)), requestEnabled: req.enabled, privacyText: req.privacy,
     categories: cats.map((c) => ({
       id: c.id, name: c.name, text: s.categories[c.id]?.text || c.description, maxPersons: c.maxPersons, stdOccupancy: c.stdOccupancy,
@@ -138,5 +139,39 @@ export async function saveSiteImage(db: Db, actor: Actor, key: ImageKey, v: { mi
     await db.insert(siteImages).values({ key, mime: v.mime, data }).onConflictDoUpdate({ target: siteImages.key, set: { mime: v.mime, data, updatedAt: new Date() } });
   }
   await record(db, actor, { action: 'update', entity: 'settings', entityId: `guest_site_image_${key}`, after: { bild: v ? 'hochgeladen' : 'entfernt' } });
+  return { ok: true };
+}
+
+// ---------- Video im Startbild (z. B. Drohnenflug) ----------
+export const VIDEO_MAX = 80 * 1024 * 1024;
+let videoCache: { at: number; mime: string; data: Buffer } | null = null;
+/** MP4 (H.264) oder WebM; geprüft wird die Dateikennung, nicht nur die Endung. */
+export function videoType(data: Buffer): 'video/mp4' | 'video/webm' | null {
+  if (data.length > 12 && data.subarray(4, 8).toString('latin1') === 'ftyp') return 'video/mp4';
+  if (data.length > 4 && data.subarray(0, 4).toString('hex') === '1a45dfa3') return 'video/webm';
+  return null;
+}
+export async function siteVideo(db: Exec) {
+  const [meta] = await db.select({ at: siteImages.updatedAt }).from(siteImages).where(eq(siteImages.key, 'video'));
+  if (!meta) { videoCache = null; return null; }
+  if (videoCache?.at === meta.at.getTime()) return videoCache;
+  const [row] = await db.select().from(siteImages).where(eq(siteImages.key, 'video'));
+  videoCache = row ? { at: row.updatedAt.getTime(), mime: row.mime, data: row.data } : null;
+  return videoCache;
+}
+export async function publicSiteVideo(db: Exec, preview: boolean) {
+  const s = await getSite(db);
+  return s.enabled || preview ? siteVideo(db) : null;
+}
+export async function saveSiteVideo(db: Db, actor: Actor, data: Buffer | null) {
+  if (!data) await db.delete(siteImages).where(eq(siteImages.key, 'video'));
+  else {
+    if (data.length > VIDEO_MAX) throw new AppError(400, 'too_large', 'Das Video ist zu groß (höchstens 80 MB). Bitte kürzer oder kleiner speichern.');
+    const mime = videoType(data);
+    if (!mime) throw new AppError(400, 'bad_video', 'Die Datei ist kein MP4- oder WebM-Video');
+    await db.insert(siteImages).values({ key: 'video', mime, data }).onConflictDoUpdate({ target: siteImages.key, set: { mime, data, updatedAt: new Date() } });
+  }
+  videoCache = null;
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: 'guest_site_video', after: { video: data ? `${Math.round(data.length / 1024 / 1024)} MB` : 'entfernt' } });
   return { ok: true };
 }

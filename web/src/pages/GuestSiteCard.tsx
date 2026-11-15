@@ -26,6 +26,40 @@ function ImageField({ label, src, upload, remove, at }: { label: string; src: st
   );
 }
 
+/** Video im Startbild hochladen – als rohe Datei mit Fortschrittsanzeige (Videos sind groß). */
+function VideoField() {
+  const toast = useToast();
+  const [rev, setRev] = useState(0);
+  const [pct, setPct] = useState<number | null>(null);
+  const [has, setHas] = useState<boolean | null>(null);
+  useEffect(() => { void fetch(`/api/v1/public/site/video?t=${rev}`, { method: 'HEAD' }).then((r) => setHas(r.ok)).catch(() => setHas(false)); }, [rev]);
+  const upload = (file: File) => {
+    if (file.size > 80 * 1024 * 1024) { toast(`Das Video ist ${Math.round(file.size / 1024 / 1024)} MB groß – höchstens 80 MB. Bitte kürzer oder kleiner speichern.`, 'error'); return; }
+    const x = new XMLHttpRequest();
+    x.open('PUT', '/api/v1/settings/site/video');
+    x.setRequestHeader('Content-Type', file.type === 'video/webm' ? 'video/webm' : 'video/mp4');
+    x.upload.onprogress = (e) => { if (e.lengthComputable) setPct(Math.round((e.loaded / e.total) * 100)); };
+    x.onload = () => {
+      setPct(null);
+      if (x.status === 200) { toast('Video gespeichert'); setRev(Date.now()); }
+      else { let m = 'Video konnte nicht gespeichert werden'; try { m = (JSON.parse(x.responseText) as { error: { message: string } }).error.message; } catch { /* ohne Text */ } toast(m, 'error'); }
+    };
+    x.onerror = () => { setPct(null); toast('Keine Verbindung zum Server', 'error'); };
+    setPct(0); x.send(file);
+  };
+  const remove = async () => { await api('DELETE', '/settings/site/video'); setRev(Date.now()); toast('Video entfernt'); };
+  return (
+    <div className="site-admin-cat">
+      <div className="site-admin-photo">{has ? <video src={`/api/v1/public/site/video?t=${rev}`} muted loop autoPlay playsInline /> : <span>kein Video</span>}</div>
+      <div><b>Video im Startbild (z. B. Drohnenflug)</b>
+        <p className="muted small">Läuft ohne Ton in Schleife statt des Startbilds; das Startbild wird als Vorschaubild gezeigt, bis das Video geladen ist, und bei Gästen mit „Bewegung reduzieren“. Am besten MP4 (H.264), 15–40 Sekunden, Full HD, ohne Tonspur, höchstens 80 MB – je kleiner, desto schneller lädt die Seite.</p>
+        {pct != null ? <div className="uploadbar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${pct}%` }} /><span>{pct < 100 ? `Wird hochgeladen … ${pct} %` : 'Wird gespeichert …'}</span></div>
+          : <div className="btnrow"><label className="btn">Video wählen<input type="file" accept="video/mp4,video/webm" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ''; }} /></label>{has && <Button onClick={() => void remove()}>Entfernen</Button>}</div>}
+      </div>
+    </div>
+  );
+}
+
 const Group = ({ title, children, open = false }: { title: string; children: ReactNode; open?: boolean }) => (
   <details className="site-group" open={open}><summary>{title}</summary><div className="site-group-body">{children}</div></details>
 );
@@ -71,6 +105,7 @@ export function GuestSiteCard() {
           {txt('headline', 'Überschrift, erste Zeile')}{txt('headlineEm', 'Überschrift, zweite Zeile (kursiv)')}
           {area('heroText', 'Text unter der Überschrift', 2)}
         </div>
+        <VideoField />
         <ImageField label={IMAGE_LABEL.hero} src="/api/v1/public/site/image/hero" at={at.hero} upload={(file) => put('/settings/site/image/hero', 'hero', file, true)} remove={() => del('/settings/site/image/hero', 'hero')} />
       </Group>
 

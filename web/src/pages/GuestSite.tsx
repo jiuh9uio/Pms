@@ -81,8 +81,8 @@ export function GuestSite({ staffLink = false }: { staffLink?: boolean }) {
       </header>
 
       <main>
-        <section id="gs-start" className={`gs-hero ${img('hero') ? '' : 'noimg'}`} aria-labelledby="gs-h1">
-          {img('hero') && <img src={img('hero')!} alt="" fetchPriority="high" />}
+        <section id="gs-start" className={`gs-hero ${img('hero') || data.video ? '' : 'noimg'}`} aria-labelledby="gs-h1">
+          {data.video ? <HeroVideo src={`/api/v1/public/site/video?v=${data.video}`} poster={img('hero')} /> : img('hero') && <img src={img('hero')!} alt="" fetchPriority="high" />}
           <div className="gs-hero-in">
             <span className="gs-mono" aria-hidden>{letter}</span>
             {data.heroKicker && <span className="gs-kicker">{data.heroKicker}</span>}
@@ -210,6 +210,27 @@ export function GuestSite({ staffLink = false }: { staffLink?: boolean }) {
         </div>
       </div></footer>
     </div>
+  );
+}
+
+/**
+ * Video im Startbild (z. B. Drohnenflug): ohne Ton, in Schleife. Wer auf dem Gerät „Bewegung reduzieren“ eingestellt hat
+ * oder Datensparen nutzt, sieht nur das Startbild. Ein Knopf hält das Video an.
+ */
+function HeroVideo({ src, poster }: { src: string; poster: string | null }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [playing, setPlaying] = useState(true);
+  const still = typeof window !== 'undefined' && (window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    || (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true);
+  if (still) return poster ? <img src={poster} alt="" fetchPriority="high" /> : null;
+  const toggle = () => { const v = ref.current; if (!v) return; if (v.paused) { void v.play(); setPlaying(true); } else { v.pause(); setPlaying(false); } };
+  return (
+    <>
+      <video ref={ref} className="gs-hero-video" autoPlay muted loop playsInline preload="auto" poster={poster ?? undefined} aria-hidden onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}>
+        <source src={src} />
+      </video>
+      <button type="button" className="gs-videobtn" onClick={toggle} aria-label={playing ? 'Video anhalten' : 'Video abspielen'}>{playing ? '❚❚' : '▶'}</button>
+    </>
   );
 }
 

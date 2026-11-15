@@ -11,7 +11,7 @@ const { db, close } = connect(url);
 let app: FastifyInstance;
 let admin: Record<string, string>;
 let user: Record<string, string>;
-type Method = 'GET' | 'POST' | 'PUT' | 'PATCH';
+type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 /** Absenderadresse der Anfragen – die öffentlichen Seiten erlauben 30 Aufrufe je Minute und Absender */
 let clientIp = '127.0.0.1';
 const call = (method: Method, path: string, cookies: Record<string, string>, payload?: unknown) =>
@@ -546,7 +546,27 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     await ok('POST', '/public/booking-request', anon, { name: 'Erika Gast', email: 'erika@example.org', phone: '', from: addDays(today, 330), to: addDays(today, 332), adults: 2, children: 0, message: '', category: 'Doppelzimmer', consent: true, website: '' });
     const mail = await db.execute(sql`select body from inbox_mails where uid_validity = 'web' order by received_at desc limit 1`);
     expect(String(mail[0]!.body)).toContain('Gewünschte Zimmerkategorie: Doppelzimmer');
+    // Video im Startbild: nur echte Videos, Teilabruf (Range) für iPhone/iPad
+    const mp4 = Buffer.concat([Buffer.from('00000018667479706d703432', 'hex'), Buffer.alloc(2000, 7)]);
+    const putVideo = (body: Buffer, who = admin, type = 'video/mp4') => app.inject({ method: 'PUT', url: '/api/v1/settings/site/video', cookies: who, headers: { 'content-type': type }, payload: body, remoteAddress: clientIp });
+    expect((await putVideo(mp4, user)).statusCode).toBe(403);
+    expect((await putVideo(Buffer.from('kein video'.repeat(10)))).statusCode).toBe(400);
+    expect((await putVideo(mp4)).statusCode).toBe(200);
+    expect((await ok('GET', '/public/site', anon)).video).not.toBe('');
+    const whole = await call('GET', '/public/site/video', anon);
+    expect(whole.statusCode).toBe(200);
+    expect(whole.headers['content-type']).toBe('video/mp4');
+    expect(whole.rawPayload.length).toBe(mp4.length);
+    const part = await app.inject({ method: 'GET', url: '/api/v1/public/site/video', headers: { range: 'bytes=0-99' }, remoteAddress: clientIp });
+    expect(part.statusCode).toBe(206);
+    expect(part.headers['content-range']).toBe(`bytes 0-99/${mp4.length}`);
+    expect(part.rawPayload.subarray(4, 8).toString()).toBe('ftyp');
+    expect((await app.inject({ method: 'GET', url: '/api/v1/public/site/video', headers: { range: 'bytes=999999-' }, remoteAddress: clientIp })).statusCode).toBe(416);
+    await call('DELETE', '/settings/site/video', admin);
+    expect((await call('GET', '/public/site/video', anon)).statusCode).toBe(404);
+
     // ein Formular für alles: Zimmer, Tisch, Feier, Gutschein, Frage
+    clientIp = '10.7.7.8'; // eigene Absenderadresse: öffentliche Seiten erlauben 30 Aufrufe je Minute
     const who = { name: 'Erika Gast', email: 'erika@example.org', phone: '0123 456', message: '', consent: true, website: '' };
     const ask = (body: object) => call('POST', '/public/site/request', anon, { ...who, ...body });
     const last = async () => (await db.execute(sql`select subject, kind, body, extract from inbox_mails where uid_validity = 'web' order by uid desc limit 1`))[0] as { subject: string; kind: string; body: string; extract: Record<string, unknown> };

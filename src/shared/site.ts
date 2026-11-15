@@ -77,6 +77,8 @@ export interface SitePublic {
   eventTypes: string[]; hours: { label: string; value: string }[]; hoursNote: string; faq: { q: string; a: string }[]; routeLink: boolean;
   /** hochgeladene Bilder: Kennung → Versionsstempel (leer = kein Bild) */
   images: Record<ImageKey, string>;
+  /** Video im Startbild: Versionsstempel, leer = keins */
+  video: string;
   categories: SiteCategory[];
 }
 export interface SiteAvailability { nights: number; categories: { id: string; available: boolean; totalCents: number | null }[] }

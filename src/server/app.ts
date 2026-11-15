@@ -56,6 +56,8 @@ export interface AppOptions { db: Db; cookieSecure?: boolean; webDir?: string | 
 export async function buildApp({ db, cookieSecure = false, webDir, logger = false }: AppOptions) {
   // trustProxy nur für lokale Proxys (z. B. Caddy auf demselben Rechner)
   const app = Fastify({ logger: logger ? { level: 'warn' } : false, trustProxy: 'loopback', bodyLimit: 1024 * 1024 });
+  // Videos für die Gästeseite kommen als rohe Datei (nicht als JSON)
+  app.addContentTypeParser(['video/mp4', 'video/webm', 'application/octet-stream'], { parseAs: 'buffer', bodyLimit: 81 * 1024 * 1024 }, (_req, body, done) => done(null, body));
   await app.register(cookie);
   app.decorateRequest('user', null);
   app.decorateRequest('sessionId', null);
@@ -163,6 +165,20 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
       if (!p) return reply.status(404).send({ error: { code: 'not_found', message: 'Kein Bild' } });
       return reply.header('Content-Type', p.mime).header('Cache-Control', 'public, max-age=86400').send(p.data);
     });
+    // Video im Startbild – mit Teilabruf (Range), wie ihn Browser, besonders auf iPhone/iPad, für Videos verlangen
+    api.get('/public/site/video', async (req, reply) => {
+      const v = await site.publicSiteVideo(db, await isAdminPreview(req));
+      if (!v) return reply.status(404).send({ error: { code: 'not_found', message: 'Kein Video' } });
+      const size = v.data.length;
+      reply.header('Content-Type', v.mime).header('Accept-Ranges', 'bytes').header('Cache-Control', 'public, max-age=86400');
+      const m = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ''));
+      if (!m || (m[1] === '' && m[2] === '')) return reply.header('Content-Length', size).send(v.data);
+      let start = m[1] === '' ? size - Number(m[2]) : Number(m[1]);
+      let end = m[1] !== '' && m[2] !== '' ? Number(m[2]) : size - 1;
+      start = Math.max(0, start); end = Math.min(end, size - 1);
+      if (start > end || start >= size) return reply.status(416).header('Content-Range', `bytes */${size}`).send();
+      return reply.status(206).header('Content-Range', `bytes ${start}-${end}/${size}`).header('Content-Length', end - start + 1).send(v.data.subarray(start, end + 1));
+    });
     api.get('/public/site/logo', async (_req, reply) => {
       const s = await site.getSite(db);
       const logo = s.enabled || s.homepage ? await getLogo(db) : null;
@@ -214,6 +230,11 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     // Gästeseite einrichten (Administrator)
     api.get('/settings/site', { preHandler: requireAdmin }, () => site.getSite(db));
     api.put('/settings/site', { preHandler: requireAdmin }, (req) => site.saveSite(db, actor(req), SI.siteSettingsInput.parse(req.body)));
+    api.put('/settings/site/video', { preHandler: requireAdmin, bodyLimit: site.VIDEO_MAX + 1024 }, (req) => {
+      if (!Buffer.isBuffer(req.body)) throw new AppError(400, 'bad_video', 'Bitte eine Videodatei senden');
+      return site.saveSiteVideo(db, actor(req), req.body);
+    });
+    api.delete('/settings/site/video', { preHandler: requireAdmin }, (req) => site.saveSiteVideo(db, actor(req), null));
     api.put('/settings/site/image/:key', { preHandler: requireAdmin, bodyLimit: 1_500_000 }, (req) => site.saveSiteImage(db, actor(req), imageKey(req), SI.categoryPhotoInput.parse(req.body)));
     api.delete('/settings/site/image/:key', { preHandler: requireAdmin }, (req) => site.saveSiteImage(db, actor(req), imageKey(req), null));
     api.get('/categories/:id/photo', { preHandler: requireAdmin }, async (req, reply) => {
