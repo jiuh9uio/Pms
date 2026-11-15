@@ -1,6 +1,8 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, chmodSync, createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { get as httpGet } from 'node:http';
+import { get as httpsGet } from 'node:https';
 import { join } from 'node:path';
 import { AppError } from './lib/errors.js';
 
@@ -94,48 +96,60 @@ export async function downloadFile(url: string, file: string, onProgress: (recei
   const idleMs = o.idleMs ?? 90_000, attempts = o.attempts ?? 5;
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= attempts; attempt++) {
-    const have = existsSync(file) ? statSync(file).size : 0;
-    const ctl = new AbortController();
-    let out: ReturnType<typeof createWriteStream> | null = null;
-    let idle = setTimeout(() => ctl.abort(new Error('timeout')), idleMs);
-    const kick = () => { clearTimeout(idle); idle = setTimeout(() => ctl.abort(new Error('timeout')), idleMs); };
     try {
-      const res = await fetch(url, { headers: { 'User-Agent': 'pms-updater', ...(have ? { Range: `bytes=${have}-` } : {}) }, signal: ctl.signal, redirect: 'follow' });
-      if (res.status === 416 && have) { clearTimeout(idle); return; } // schon vollständig
-      if (!res.ok) throw new Error(`Antwort ${res.status} von ${new URL(url).host}`);
-      const resumed = res.status === 206 && have > 0;
-      const len = Number(res.headers.get('content-length')) || null;
-      const total = len === null ? null : resumed ? have + len : len;
-      let received = resumed ? have : 0;
-      const w = createWriteStream(file, { flags: resumed ? 'a' : 'w' });
-      out = w;
-      const done = new Promise<void>((resolve, reject) => { w.on('finish', () => resolve()); w.on('error', reject); });
-      onProgress(received, total, attempt);
-      const reader = res.body!.getReader();
-      for (;;) {
-        const { done: end, value } = await reader.read();
-        if (end) break;
-        kick();
-        received += value.length;
-        if (!w.write(value)) await new Promise((r) => w.once('drain', r));
-        onProgress(received, total, attempt);
-      }
-      w.end();
-      await done;
-      out = null;
-      clearTimeout(idle);
-      if (total !== null && received < total) throw new Error('timeout');
+      await downloadOnce(url, file, idleMs, (r, t) => onProgress(r, t, attempt), 0);
       return;
     } catch (e) {
-      clearTimeout(idle);
-      // Datei schließen (Windows sperrt offene Dateien), damit der nächste Versuch weiterschreiben kann
-      if (out) { const o2 = out; await new Promise<void>((r) => { o2.once('close', () => r()); o2.end(); setTimeout(r, 2000); }); out = null; }
       lastError = e;
-      if (/Antwort 4\d\d/.test(e instanceof Error ? e.message : '') && !/Antwort 416/.test(String(e))) break; // nicht gefunden o. ä.: Wiederholen hilft nicht
+      const msg = e instanceof Error ? e.message : '';
+      if (/Antwort 4\d\d/.test(msg)) break; // nicht gefunden o. ä.: Wiederholen hilft nicht
       if (attempt < attempts) await new Promise((r) => setTimeout(r, Math.min(30_000, 2000 * attempt)));
     }
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+/**
+ * Ein Download-Versuch mit node:http/https und Datenstrom direkt in die Datei (das eingebaute fetch stürzt bei großen
+ * Downloads mit Rückstau unter Umständen ab). Folgt Weiterleitungen, setzt per Range fort, bricht nach idleMs ohne Daten ab.
+ */
+function downloadOnce(url: string, file: string, idleMs: number, onProgress: (received: number, total: number | null) => void, hops: number): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const have = existsSync(file) ? statSync(file).size : 0;
+    const u = new URL(url);
+    const mod = u.protocol === 'https:' ? httpsGet : httpGet;
+    let settled = false;
+    const fail = (e: Error) => { if (!settled) { settled = true; reject(e); } };
+    const req = mod(u, { headers: { 'User-Agent': 'pms-updater', ...(have ? { Range: `bytes=${have}-` } : {}) } }, (res) => {
+      const code = res.statusCode ?? 0;
+      if (code >= 300 && code < 400 && res.headers.location) {
+        res.resume();
+        if (hops > 8) return fail(new Error('Zu viele Weiterleitungen'));
+        downloadOnce(new URL(res.headers.location, u).toString(), file, idleMs, onProgress, hops + 1).then(() => { settled = true; resolve(); }, fail);
+        return;
+      }
+      if (code === 416 && have) { res.resume(); settled = true; return resolve(); } // schon vollständig
+      if (code < 200 || code >= 300) { res.resume(); return fail(new Error(`Antwort ${code} von ${u.host}`)); }
+      const resumed = code === 206 && have > 0;
+      const len = Number(res.headers['content-length']) || null;
+      const total = len === null ? null : resumed ? have + len : len;
+      let received = resumed ? have : 0;
+      onProgress(received, total);
+      const out = createWriteStream(file, { flags: resumed ? 'a' : 'w' });
+      res.on('data', (d: Buffer) => { received += d.length; req.setTimeout(idleMs); onProgress(received, total); });
+      res.on('aborted', () => { out.end(); fail(new Error('timeout')); });
+      res.on('error', (e) => { out.end(); fail(e); });
+      out.on('error', (e) => { res.destroy(); fail(e); });
+      out.on('close', () => {
+        if (settled) return;
+        if (total !== null && received < total) return fail(new Error('timeout'));
+        settled = true; resolve();
+      });
+      res.pipe(out);
+    });
+    req.setTimeout(idleMs, () => req.destroy(new Error('timeout')));
+    req.on('error', fail);
+  });
 }
 
 const sha256File = (file: string) => new Promise<string>((resolve, reject) => {

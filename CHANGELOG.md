@@ -6,6 +6,7 @@ Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.js
 ## 1.61.1
 
 - Programm-Update: Der Download brach bei langsamem Internet nach 60 Sekunden ab („The operation was aborted due to timeout“). Jetzt gibt es keine feste Gesamtzeit mehr – abgebrochen wird nur, wenn 90 Sekunden lang gar keine Daten kommen. Bricht die Verbindung ab, setzt das Programm bis zu fünfmal neu an, wo möglich an der Stelle, an der es aufgehört hat; auch ein späterer neuer Versuch macht dort weiter.
+- Der Download nutzt die robuste Netzwerkfunktion von Node.js direkt (mit der eingebauten fetch-Funktion konnte das Programm bei großen Downloads abstürzen).
 - Das Update läuft im Hintergrund (auch wenn die Seite geschlossen wird) und zeigt einen Fortschrittsbalken mit MB und Prozent. Fehlermeldungen kommen auf Deutsch.
 
 ## 1.61.0
