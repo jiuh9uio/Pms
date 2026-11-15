@@ -50,7 +50,7 @@ export function FloorPlanView({ plan, tiles, onRoom, selected, legend = true }: 
       <section key={c.id} className="fp-corridor">
         <header className="fp-head"><b>{c.name || 'Flur'}</b>{c.floor && <span>{floorLabel(c.floor)}</span>}</header>
         <div className="fp-side fp-side-street">Straßenseite · Fenster</div>
-        <div className="fp-grid" style={{ gridTemplateColumns: `repeat(${totalCols}, minmax(54px, 112px))`, gridTemplateRows: rowsDef.map((r) => (r === 'hall' ? '30px' : 'auto')).join(' ') }}>
+        <div className="fp-grid" style={{ gridTemplateColumns: `repeat(${totalCols}, minmax(54px, 96px))`, gridTemplateRows: rowsDef.map((r) => (r === 'hall' ? '30px' : 'auto')).join(' ') }}>
           {stairsCol}
           {hasStreet && Array.from({ length: cols }, (_, i) => <div key={`s${i}`} className="fp-cell" style={{ gridRow: rowOf('street'), gridColumn: i + 1 + offset }}>{tile(c.street[i] ?? '-', 'street', `s${i}`)}</div>)}
           <div className="fp-hall" style={{ gridRow: rowOf('hall'), gridColumn: `${1 + offset} / span ${cols}` }}><span>Gang</span></div>

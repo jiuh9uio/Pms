@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.68.1
+
+- Etagenplan ruhiger gestaltet, passend zu den übrigen Seiten: weiße Zimmerkacheln mit dünnem Rahmen, Status nur als schmaler farbiger Streifen links (Legende mit kleinen Punkten), schlichter Gang ohne Muster, dezentes Treppen- und Fenstersymbol, keine bunten Flächen oder Schraffuren mehr.
+
 ## 1.68.0
 
 - Neu: Etagenplan (Hotel → Heute → Etagenplan). Die Zimmer als schematischer Grundriss: je Flur oben die Straßenseite mit Fenstersymbol, in der Mitte der Gang, unten die Hofseite, dazu ein Treppenhaus. Farben: grün frei, rot belegt, gelb reserviert, grau gesperrt. Der Status kommt aus denselben Buchungen wie der Belegungsplan; die Seite aktualisiert sich alle 30 Sekunden. Klick auf ein belegtes/reserviertes Zimmer öffnet die Reservierung, auf ein freies eine neue Reservierung.
