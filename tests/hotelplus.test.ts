@@ -580,10 +580,14 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect(await last()).toMatchObject({ kind: 'other', body: expect.stringContaining('Anlass: Hochzeit') });
     expect((await ask({ type: 'event', date: '', guests: 40, occasion: '', message: '' })).json().error.fields.message).toBeTruthy();
     // Tagung (z. B. Ärzte-Fortbildung): Veranstalter, Tage, Teilnehmer, Zimmer, Bestuhlung, Technik, Verpflegung
-    const meeting = { type: 'meeting', organization: 'Ärztlicher Qualitätszirkel', from: addDays(today, 40), to: addDays(today, 41), participants: 25, rooms: 8, layout: 'U-Form', equipment: ['Beamer und Leinwand', 'Flipchart'], catering: ['Mittagessen', 'Kaffeepause nachmittags'] };
+    const meeting = { type: 'meeting', organization: 'Ärztlicher Qualitätszirkel', kind: 'Seminar / Fortbildung / Schulung', from: addDays(today, 40), to: addDays(today, 41), participants: 25, rooms: 8, layout: 'U-Form', equipment: ['Beamer und Leinwand', 'Flipchart'], catering: ['Mittagessen', 'Kaffeepause nachmittags'] };
     expect((await ask(meeting)).statusCode).toBe(200);
     const mt = await last();
-    expect(mt.subject).toBe(`Tagungsanfrage: Ärztlicher Qualitätszirkel, ${addDays(today, 40).split('-').reverse().join('.')} bis ${addDays(today, 41).split('-').reverse().join('.')}, 25 Teilnehmer`);
+    expect(mt.subject).toBe(`Seminar: Anfrage von Ärztlicher Qualitätszirkel, ${addDays(today, 40).split('-').reverse().join('.')} bis ${addDays(today, 41).split('-').reverse().join('.')}, 25 Teilnehmer`);
+    expect(mt.body).toContain('Art: Seminar / Fortbildung / Schulung');
+    expect((await ask({ ...meeting, organization: 'Bäckerinnung Zwickau', kind: 'Innungs- oder Mitgliederversammlung', equipment: ['Rednerpult'] })).statusCode).toBe(200);
+    expect((await last()).subject).toMatch(/^Innungs-\/Mitgliederversammlung: Anfrage von Bäckerinnung Zwickau/);
+    expect((await ask({ ...meeting, kind: 'Kaffeekränzchen' })).statusCode).toBe(400);
     expect(mt.body).toContain('Technik: Beamer und Leinwand, Flipchart');
     expect(mt.body).toContain('Verpflegung: Mittagessen, Kaffeepause nachmittags');
     expect(mt.body).toContain('Übernachtungen: 8 Zimmer je Nacht');

@@ -342,8 +342,8 @@ export async function submitSiteRequest(db: Db, v: SiteRequest, ip: string | nul
   } else if (v.type === 'meeting') {
     past(v.from, 'from');
     const days = v.to && v.to > v.from ? `${deDay(v.from)} bis ${deDay(v.to)}` : deDay(v.from);
-    subject = `Tagungsanfrage: ${v.organization}, ${days}, ${v.participants} Teilnehmer`;
-    lines = [...who, `Veranstalter: ${v.organization}`, `Termin: ${days}`, `Teilnehmer (ungefähr): ${v.participants}`,
+    subject = `${v.kind && v.kind !== 'Sonstiges' ? v.kind.split(' / ')[0]!.replace(/^Innungs- oder /, 'Innungs-/') : 'Tagung'}: Anfrage von ${v.organization}, ${days}, ${v.participants} Teilnehmer`;
+    lines = [...who, `Veranstalter: ${v.organization}`, ...(v.kind ? [`Art: ${v.kind}`] : []), `Termin: ${days}`, `Teilnehmer (ungefähr): ${v.participants}`,
       `Übernachtungen: ${v.rooms ? `${v.rooms} ${v.rooms === 1 ? 'Zimmer' : 'Zimmer'} je Nacht` : 'keine'}`,
       ...(v.layout ? [`Bestuhlung: ${v.layout}`] : []), ...(v.equipment.length ? [`Technik: ${v.equipment.join(', ')}`] : []), ...(v.catering.length ? [`Verpflegung: ${v.catering.join(', ')}`] : [])];
     ex = { ...ex, dates: v.to && v.to > v.from ? [v.from, v.to] : [v.from], persons: v.participants };

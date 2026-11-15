@@ -53,7 +53,7 @@ export const siteSettingsInput = z.object({
   sections: z.object(Object.fromEntries(SECTION_KEYS.map((k) => [k, section(SECTION_DEFAULTS[k])])) as Record<SectionKey, ReturnType<typeof section>>).default(
     Object.fromEntries(SECTION_KEYS.map((k) => [k, { show: true, ...SECTION_DEFAULTS[k], note: SECTION_DEFAULTS[k].note ?? '' }])) as never),
   /** Anlässe für „Feiern & Tagen“, je Zeile einer */
-  eventTypes: t(400, 'Familienfeiern\nHochzeiten\nGeburtstage\nTagungen & Seminare'),
+  eventTypes: t(400, 'Familienfeiern\nHochzeiten\nGeburtstage\nTagungen & Versammlungen'),
   /** Öffnungszeiten, je Zeile „Tage | Zeit“ */
   hours: t(800, ''), hoursNote: t(400, ''),
   /** Häufige Fragen: Frage in der ersten Zeile, Antwort darunter, Fragen durch eine Leerzeile getrennt */
@@ -96,11 +96,12 @@ export const parseFaq = (s: string) => s.replace(/\r/g, '').split(/\n\s*\n/).map
 /** Anfrage von der Gästeseite – ein Formular für alles. Es wird nichts gebucht. */
 export const REQUEST_TYPES = ['room', 'table', 'event', 'meeting', 'voucher', 'question'] as const;
 export type RequestType = (typeof REQUEST_TYPES)[number];
-/** Tagung: Auswahl für Bestuhlung, Technik und Verpflegung */
+/** Tagung: Art, Bestuhlung, Technik und Verpflegung */
+export const MEETING_KINDS = ['Tagung / Konferenz', 'Innungs- oder Mitgliederversammlung', 'Jahreshauptversammlung', 'Seminar / Fortbildung / Schulung', 'Sitzung / Besprechung', 'Workshop', 'Vortrag / Infoabend', 'Sonstiges'] as const;
 export const MEETING_LAYOUTS = ['Reihen (Kino)', 'U-Form', 'Parlament (Tische in Reihen)', 'Block / Konferenztisch', 'Stuhlkreis'] as const;
-export const MEETING_EQUIPMENT = ['Beamer und Leinwand', 'Flipchart', 'Moderationskoffer und Pinnwand', 'Mikrofon / Lautsprecher', 'WLAN für Teilnehmer'] as const;
+export const MEETING_EQUIPMENT = ['Beamer und Leinwand', 'Flipchart', 'Moderationskoffer und Pinnwand', 'Mikrofon / Lautsprecher', 'Rednerpult', 'Videokonferenz', 'WLAN für Teilnehmer'] as const;
 export const MEETING_CATERING = ['Begrüßungskaffee', 'Kaffeepause vormittags', 'Mittagessen', 'Kaffeepause nachmittags', 'Abendessen', 'Getränke im Raum'] as const;
-export const REQUEST_LABEL: Record<RequestType, string> = { room: 'Zimmer', table: 'Tisch im Restaurant', event: 'Feier oder Veranstaltung', meeting: 'Tagung oder Seminar', voucher: 'Gutschein', question: 'Allgemeine Frage' };
+export const REQUEST_LABEL: Record<RequestType, string> = { room: 'Zimmer', table: 'Tisch im Restaurant', event: 'Feier oder Veranstaltung', meeting: 'Tagung oder Versammlung', voucher: 'Gutschein', question: 'Allgemeine Frage' };
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Bitte ein Datum wählen');
 const opt = z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/).default('');
 const num = (min: number, max: number, msg: string) => z.coerce.number(msg).int(msg).min(min, msg).max(max, msg);
@@ -121,7 +122,8 @@ export const siteRequestInput = z.discriminatedUnion('type', [
     .refine((v) => v.message.length >= 5 || v.occasion.length > 0, { message: 'Bitte kurz den Anlass oder Ihre Wünsche beschreiben', path: ['message'] }),
   z.object({
     type: z.literal('meeting'), ...base,
-    organization: z.string().trim().min(2, 'Bitte Praxis, Klinik, Firma oder Veranstalter eintragen').max(120),
+    organization: z.string().trim().min(2, 'Bitte den Veranstalter eintragen (z. B. Innung, Verein, Verband, Praxis, Firma)').max(120),
+    kind: z.enum(['', ...MEETING_KINDS]).default(''),
     from: day, to: opt, participants: num(1, 500, 'Bitte die ungefähre Teilnehmerzahl eintragen'), rooms: num(0, 200, 'Bitte eine Zahl eintragen').default(0),
     layout: z.enum(['', ...MEETING_LAYOUTS]).default(''),
     equipment: z.array(z.enum(MEETING_EQUIPMENT)).max(MEETING_EQUIPMENT.length).default([]),

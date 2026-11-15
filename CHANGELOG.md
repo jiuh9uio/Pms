@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.54.1
+
+- Anfrageformular: „Tagung oder Versammlung“ jetzt allgemein für Innungen, Vereine, Verbände, Praxen und Firmen – mit Auswahl der Art (Tagung/Konferenz, Innungs- oder Mitgliederversammlung, Jahreshauptversammlung, Seminar/Fortbildung/Schulung, Sitzung/Besprechung, Workshop, Vortrag/Infoabend, Sonstiges). Technik zusätzlich mit Rednerpult und Videokonferenz. Die Art steht im Betreff der Anfrage im Posteingang.
+
 ## 1.54.0
 
 - Gästeseite → Anfrageformular: neue Art „Tagung oder Seminar“ (z. B. Ärzte-Fortbildungen, Qualitätszirkel, Firmentagungen) mit Veranstalter (Praxis, Klinik, Firma), erstem und letztem Tag, Teilnehmerzahl, Zimmern je Nacht, Bestuhlung, Technik (Beamer, Flipchart, Moderationskoffer, Mikrofon, WLAN) und Verpflegung (Kaffeepausen, Mittag- und Abendessen, Getränke). Im Bereich „Feiern & Tagen“ gibt es dafür den Knopf „Tagung anfragen“; Anlässe wie „Tagungen & Seminare“ führen ebenfalls dorthin.
