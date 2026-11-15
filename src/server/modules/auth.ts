@@ -72,7 +72,7 @@ export async function login(db: Db, input: { username: string; password: string;
   // Zwei-Faktor-Anmeldung: nach dem richtigen Passwort zusätzlich der Code aus der App
   let totpStep: number | null = null;
   if (user.totpEnabled && user.totpSecretEnc) {
-    if (!input.code) throw new AppError(401, 'totp_required', 'Bitte den 6-stelligen Code aus Ihrer Authenticator-App eingeben.');
+    if (!input.code) throw new AppError(401, 'totp_required', 'Bitte den 6-stelligen Code aus Microsoft Authenticator eingeben.');
     totpStep = verifyCode(decrypt(user.totpSecretEnc), input.code);
     if (totpStep == null || (user.totpLastStep != null && totpStep <= user.totpLastStep)) {
       const fails = user.failedLogins + 1;

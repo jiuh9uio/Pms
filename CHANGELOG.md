@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.48.1
+
+- Zwei-Faktor-Anmeldung: Anleitung und Beschriftungen auf „Microsoft Authenticator“ abgestimmt (Konto hinzufügen über „Anderes Konto“). Andere Authenticator-Apps funktionieren weiterhin.
+
 ## 1.48.0
 
 - Zwei-Faktor-Anmeldung: Unter „Mein Konto“ kann jeder Benutzer einstellen, dass bei der Anmeldung zusätzlich zum Passwort ein 6-stelliger Code aus einer Authenticator-App verlangt wird. Aufheben: selbst mit Passwort, durch einen Administrator unter Benutzer, oder im Notfall mit „Passwort vergessen.bat“ am PMS-Rechner.

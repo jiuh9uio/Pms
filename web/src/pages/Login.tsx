@@ -41,7 +41,7 @@ export function Login({ setup, onDone }: { setup: boolean; onDone: () => Promise
           <input type="password" value={v.password} onChange={set('password')} autoComplete={setup ? 'new-password' : 'current-password'} />
         </Field>
         {!setup && needCode && (
-          <Field label="Code aus der Authenticator-App" error={codeError ?? undefined} hint="6 Ziffern – der Code wechselt alle 30 Sekunden">
+          <Field label="Code aus Microsoft Authenticator" error={codeError ?? undefined} hint="6 Ziffern – der Code wechselt alle 30 Sekunden">
             <input value={v.code} onChange={set('code')} inputMode="numeric" autoComplete="one-time-code" maxLength={7} autoFocus />
           </Field>
         )}

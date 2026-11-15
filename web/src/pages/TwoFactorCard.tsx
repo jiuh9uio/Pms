@@ -24,15 +24,15 @@ export function TwoFactorCard() {
   return (
     <section className="card">
       <h2>Zwei-Faktor-Anmeldung {user.twoFactor ? <Badge tone="ok">eingeschaltet</Badge> : <Badge>aus</Badge>}</h2>
-      <p className="muted">Zusätzlich zum Passwort fragt das Programm bei der Anmeldung nach einem 6-stelligen Code aus einer Authenticator-App auf Ihrem Handy (z. B. Google Authenticator, Microsoft Authenticator, Aegis). Wer nur Ihr Passwort kennt, kommt damit nicht hinein. Dringend empfohlen, sobald das Programm über das Internet erreichbar ist.</p>
+      <p className="muted">Zusätzlich zum Passwort fragt das Programm bei der Anmeldung nach einem 6-stelligen Code aus der App „Microsoft Authenticator“ auf Ihrem Handy (kostenlos im App Store und bei Google Play; andere Authenticator-Apps gehen genauso). Wer nur Ihr Passwort kennt, kommt damit nicht hinein. Dringend empfohlen, sobald das Programm über das Internet erreichbar ist.</p>
       {!user.twoFactor && !setup && <div className="formactions"><Button variant="primary" busy={busy} onClick={() => void begin()}>Einrichten</Button></div>}
       {!user.twoFactor && setup && (
         <form onSubmit={(e) => void confirm.submit({ code }, e)} noValidate>
           <ol className="steps">
-            <li>Authenticator-App auf dem Handy öffnen und „Konto hinzufügen“ → „QR-Code scannen“ wählen.</li>
-            <li>Diesen Code scannen:<br /><img src={setup.qr} alt="QR-Code für die Authenticator-App" width={220} height={220} className="qrimg" /><br />
+            <li>Auf dem Handy „Microsoft Authenticator“ öffnen, oben auf „+“ tippen und <b>„Anderes Konto (Google, Facebook usw.)“</b> wählen – nicht „Geschäfts- oder Schulkonto“.</li>
+            <li>Mit der App diesen QR-Code scannen:<br /><img src={setup.qr} alt="QR-Code für die Authenticator-App" width={220} height={220} className="qrimg" /><br />
               <small>Ohne Kamera: Schlüssel von Hand eintragen (Konto „{setup.account}“, zeitbasiert): <code className="wrapcode">{setup.secret.replace(/(.{4})/g, '$1 ').trim()}</code></small></li>
-            <li>Den 6-stelligen Code eingeben, den die App jetzt anzeigt:
+            <li>In der App erscheint ein Eintrag mit dem Namen Ihres Hauses. Den 6-stelligen Code daraus hier eingeben:
               <div className="inline"><Field label="Code" error={confirm.errors.code}><input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" maxLength={6} autoFocus /></Field>
                 <Button type="submit" variant="primary" busy={confirm.busy}>Bestätigen und einschalten</Button><Button onClick={() => { setSetup(null); setCode(''); }}>Abbrechen</Button></div></li>
           </ol>
