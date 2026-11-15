@@ -169,6 +169,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
       if (!logo) return reply.status(404).send({ error: { code: 'not_found', message: 'Kein Logo' } });
       return reply.header('Content-Type', logo.mime).header('Cache-Control', 'public, max-age=3600').send(logo.data);
     });
+    api.post('/public/site/request', { preHandler: publicLimit, bodyLimit: 8 * 1024 }, (req) => inbox.submitSiteRequest(db, SI.siteRequestInput.parse(req.body), req.ip ?? null));
     api.get('/public/booking-request', { preHandler: publicLimit }, () => inbox.webRequestPublic(db));
     api.post('/public/booking-request', { preHandler: publicLimit, bodyLimit: 8 * 1024 }, (req) => inbox.submitWebRequest(db, I.webRequestInput.parse(req.body), req.ip ?? null));
 

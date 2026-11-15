@@ -90,3 +90,31 @@ export const categoryPhotoInput = z.object({ mime: z.enum(['image/png', 'image/j
 export const parseHours = (s: string) => s.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 14).map((l) => { const [a, ...b] = l.split('|'); return { label: a!.trim(), value: b.join('|').trim() }; });
 /** Frage in der ersten Zeile, Antwort in den folgenden; Leerzeile trennt */
 export const parseFaq = (s: string) => s.replace(/\r/g, '').split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean).slice(0, 20).map((b) => { const [q, ...a] = b.split('\n'); return { q: q!.trim(), a: a.join(' ').trim() }; }).filter((x) => x.q && x.a);
+
+/** Anfrage von der Gästeseite – ein Formular für alles. Es wird nichts gebucht. */
+export const REQUEST_TYPES = ['room', 'table', 'event', 'voucher', 'question'] as const;
+export type RequestType = (typeof REQUEST_TYPES)[number];
+export const REQUEST_LABEL: Record<RequestType, string> = { room: 'Zimmer', table: 'Tisch im Restaurant', event: 'Feier oder Veranstaltung', voucher: 'Gutschein', question: 'Allgemeine Frage' };
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Bitte ein Datum wählen');
+const opt = z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/).default('');
+const num = (min: number, max: number, msg: string) => z.coerce.number(msg).int(msg).min(min, msg).max(max, msg);
+const base = {
+  name: z.string().trim().min(2, 'Bitte Ihren Namen eintragen').max(120),
+  email: z.email('Bitte eine gültige E-Mail-Adresse eintragen'),
+  phone: z.string().trim().max(60).default(''),
+  message: z.string().trim().max(1500).default(''),
+  consent: z.literal(true, 'Bitte den Hinweis zum Datenschutz bestätigen'),
+  /** unsichtbares Feld gegen automatische Einträge – muss leer bleiben */
+  website: z.string().max(200).default(''),
+};
+export const siteRequestInput = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('room'), ...base, from: day, to: day, adults: num(1, 30, 'Bitte eine Zahl wählen'), children: num(0, 30, 'Bitte eine Zahl wählen').default(0), category: z.string().trim().max(80).default('') })
+    .refine((v) => v.from < v.to, { message: 'Die Abreise muss nach der Anreise liegen', path: ['to'] }),
+  z.object({ type: z.literal('table'), ...base, date: day, time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Bitte eine Uhrzeit wählen'), persons: num(1, 60, 'Bitte die Personenzahl wählen') }),
+  z.object({ type: z.literal('event'), ...base, date: opt, guests: num(1, 500, 'Bitte die ungefähre Gästezahl eintragen'), occasion: z.string().trim().max(80).default('') })
+    .refine((v) => v.message.length >= 5 || v.occasion.length > 0, { message: 'Bitte kurz den Anlass oder Ihre Wünsche beschreiben', path: ['message'] }),
+  z.object({ type: z.literal('voucher'), ...base, value: z.string().trim().max(80).default('') })
+    .refine((v) => v.message.length >= 3 || v.value.length > 0, { message: 'Bitte Wert oder Wunsch für den Gutschein angeben', path: ['value'] }),
+  z.object({ type: z.literal('question'), ...base }).refine((v) => v.message.length >= 5, { message: 'Bitte Ihre Frage eintragen', path: ['message'] }),
+]);
+export type SiteRequest = z.infer<typeof siteRequestInput>;

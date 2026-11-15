@@ -5,6 +5,7 @@ import type { MailDraft } from '../../shared/hotel.js';
 import type { InboxMailDto, InboxSettingsDto, InboxState, InboxStatus, MailRules, ReplyTemplate, WebRequestPublic, WebRequestSettings } from '../../shared/inbox.js';
 import { extract, type MailExtract, type MailKind } from '../../shared/mailextract.js';
 import type { Db, Exec } from '../db/client.js';
+import type { SiteRequest } from '../../shared/site.js';
 import { inboxMails, restaurantTables, settings, tableReservations } from '../db/schema.js';
 import { AppError, conflict, notFound } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
@@ -306,3 +307,50 @@ export async function submitWebRequest(db: Db, v: { name: string; email: string;
   return { ok: true };
 }
 const todayOf = (d: Date) => d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+
+/**
+ * Anfrage von der Gästeseite (Zimmer, Tisch, Feier, Gutschein, Frage). Landet wie eine E-Mail im Posteingang –
+ * mit erkannter Art und Angaben, damit Zimmer- und Tischanfragen mit einem Klick übernommen werden können.
+ */
+export async function submitSiteRequest(db: Db, v: SiteRequest, ip: string | null) {
+  const s = await getWebRequest(db);
+  if (!s.enabled) throw conflict('Online-Anfragen sind derzeit nicht möglich', 'web_request_off');
+  if (v.website) return { ok: true };
+  const [day] = await db.execute(sql`select count(*)::int as n from inbox_mails where uid_validity = 'web' and received_at > now() - interval '24 hours'`);
+  if (Number(day!.n) >= WEB_PER_DAY) throw new AppError(429, 'too_many', 'Heute sind schon sehr viele Anfragen eingegangen. Bitte rufen Sie uns an oder schreiben Sie uns eine E-Mail.');
+  const today = todayOf(new Date());
+  const past = (d: string, field: string) => { if (d && d < today) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { [field]: 'Das Datum liegt in der Vergangenheit' }); };
+  const who = [`Name: ${v.name}`, `E-Mail: ${v.email}`, ...(v.phone ? [`Telefon: ${v.phone}`] : [])];
+  const msg = v.message ? ['', 'Nachricht:', v.message] : [];
+  let subject: string, lines: string[], kind: MailKind = 'other';
+  let ex: MailExtract = { kind: 'other', dates: [], from: null, to: null, time: null, persons: null, children: null, phone: v.phone };
+  if (v.type === 'room') {
+    past(v.from, 'from');
+    subject = `Zimmeranfrage ${deDay(v.from)} bis ${deDay(v.to)}`; kind = 'hotel';
+    lines = [...who, `Anreise: ${deDay(v.from)}`, `Abreise: ${deDay(v.to)}`, `Personen: ${v.adults} Erwachsene${v.children ? `, ${v.children} Kinder` : ''}`, ...(v.category ? [`Gewünschte Zimmerkategorie: ${v.category}`] : [])];
+    ex = { ...ex, kind, dates: [v.from, v.to], from: v.from, to: v.to, persons: v.adults, children: v.children || null };
+  } else if (v.type === 'table') {
+    past(v.date, 'date');
+    subject = `Tischanfrage ${deDay(v.date)} ${v.time} Uhr, ${v.persons} Pers.`; kind = 'table';
+    lines = [...who, `Tag: ${deDay(v.date)}`, `Uhrzeit: ${v.time} Uhr`, `Personen: ${v.persons}`];
+    ex = { ...ex, kind, dates: [v.date], time: v.time, persons: v.persons };
+  } else if (v.type === 'event') {
+    past(v.date, 'date');
+    subject = `Veranstaltungsanfrage${v.occasion ? `: ${v.occasion}` : ''}${v.date ? ` am ${deDay(v.date)}` : ''}`;
+    lines = [...who, ...(v.occasion ? [`Anlass: ${v.occasion}`] : []), `Wunschtermin: ${v.date ? deDay(v.date) : 'noch offen'}`, `Gäste (ungefähr): ${v.guests}`];
+    ex = { ...ex, dates: v.date ? [v.date] : [], persons: v.guests };
+  } else if (v.type === 'voucher') {
+    subject = `Gutscheinanfrage${v.value ? `: ${v.value}` : ''}`;
+    lines = [...who, ...(v.value ? [`Wert / Wunsch: ${v.value}`] : [])];
+  } else {
+    subject = 'Frage über die Gästeseite'; lines = who;
+  }
+  const body = ['Anfrage über die Gästeseite', '', ...lines, ...msg].join('\n');
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(4712)`);
+    const [m] = await tx.execute(sql`select coalesce(max(uid), 0) + 1 as n from inbox_mails where uid_validity = 'web'`);
+    await tx.insert(inboxMails).values({ uidValidity: 'web', uid: Number(m!.n), fromName: v.name, fromAddr: v.email, subject, receivedAt: new Date(), body, kind, extract: ex });
+    await record(tx, { userId: null, userName: 'Gästeseite', ip }, { action: 'create', entity: 'inbox', after: { art: v.type } });
+  });
+  return { ok: true };
+}

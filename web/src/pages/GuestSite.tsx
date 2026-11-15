@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { addDays, formatMoney, todayBerlin } from '../../../src/shared/hotel.js';
-import type { SiteAvailability, SiteCategory, SitePublic, SiteSection } from '../../../src/shared/site.js';
+import { REQUEST_LABEL, REQUEST_TYPES, type RequestType, type SiteAvailability, type SiteCategory, type SitePublic, type SiteSection } from '../../../src/shared/site.js';
 import { ApiFailure, api } from '../api.ts';
 import { LoadState, useLoad } from '../ui.tsx';
 
@@ -40,6 +40,7 @@ function Reveal({ children, className = '', id, as: As = 'section', label }: { c
 export function GuestSite({ staffLink = false }: { staffLink?: boolean }) {
   const { data, error } = useLoad(() => api<SitePublic>('GET', '/public/site'));
   const [menuOpen, setMenuOpen] = useState(false);
+  const [want, setWant] = useState<Want | null>(null);
   useEffect(() => { if (data?.hotel.name) document.title = data.hotel.name; }, [data]);
   if (!data) return <div className="gs"><div className="gs-wrap gs-off"><LoadState error={error} loading /></div></div>;
   if (!data.enabled && !data.preview) return (
@@ -52,11 +53,17 @@ export function GuestSite({ staffLink = false }: { staffLink?: boolean }) {
   const hotelOn = S.hotel.show && data.categories.length > 0;
   const nav: [string, string, boolean][] = [
     ['gs-start', 'Das Haus', true], ['gs-restaurant', 'Restaurant', S.restaurant.show], ['gs-hotel', 'Hotel & Zimmer', hotelOn], ['gs-feiern', 'Feiern & Tagen', S.events.show],
-    ['gs-gutscheine', 'Gutscheine', S.vouchers.show && !!h.email], ['gs-kontakt', 'Kontakt', S.contact.show],
+    ['gs-gutscheine', 'Gutscheine', S.vouchers.show && (!!h.email || data.requestEnabled)], ['gs-kontakt', 'Kontakt', S.contact.show], ['gs-anfrage', 'Anfrage', data.requestEnabled],
   ];
   const address = [h.street, `${h.zip} ${h.city}`.trim()].filter(Boolean);
   const callBtn = (label: string, cls = '') => h.phone ? <a className={`gs-btn ${cls}`} href={tel(h.phone)}>{label}</a> : h.email ? <a className={`gs-btn ${cls}`} href={mail(h.email, 'Tischreservierung')}>{label.replace('telefonisch', 'per E-Mail')}</a> : null;
   const go = (id: string) => { setMenuOpen(false); document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  const online = data.requestEnabled;
+  /** Anfrage öffnen: Formular unten mit gewählter Art (und ggf. Zimmer und Reisedaten) */
+  const ask = (w: Want) => { setWant({ ...w, n: Date.now() }); setTimeout(() => go('gs-anfrage'), 30); };
+  const askBtn = (type: RequestType, label: string, cls = '') => <button type="button" className={`gs-btn ${cls}`} onClick={() => ask({ type })}>{label}</button>;
+  /** Tisch: online anfragen, sonst Telefon */
+  const tableBtn = (label: string, cls = '') => (online ? askBtn('table', label, cls) : callBtn(label, cls));
   return (
     <div className="gs">
       {data.preview && <div className="gs-preview">Vorschau – die Seite ist noch nicht freigeschaltet. Nur Sie als Administrator sehen sie.</div>}
@@ -82,8 +89,8 @@ export function GuestSite({ staffLink = false }: { staffLink?: boolean }) {
             <Title as="h1" id="gs-h1" s={{ title: data.headline || `Willkommen im ${h.name}`, titleEm: data.headlineEm }} />
             {data.heroText && <p>{data.heroText}</p>}
             <div className="gs-actions">
-              {S.reservation.show && callBtn('Tisch telefonisch reservieren', 'light')}
-              {hotelOn && <a className="gs-btn outline" href="#gs-hotel" onClick={(e) => { e.preventDefault(); go('gs-hotel'); }}>Zimmer anfragen</a>}
+              {S.reservation.show && tableBtn(online ? 'Tisch anfragen' : 'Tisch telefonisch reservieren', 'light')}
+              {hotelOn && <a className="gs-btn outline" href="#gs-hotel" onClick={(e) => { e.preventDefault(); go('gs-hotel'); }}>Zimmer ansehen &amp; anfragen</a>}
             </div>
           </div>
         </section>
@@ -103,18 +110,18 @@ export function GuestSite({ staffLink = false }: { staffLink?: boolean }) {
             <Pic src={img('restaurant')} alt={`Restaurant – ${h.name}`} letter={letter} />
             <div className="gs-copy">
               <span className="gs-kicker">{S.restaurant.kicker}</span><Title s={S.restaurant} />{S.restaurant.text && <p>{S.restaurant.text}</p>}
-              <div className="gs-actions">{S.reservation.show && callBtn('Tisch telefonisch reservieren')}{S.menu.show && <a className="gs-link" href="#gs-karte" onClick={(e) => { e.preventDefault(); go('gs-karte'); }}>Zur Speisekarte</a>}</div>
+              <div className="gs-actions">{S.reservation.show && tableBtn(online ? 'Tisch anfragen' : 'Tisch telefonisch reservieren')}{S.menu.show && <a className="gs-link" href="#gs-karte" onClick={(e) => { e.preventDefault(); go('gs-karte'); }}>Zur Speisekarte</a>}</div>
               {S.restaurant.note && <p className="gs-note">{S.restaurant.note}</p>}
             </div>
           </div></Reveal>
         )}
 
-        {hotelOn && <Hotel data={data} img={img('hotel')} letter={letter} />}
+        {hotelOn && <Hotel data={data} img={img('hotel')} letter={letter} ask={ask} />}
 
         {S.menu.show && (
           <Reveal id="gs-karte" className="gs-section"><div className="gs-wrap">
             <div className="gs-head"><div><span className="gs-kicker">{S.menu.kicker}</span><Title s={S.menu} /></div>{S.menu.note && <p>{S.menu.note}</p>}</div>
-            <div className="gs-card"><h3>Vorfreude auf Ihren nächsten Besuch.</h3>{S.menu.text && <p>{S.menu.text}</p>}<div className="gs-actions">{callBtn('Aktuelle Speisekarte erfragen')}</div></div>
+            <div className="gs-card"><h3>Vorfreude auf Ihren nächsten Besuch.</h3>{S.menu.text && <p>{S.menu.text}</p>}<div className="gs-actions">{callBtn('Aktuelle Speisekarte erfragen')}{online && <button type="button" className="gs-link" onClick={() => ask({ type: 'question', message: 'Ich interessiere mich für Ihre aktuelle Speisekarte.' })}>Oder schriftlich fragen</button>}</div></div>
           </div></Reveal>
         )}
 
@@ -122,18 +129,18 @@ export function GuestSite({ staffLink = false }: { staffLink?: boolean }) {
           <Reveal id="gs-feiern" className="gs-section gs-soft"><div className="gs-wrap">
             <div className="gs-head"><div><span className="gs-kicker">{S.events.kicker}</span><Title s={S.events} /></div>{S.events.text && <p>{S.events.text}</p>}</div>
             <Pic src={img('events')} alt={`Feiern – ${h.name}`} letter={letter} className="gs-events-pic" />
-            {data.eventTypes.length > 0 && <div className="gs-types" style={{ ['--n' as string]: Math.min(4, data.eventTypes.length) }}>{data.eventTypes.map((x) => <span key={x}>{x}</span>)}</div>}
-            {h.email && <div className="gs-actions"><a className="gs-btn" href={mail(h.email, 'Unverbindliche Veranstaltungsanfrage')}>Ihre Veranstaltung anfragen</a></div>}
+            {data.eventTypes.length > 0 && <div className="gs-types" style={{ ['--n' as string]: Math.min(4, data.eventTypes.length) }}>{data.eventTypes.map((x) => online ? <button type="button" key={x} className="gs-type" onClick={() => ask({ type: 'event', occasion: x })}>{x}</button> : <span key={x}>{x}</span>)}</div>}
+            {(online || h.email) && <div className="gs-actions">{online ? askBtn('event', 'Ihre Veranstaltung anfragen') : <a className="gs-btn" href={mail(h.email, 'Unverbindliche Veranstaltungsanfrage')}>Ihre Veranstaltung anfragen</a>}</div>}
             {S.events.note && <p className="gs-note">{S.events.note}</p>}
           </div></Reveal>
         )}
 
-        {S.vouchers.show && h.email && (
+        {S.vouchers.show && (online || h.email) && (
           <Reveal id="gs-gutscheine" className="gs-section"><div className="gs-wrap gs-grid">
             <div className="gs-gift"><span className="gs-kicker">{h.name}</span><h3>Gute Zeit.<br /><em>Verschenkt.</em></h3><small>Gutschein auf Anfrage</small></div>
             <div className="gs-copy">
               <span className="gs-kicker">{S.vouchers.kicker}</span><Title s={S.vouchers} />{S.vouchers.text && <p>{S.vouchers.text}</p>}
-              <div className="gs-actions"><a className="gs-btn" href={mail(h.email, 'Unverbindliche Gutscheinanfrage')}>Gutschein per E-Mail anfragen</a></div>
+              <div className="gs-actions">{online ? askBtn('voucher', 'Gutschein anfragen') : <a className="gs-btn" href={mail(h.email, 'Unverbindliche Gutscheinanfrage')}>Gutschein per E-Mail anfragen</a>}</div>
               {S.vouchers.note && <p className="gs-note">{S.vouchers.note}</p>}
             </div>
           </div></Reveal>
@@ -144,10 +151,22 @@ export function GuestSite({ staffLink = false }: { staffLink?: boolean }) {
             <div className="gs-copy"><span className="gs-kicker">{S.reservation.kicker}</span><Title s={S.reservation} />{S.reservation.text && <p>{S.reservation.text}</p>}</div>
             <div>
               {h.phone ? <a className="gs-phone" href={tel(h.phone)}>{h.phone}</a> : <a className="gs-phone" href={mail(h.email, 'Tischreservierung')}>{h.email}</a>}
-              {callBtn('Jetzt anrufen', 'light')}
+              <div className="gs-actions" style={{ marginTop: 0 }}>{h.phone && callBtn('Jetzt anrufen', 'light')}{online && askBtn('table', 'Online anfragen', h.phone ? 'outline' : 'light')}</div>
               {S.reservation.note && <p className="gs-note">{S.reservation.note}</p>}
             </div>
           </div></Reveal>
+        )}
+
+        {online && (
+          <section id="gs-anfrage" className="gs-section gs-soft" aria-labelledby="gs-anfrage-titel"><div className="gs-wrap gs-grid" style={{ alignItems: 'start' }}>
+            <div className="gs-copy">
+              <span className="gs-kicker">Ihre Anfrage</span>
+              <h2 id="gs-anfrage-titel">Schreiben Sie uns.<br /><em>Wir melden uns.</em></h2>
+              <p>Ob Zimmer, Tisch, Feier oder Gutschein: Erzählen Sie uns, was Sie sich wünschen. Wir prüfen Ihre Anfrage persönlich und antworten Ihnen so bald wie möglich.</p>
+              <p className="gs-note">Eine Anfrage ist unverbindlich und noch keine Buchung oder Reservierung. Erst unsere Bestätigung macht sie verbindlich.{h.phone && <> Eilig? Rufen Sie uns an: <a className="gs-link" href={tel(h.phone)}>{h.phone}</a></>}</p>
+            </div>
+            <RequestForm site={data} want={want} />
+          </div></section>
         )}
 
         {S.contact.show && (
@@ -195,7 +214,7 @@ export function GuestSite({ staffLink = false }: { staffLink?: boolean }) {
 }
 
 /** Hotel: Text und Bild, darunter die Zimmer mit Verfügbarkeit und die unverbindliche Anfrage. */
-function Hotel({ data, img, letter }: { data: SitePublic; img: string | null; letter: string }) {
+function Hotel({ data, img, letter, ask: askUp }: { data: SitePublic; img: string | null; letter: string; ask: (w: Want) => void }) {
   const S = data.sections.hotel;
   const today = todayBerlin();
   const [q, setQ] = useState({ from: addDays(today, 1), to: addDays(today, 3), adults: '2', children: '0' });
@@ -203,7 +222,6 @@ function Hotel({ data, img, letter }: { data: SitePublic; img: string | null; le
   const [searched, setSearched] = useState<typeof q | null>(null);
   const [err, setErr] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const [pick, setPick] = useState<SiteCategory | null | undefined>(undefined);
   const search = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true); setErr({});
     try {
@@ -212,7 +230,7 @@ function Hotel({ data, img, letter }: { data: SitePublic; img: string | null; le
     } catch (x) { setErr(x instanceof ApiFailure && Object.keys(x.fields).length ? x.fields : { form: x instanceof Error ? x.message : 'Fehler' }); }
     setBusy(false);
   };
-  const ask = (c: SiteCategory | null) => { setPick(c); setTimeout(() => document.getElementById('gs-anfrage')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); };
+  const ask = (c: SiteCategory | null) => { const st = searched ?? q; askUp({ type: 'room', category: c?.name ?? '', from: st.from, to: st.to, adults: st.adults, children: st.children }); };
   const n = searched ? Number(searched.adults) + Number(searched.children) : 0;
   return (
     <Reveal id="gs-hotel" className="gs-section gs-soft"><div className="gs-wrap">
@@ -258,48 +276,81 @@ function Hotel({ data, img, letter }: { data: SitePublic; img: string | null; le
           );
         })}
       </div>
-      {pick !== undefined && data.requestEnabled && <Request site={data} category={pick} stay={searched ?? q} onClose={() => setPick(undefined)} />}
     </div></Reveal>
   );
 }
 
-function Request({ site, category, stay, onClose }: { site: SitePublic; category: SiteCategory | null; stay: { from: string; to: string; adults: string; children: string }; onClose: () => void }) {
-  const [v, setV] = useState({ ...stay, category: category?.name ?? '', name: '', email: '', phone: '', message: '', consent: false, website: '' });
+interface Want { type: RequestType; category?: string; from?: string; to?: string; adults?: string; children?: string; occasion?: string; message?: string; n?: number }
+
+/** Ein Anfrageformular für alles: Zimmer, Tisch, Feier, Gutschein, Frage. Es wird nichts gebucht. */
+function RequestForm({ site, want }: { site: SitePublic; want: Want | null }) {
+  const today = todayBerlin();
+  const first: RequestType = site.categories.length && site.sections.hotel.show ? 'room' : 'table';
+  const empty = { type: first as RequestType, name: '', email: '', phone: '', message: '', consent: false, website: '', from: addDays(today, 1), to: addDays(today, 3), adults: '2', children: '0', category: '',
+    date: addDays(today, 1), time: '19:00', persons: '2', guests: '', occasion: '', value: '' };
+  const [v, setV] = useState(empty);
   const [err, setErr] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
-  useEffect(() => { setV((x) => ({ ...x, category: category?.name ?? x.category })); setDone(false); }, [category]);
+  const [done, setDone] = useState<RequestType | null>(null);
+  useEffect(() => {
+    if (!want) return;
+    setDone(null); setErr({});
+    setV((x) => ({ ...x, type: want.type, category: want.category ?? x.category, from: want.from ?? x.from, to: want.to ?? x.to, adults: want.adults ?? x.adults, children: want.children ?? x.children, occasion: want.occasion ?? x.occasion, message: want.message ?? x.message }));
+  }, [want]);
+  const types = REQUEST_TYPES.filter((t) => t !== 'room' || (site.categories.length > 0 && site.sections.hotel.show)).filter((t) => t !== 'table' || site.sections.reservation.show || site.sections.restaurant.show)
+    .filter((t) => t !== 'event' || site.sections.events.show).filter((t) => t !== 'voucher' || site.sections.vouchers.show);
   const send = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true); setErr({});
-    try { await api('POST', '/public/booking-request', { ...v, adults: Number(v.adults), children: Number(v.children) || 0 }); setDone(true); }
+    try { await api('POST', '/public/site/request', { ...v, guests: v.guests === '' ? undefined : v.guests }); setDone(v.type); setV({ ...empty, type: v.type, name: v.name, email: v.email, phone: v.phone }); }
     catch (x) { setErr(x instanceof ApiFailure && Object.keys(x.fields).length ? x.fields : { form: x instanceof Error ? x.message : 'Fehler' }); }
     setBusy(false);
   };
-  const field = (k: 'from' | 'to' | 'name' | 'email' | 'phone', label: string, type = 'text', cls = '', auto?: string) => (
-    <label className={`gs-f ${cls}`}>{label}<input type={type} autoComplete={auto} value={v[k]} min={type === 'date' ? todayBerlin() : undefined} onChange={(e) => setV({ ...v, [k]: e.target.value })} />{err[k] && <span className="gs-err">{err[k]}</span>}</label>
+  const set = (k: keyof typeof v) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setV({ ...v, [k]: e.target.value });
+  const f = (k: keyof typeof v, label: string, el: ReactNode, cls = '') => <label className={`gs-f ${cls}`}>{label}{el}{err[k] && <span className="gs-err">{err[k]}</span>}</label>;
+  const sel = (k: keyof typeof v, n: number[]) => <select value={String(v[k])} onChange={set(k)}>{n.map((x) => <option key={x}>{x}</option>)}</select>;
+  const times = Array.from({ length: 23 }, (_, i) => `${String(11 + Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`);
+  if (done) return (
+    <div className="gs-request" role="status">
+      <span className="gs-kicker">Vielen Dank</span>
+      <p className="gs-thanks">Ihre Anfrage ist bei uns angekommen.</p>
+      <p>Wir melden uns so bald wie möglich bei Ihnen – in der Regel per E-Mail an die angegebene Adresse. Die Anfrage ist noch keine {done === 'room' ? 'Buchung' : done === 'table' ? 'Reservierung' : 'verbindliche Zusage'}.</p>
+      <div className="gs-actions"><button type="button" className="gs-link" onClick={() => setDone(null)}>Weitere Anfrage stellen</button></div>
+    </div>
   );
   return (
-    <div id="gs-anfrage" className="gs-request">
-      <span className="gs-kicker">Unverbindliche Anfrage</span>
-      {done ? <><p className="gs-thanks">Vielen Dank – Ihre Anfrage ist bei uns angekommen.</p><p>Wir melden uns so bald wie möglich bei Ihnen. Die Anfrage ist noch keine Buchung.</p><div className="gs-actions"><button type="button" className="gs-link" style={{ background: 'none', border: 0, cursor: 'pointer', borderBottom: '1px solid' }} onClick={onClose}>Schließen</button></div></> : (
-        <form onSubmit={(e) => void send(e)} noValidate>
-          <h3>{category ? category.name : 'Ihr Aufenthalt'}</h3>
-          <div className="gs-form">
-            {field('from', 'Anreise', 'date')}{field('to', 'Abreise', 'date')}
-            <label className="gs-f">Erwachsene<select value={v.adults} onChange={(e) => setV({ ...v, adults: e.target.value })}>{[1, 2, 3, 4, 5, 6, 7, 8].map((x) => <option key={x}>{x}</option>)}</select></label>
-            <label className="gs-f">Kinder<select value={v.children} onChange={(e) => setV({ ...v, children: e.target.value })}>{[0, 1, 2, 3, 4, 5].map((x) => <option key={x}>{x}</option>)}</select></label>
-            <label className="gs-f wide">Zimmerwunsch<select value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })}><option value="">egal / bitte beraten</option>{site.categories.map((c) => <option key={c.id}>{c.name}</option>)}</select></label>
-            {field('name', 'Ihr Name', 'text', 'wide', 'name')}{field('email', 'E-Mail', 'email', 'wide', 'email')}{field('phone', 'Telefon (freiwillig)', 'tel', 'wide', 'tel')}
-            <label className="gs-f full">Nachricht (freiwillig)<textarea rows={3} value={v.message} onChange={(e) => setV({ ...v, message: e.target.value })} /></label>
-            <input className="hp" tabIndex={-1} autoComplete="off" aria-hidden value={v.website} onChange={(e) => setV({ ...v, website: e.target.value })} />
-            <label className="gs-check full"><input type="checkbox" checked={v.consent} onChange={(e) => setV({ ...v, consent: e.target.checked })} />
-              <span>Ich habe den Hinweis zum Datenschutz gelesen.{site.privacyText && <><br /><small>{site.privacyText}</small></>}{site.privacyUrl && <> <a className="gs-link" href={site.privacyUrl} rel="noopener">Datenschutzerklärung</a></>}{err.consent && <><br /><span className="gs-err">{err.consent}</span></>}</span></label>
-          </div>
-          {err.form && <p className="gs-err">{err.form}</p>}
-          <div className="gs-actions"><button type="submit" className="gs-btn" disabled={busy}>{busy ? 'Wird gesendet …' : 'Anfrage senden'}</button><button type="button" className="gs-link" style={{ background: 'none', border: 0, borderBottom: '1px solid', cursor: 'pointer' }} onClick={onClose}>Abbrechen</button></div>
-          <p className="gs-note">Mit dem Absenden fragen Sie unverbindlich an. Eine Buchung kommt erst zustande, wenn wir sie Ihnen bestätigen.</p>
-        </form>
-      )}
-    </div>
+    <form className="gs-request" onSubmit={(e) => void send(e)} noValidate style={{ marginTop: 0 }}>
+      <div className="gs-tabs" role="radiogroup" aria-label="Worum geht es?">
+        {types.map((t) => <button key={t} type="button" role="radio" aria-checked={v.type === t} className={v.type === t ? 'on' : ''} onClick={() => { setV({ ...v, type: t }); setErr({}); }}>{REQUEST_LABEL[t]}</button>)}
+      </div>
+      <div className="gs-form">
+        {v.type === 'room' && <>
+          {f('from', 'Anreise', <input type="date" min={today} value={v.from} onChange={(e) => setV({ ...v, from: e.target.value, to: v.to <= e.target.value ? addDays(e.target.value, 1) : v.to })} />)}
+          {f('to', 'Abreise', <input type="date" min={addDays(v.from || today, 1)} value={v.to} onChange={set('to')} />)}
+          {f('adults', 'Erwachsene', sel('adults', [1, 2, 3, 4, 5, 6, 7, 8]))}{f('children', 'Kinder', sel('children', [0, 1, 2, 3, 4, 5]))}
+          {f('category', 'Zimmerwunsch', <select value={v.category} onChange={set('category')}><option value="">egal / bitte beraten</option>{site.categories.map((c) => <option key={c.id}>{c.name}</option>)}</select>, 'full')}
+        </>}
+        {v.type === 'table' && <>
+          {f('date', 'Tag', <input type="date" min={today} value={v.date} onChange={set('date')} />, 'wide')}
+          {f('time', 'Uhrzeit', <select value={v.time} onChange={set('time')}>{times.map((x) => <option key={x}>{x}</option>)}</select>)}
+          {f('persons', 'Personen', sel('persons', Array.from({ length: 20 }, (_, i) => i + 1)))}
+        </>}
+        {v.type === 'event' && <>
+          {f('occasion', 'Anlass', <input list="gs-anlaesse" value={v.occasion} onChange={set('occasion')} placeholder="z. B. Geburtstag" />, 'wide')}
+          {f('date', 'Wunschtermin (falls bekannt)', <input type="date" min={today} value={v.date} onChange={set('date')} />)}
+          {f('guests', 'Gäste (ungefähr)', <input inputMode="numeric" value={v.guests} onChange={set('guests')} />)}
+          <datalist id="gs-anlaesse">{site.eventTypes.map((x) => <option key={x} value={x} />)}</datalist>
+        </>}
+        {v.type === 'voucher' && f('value', 'Wert oder Wunsch', <input value={v.value} onChange={set('value')} placeholder="z. B. 50 € oder „Abendessen für zwei“" />, 'full')}
+        {f('name', 'Ihr Name', <input autoComplete="name" value={v.name} onChange={set('name')} />, 'wide')}
+        {f('email', 'E-Mail', <input type="email" autoComplete="email" value={v.email} onChange={set('email')} />, 'wide')}
+        {f('phone', 'Telefon (freiwillig)', <input type="tel" autoComplete="tel" value={v.phone} onChange={set('phone')} />, 'wide')}
+        {f('message', v.type === 'question' ? 'Ihre Frage' : v.type === 'event' ? 'Ihre Wünsche' : 'Nachricht (freiwillig)', <textarea rows={v.type === 'question' || v.type === 'event' ? 5 : 3} value={v.message} onChange={set('message')} />, 'full')}
+        <input className="hp" tabIndex={-1} autoComplete="off" aria-hidden value={v.website} onChange={set('website')} />
+        <label className="gs-check full"><input type="checkbox" checked={v.consent} onChange={(e) => setV({ ...v, consent: e.target.checked })} />
+          <span>Ich habe den Hinweis zum Datenschutz gelesen.{site.privacyText && <><br /><small>{site.privacyText}</small></>}{site.privacyUrl && <> <a className="gs-link" href={site.privacyUrl} rel="noopener">Datenschutzerklärung</a></>}{err.consent && <><br /><span className="gs-err">{err.consent}</span></>}</span></label>
+      </div>
+      {err.form && <p className="gs-err">{err.form}</p>}
+      <div className="gs-actions"><button type="submit" className="gs-btn" disabled={busy}>{busy ? 'Wird gesendet …' : 'Anfrage senden'}</button></div>
+    </form>
   );
 }

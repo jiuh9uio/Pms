@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.51.0
+
+- Gästeseite: ein gemeinsames Anfrageformular für Zimmer, Tisch im Restaurant, Feier oder Veranstaltung, Gutschein und allgemeine Fragen – jeweils mit den passenden Feldern (Reisedaten und Zimmerwunsch, Tag/Uhrzeit/Personen, Anlass/Termin/Gästezahl, Wert des Gutscheins). Alle Knöpfe der Seite führen dorthin und füllen die Art schon aus; nach einer Zimmersuche sind Reisedaten und Zimmer eingetragen. Es wird nichts gebucht.
+- Die Anfragen landen im E-Mail-Posteingang; Zimmer- und Tischanfragen sind als solche erkannt (mit Datum, Uhrzeit, Personen) und lassen sich wie gewohnt übernehmen. Ist die Online-Anfrage ausgeschaltet, bieten die Knöpfe wie bisher Telefon und E-Mail an.
+
 ## 1.50.0
 
 - Gästeseite neu gestaltet nach der Gestaltungsvorlage des Hauses: warme Cremetöne, Serifen-Überschriften mit kursiver zweiter Zeile, Name und Untertitel mittig mit Navigation, großes Startbild mit Monogramm, Begrüßung, Restaurant, Hotel & Zimmer (mit Verfügbarkeit, Preis und Anfrage), Speisekarte, Feiern & Tagen, Gutscheine, Tischreservierung, Kontakt mit Öffnungszeiten und „Route planen“, häufige Fragen, dunkler Fußbereich. Bereiche blenden beim Scrollen weich ein; auf dem Handy mit Menü-Knopf.

@@ -546,6 +546,27 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     await ok('POST', '/public/booking-request', anon, { name: 'Erika Gast', email: 'erika@example.org', phone: '', from: addDays(today, 330), to: addDays(today, 332), adults: 2, children: 0, message: '', category: 'Doppelzimmer', consent: true, website: '' });
     const mail = await db.execute(sql`select body from inbox_mails where uid_validity = 'web' order by received_at desc limit 1`);
     expect(String(mail[0]!.body)).toContain('Gewünschte Zimmerkategorie: Doppelzimmer');
+    // ein Formular für alles: Zimmer, Tisch, Feier, Gutschein, Frage
+    const who = { name: 'Erika Gast', email: 'erika@example.org', phone: '0123 456', message: '', consent: true, website: '' };
+    const ask = (body: object) => call('POST', '/public/site/request', anon, { ...who, ...body });
+    const last = async () => (await db.execute(sql`select subject, kind, body, extract from inbox_mails where uid_validity = 'web' order by uid desc limit 1`))[0] as { subject: string; kind: string; body: string; extract: Record<string, unknown> };
+    expect((await ask({ type: 'room', from: addDays(today, 340), to: addDays(today, 342), adults: 2, children: 1, category: 'Doppelzimmer' })).statusCode).toBe(200);
+    expect(await last()).toMatchObject({ kind: 'hotel', subject: expect.stringContaining('Zimmeranfrage'), extract: { from: addDays(today, 340), to: addDays(today, 342), persons: 2, children: 1 } });
+    expect((await ask({ type: 'table', date: addDays(today, 5), time: '19:30', persons: 4 })).statusCode).toBe(200);
+    expect(await last()).toMatchObject({ kind: 'table', extract: { dates: [addDays(today, 5)], time: '19:30', persons: 4 } });
+    expect((await ask({ type: 'table', date: addDays(today, 5), time: '25:00', persons: 4 })).json().error.fields.time).toBeTruthy();
+    expect((await ask({ type: 'table', date: addDays(today, -2), time: '19:00', persons: 2 })).json().error.fields.date).toContain('Vergangenheit');
+    expect((await ask({ type: 'event', date: '', guests: 40, occasion: 'Hochzeit', message: '' })).statusCode).toBe(200);
+    expect(await last()).toMatchObject({ kind: 'other', body: expect.stringContaining('Anlass: Hochzeit') });
+    expect((await ask({ type: 'event', date: '', guests: 40, occasion: '', message: '' })).json().error.fields.message).toBeTruthy();
+    expect((await ask({ type: 'voucher', value: '50 €' })).statusCode).toBe(200);
+    expect((await last()).subject).toBe('Gutscheinanfrage: 50 €');
+    expect((await ask({ type: 'question', message: 'Gibt es Parkplätze?' })).statusCode).toBe(200);
+    expect((await ask({ type: 'question', message: '' })).statusCode).toBe(400);
+    expect((await ask({ type: 'question', message: 'Ohne Häkchen', consent: false })).statusCode).toBe(400);
+    expect((await ask({ type: 'unbekannt', message: 'x' })).statusCode).toBe(400);
+    await ok('PUT', '/settings/web-request', admin, { enabled: false, intro: '', privacy: '' });
+    expect((await ask({ type: 'question', message: 'Noch offen?' })).statusCode).toBe(409);
     await ok('PUT', '/settings/site', admin, { ...base, enabled: false });
     clientIp = '127.0.0.1';
   });
