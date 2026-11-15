@@ -19,6 +19,8 @@ import { overview } from './modules/overview.js';
 import { search } from './modules/search.js';
 import { shortcutBat, validHost } from './lib/shortcut.js';
 import * as tse from './modules/tse.js';
+import * as site from './modules/site.js';
+import * as SI from '../shared/site.js';
 import * as tsesign from './modules/tsesign.js';
 import { guestFormInput } from '../shared/hotel.js';
 import * as settings from './modules/settings.js';
@@ -31,7 +33,7 @@ import { registerRestaurantRoutes } from './routes-restaurant.js';
 import { getBackupStatus, runBackup } from './backup.js';
 import { purge } from './modules/purge.js';
 import { checklist } from './modules/setup.js';
-import { invoiceNumberState, setInvoiceNumber } from './modules/billing.js';
+import { getLogo, invoiceNumberState, setInvoiceNumber } from './modules/billing.js';
 import * as inbox from './modules/inbox.js';
 import * as team from './modules/team.js';
 import * as T from '../shared/team.js';
@@ -146,13 +148,30 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.post('/public/booking/:token/cancel', { preHandler: publicLimit, bodyLimit: 1024 }, (req) => guestlink.cancelByGuest(db, linkToken(req), publicCancelInput.parse(req.body), req.ip ?? null));
 
     // Online-Buchungsanfrage: ohne Anmeldung, nur wenn eingeschaltet; legt eine Nachricht im Posteingang an
+    // Gästeseite: öffentliche Angaben, Verfügbarkeit, Fotos. Ein angemeldeter Administrator sieht sie als Vorschau auch vor dem Freischalten.
+    const isAdminPreview = async (req: FastifyRequest) => (await auth.authenticate(db, req.cookies[COOKIE]))?.user.role === 'admin';
+    api.get('/public/site', { preHandler: publicLimit }, async (req) => site.sitePublic(db, await isAdminPreview(req)));
+    api.get('/public/site/availability', { preHandler: publicLimit }, async (req) => site.siteAvailability(db, SI.siteAvailabilityQuery.parse(req.query), await isAdminPreview(req)));
+    api.get('/public/site/photo/:id', async (req, reply) => {
+      const p = await site.publicPhoto(db, idParam(req), await isAdminPreview(req));
+      if (!p) return reply.status(404).send({ error: { code: 'not_found', message: 'Kein Foto' } });
+      return reply.header('Content-Type', p.mime).header('Cache-Control', 'public, max-age=86400').send(p.data);
+    });
+    api.get('/public/site/logo', async (_req, reply) => {
+      const s = await site.getSite(db);
+      const logo = s.enabled || s.homepage ? await getLogo(db) : null;
+      if (!logo) return reply.status(404).send({ error: { code: 'not_found', message: 'Kein Logo' } });
+      return reply.header('Content-Type', logo.mime).header('Cache-Control', 'public, max-age=3600').send(logo.data);
+    });
     api.get('/public/booking-request', { preHandler: publicLimit }, () => inbox.webRequestPublic(db));
     api.post('/public/booking-request', { preHandler: publicLimit, bodyLimit: 8 * 1024 }, (req) => inbox.submitWebRequest(db, I.webRequestInput.parse(req.body), req.ip ?? null));
 
     // ---------- Anmeldung ----------
     api.get('/auth/state', async (req) => {
       const s = await auth.authenticate(db, req.cookies[COOKIE]);
-      return { needsSetup: s ? false : await auth.needsSetup(db), user: s ? usersMod.toUserDto(s.user) : null };
+      if (s) return { needsSetup: false, user: usersMod.toUserDto(s.user), guestHome: false };
+      const g = await site.getSite(db);
+      return { needsSetup: await auth.needsSetup(db), user: null, guestHome: g.enabled && g.homepage };
     });
     api.post('/auth/setup', async (req, reply) => {
       const r = await auth.setup(db, S.setupInput.parse(req.body), meta(req));
@@ -184,6 +203,17 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.post('/users/:id/totp/begin', { preHandler: requireAdmin }, async (req) => auth.totpBegin(db, actor(req), (await settings.getHotel(db)).name || 'PMS', idParam(req)));
     api.post('/users/:id/totp/confirm', { preHandler: requireAdmin }, (req) => auth.totpConfirm(db, actor(req), S.totpConfirmInput.parse(req.body).code, idParam(req)));
     api.post('/users/:id/totp-reset', { preHandler: requireAdmin }, (req) => usersMod.resetTwoFactor(db, actor(req), idParam(req)));
+
+    // Gästeseite einrichten (Administrator)
+    api.get('/settings/site', { preHandler: requireAdmin }, () => site.getSite(db));
+    api.put('/settings/site', { preHandler: requireAdmin }, (req) => site.saveSite(db, actor(req), SI.siteSettingsInput.parse(req.body)));
+    api.get('/categories/:id/photo', { preHandler: requireAdmin }, async (req, reply) => {
+      const p = await site.categoryPhoto(db, idParam(req));
+      if (!p) return reply.status(404).send({ error: { code: 'not_found', message: 'Kein Foto' } });
+      return reply.header('Content-Type', p.mime).header('Cache-Control', 'no-cache').send(p.data);
+    });
+    api.put('/categories/:id/photo', { preHandler: requireAdmin, bodyLimit: 1_500_000 }, (req) => site.saveCategoryPhoto(db, actor(req), idParam(req), SI.categoryPhotoInput.parse(req.body)));
+    api.delete('/categories/:id/photo', { preHandler: requireAdmin }, (req) => site.saveCategoryPhoto(db, actor(req), idParam(req), null));
 
     // ---------- Benutzer (nur Administrator) ----------
     api.get('/users', { preHandler: requireAdmin }, () => usersMod.listUsers(db));

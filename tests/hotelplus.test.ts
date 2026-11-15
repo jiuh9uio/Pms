@@ -470,4 +470,63 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect(await ok('PUT', '/settings/security', admin, { idleMinutes: 15 })).toEqual({ idleMinutes: 15 });
     await ok('PUT', '/settings/security', admin, { idleMinutes: 0 });
   });
+
+  it('zeigt Gästen eine öffentliche Seite mit Zimmern, Verfügbarkeit und Anfrage', async () => {
+    clientIp = '10.7.7.7';
+    const anon = {};
+    const catId = (await ok('GET', '/categories', admin))[0].id as string;
+    // noch nicht freigeschaltet: nichts verraten, auch keine Kategorien
+    const off = await ok('GET', '/public/site', anon);
+    expect(off).toMatchObject({ enabled: false, preview: false, categories: [] });
+    expect(off.hotel.street).toBe('');
+    expect((await call('GET', `/public/site/availability?from=${addDays(today, 200)}&to=${addDays(today, 202)}&adults=2`, anon)).statusCode).toBe(409);
+    expect((await ok('GET', '/auth/state', anon)).guestHome).toBe(false);
+    // Einstellungen nur für den Administrator; Adressen müssen vollständig sein
+    const base = { enabled: false, homepage: false, headline: 'Schlafen am Schützenplatz', intro: 'Ruhig gelegen.', highlights: 'WLAN\n\nParkplatz', showPrices: true, imprintUrl: '', privacyUrl: '', categories: { [catId]: { show: true, text: 'Mit Blick ins Grüne' } } };
+    expect((await call('PUT', '/settings/site', user, base)).statusCode).toBe(403);
+    expect((await call('PUT', '/settings/site', admin, { ...base, imprintUrl: 'impressum' })).statusCode).toBe(400);
+    await ok('PUT', '/settings/site', admin, base);
+    // Vorschau für den angemeldeten Administrator
+    expect(await ok('GET', '/public/site', admin)).toMatchObject({ preview: true, headline: 'Schlafen am Schützenplatz', highlights: ['WLAN', 'Parkplatz'], categories: [{ id: catId, text: 'Mit Blick ins Grüne', fromPriceCents: 9900, hasPhoto: false }] });
+    expect((await ok('GET', '/public/site', user)).preview).toBe(false);
+
+    await ok('PUT', '/settings/site', admin, { ...base, enabled: true, homepage: true });
+    const pub = await ok('GET', '/public/site', anon);
+    expect(pub).toMatchObject({ enabled: true, preview: false, hotel: { street: 'Am Schützenplatz 1' } });
+    expect(JSON.stringify(pub)).not.toMatch(/iban|taxNumber|DE00/i); // keine internen Angaben
+    expect((await ok('GET', '/auth/state', anon)).guestHome).toBe(true);
+    // Verfügbarkeit: frei mit Preis, belegt, zu viele Personen, ungültige Zeiträume
+    const from = addDays(today, 300), to = addDays(today, 302);
+    expect(await ok('GET', `/public/site/availability?from=${from}&to=${to}&adults=2`, anon)).toEqual({ nights: 2, categories: [{ id: catId, available: true, totalCents: 19800 }] });
+    expect((await ok('GET', `/public/site/availability?from=${from}&to=${to}&adults=3`, anon)).categories[0].available).toBe(false);
+    await bookingAt(from, to);
+    expect((await ok('GET', `/public/site/availability?from=${from}&to=${to}&adults=2`, anon)).categories[0]).toEqual({ id: catId, available: false, totalCents: null });
+    expect((await call('GET', `/public/site/availability?from=${addDays(today, -1)}&to=${today}&adults=2`, anon)).statusCode).toBe(400);
+    expect((await call('GET', `/public/site/availability?from=${from}&to=${addDays(from, 40)}&adults=2`, anon)).statusCode).toBe(400);
+    // ohne Preise: nur frei/belegt
+    await ok('PUT', '/settings/site', admin, { ...base, enabled: true, showPrices: false });
+    expect((await ok('GET', `/public/site/availability?from=${addDays(today, 320)}&to=${addDays(today, 321)}&adults=1`, anon)).categories[0]).toEqual({ id: catId, available: true, totalCents: null });
+    expect((await ok('GET', '/public/site', anon)).categories[0].fromPriceCents).toBeNull();
+
+    // Foto: nur gültige Bilder, öffentlich nur für freigegebene Kategorien
+    const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4ee0000000049454e44ae426082', 'hex');
+    expect((await call('PUT', `/categories/${catId}/photo`, user, { mime: 'image/png', dataBase64: png.toString('base64') })).statusCode).toBe(403);
+    expect((await call('PUT', `/categories/${catId}/photo`, admin, { mime: 'image/jpeg', dataBase64: png.toString('base64') })).statusCode).toBe(400);
+    await ok('PUT', `/categories/${catId}/photo`, admin, { mime: 'image/png', dataBase64: png.toString('base64') });
+    const photo = await call('GET', `/public/site/photo/${catId}`, anon);
+    expect(photo.statusCode).toBe(200);
+    expect(photo.headers['content-type']).toBe('image/png');
+    expect((await ok('GET', '/public/site', anon)).categories[0].hasPhoto).toBe(true);
+    await ok('PUT', '/settings/site', admin, { ...base, enabled: true, categories: { [catId]: { show: false, text: '' } } });
+    expect((await call('GET', `/public/site/photo/${catId}`, anon)).statusCode).toBe(404);
+    expect((await ok('GET', '/public/site', anon)).categories).toEqual([]);
+
+    // Anfrage mit gewünschter Kategorie landet im Posteingang
+    await ok('PUT', '/settings/web-request', admin, { enabled: true, intro: '', privacy: 'Wir verwenden Ihre Angaben nur für die Anfrage.' });
+    await ok('POST', '/public/booking-request', anon, { name: 'Erika Gast', email: 'erika@example.org', phone: '', from: addDays(today, 330), to: addDays(today, 332), adults: 2, children: 0, message: '', category: 'Doppelzimmer', consent: true, website: '' });
+    const mail = await db.execute(sql`select body from inbox_mails where uid_validity = 'web' order by received_at desc limit 1`);
+    expect(String(mail[0]!.body)).toContain('Gewünschte Zimmerkategorie: Doppelzimmer');
+    await ok('PUT', '/settings/site', admin, { ...base, enabled: false });
+    clientIp = '127.0.0.1';
+  });
 });

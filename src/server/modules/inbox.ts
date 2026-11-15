@@ -283,7 +283,7 @@ export async function webRequestPublic(db: Exec): Promise<WebRequestPublic> {
  * Anfrage von der öffentlichen Seite: Es wird nichts gebucht und nichts zugesagt – die Anfrage landet als Nachricht der Art
  * „Zimmer“ im E-Mail-Posteingang und wird dort wie eine E-Mail geprüft, übernommen und beantwortet.
  */
-export async function submitWebRequest(db: Db, v: { name: string; email: string; phone: string; from: string; to: string; adults: number; children: number; message: string; website: string }, ip: string | null) {
+export async function submitWebRequest(db: Db, v: { name: string; email: string; phone: string; from: string; to: string; adults: number; children: number; message: string; website: string; category?: string }, ip: string | null) {
   const s = await getWebRequest(db);
   if (!s.enabled) throw conflict('Online-Anfragen sind derzeit nicht möglich', 'web_request_off');
   if (v.website) return { ok: true }; // automatischer Eintrag: still verwerfen
@@ -292,7 +292,7 @@ export async function submitWebRequest(db: Db, v: { name: string; email: string;
   if (Number(day!.n) >= WEB_PER_DAY) throw new AppError(429, 'too_many', 'Heute sind schon sehr viele Anfragen eingegangen. Bitte rufen Sie uns an oder schreiben Sie uns eine E-Mail.');
   if (v.from < todayOf(new Date())) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { from: 'Die Anreise liegt in der Vergangenheit' });
   const body = [`Online-Anfrage über die Website`, '', `Name: ${v.name}`, `E-Mail: ${v.email}`, ...(v.phone ? [`Telefon: ${v.phone}`] : []),
-    `Anreise: ${deDay(v.from)}`, `Abreise: ${deDay(v.to)}`, `Personen: ${v.adults} Erwachsene${v.children ? `, ${v.children} Kinder` : ''}`, ...(v.message ? ['', 'Nachricht:', v.message] : [])].join('\n');
+    `Anreise: ${deDay(v.from)}`, `Abreise: ${deDay(v.to)}`, `Personen: ${v.adults} Erwachsene${v.children ? `, ${v.children} Kinder` : ''}`, ...(v.category ? [`Gewünschte Zimmerkategorie: ${v.category}`] : []), ...(v.message ? ['', 'Nachricht:', v.message] : [])].join('\n');
   const ex: MailExtract = { kind: 'hotel', dates: [v.from, v.to], from: v.from, to: v.to, time: null, persons: v.adults, children: v.children || null, phone: v.phone };
   await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(4712)`);

@@ -17,6 +17,7 @@ export function Login({ setup, onDone }: { setup: boolean; onDone: () => Promise
       if (e instanceof ApiFailure && e.code === 'totp_invalid') { setCodeError(e.message); setV((x) => ({ ...x, code: '' })); return; }
       throw e;
     }
+    if (window.location.pathname === '/anmelden') window.history.replaceState(null, '', '/');
     await onDone();
   });
   const first = useSubmit(setupInput, async (d) => { await api('POST', '/auth/setup', d); await onDone(); });

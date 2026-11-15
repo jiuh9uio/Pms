@@ -6,6 +6,7 @@ import { App } from './App.tsx';
 import { GuestFormPage } from './pages/GuestFormPage.tsx';
 import { BookingPage } from './pages/BookingPage.tsx';
 import { RequestPage } from './pages/RequestPage.tsx';
+import { GuestSite } from './pages/GuestSite.tsx';
 import { ToastProvider } from './ui.tsx';
 import { applyMotion, applyTheme, storedMotion, storedTheme } from './theme.ts';
 import './styles.css';
@@ -18,6 +19,8 @@ createRoot(document.getElementById('root')!).render(
       ? <ToastProvider><GuestFormPage /></ToastProvider> /* Online-Meldeschein für Gäste – ohne Anmeldung, ohne Menü */
       : window.location.pathname.startsWith('/buchung/')
         ? <ToastProvider><BookingPage /></ToastProvider> /* Reservierung für den Gast – über seinen persönlichen Link */
+      : window.location.pathname === '/willkommen'
+        ? <ToastProvider><GuestSite /></ToastProvider> /* Gästeseite – öffentlich */
       : window.location.pathname === '/anfrage'
         ? <ToastProvider><RequestPage /></ToastProvider> /* Zimmeranfrage für Gäste – ohne Anmeldung */
         : <BrowserRouter><App /></BrowserRouter>}

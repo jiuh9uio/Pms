@@ -39,7 +39,7 @@ afterAll(async () => {
 
 describe('Ersteinrichtung und Anmeldung', () => {
   it('verlangt die Ersteinrichtung und lässt sie nur einmal zu', async () => {
-    expect((await call('GET', '/auth/state')).json()).toEqual({ needsSetup: true, user: null });
+    expect((await call('GET', '/auth/state')).json()).toEqual({ needsSetup: true, user: null, guestHome: false });
     const weak = await call('POST', '/auth/setup', {}, { ...ADMIN, password: 'kurz' });
     expect(weak.statusCode).toBe(400);
     expect(weak.json().error.fields.password).toMatch(/Mindestens 10/);

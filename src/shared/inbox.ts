@@ -58,6 +58,8 @@ export const webRequestInput = z.object({
   from: day, to: day,
   adults: z.number('Bitte eine Zahl eintragen').int().min(1).max(30), children: z.number().int().min(0).max(30).default(0),
   message: z.string().trim().max(1500).default(''),
+  /** gewünschte Zimmerkategorie (von der Gästeseite), frei */
+  category: z.string().trim().max(80).default(''),
   /** Datenschutzhinweis gelesen */
   consent: z.literal(true, 'Bitte den Hinweis zum Datenschutz bestätigen'),
   /** unsichtbares Feld gegen automatische Einträge – muss leer bleiben */

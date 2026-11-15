@@ -246,6 +246,13 @@
       "when": 1794749947534,
       "tag": "0034_zwei_faktor",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794751251084,
+      "tag": "0035_gaesteseite",
+      "breakpoints": true
     }
   ]
 }

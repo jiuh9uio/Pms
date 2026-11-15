@@ -47,6 +47,7 @@ const PAGES: Page[] = [
   { to: '/einstellungen?ansicht=mitteilungen', title: 'Mitteilungen', area: 'Einstellungen', words: 'mitteilungen hinweise meldungen benachrichtigung abfrage popup zähler warnung ein aus schalten', admin: true },
   { to: '/einstellungen?ansicht=sicherheit', title: 'Sicherheit (automatisches Abmelden, Zwei-Faktor)', area: 'Einstellungen', words: 'sicherheit abmelden automatisch zwei faktor 2fa authenticator code datenschutz', admin: true },
   { to: '/konto', title: 'Mein Konto (Passwort, Zwei-Faktor-Anmeldung)', area: 'Konto', words: 'konto passwort zwei faktor 2fa authenticator code darstellung' },
+  { to: '/einstellungen?ansicht=gaesteseite', title: 'Gästeseite (öffentliche Seite für Gäste)', area: 'Einstellungen', words: 'gästeseite website homepage öffentlich zimmer fotos verfügbarkeit online anfrage kundenseite frontend', admin: true },
   { to: '/erste-schritte', title: 'Erste Schritte (Start-Checkliste)', area: 'Verwaltung', words: 'start checkliste einrichtung erste schritte anfangen inbetriebnahme', admin: true },
   { to: '/einstellungen?ansicht=steuern', title: 'Rechnungsnummern', area: 'Einstellungen', words: 'rechnungsnummer nummernkreis startnummer erste nummer', admin: true },
   { to: '/einstellungen?ansicht=tse', title: 'TSE', area: 'Einstellungen', words: 'tse epson stick kassensicherung selbsttest zertifikat seriennummer finanzamt', admin: true },

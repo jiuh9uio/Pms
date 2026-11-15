@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.49.0
+
+- Neue Gästeseite (Adresse /willkommen): eine öffentliche Seite für Gäste mit Überschrift, Einleitung, „Das bieten wir“, Zimmerkategorien mit Foto, Beschreibung und „ab … / Nacht“, Verfügbarkeitsprüfung für Reisedaten und Personen (mit Preis für den Aufenthalt nach Ihren Preisregeln) und unverbindlicher Anfrage, die mit der gewünschten Kategorie in den E-Mail-Posteingang kommt. Kontakt, Impressum- und Datenschutz-Link unten. Gebucht oder bezahlt wird darüber nichts.
+- Einstellungen → Online → „Gästeseite“: freischalten (vorher Vorschau nur für Administratoren), als Startseite verwenden (Mitarbeiter melden sich dann über /anmelden an), Texte, Preise ein/aus, je Kategorie anzeigen, Beschreibung und Foto (wird beim Hochladen verkleinert). Die Einstellungs-Gruppe „E-Mail“ heißt jetzt „Online“.
+- Gäste sehen nur, ob etwas frei ist – nicht, wie viele Zimmer; keine internen Angaben wie Steuernummer oder Bankverbindung.
+
 ## 1.48.2
 
 - Zwei-Faktor-Anmeldung über die Benutzerverwaltung: Der Administrator öffnet unter Verwaltung → Benutzer den Benutzer, klickt „Einrichten“, der Benutzer scannt den QR-Code mit Microsoft Authenticator auf seinem Handy, der Administrator trägt den angezeigten Code ein. Aufheben ebenfalls dort.

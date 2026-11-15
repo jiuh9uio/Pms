@@ -689,3 +689,11 @@ export const teamRecurring = pgTable('team_recurring', {
   createdBy: text('created_by').notNull(),
   createdAt: ts('created_at').notNull().defaultNow(),
 });
+
+/** Foto einer Zimmerkategorie für die Gästeseite (ein Bild je Kategorie, verkleinert hochgeladen) */
+export const categoryPhotos = pgTable('category_photos', {
+  categoryId: uuid('category_id').primaryKey().references(() => roomCategories.id, { onDelete: 'cascade' }),
+  mime: text('mime').notNull(),
+  data: bytea('data').notNull(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});

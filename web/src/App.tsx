@@ -3,6 +3,7 @@ import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from
 import { ROLE_LABEL, hasModule, type Module, type UserDto } from '../../src/shared/schemas.js';
 import { api } from './api.ts';
 import { Account } from './pages/Account.tsx';
+import { GuestSite } from './pages/GuestSite.tsx';
 import { Audit } from './pages/Audit.tsx';
 import { Breakfast } from './pages/Breakfast.tsx';
 import { Report } from './pages/Report.tsx';
@@ -35,7 +36,7 @@ import { Users } from './pages/Users.tsx';
 import { Search } from './Search.tsx';
 import { ToastProvider } from './ui.tsx';
 
-interface AuthState { needsSetup: boolean; user: UserDto | null }
+interface AuthState { needsSetup: boolean; user: UserDto | null; guestHome?: boolean }
 const AuthCtx = createContext<{ user: UserDto; refresh: () => Promise<void> }>(null!);
 export const useAuth = () => useContext(AuthCtx);
 
@@ -113,6 +114,7 @@ export function App() {
     <ToastProvider>
       {state.user
         ? <AuthCtx.Provider value={{ user: state.user, refresh }}><Shell user={state.user} /></AuthCtx.Provider>
+        : state.guestHome && window.location.pathname === '/' ? <GuestSite staffLink />
         : <Login setup={state.needsSetup} onDone={refresh} />}
     </ToastProvider>
   );
