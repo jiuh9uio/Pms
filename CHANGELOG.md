@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.68.0
+
+- Neu: Etagenplan (Hotel → Heute → Etagenplan). Die Zimmer als schematischer Grundriss: je Flur oben die Straßenseite mit Fenstersymbol, in der Mitte der Gang, unten die Hofseite, dazu ein Treppenhaus. Farben: grün frei, rot belegt, gelb reserviert, grau gesperrt. Der Status kommt aus denselben Buchungen wie der Belegungsplan; die Seite aktualisiert sich alle 30 Sekunden. Klick auf ein belegtes/reserviertes Zimmer öffnet die Reservierung, auf ein freies eine neue Reservierung.
+- Ausgangsplan nur aus den bekannten Angaben: 111–118 auf einer Flurseite zur Straße; 124 gegenüber 228 (Hof); 224 Straßenseite und 120 Hofseite noch ohne Flur; Lage des Treppenhauses nur angenommen und im Plan so gekennzeichnet. Etagen sind leer.
+- „Plan bearbeiten“ (Administrator): Flure, Etage, Straßen- und Hofseite, Reihenfolge (gleicher Platz = gegenüber, „-“ = Lücke) und Treppenhaus einstellen. Gespeichert wird nur die Lage – Zimmer und Buchungen bleiben unverändert.
+- Neue Reservierung: Umschalter „Kacheln / Etagenplan“ für die Zimmerwahl (wird je Gerät gemerkt).
+
 ## 1.67.0
 
 - Daten löschen: neuer Knopf „Alles auf Null“ – wählt mit einem Klick alles aus: Rechnungen, Zahlungen und Umsätze, alle Buchungen und Sperren, Gäste, Firmen, E-Mail-Posteingang; Rechnungs- und Buchungsnummern beginnen wieder bei 1, alle Zimmer gelten wieder als sauber, von Hand eingetragene Reinigungen entfallen. Die Einrichtung (Zimmer, Preise, Benutzer, Einstellungen) bleibt. Wie bisher: erst „Prüfen“, dann Passwort und LÖSCHEN eintippen; vorher wird automatisch eine Datensicherung geschrieben.

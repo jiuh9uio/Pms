@@ -15,6 +15,7 @@ import { Dashboard } from './pages/Dashboard.tsx';
 import { EInvoice } from './pages/EInvoice.tsx';
 import { Guests } from './pages/Guests.tsx';
 import { Registrations } from './pages/Registrations.tsx';
+import { FloorPlanPage } from './pages/FloorPlanPage.tsx';
 import { Invoices } from './pages/Invoices.tsx';
 import { Companies } from './pages/Companies.tsx';
 import { RegistrationBatchPrint, RegistrationPrint } from './hotel/RegistrationPrint.tsx';
@@ -62,6 +63,7 @@ interface NavItem { to: string; label: string; short?: string; icon: string; adm
 const NAV: NavItem[] = [
   { to: '/hotel', label: 'Übersicht', icon: '◧', module: 'hotel', group: 'Heute' },
   { to: '/plan', label: 'Belegungsplan', short: 'Plan', icon: '▦', module: 'hotel', group: 'Heute' },
+  { to: '/etagenplan', label: 'Etagenplan', short: 'Etagen', icon: '⊞', module: 'hotel', group: 'Heute' },
   { to: '/reservierungen', label: 'Reservierungen', short: 'Buchungen', icon: '☷', module: 'hotel', group: 'Heute' },
   { to: '/fruehstueck', label: 'Frühstück', icon: '☕', module: 'hotel', group: 'Haus' },
   { to: '/reinigung', label: 'Reinigung', icon: '✧', module: 'hotel', group: 'Haus' },
@@ -205,6 +207,7 @@ function Shell({ user }: { user: UserDto }) {
           {kontrollen && <Route path="/kontrollen" element={<Controls />} />}
           {kontrollen && <Route path="/kontrollen/:id" element={<ControlType />} />}
           {hotel && <Route path="/plan" element={<Plan />} />}
+          {hotel && <Route path="/etagenplan" element={<FloorPlanPage />} />}
           {hotel && <Route path="/reservierungen" element={<Reservations />} />}
           {hotel && <Route path="/fruehstueck" element={<Breakfast />} />}
           {hotel && <Route path="/reinigung" element={<Housekeeping />} />}

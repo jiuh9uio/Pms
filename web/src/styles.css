@@ -226,6 +226,41 @@ textarea { width: 100%; height: auto; min-height: 38px; padding: 8px 11px; borde
 .mc-form select { width: auto; min-width: 180px; } .mc-form input { flex: 1 1 220px; }
 .purgeall { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 16px; margin: 12px 0; border: 2px solid var(--line-strong); border-radius: 12px; }
 .purgeall.on { border-color: #c0392b; background: color-mix(in srgb, #c0392b 6%, var(--surface)); } .purgeall small { display: block; color: var(--muted); margin-top: 4px; }
+/* Etagenplan: schematischer Grundriss */
+.fp { --fp-free: #1f9d6b; --fp-occupied: #d0473a; --fp-reserved: #d99a00; --fp-blocked: #9aa0a6; }
+.fp-legend, .fp-counts { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+.fp-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 4px; margin-right: 6px; vertical-align: -1px; }
+.fp-legend .st-free i { background: var(--fp-free); } .fp-legend .st-occupied i { background: var(--fp-occupied); } .fp-legend .st-reserved i { background: var(--fp-reserved); } .fp-legend .st-blocked i { background: var(--fp-blocked); }
+.fp-counts { --fp-free: #1f9d6b; --fp-occupied: #d0473a; --fp-reserved: #d99a00; --fp-blocked: #9aa0a6; }
+.fp-counts span { padding: 6px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); } .fp-counts b { font-size: 15px; margin-right: 4px; }
+.fp-counts .st-free b { color: var(--fp-free); } .fp-counts .st-occupied b { color: var(--fp-occupied); } .fp-counts .st-reserved b { color: var(--fp-reserved); } .fp-counts .st-blocked b { color: var(--fp-blocked); }
+.fp-note { font-size: 12px; color: #8a5a00; background: color-mix(in srgb, #d99a00 12%, var(--surface)); border-radius: 8px; padding: 6px 10px; margin: 0 0 10px; }
+.fp-corridors { display: grid; gap: 18px; }
+.fp-corridor, .fp-loose { border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px 10px; background: linear-gradient(180deg, var(--surface), var(--surface-2)); overflow-x: auto; }
+.fp-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; } .fp-head b { font-size: 14px; } .fp-head span { font-size: 12px; color: var(--muted); }
+.fp-side { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); text-align: center; padding: 2px 0; }
+.fp-side-street { border-bottom: 2px solid color-mix(in srgb, var(--accent) 35%, transparent); margin-bottom: 6px; } .fp-side-court { border-top: 2px dashed var(--line-strong); margin-top: 6px; }
+.fp-grid { display: grid; gap: 6px; justify-content: start; min-width: min-content; }
+.fp-hall { display: flex; align-items: center; justify-content: center; border-radius: 8px; background: repeating-linear-gradient(90deg, var(--surface-2) 0 14px, color-mix(in srgb, var(--line) 60%, var(--surface-2)) 14px 16px); color: var(--muted); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+.fp-cell { display: flex; min-width: 0; }
+.fp-slot { flex: 1; min-width: 0; overflow: hidden; min-height: 70px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; position: relative; padding: 14px 6px 8px; }
+.fp-empty { border: 1px dashed transparent; }
+.fp-missing { border: 1px dashed var(--line-strong); color: var(--muted); } .fp-missing small { font-size: 10px; }
+.fp-room { --c: var(--fp-free); border: 1.5px solid var(--c); background: color-mix(in srgb, var(--c) 12%, var(--surface)); color: var(--text); cursor: pointer; transition: transform .12s, box-shadow .15s, background .15s; }
+.fp-room.st-occupied { --c: var(--fp-occupied); } .fp-room.st-reserved { --c: var(--fp-reserved); } .fp-room.st-blocked { --c: var(--fp-blocked); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 14%, var(--surface)) 0 6px, var(--surface) 6px 12px); }
+.fp-room:hover { transform: translateY(-1px); box-shadow: 0 4px 14px color-mix(in srgb, var(--c) 30%, transparent); }
+.fp-room b { font-size: 18px; line-height: 1.1; } .fp-room small { font-size: 11px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fp-room::after { content: ''; position: absolute; left: 8px; right: 8px; bottom: 5px; height: 3px; border-radius: 3px; background: var(--c); opacity: .85; }
+.fp-room.on { box-shadow: 0 0 0 3px var(--accent); }
+.fp-check { position: absolute; top: 4px; right: 6px; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 11px; font-style: normal; display: grid; place-items: center; }
+.fp-window { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); width: 20px; height: 11px; fill: color-mix(in srgb, #5aa7e6 25%, transparent); stroke: #3b82c4; stroke-width: 1.2; }
+.fp-stairs { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--muted); min-width: 0; }
+.fp-stairs-icon { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linejoin: round; } .fp-stairs small { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.fp-loose { margin-top: 18px; } .fp-row { display: flex; flex-wrap: wrap; gap: 8px; } .fp-loosecell { display: flex; flex-direction: column; gap: 4px; width: 96px; }
+.fp-tag { font-size: 10px; text-align: center; border-radius: 6px; padding: 1px 4px; } .fp-tag.street { background: color-mix(in srgb, #3b82c4 14%, var(--surface)); color: #2a6aa6; } .fp-tag.court { background: var(--surface-2); color: var(--muted); }
+.fp-toggle { margin: 0 0 10px; } .segmented.small button { padding: 5px 12px; font-size: 13px; }
+.gsec.fp-edit { margin-bottom: 12px; } .gsec.fp-edit .btn { margin: 4px 0 8px; }
+@media (max-width: 760px) { .fp-cell { min-width: 58px; } .fp-room b { font-size: 15px; } }
 /* Zettel für die Buchhaltung */
 .acctbox { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; padding: 12px 14px; border: 1px dashed var(--line-strong); border-radius: 10px; background: var(--surface-2); }
 .acctslip header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #222; padding-bottom: 8px; margin-bottom: 6px; } .acctslip header span { font-weight: 600; }
