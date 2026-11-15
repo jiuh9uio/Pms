@@ -3,10 +3,6 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
-## 1.68.2
-
-- Etagenplan (aus 1.68.0/1.68.1) wieder entfernt: die Seite „Etagenplan“ und der Umschalter „Kacheln / Etagenplan“ bei „Neue Reservierung“ entfallen; die Zimmerwahl ist wie vorher (Kacheln nach Etage). Buchungen und Zimmer waren davon nie betroffen.
-
 ## 1.67.0
 
 - Daten löschen: neuer Knopf „Alles auf Null“ – wählt mit einem Klick alles aus: Rechnungen, Zahlungen und Umsätze, alle Buchungen und Sperren, Gäste, Firmen, E-Mail-Posteingang; Rechnungs- und Buchungsnummern beginnen wieder bei 1, alle Zimmer gelten wieder als sauber, von Hand eingetragene Reinigungen entfallen. Die Einrichtung (Zimmer, Preise, Benutzer, Einstellungen) bleibt. Wie bisher: erst „Prüfen“, dann Passwort und LÖSCHEN eintippen; vorher wird automatisch eine Datensicherung geschrieben.

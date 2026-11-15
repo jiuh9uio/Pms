@@ -1,6 +1,6 @@
 {
   "name": "schuetzenhaus-pms",
-  "version": "1.68.2",
+  "version": "1.67.0",
   "private": true,
   "type": "module",
   "engines": {
