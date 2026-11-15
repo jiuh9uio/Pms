@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.60.0
+
+- Check-in: Nach „Anreise bestätigen“ erscheint „Eingecheckt – Meldeschein drucken?“. Ein Klick öffnet den Meldeschein und gleich das Druckfenster.
+- Meldeschein mit Gästeinformationen zum Abtrennen (passt auf eine A4-Seite): oben der Meldeschein zum Unterschreiben, darunter „✂ hier abtrennen“ und für den Gast: Begrüßung, Zimmer, WLAN-Name und Passwort mit QR-Code zum direkten Verbinden sowie Hausinformationen (z. B. Frühstück, Zimmerreinigung, Abreise, Restaurant, Rezeption) und ein Schlusssatz.
+- Einstellungen → Betrieb → Haus → „Check-in & Meldeschein“: Abfrage nach dem Check-in ein/aus, Gästeinformationen ein/aus, WLAN ein/aus (dieselben WLAN-Angaben wie beim Aushang unter Internet), Überschrift, Informationen (je Zeile „Bezeichnung | Angabe“) und Schlusssatz. Beim ersten Öffnen ist der Text aus Frühstückszeiten, Abreisezeit, Öffnungszeiten und Telefon des Hauses vorausgefüllt.
+
 ## 1.59.0
 
 - Neue Reservierung: Die Zimmer stehen jetzt oben als Kacheln zum Antippen, nach Etage geordnet (1. Etage, 2. Etage …) und farblich nach Kategorie (z. B. Einzelzimmer blau, Doppelzimmer grün) mit Legende. Belegte Zimmer sind ausgegraut. Darunter Zeitraum, Status und die gewählten Zimmer mit Personen und Preis; rechts wie bisher Gast und Angaben. Wird ein gewähltes Zimmer durch einen geänderten Zeitraum belegt, weist ein Hinweis darauf hin.

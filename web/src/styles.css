@@ -203,6 +203,8 @@ textarea { width: 100%; height: auto; min-height: 38px; padding: 8px 11px; borde
 .hits button { text-align: left; border: 0; border-bottom: 1px solid var(--line); background: none; padding: 9px 11px; cursor: pointer; } .hits button:last-child { border-bottom: 0; } .hits button:hover { background: var(--accent-soft); }
 .roompick { display: grid; gap: 6px; }
 /* Check-in */
+.ci-done { text-align: center; padding: 8px 8px 0; } .ci-done-mark { width: 56px; height: 56px; margin: 0 auto 12px; border-radius: 50%; display: grid; place-items: center; font-size: 28px; color: #fff; background: #1f9d6b; animation: pop .35s ease-out; }
+@keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .ci-summary { display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: center; padding: 14px 16px; border-radius: 12px; background: linear-gradient(135deg, var(--accent-soft), var(--surface-2)); margin-bottom: 12px; }
 .ci-room { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 96px; padding: 10px 14px; border-radius: 10px; background: var(--surface); box-shadow: 0 1px 4px rgba(0,0,0,.06); }
 .ci-room small { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; } .ci-room b { font-size: 30px; line-height: 1.1; } .ci-room span { font-size: 12px; color: var(--muted); }
@@ -382,6 +384,23 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--border); }
 .regform h1 { font-size: 20px; margin: 24px 0 12px; } .regform table { width: 100%; border-collapse: collapse; }
 .regform th { text-align: left; font-weight: 500; width: 46%; padding: 9px 10px 9px 0; border-bottom: 1px solid #bbb; vertical-align: bottom; background: none; }
 .regform td { border-bottom: 1px solid #bbb; padding: 9px 0; height: 38px; }
+/* Meldeschein mit abtrennbaren Gästeinformationen – passt zusammen auf eine A4-Seite */
+.regform.withinfo h1 { margin: 14px 0 8px; } .regform.withinfo th { padding: 5px 10px 5px 0; } .regform.withinfo td { padding: 5px 0; height: 28px; }
+.regform.withinfo .signatures { margin-top: 30px; }
+.guestinfo { margin-top: 26px; break-inside: avoid; page-break-inside: avoid; }
+.cutline { border-top: 2px dashed #999; position: relative; margin-bottom: 18px; } .cutline span { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); background: #fff; padding: 0 10px; font-size: 11px; color: #777; }
+.gi-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; } .gi-head h2 { margin: 0; font-size: 20px; } .gi-head span { font-size: 13px; color: #555; }
+.gi-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 20px; align-items: start; } .gi-body.nowifi { grid-template-columns: 1fr; }
+.gi-wifi { display: flex; gap: 14px; align-items: center; border: 1px solid #ccc; border-radius: 10px; padding: 12px; } .gi-wifi img { width: 120px; height: 120px; flex: none; }
+.gi-wifi > div { display: flex; flex-direction: column; gap: 4px; font-size: 14px; } .gi-wifi small { display: block; font-size: 10px; color: #777; text-transform: uppercase; letter-spacing: .04em; }
+.gi-wifi code { font-size: 15px; font-weight: 600; letter-spacing: .03em; } .gi-wifi .gi-hint { text-transform: none; letter-spacing: 0; font-size: 11px; margin-top: 4px; }
+.gi-lines { margin: 0; display: grid; gap: 6px; font-size: 13px; } .gi-lines > div { display: grid; grid-template-columns: 130px 1fr; gap: 10px; } .gi-lines > div.full { grid-template-columns: 1fr; }
+.gi-lines dt { font-weight: 600; } .gi-lines dd { margin: 0; }
+.gi-closing { margin: 16px 0 0; font-style: italic; text-align: center; }
+@media (max-width: 640px) { .gi-body { grid-template-columns: 1fr; } }
+.sheet-wifi { display: grid; grid-template-columns: 1fr 130px; gap: 16px; align-items: center; } .sheet-qr { display: grid; place-items: center; min-height: 120px; border: 1px dashed var(--line-strong); border-radius: 10px; background: #fff; }
+.sheet-qr img { width: 120px; height: 120px; }
+@media (max-width: 640px) { .sheet-wifi { grid-template-columns: 1fr; } }
 .regform .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 70px; } .regform .signatures span { border-top: 1px solid #000; padding-top: 6px; font-size: 12px; }
 
 /* Online-Meldeschein */

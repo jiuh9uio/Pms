@@ -366,3 +366,24 @@ export function longStayDiscount(c: { stdOccupancy: number; longStayNights: numb
   if (c.longStayNights < 2 || nights < c.longStayNights) return 0;
   return persons === 1 && c.stdOccupancy > 1 ? c.longStaySingleDiscountCents : c.longStayDiscountCents;
 }
+
+// ---------- Check-in-Blatt: Meldeschein mit Gästeinformationen (WLAN, Frühstück, Zimmerreinigung …) ----------
+export const checkinSheetInput = z.object({
+  /** nach „Anreise bestätigen“ anbieten, den Meldeschein zu drucken */
+  askAfterCheckin: z.boolean(),
+  /** Gästeinformationen unten auf dem Meldeschein (zum Abtrennen) */
+  showInfo: z.boolean(),
+  showWifi: z.boolean(),
+  title: z.string().trim().max(80),
+  /** je Zeile „Bezeichnung | Angabe“, z. B. „Frühstück | 7:00 – 10:00 Uhr“; Zeilen ohne | erscheinen als Text */
+  info: z.string().trim().max(1500),
+  closing: z.string().trim().max(300),
+});
+export type CheckinSheet = z.infer<typeof checkinSheetInput>;
+export const CHECKIN_SHEET_DEFAULTS: CheckinSheet = {
+  askAfterCheckin: true, showInfo: true, showWifi: true, title: 'Herzlich willkommen!',
+  info: 'Frühstück | 7:00 – 10:00 Uhr\nZimmerreinigung | täglich zwischen 10:00 und 14:00 Uhr – bitte Schild „Bitte nicht stören“ an die Tür hängen, wenn Sie keine Reinigung wünschen\nAbreise | bitte bis 11:00 Uhr das Zimmer freigeben\nRezeption | bei Fragen einfach anrufen oder vorbeikommen',
+  closing: 'Wir wünschen Ihnen einen angenehmen Aufenthalt.',
+};
+/** Was der Meldeschein zum Drucken braucht: Einstellungen und – falls gewünscht und eingerichtet – das Gäste-WLAN. */
+export interface CheckinSheetDto extends CheckinSheet { lines: { label: string; value: string }[]; wifi: { ssid: string; password: string; open: boolean; qr: string } | null }

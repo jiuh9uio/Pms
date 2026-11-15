@@ -6,6 +6,7 @@ import { listAudit, type Actor } from './modules/audit.js';
 import * as bookings from './modules/bookings.js';
 import * as breakfast from './modules/breakfast.js';
 import * as guestguide from './modules/guestguide.js';
+import * as checkinSheet from './modules/checkinsheet.js';
 import * as lookup from './modules/lookup.js';
 import * as guestlink from './modules/guestlink.js';
 import * as stats from './modules/stats.js';
@@ -128,6 +129,11 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
     return { ok: true };
   });
   api.put('/guests/:id', user, (req) => guests.updateGuest(db, actor(req), idOf(req), H.guestInput.parse(req.body), versionOf(req)));
+
+  // ---------- Check-in-Blatt (Meldeschein mit WLAN und Hausinformationen) ----------
+  api.get('/checkin-sheet', user, () => checkinSheet.checkinSheetForPrint(db));
+  api.get('/settings/checkin-sheet', admin, () => checkinSheet.getCheckinSheet(db));
+  api.put('/settings/checkin-sheet', admin, (req) => checkinSheet.saveCheckinSheet(db, actor(req), H.checkinSheetInput.parse(req.body)));
 
   // ---------- Firmen ----------
   api.get('/companies', user, (req) => companies.listCompanies(db, z.object({ q: z.string().max(100).default('') }).parse(req.query).q.trim()));

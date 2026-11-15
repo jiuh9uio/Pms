@@ -18,6 +18,7 @@ import { PrearrivalCard } from './PrearrivalCard.tsx';
 import { PurgeCard } from './PurgeCard.tsx';
 import { MailRulesCard } from './MailRulesCard.tsx';
 import { RulesCard } from './RulesCard.tsx';
+import { CheckinSheetCard } from './CheckinSheetCard.tsx';
 import { TseCard } from './TseCard.tsx';
 import { WebRequestCard } from './WebRequestCard.tsx';
 import { Changelog, UpdateCard } from './UpdateCard.tsx';
@@ -53,7 +54,7 @@ export function Settings() {
           {group.tabs.map((k) => <button key={k} type="button" role="tab" aria-selected={k === current} className={k === current ? 'on' : ''} onClick={() => show(k)}>{label(k)}</button>)}
         </div>
       )}
-      {current === 'haus' && <><HotelForm /><LogoCard /><InvoiceLayoutCard /><GuideCard /></>}
+      {current === 'haus' && <><HotelForm /><LogoCard /><InvoiceLayoutCard /><CheckinSheetCard /><GuideCard /></>}
       {current === 'email' && <><MailSettings /><InboxSettings /><WebRequestCard /></>}
       {current === 'drucker' && <><KitchenPrinterCard kind="kitchen" /><KitchenPrinterCard kind="front" /></>}
       {current === 'ecgeraet' && <TerminalCard />}

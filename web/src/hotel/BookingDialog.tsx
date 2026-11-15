@@ -4,7 +4,7 @@ import {
   isActiveStatus,
   PAYMENT_METHODS, SOURCES, STATUS_LABEL, addDays, bookingRoomInput, bookingRoomUpdateInput, bookingUpdateInput, chargeInput, diffDays, formatMoney,
   guestInput, isIsoDate, moneyInput, parseMoney, todayBerlin,
-  type BookingDto, type BookingRoomDto, type CancelTerms, type GuestLinkDto, type FreeRoomDto, type RoomStatus, type ServiceDto,
+  type BookingDto, type BookingRoomDto, type CheckinSheetDto, type CancelTerms, type GuestLinkDto, type FreeRoomDto, type RoomStatus, type ServiceDto,
 } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
 import type { BookingBillingDto } from '../../../src/shared/billing.js';
@@ -191,7 +191,9 @@ function Checkin({ booking, room, onClose }: { booking: BookingDto; room: Bookin
   const toast = useToast();
   const [v, setV] = useState<GuestDraft>(toDraft(booking.guest));
   const [roomId, setRoomId] = useState(room.roomId);
+  const [done, setDone] = useState<string | null>(null);
   const free = useLoad(() => api<FreeRoomDto[]>('GET', `/availability?from=${room.from}&to=${room.to}&exclude=${room.allocationId}`));
+  const sheet = useLoad(() => api<CheckinSheetDto>('GET', '/checkin-sheet').catch(() => null));
   const f = useSubmit(guestInput, async (d) => {
     if (JSON.stringify(toDraft(d as never)) !== JSON.stringify(toDraft(booking.guest)))
       await api('PUT', `/guests/${booking.guest.id}`, { ...d, version: booking.guest.version });
@@ -201,10 +203,25 @@ function Checkin({ booking, room, onClose }: { booking: BookingDto; room: Bookin
       version = moved.rooms.find((r) => r.id === room.id)!.version;
     }
     await api('POST', `/booking-rooms/${room.id}/status`, { status: 'checked_in', version });
-    toast(`${[d.firstName, d.lastName].filter(Boolean).join(' ')} ist eingecheckt`);
+    const who = [d.firstName, d.lastName].filter(Boolean).join(' ');
     bump();
-    onClose();
+    if (sheet.data?.askAfterCheckin ?? true) setDone(who);
+    else { toast(`${who} ist eingecheckt`); onClose(); }
   });
+  if (done !== null) {
+    const info = sheet.data?.showInfo ? [sheet.data.wifi ? 'WLAN-Zugang mit QR-Code' : '', sheet.data.lines.length ? 'Hausinformationen' : ''].filter(Boolean) : [];
+    return (
+      <Dialog title="Eingecheckt" onClose={onClose}
+        footer={<><Button onClick={onClose}>Ohne Druck schließen</Button>
+          <a className="btn primary" href={`/meldeschein/${booking.id}?druck=1`} target="_blank" rel="noopener" onClick={() => setTimeout(onClose, 300)}>Meldeschein drucken</a></>}>
+        <div className="ci-done">
+          <div className="ci-done-mark" aria-hidden>✓</div>
+          <p><b>{done || 'Der Gast'}</b> ist in Zimmer <b>{free.data?.find((r) => r.id === roomId)?.number ?? room.roomNumber}</b> eingecheckt.</p>
+          <p className="muted">Meldeschein jetzt drucken und unterschreiben lassen?{info.length ? ` Unten auf dem Blatt – zum Abtrennen für den Gast: ${info.join(' und ')}.` : ''}</p>
+        </div>
+      </Dialog>
+    );
+  }
   const future = room.from > todayBerlin();
   const target = free.data?.find((r) => r.id === roomId);
   const name = [v.salutation, v.firstName, v.lastName].filter(Boolean).join(' ') || 'Gast';

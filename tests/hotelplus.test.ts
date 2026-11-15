@@ -654,4 +654,24 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     await ok('PUT', '/settings/site', admin, { ...base, enabled: false });
     clientIp = '127.0.0.1';
   });
+
+  it('druckt beim Check-in den Meldeschein mit WLAN-Zugang und Hausinformationen', async () => {
+    const def = await ok('GET', '/settings/checkin-sheet', admin);
+    expect(def).toMatchObject({ askAfterCheckin: true, showInfo: true, showWifi: true });
+    expect((await call('GET', '/settings/checkin-sheet', user)).statusCode).toBe(403);
+    expect((await call('PUT', '/settings/checkin-sheet', user, def)).statusCode).toBe(403);
+    expect((await call('PUT', '/settings/checkin-sheet', admin, { ...def, info: 'x'.repeat(1600) })).statusCode).toBe(400);
+    await ok('PUT', '/settings/checkin-sheet', admin, { ...def, info: 'Frühstück | 7–10 Uhr\nSchöne Zeit bei uns!\n\nZimmerreinigung|täglich' });
+    // ohne eingerichtetes WLAN: kein WLAN-Block
+    const a = await ok('GET', '/checkin-sheet', user);
+    expect(a.lines).toEqual([{ label: 'Frühstück', value: '7–10 Uhr' }, { label: '', value: 'Schöne Zeit bei uns!' }, { label: 'Zimmerreinigung', value: 'täglich' }]);
+    expect(a.wifi).toBeNull();
+    await ok('PUT', '/network/wifi', admin, { ssid: 'Gast-WLAN', password: 'geheim123', open: false, note: '' });
+    const b = await ok('GET', '/checkin-sheet', user);
+    expect(b.wifi).toMatchObject({ ssid: 'Gast-WLAN', password: 'geheim123', open: false });
+    expect(b.wifi.qr).toMatch(/^data:image\/svg\+xml;base64,/);
+    await ok('PUT', '/settings/checkin-sheet', admin, { ...def, showWifi: false });
+    expect((await ok('GET', '/checkin-sheet', user)).wifi).toBeNull();
+    expect((await call('GET', '/checkin-sheet', {})).statusCode).toBe(401);
+  });
 });
