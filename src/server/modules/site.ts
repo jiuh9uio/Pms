@@ -1,6 +1,6 @@
 import { asc, eq } from 'drizzle-orm';
 import { diffDays, todayBerlin } from '../../shared/hotel.js';
-import { IMAGE_KEYS, SITE_DEFAULTS, SECTION_KEYS, parseFaq, parseHours, siteSettingsInput, type ImageKey, type SiteAvailability, type SitePublic, type SiteSettings } from '../../shared/site.js';
+import { FORM_DEFAULTS, IMAGE_KEYS, SECTION_KEYS, parseFaq, parseHours, siteFrom, type ImageKey, type SiteAvailability, type SitePublic, type SiteSettings } from '../../shared/site.js';
 import type { Db, Exec } from '../db/client.js';
 import { categoryPhotos, roomCategories, rooms, settings, siteImages } from '../db/schema.js';
 import { AppError, notFound } from '../lib/errors.js';
@@ -16,9 +16,7 @@ import { getHotel } from './settings.js';
  */
 export async function getSite(db: Exec): Promise<SiteSettings> {
   const [row] = await db.select().from(settings).where(eq(settings.key, 'guest_site'));
-  // ältere Stände ohne die neuen Felder: fehlende Werte aus den Vorgaben ergänzen
-  const v = siteSettingsInput.safeParse({ ...SITE_DEFAULTS, ...((row?.value as Partial<SiteSettings>) ?? {}) });
-  return v.success ? v.data : SITE_DEFAULTS;
+  return siteFrom(row?.value);
 }
 export async function saveSite(db: Db, actor: Actor, v: SiteSettings) {
   await db.insert(settings).values({ key: 'guest_site', value: v }).onConflictDoUpdate({ target: settings.key, set: { value: v, updatedAt: new Date() } });
@@ -41,7 +39,7 @@ export async function sitePublic(db: Exec, preview: boolean): Promise<SitePublic
     enabled: false, preview: false, hotel: { ...hotel, street: '', zip: '', city: '', phone: '', email: '', website: '' }, brandSubtitle: '', heroKicker: '', headline: '', headlineEm: '', heroText: '',
     introKicker: '', introTitle: '', introTitleEm: '', intro: '', highlights: [], showPrices: false, showAvailability: false, imprintUrl: '', privacyUrl: '', hasLogo: false, requestEnabled: false, privacyText: '',
     sections: Object.fromEntries(SECTION_KEYS.map((k) => [k, blank])) as SitePublic['sections'], eventTypes: [], hours: [], hoursNote: '', faq: [], routeLink: false,
-    images: Object.fromEntries(IMAGE_KEYS.map((k) => [k, ''])) as SitePublic['images'], video: '', categories: [],
+    images: Object.fromEntries(IMAGE_KEYS.map((k) => [k, ''])) as SitePublic['images'], video: '', form: FORM_DEFAULTS, categories: [],
   };
   if (!s.enabled && !preview) return empty;
   const cats = await shownCategories(db, s);
@@ -54,7 +52,7 @@ export async function sitePublic(db: Exec, preview: boolean): Promise<SitePublic
     introKicker: s.introKicker, introTitle: s.introTitle, introTitleEm: s.introTitleEm, intro: s.intro,
     highlights: s.highlights.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 12), showPrices: s.showPrices, showAvailability: s.showAvailability,
     sections: s.sections, eventTypes: s.eventTypes.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 8), hours: parseHours(s.hours), hoursNote: s.hoursNote, faq: parseFaq(s.faq), routeLink: s.routeLink,
-    images: Object.fromEntries(IMAGE_KEYS.map((k) => [k, imgs.get(k) ?? ''])) as SitePublic['images'], video,
+    images: Object.fromEntries(IMAGE_KEYS.map((k) => [k, imgs.get(k) ?? ''])) as SitePublic['images'], video, form: s.form,
     imprintUrl: s.imprintUrl, privacyUrl: s.privacyUrl, hasLogo: !!(await getLogo(db)), requestEnabled: req.enabled, privacyText: req.privacy,
     categories: cats.map((c) => ({
       id: c.id, name: c.name, text: s.categories[c.id]?.text || c.description, maxPersons: c.maxPersons, stdOccupancy: c.stdOccupancy,

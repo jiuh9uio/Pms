@@ -5,7 +5,7 @@ import type { MailDraft } from '../../shared/hotel.js';
 import type { InboxMailDto, InboxSettingsDto, InboxState, InboxStatus, MailRules, ReplyTemplate, WebRequestPublic, WebRequestSettings } from '../../shared/inbox.js';
 import { extract, type MailExtract, type MailKind } from '../../shared/mailextract.js';
 import type { Db, Exec } from '../db/client.js';
-import type { SiteRequest } from '../../shared/site.js';
+import { REQUEST_LABEL, siteFrom, type SiteRequest } from '../../shared/site.js';
 import { inboxMails, restaurantTables, settings, tableReservations } from '../db/schema.js';
 import { AppError, conflict, notFound } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
@@ -316,6 +316,22 @@ export async function submitSiteRequest(db: Db, v: SiteRequest, ip: string | nul
   const s = await getWebRequest(db);
   if (!s.enabled) throw conflict('Online-Anfragen sind derzeit nicht möglich', 'web_request_off');
   if (v.website) return { ok: true };
+  // was der Administrator im Anfrageformular eingestellt hat
+  const [srow] = await db.select().from(settings).where(eq(settings.key, 'guest_site'));
+  const form = siteFrom(srow?.value).form;
+  if (!form.types[v.type]) throw conflict(`Anfragen zu „${REQUEST_LABEL[v.type]}“ sind derzeit nicht möglich`, 'type_off');
+  const bad = (field: string, msg: string) => new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { [field]: msg });
+  if (v.type === 'table') {
+    if (v.time < form.tableFrom || v.time > form.tableTo) throw bad('time', `Bitte eine Uhrzeit zwischen ${form.tableFrom} und ${form.tableTo} Uhr wählen`);
+    if (v.persons > form.tableMaxPersons) throw bad('persons', `Online höchstens ${form.tableMaxPersons} Personen – für größere Runden wählen Sie bitte „Feier oder Veranstaltung“`);
+  }
+  if (v.type === 'meeting') {
+    const inList = (x: string, l: string[]) => l.some((y) => y.toLowerCase() === x.toLowerCase());
+    if (v.kind && !inList(v.kind, form.meetingKinds)) throw bad('kind', 'Bitte eine Art aus der Liste wählen');
+    if (v.layout && !inList(v.layout, form.layouts)) throw bad('layout', 'Bitte eine Bestuhlung aus der Liste wählen');
+    if (v.equipment.some((x) => !inList(x, form.equipment))) throw bad('equipment', 'Unbekannte Technik');
+    if (v.catering.some((x) => !inList(x, form.catering))) throw bad('catering', 'Unbekannte Verpflegung');
+  }
   const [day] = await db.execute(sql`select count(*)::int as n from inbox_mails where uid_validity = 'web' and received_at > now() - interval '24 hours'`);
   if (Number(day!.n) >= WEB_PER_DAY) throw new AppError(429, 'too_many', 'Heute sind schon sehr viele Anfragen eingegangen. Bitte rufen Sie uns an oder schreiben Sie uns eine E-Mail.');
   const today = todayOf(new Date());

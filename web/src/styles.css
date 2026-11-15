@@ -778,3 +778,14 @@ tbody tr { transition: background .15s; }
 .gs-chips label { cursor: pointer; } .gs-chips input { position: absolute; opacity: 0; width: 1px; height: 1px; min-height: 0; }
 .gs-chips span { display: inline-block; padding: 7px 12px; border: 1px solid var(--gs-line); font-size: 13px; background: #fff; transition: background .18s, color .18s, border-color .18s; }
 .gs-chips input:checked + span { background: var(--gs-dark); border-color: var(--gs-dark); color: #fff; } .gs-chips input:focus-visible + span { outline: 3px solid var(--gs-accent); outline-offset: 2px; }
+
+/* Anfrageformular bearbeiten */
+.site-group-flat { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; flex-wrap: wrap; } .site-group-flat p { margin: 2px 0 0; }
+.listedit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.listedit { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 8px; align-content: start; }
+.listedit-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.listedit ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.listedit li { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 2px; padding: 4px 4px 4px 10px; border-radius: 8px; background: var(--surface-2); animation: fade .2s; }
+.listedit li .iconbtn { width: 28px; height: 28px; } .listedit li .iconbtn:disabled { opacity: .3; } .listedit li .iconbtn.danger:hover { color: var(--danger); background: var(--danger-soft); }
+.listedit-add { display: flex; gap: 6px; } .listedit-add input { flex: 1; min-width: 0; }
+@media (max-width: 760px) { .listedit-grid { grid-template-columns: 1fr; } }

@@ -602,6 +602,20 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect((await ask({ type: 'question', message: '' })).statusCode).toBe(400);
     expect((await ask({ type: 'question', message: 'Ohne Häkchen', consent: false })).statusCode).toBe(400);
     expect((await ask({ type: 'unbekannt', message: 'x' })).statusCode).toBe(400);
+    // Anfrageformular selbst einstellen: eigene Listen, Arten abschalten, Tischzeiten
+    const cfg = await ok('GET', '/settings/site', admin);
+    expect(cfg.form.equipment).toContain('Beamer und Leinwand');
+    expect((await call('PUT', '/settings/site', admin, { ...cfg, form: { ...cfg.form, equipment: ['A', 'a'] } })).statusCode).toBe(400); // doppelt
+    await ok('PUT', '/settings/site', admin, { ...cfg, form: { ...cfg.form, equipment: ['Fernseher mit HDMI'], layouts: [], types: { ...cfg.form.types, voucher: false }, tableFrom: '17:00', tableTo: '21:00', tableMaxPersons: 8 } });
+    expect((await ok('GET', '/public/site', anon)).form).toMatchObject({ equipment: ['Fernseher mit HDMI'], layouts: [], types: { voucher: false }, tableFrom: '17:00' });
+    expect((await ask({ ...meeting, equipment: ['Fernseher mit HDMI'], layout: '' })).statusCode).toBe(200);
+    expect((await ask({ ...meeting, equipment: ['Beamer und Leinwand'], layout: '' })).json().error.fields.equipment).toBeTruthy(); // nicht mehr angeboten
+    expect((await ask({ ...meeting, equipment: [], layout: 'U-Form' })).json().error.fields.layout).toBeTruthy();
+    expect((await ask({ type: 'voucher', value: '20 €' })).statusCode).toBe(409);
+    expect((await ask({ type: 'table', date: addDays(today, 5), time: '12:00', persons: 2 })).json().error.fields.time).toContain('17:00');
+    expect((await ask({ type: 'table', date: addDays(today, 5), time: '19:00', persons: 12 })).json().error.fields.persons).toBeTruthy();
+    expect((await ask({ type: 'table', date: addDays(today, 5), time: '19:00', persons: 8 })).statusCode).toBe(200);
+    await ok('PUT', '/settings/site', admin, cfg);
     await ok('PUT', '/settings/web-request', admin, { enabled: false, intro: '', privacy: '' });
     expect((await ask({ type: 'question', message: 'Noch offen?' })).statusCode).toBe(409);
     await ok('PUT', '/settings/site', admin, { ...base, enabled: false });

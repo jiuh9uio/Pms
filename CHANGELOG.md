@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.55.0
+
+- Einstellungen → Online → Gästeseite → „Anfrageformular bearbeiten“: ein Fenster, in dem Sie festlegen, welche Anfragen Gäste stellen können (Zimmer, Tisch, Feier, Tagung, Gutschein, Frage), und die Auswahllisten selbst pflegen – Art der Veranstaltung, Bestuhlung, Technik, Verpflegung: eigene Einträge hinzufügen, löschen, verschieben, Vorgabe wiederherstellen. Für Tischanfragen: früheste und späteste Uhrzeit, Abstand und Höchstzahl Personen.
+- Der Server prüft Anfragen gegen diese Einstellungen (abgeschaltete Arten, nicht angebotene Technik, Uhrzeit außerhalb, zu viele Personen).
+
 ## 1.54.1
 
 - Anfrageformular: „Tagung oder Versammlung“ jetzt allgemein für Innungen, Vereine, Verbände, Praxen und Firmen – mit Auswahl der Art (Tagung/Konferenz, Innungs- oder Mitgliederversammlung, Jahreshauptversammlung, Seminar/Fortbildung/Schulung, Sitzung/Besprechung, Workshop, Vortrag/Infoabend, Sonstiges). Technik zusätzlich mit Rednerpult und Videokonferenz. Die Art steht im Betreff der Anfrage im Posteingang.

@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import type { CategoryDto } from '../../../src/shared/hotel.js';
 import { IMAGE_LABEL, SECTION_DEFAULTS, SECTION_KEYS, SECTION_LABEL, siteSettingsInput, type SectionKey, type SiteSettings } from '../../../src/shared/site.js';
 import { api } from '../api.ts';
+import { RequestFormDialog } from './RequestFormDialog.tsx';
 import { Button, Field, LoadState, useLoad, useSubmit, useToast } from '../ui.tsx';
 
 /** Foto verkleinern (höchstens 1920 × 1280 Pixel, JPEG), damit Handyfotos schnell laden. */
@@ -73,6 +74,7 @@ export function GuestSiteCard() {
   const req = useLoad(() => api<{ enabled: boolean }>('GET', '/settings/web-request').catch(() => ({ enabled: false }))).data;
   const [v, setV] = useState<SiteSettings | null>(null);
   const [at, setAt] = useState<Record<string, number>>({});
+  const [formDlg, setFormDlg] = useState(false);
   useEffect(() => { if (data) setV(data); }, [data]);
   const f = useSubmit(siteSettingsInput, async (d) => { setV(await api<SiteSettings>('PUT', '/settings/site', d)); toast('Gästeseite gespeichert'); });
   if (!v || !cats) return <section className="card"><h2>Gästeseite</h2><LoadState error={error} loading /></section>;
@@ -167,6 +169,11 @@ export function GuestSiteCard() {
         </div>
       </Group>
 
+      <div className="site-group site-group-flat">
+        <div><b>Anfrageformular</b><p className="muted small">Welche Anfragen Gäste stellen können (Zimmer, Tisch, Feier, Tagung, Gutschein, Frage) und was sie dabei auswählen – Art der Veranstaltung, Bestuhlung, Technik, Verpflegung, Tischzeiten.</p></div>
+        <Button onClick={() => setFormDlg(true)}>Anfrageformular bearbeiten</Button>
+      </div>
+      {formDlg && <RequestFormDialog site={v} onClose={() => setFormDlg(false)} onSaved={(s) => setV(s)} />}
       {(!v.imprintUrl || !v.privacyUrl) && <p className="notice warn">Eine öffentlich erreichbare Seite braucht in Deutschland in der Regel ein Impressum und eine Datenschutzerklärung. Tragen Sie unter „Rechtliches“ die Adressen Ihrer bestehenden Seiten ein. Ob die Inhalte genügen, kann das Programm nicht prüfen – bitte rechtlich prüfen lassen.</p>}
       {req && !req.enabled && <p className="notice warn">Die Online-Anfrage ist ausgeschaltet – auf der Gästeseite erscheint dann kein „Anfragen“ für Zimmer. Einschalten unter E-Mail → Online-Anfrage.</p>}
       <div className="formactions"><Button type="submit" variant="primary" busy={f.busy}>Speichern</Button></div>

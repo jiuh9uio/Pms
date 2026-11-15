@@ -32,6 +32,36 @@ export const IMAGE_KEYS = ['hero', 'restaurant', 'hotel', 'events'] as const;
 export type ImageKey = (typeof IMAGE_KEYS)[number];
 export const IMAGE_LABEL: Record<ImageKey, string> = { hero: 'Startbild (groß, oben)', restaurant: 'Restaurant', hotel: 'Hotel', events: 'Feiern & Tagen' };
 
+/** Anfrage von der Gästeseite – ein Formular für alles. Es wird nichts gebucht. */
+export const REQUEST_TYPES = ['room', 'table', 'event', 'meeting', 'voucher', 'question'] as const;
+export type RequestType = (typeof REQUEST_TYPES)[number];
+/** Tagung: Art, Bestuhlung, Technik und Verpflegung */
+export const MEETING_KINDS = ['Tagung / Konferenz', 'Innungs- oder Mitgliederversammlung', 'Jahreshauptversammlung', 'Seminar / Fortbildung / Schulung', 'Sitzung / Besprechung', 'Workshop', 'Vortrag / Infoabend', 'Sonstiges'] as const;
+export const MEETING_LAYOUTS = ['Reihen (Kino)', 'U-Form', 'Parlament (Tische in Reihen)', 'Block / Konferenztisch', 'Stuhlkreis'] as const;
+export const MEETING_EQUIPMENT = ['Beamer und Leinwand', 'Flipchart', 'Moderationskoffer und Pinnwand', 'Mikrofon / Lautsprecher', 'Rednerpult', 'Videokonferenz', 'WLAN für Teilnehmer'] as const;
+export const MEETING_CATERING = ['Begrüßungskaffee', 'Kaffeepause vormittags', 'Mittagessen', 'Kaffeepause nachmittags', 'Abendessen', 'Getränke im Raum'] as const;
+export const REQUEST_LABEL: Record<RequestType, string> = { room: 'Zimmer', table: 'Tisch im Restaurant', event: 'Feier oder Veranstaltung', meeting: 'Tagung oder Versammlung', voucher: 'Gutschein', question: 'Allgemeine Frage' };
+
+/** Anfrageformular – vom Administrator einstellbar: welche Arten es gibt und was zur Auswahl steht. */
+const list = (d: readonly string[]) => z.array(z.string().trim().min(1, 'Leerer Eintrag').max(60, 'Höchstens 60 Zeichen')).max(20, 'Höchstens 20 Einträge')
+  .refine((a) => new Set(a.map((x) => x.toLowerCase())).size === a.length, 'Ein Eintrag steht doppelt in der Liste').default([...d]);
+const clock = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Uhrzeit im Format 17:30');
+export const formSettings = z.object({
+  types: z.object(Object.fromEntries(REQUEST_TYPES.map((t) => [t, z.boolean().default(true)])) as Record<RequestType, z.ZodDefault<z.ZodBoolean>>).default(Object.fromEntries(REQUEST_TYPES.map((t) => [t, true])) as never),
+  meetingKinds: list(MEETING_KINDS), layouts: list(MEETING_LAYOUTS), equipment: list(MEETING_EQUIPMENT), catering: list(MEETING_CATERING),
+  tableFrom: clock.default('11:00'), tableTo: clock.default('21:30'), tableStep: z.union([z.literal(15), z.literal(30), z.literal(60)]).default(30),
+  tableMaxPersons: z.number('Bitte eine Zahl eingeben').int().min(1).max(200).default(20),
+}).refine((f) => f.tableFrom <= f.tableTo, { message: 'Ende vor Beginn', path: ['tableTo'] });
+export type FormSettings = z.infer<typeof formSettings>;
+export const FORM_DEFAULTS: FormSettings = formSettings.parse({});
+/** Uhrzeiten für die Tischanfrage aus Beginn, Ende und Takt */
+export function tableTimes(f: Pick<FormSettings, 'tableFrom' | 'tableTo' | 'tableStep'>): string[] {
+  const m = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+  const out: string[] = [];
+  for (let x = m(f.tableFrom); x <= m(f.tableTo) && out.length < 200; x += f.tableStep) out.push(`${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`);
+  return out;
+}
+
 export const siteSettingsInput = z.object({
   enabled: z.boolean(),
   /** Besucher der Hauptadresse sehen die Gästeseite; Mitarbeiter melden sich über /anmelden an */
@@ -60,6 +90,7 @@ export const siteSettingsInput = z.object({
   faq: t(4000, ''),
   /** Knopf „Route planen“ (öffnet Google Maps erst beim Anklicken) */
   routeLink: z.boolean().default(true),
+  form: formSettings.default(FORM_DEFAULTS),
 });
 export type SiteSettings = z.infer<typeof siteSettingsInput>;
 export const SITE_DEFAULTS: SiteSettings = siteSettingsInput.parse({ enabled: false, homepage: false, headline: 'Ein Haus mit Seele.', intro: 'Ein liebevoll gedeckter Tisch. Ein Abend in guter Gesellschaft. Ein Ort zum Ankommen. Im Schützenhaus verbinden sich rustikaler Charme und persönliche Gastfreundschaft – für Ihren Besuch, Ihre Übernachtung und Ihren besonderen Anlass.', highlights: '', showPrices: true, imprintUrl: '', privacyUrl: '', categories: {} });
@@ -79,6 +110,7 @@ export interface SitePublic {
   images: Record<ImageKey, string>;
   /** Video im Startbild: Versionsstempel, leer = keins */
   video: string;
+  form: FormSettings;
   categories: SiteCategory[];
 }
 export interface SiteAvailability { nights: number; categories: { id: string; available: boolean; totalCents: number | null }[] }
@@ -93,15 +125,6 @@ export const parseHours = (s: string) => s.split('\n').map((l) => l.trim()).filt
 /** Frage in der ersten Zeile, Antwort in den folgenden; Leerzeile trennt */
 export const parseFaq = (s: string) => s.replace(/\r/g, '').split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean).slice(0, 20).map((b) => { const [q, ...a] = b.split('\n'); return { q: q!.trim(), a: a.join(' ').trim() }; }).filter((x) => x.q && x.a);
 
-/** Anfrage von der Gästeseite – ein Formular für alles. Es wird nichts gebucht. */
-export const REQUEST_TYPES = ['room', 'table', 'event', 'meeting', 'voucher', 'question'] as const;
-export type RequestType = (typeof REQUEST_TYPES)[number];
-/** Tagung: Art, Bestuhlung, Technik und Verpflegung */
-export const MEETING_KINDS = ['Tagung / Konferenz', 'Innungs- oder Mitgliederversammlung', 'Jahreshauptversammlung', 'Seminar / Fortbildung / Schulung', 'Sitzung / Besprechung', 'Workshop', 'Vortrag / Infoabend', 'Sonstiges'] as const;
-export const MEETING_LAYOUTS = ['Reihen (Kino)', 'U-Form', 'Parlament (Tische in Reihen)', 'Block / Konferenztisch', 'Stuhlkreis'] as const;
-export const MEETING_EQUIPMENT = ['Beamer und Leinwand', 'Flipchart', 'Moderationskoffer und Pinnwand', 'Mikrofon / Lautsprecher', 'Rednerpult', 'Videokonferenz', 'WLAN für Teilnehmer'] as const;
-export const MEETING_CATERING = ['Begrüßungskaffee', 'Kaffeepause vormittags', 'Mittagessen', 'Kaffeepause nachmittags', 'Abendessen', 'Getränke im Raum'] as const;
-export const REQUEST_LABEL: Record<RequestType, string> = { room: 'Zimmer', table: 'Tisch im Restaurant', event: 'Feier oder Veranstaltung', meeting: 'Tagung oder Versammlung', voucher: 'Gutschein', question: 'Allgemeine Frage' };
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Bitte ein Datum wählen');
 const opt = z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/).default('');
 const num = (min: number, max: number, msg: string) => z.coerce.number(msg).int(msg).min(min, msg).max(max, msg);
@@ -117,20 +140,26 @@ const base = {
 export const siteRequestInput = z.discriminatedUnion('type', [
   z.object({ type: z.literal('room'), ...base, from: day, to: day, adults: num(1, 30, 'Bitte eine Zahl wählen'), children: num(0, 30, 'Bitte eine Zahl wählen').default(0), category: z.string().trim().max(80).default('') })
     .refine((v) => v.from < v.to, { message: 'Die Abreise muss nach der Anreise liegen', path: ['to'] }),
-  z.object({ type: z.literal('table'), ...base, date: day, time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Bitte eine Uhrzeit wählen'), persons: num(1, 60, 'Bitte die Personenzahl wählen') }),
+  z.object({ type: z.literal('table'), ...base, date: day, time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Bitte eine Uhrzeit wählen'), persons: num(1, 200, 'Bitte die Personenzahl wählen') }),
   z.object({ type: z.literal('event'), ...base, date: opt, guests: num(1, 500, 'Bitte die ungefähre Gästezahl eintragen'), occasion: z.string().trim().max(80).default('') })
     .refine((v) => v.message.length >= 5 || v.occasion.length > 0, { message: 'Bitte kurz den Anlass oder Ihre Wünsche beschreiben', path: ['message'] }),
   z.object({
     type: z.literal('meeting'), ...base,
     organization: z.string().trim().min(2, 'Bitte den Veranstalter eintragen (z. B. Innung, Verein, Verband, Praxis, Firma)').max(120),
-    kind: z.enum(['', ...MEETING_KINDS]).default(''),
+    kind: z.string().trim().max(60).default(''),
     from: day, to: opt, participants: num(1, 500, 'Bitte die ungefähre Teilnehmerzahl eintragen'), rooms: num(0, 200, 'Bitte eine Zahl eintragen').default(0),
-    layout: z.enum(['', ...MEETING_LAYOUTS]).default(''),
-    equipment: z.array(z.enum(MEETING_EQUIPMENT)).max(MEETING_EQUIPMENT.length).default([]),
-    catering: z.array(z.enum(MEETING_CATERING)).max(MEETING_CATERING.length).default([]),
+    layout: z.string().trim().max(60).default(''),
+    equipment: z.array(z.string().trim().max(60)).max(20).default([]),
+    catering: z.array(z.string().trim().max(60)).max(20).default([]),
   }).refine((v) => !v.to || v.to >= v.from, { message: 'Das Ende liegt vor dem Beginn', path: ['to'] }),
   z.object({ type: z.literal('voucher'), ...base, value: z.string().trim().max(80).default('') })
     .refine((v) => v.message.length >= 3 || v.value.length > 0, { message: 'Bitte Wert oder Wunsch für den Gutschein angeben', path: ['value'] }),
   z.object({ type: z.literal('question'), ...base }).refine((v) => v.message.length >= 5, { message: 'Bitte Ihre Frage eintragen', path: ['message'] }),
 ]);
 export type SiteRequest = z.infer<typeof siteRequestInput>;
+
+/** Gespeicherte Einstellungen lesen – fehlende Felder älterer Stände aus den Vorgaben ergänzen. */
+export function siteFrom(value: unknown): SiteSettings {
+  const v = siteSettingsInput.safeParse({ ...SITE_DEFAULTS, ...((value as Partial<SiteSettings>) ?? {}) });
+  return v.success ? v.data : SITE_DEFAULTS;
+}

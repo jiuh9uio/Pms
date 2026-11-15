@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { addDays, formatMoney, todayBerlin } from '../../../src/shared/hotel.js';
-import { MEETING_CATERING, MEETING_EQUIPMENT, MEETING_KINDS, MEETING_LAYOUTS, REQUEST_LABEL, REQUEST_TYPES, type RequestType, type SiteAvailability, type SiteCategory, type SitePublic, type SiteSection } from '../../../src/shared/site.js';
+import { REQUEST_LABEL, REQUEST_TYPES, tableTimes, type RequestType, type SiteAvailability, type SiteCategory, type SitePublic, type SiteSection } from '../../../src/shared/site.js';
 import { ApiFailure, api } from '../api.ts';
 import { LoadState, useLoad } from '../ui.tsx';
 
@@ -59,11 +59,12 @@ export function GuestSite({ staffLink = false }: { staffLink?: boolean }) {
   const callBtn = (label: string, cls = '') => h.phone ? <a className={`gs-btn ${cls}`} href={tel(h.phone)}>{label}</a> : h.email ? <a className={`gs-btn ${cls}`} href={mail(h.email, 'Tischreservierung')}>{label.replace('telefonisch', 'per E-Mail')}</a> : null;
   const go = (id: string) => { setMenuOpen(false); document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   const online = data.requestEnabled;
+  const on = (t: RequestType) => online && data.form.types[t];
   /** Anfrage öffnen: Formular unten mit gewählter Art (und ggf. Zimmer und Reisedaten) */
   const ask = (w: Want) => { setWant({ ...w, n: Date.now() }); setTimeout(() => go('gs-anfrage'), 30); };
   const askBtn = (type: RequestType, label: string, cls = '') => <button type="button" className={`gs-btn ${cls}`} onClick={() => ask({ type })}>{label}</button>;
   /** Tisch: online anfragen, sonst Telefon */
-  const tableBtn = (label: string, cls = '') => (online ? askBtn('table', label, cls) : callBtn(label, cls));
+  const tableBtn = (label: string, cls = '') => (on('table') ? askBtn('table', label, cls) : callBtn(label, cls));
   return (
     <div className="gs">
       {data.preview && <div className="gs-preview">Vorschau – die Seite ist noch nicht freigeschaltet. Nur Sie als Administrator sehen sie.</div>}
@@ -121,7 +122,7 @@ export function GuestSite({ staffLink = false }: { staffLink?: boolean }) {
         {S.menu.show && (
           <Reveal id="gs-karte" className="gs-section"><div className="gs-wrap">
             <div className="gs-head"><div><span className="gs-kicker">{S.menu.kicker}</span><Title s={S.menu} /></div>{S.menu.note && <p>{S.menu.note}</p>}</div>
-            <div className="gs-card"><h3>Vorfreude auf Ihren nächsten Besuch.</h3>{S.menu.text && <p>{S.menu.text}</p>}<div className="gs-actions">{callBtn('Aktuelle Speisekarte erfragen')}{online && <button type="button" className="gs-link" onClick={() => ask({ type: 'question', message: 'Ich interessiere mich für Ihre aktuelle Speisekarte.' })}>Oder schriftlich fragen</button>}</div></div>
+            <div className="gs-card"><h3>Vorfreude auf Ihren nächsten Besuch.</h3>{S.menu.text && <p>{S.menu.text}</p>}<div className="gs-actions">{callBtn('Aktuelle Speisekarte erfragen')}{on('question') && <button type="button" className="gs-link" onClick={() => ask({ type: 'question', message: 'Ich interessiere mich für Ihre aktuelle Speisekarte.' })}>Oder schriftlich fragen</button>}</div></div>
           </div></Reveal>
         )}
 
@@ -129,18 +130,18 @@ export function GuestSite({ staffLink = false }: { staffLink?: boolean }) {
           <Reveal id="gs-feiern" className="gs-section gs-soft"><div className="gs-wrap">
             <div className="gs-head"><div><span className="gs-kicker">{S.events.kicker}</span><Title s={S.events} /></div>{S.events.text && <p>{S.events.text}</p>}</div>
             <Pic src={img('events')} alt={`Feiern – ${h.name}`} letter={letter} className="gs-events-pic" />
-            {data.eventTypes.length > 0 && <div className="gs-types" style={{ ['--n' as string]: Math.min(4, data.eventTypes.length) }}>{data.eventTypes.map((x) => online ? <button type="button" key={x} className="gs-type" onClick={() => ask(MEETING_WORDS.test(x) ? { type: 'meeting' } : { type: 'event', occasion: x })}>{x}</button> : <span key={x}>{x}</span>)}</div>}
-            {(online || h.email) && <div className="gs-actions">{online && askBtn('meeting', 'Tagung oder Versammlung anfragen', 'outline')}{online ? askBtn('event', 'Ihre Veranstaltung anfragen') : <a className="gs-btn" href={mail(h.email, 'Unverbindliche Veranstaltungsanfrage')}>Ihre Veranstaltung anfragen</a>}</div>}
+            {data.eventTypes.length > 0 && <div className="gs-types" style={{ ['--n' as string]: Math.min(4, data.eventTypes.length) }}>{data.eventTypes.map((x) => (MEETING_WORDS.test(x) ? on('meeting') : on('event')) ? <button type="button" key={x} className="gs-type" onClick={() => ask(MEETING_WORDS.test(x) ? { type: 'meeting' } : { type: 'event', occasion: x })}>{x}</button> : <span key={x}>{x}</span>)}</div>}
+            {(online || h.email) && <div className="gs-actions">{on('meeting') && askBtn('meeting', 'Tagung oder Versammlung anfragen', 'outline')}{on('event') ? askBtn('event', 'Ihre Veranstaltung anfragen') : <a className="gs-btn" href={mail(h.email, 'Unverbindliche Veranstaltungsanfrage')}>Ihre Veranstaltung anfragen</a>}</div>}
             {S.events.note && <p className="gs-note">{S.events.note}</p>}
           </div></Reveal>
         )}
 
-        {S.vouchers.show && (online || h.email) && (
+        {S.vouchers.show && (on('voucher') || h.email) && (
           <Reveal id="gs-gutscheine" className="gs-section"><div className="gs-wrap gs-grid">
             <div className="gs-gift"><span className="gs-kicker">{h.name}</span><h3>Gute Zeit.<br /><em>Verschenkt.</em></h3><small>Gutschein auf Anfrage</small></div>
             <div className="gs-copy">
               <span className="gs-kicker">{S.vouchers.kicker}</span><Title s={S.vouchers} />{S.vouchers.text && <p>{S.vouchers.text}</p>}
-              <div className="gs-actions">{online ? askBtn('voucher', 'Gutschein anfragen') : <a className="gs-btn" href={mail(h.email, 'Unverbindliche Gutscheinanfrage')}>Gutschein per E-Mail anfragen</a>}</div>
+              <div className="gs-actions">{on('voucher') ? askBtn('voucher', 'Gutschein anfragen') : <a className="gs-btn" href={mail(h.email, 'Unverbindliche Gutscheinanfrage')}>Gutschein per E-Mail anfragen</a>}</div>
               {S.vouchers.note && <p className="gs-note">{S.vouchers.note}</p>}
             </div>
           </div></Reveal>
@@ -151,7 +152,7 @@ export function GuestSite({ staffLink = false }: { staffLink?: boolean }) {
             <div className="gs-copy"><span className="gs-kicker">{S.reservation.kicker}</span><Title s={S.reservation} />{S.reservation.text && <p>{S.reservation.text}</p>}</div>
             <div>
               {h.phone ? <a className="gs-phone" href={tel(h.phone)}>{h.phone}</a> : <a className="gs-phone" href={mail(h.email, 'Tischreservierung')}>{h.email}</a>}
-              <div className="gs-actions" style={{ marginTop: 0 }}>{h.phone && callBtn('Jetzt anrufen', 'light')}{online && askBtn('table', 'Online anfragen', h.phone ? 'outline' : 'light')}</div>
+              <div className="gs-actions" style={{ marginTop: 0 }}>{h.phone && callBtn('Jetzt anrufen', 'light')}{on('table') && askBtn('table', 'Online anfragen', h.phone ? 'outline' : 'light')}</div>
               {S.reservation.note && <p className="gs-note">{S.reservation.note}</p>}
             </div>
           </div></Reveal>
@@ -258,7 +259,7 @@ function Hotel({ data, img, letter, ask: askUp }: { data: SitePublic; img: strin
       <div className="gs-grid">
         <div className="gs-copy">
           <span className="gs-kicker">{S.kicker}</span><Title s={S} />{S.text && <p>{S.text}</p>}
-          <div className="gs-actions">{data.requestEnabled && <button type="button" className="gs-btn" onClick={() => ask(null)}>Zimmer unverbindlich anfragen</button>}</div>
+          <div className="gs-actions">{data.requestEnabled && data.form.types.room && <button type="button" className="gs-btn" onClick={() => ask(null)}>Zimmer unverbindlich anfragen</button>}</div>
           {S.note && <p className="gs-note">{S.note}</p>}
         </div>
         <Pic src={img} alt="Zimmer" letter={letter} className="first" />
@@ -290,7 +291,7 @@ function Hotel({ data, img, letter, ask: askUp }: { data: SitePublic; img: strin
                   {!a ? (c.fromPriceCents != null ? <span className="gs-price"><small>ab </small>{formatMoney(c.fromPriceCents)}<small> / Nacht</small></span> : <span />)
                     : a.available ? (a.totalCents != null ? <span className="gs-price">{formatMoney(a.totalCents)}<small> für {avail!.nights} {avail!.nights === 1 ? 'Nacht' : 'Nächte'}</small></span> : <span className="gs-price">frei</span>)
                     : <span className="gs-none">{n > c.maxPersons ? `für ${persons(n)} zu klein` : 'in diesem Zeitraum belegt'}</span>}
-                  {data.requestEnabled && (!a || a.available) && <button type="button" className="gs-btn" onClick={() => ask(c)}>Anfragen</button>}
+                  {data.requestEnabled && data.form.types.room && (!a || a.available) && <button type="button" className="gs-btn" onClick={() => ask(c)}>Anfragen</button>}
                 </div>
               </div>
             </article>
@@ -311,7 +312,7 @@ function RequestForm({ site, want }: { site: SitePublic; want: Want | null }) {
   const today = todayBerlin();
   const first: RequestType = site.categories.length && site.sections.hotel.show ? 'room' : 'table';
   const empty = { type: first as RequestType, name: '', email: '', phone: '', message: '', consent: false, website: '', from: addDays(today, 1), to: addDays(today, 3), adults: '2', children: '0', category: '',
-    date: addDays(today, 1), time: '19:00', persons: '2', guests: '', occasion: '', value: '',
+    date: addDays(today, 1), time: tableTimes(site.form).includes('19:00') ? '19:00' : (tableTimes(site.form)[0] ?? '19:00'), persons: '2', guests: '', occasion: '', value: '',
     organization: '', kind: '', participants: '', rooms: '0', layout: '', equipment: [] as string[], catering: [] as string[] };
   const [v, setV] = useState(empty);
   const [err, setErr] = useState<Record<string, string>>({});
@@ -322,7 +323,8 @@ function RequestForm({ site, want }: { site: SitePublic; want: Want | null }) {
     setDone(null); setErr({});
     setV((x) => ({ ...x, type: want.type, category: want.category ?? x.category, from: want.from ?? x.from, to: want.to ?? x.to, adults: want.adults ?? x.adults, children: want.children ?? x.children, occasion: want.occasion ?? x.occasion, message: want.message ?? x.message }));
   }, [want]);
-  const types = REQUEST_TYPES.filter((t) => t !== 'room' || (site.categories.length > 0 && site.sections.hotel.show)).filter((t) => t !== 'table' || site.sections.reservation.show || site.sections.restaurant.show)
+  const F = site.form;
+  const types = REQUEST_TYPES.filter((t) => F.types[t]).filter((t) => t !== 'room' || (site.categories.length > 0 && site.sections.hotel.show)).filter((t) => t !== 'table' || site.sections.reservation.show || site.sections.restaurant.show)
     .filter((t) => (t !== 'event' && t !== 'meeting') || site.sections.events.show).filter((t) => t !== 'voucher' || site.sections.vouchers.show);
   const send = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true); setErr({});
@@ -333,7 +335,7 @@ function RequestForm({ site, want }: { site: SitePublic; want: Want | null }) {
   const set = (k: keyof typeof v) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setV({ ...v, [k]: e.target.value });
   const f = (k: keyof typeof v, label: string, el: ReactNode, cls = '') => <label className={`gs-f ${cls}`}>{label}{el}{err[k] && <span className="gs-err">{err[k]}</span>}</label>;
   const sel = (k: keyof typeof v, n: number[]) => <select value={String(v[k])} onChange={set(k)}>{n.map((x) => <option key={x}>{x}</option>)}</select>;
-  const times = Array.from({ length: 23 }, (_, i) => `${String(11 + Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`);
+  const times = tableTimes(F);
   if (done) return (
     <div className="gs-request" role="status">
       <span className="gs-kicker">Vielen Dank</span>
@@ -357,7 +359,7 @@ function RequestForm({ site, want }: { site: SitePublic; want: Want | null }) {
         {v.type === 'table' && <>
           {f('date', 'Tag', <input type="date" min={today} value={v.date} onChange={set('date')} />, 'wide')}
           {f('time', 'Uhrzeit', <select value={v.time} onChange={set('time')}>{times.map((x) => <option key={x}>{x}</option>)}</select>)}
-          {f('persons', 'Personen', sel('persons', Array.from({ length: 20 }, (_, i) => i + 1)))}
+          {f('persons', 'Personen', sel('persons', Array.from({ length: F.tableMaxPersons }, (_, i) => i + 1)))}
         </>}
         {v.type === 'event' && <>
           {f('occasion', 'Anlass', <input list="gs-anlaesse" value={v.occasion} onChange={set('occasion')} placeholder="z. B. Geburtstag" />, 'wide')}
@@ -367,14 +369,14 @@ function RequestForm({ site, want }: { site: SitePublic; want: Want | null }) {
         </>}
         {v.type === 'meeting' && <>
           {f('organization', 'Veranstalter', <input autoComplete="organization" value={v.organization} onChange={set('organization')} placeholder="z. B. Bäckerinnung, Sportverein, Arztpraxis, Firma" />, 'full')}
-          {f('kind', 'Art der Veranstaltung', <select value={v.kind} onChange={set('kind')}><option value="">bitte wählen (freiwillig)</option>{MEETING_KINDS.map((x) => <option key={x}>{x}</option>)}</select>, 'full')}
+          {F.meetingKinds.length > 0 && f('kind', 'Art der Veranstaltung', <select value={v.kind} onChange={set('kind')}><option value="">bitte wählen (freiwillig)</option>{F.meetingKinds.map((x) => <option key={x}>{x}</option>)}</select>, 'full')}
           {f('from', 'Erster Tag', <input type="date" min={today} value={v.from} onChange={(e) => setV({ ...v, from: e.target.value, to: v.to < e.target.value ? e.target.value : v.to })} />, 'wide')}
           {f('to', 'Letzter Tag', <input type="date" min={v.from || today} value={v.to} onChange={set('to')} />, 'wide')}
           {f('participants', 'Teilnehmer, ungefähr', <input inputMode="numeric" value={v.participants} onChange={set('participants')} />, 'wide')}
           {f('rooms', 'Zimmer je Nacht (0 = keine)', <input inputMode="numeric" value={v.rooms} onChange={set('rooms')} />, 'wide')}
-          {f('layout', 'Bestuhlung', <select value={v.layout} onChange={set('layout')}><option value="">egal / bitte beraten</option>{MEETING_LAYOUTS.map((x) => <option key={x}>{x}</option>)}</select>, 'full')}
-          <fieldset className="gs-chips full"><legend>Technik</legend>{MEETING_EQUIPMENT.map((x) => <label key={x}><input type="checkbox" checked={v.equipment.includes(x)} onChange={(e) => setV({ ...v, equipment: e.target.checked ? [...v.equipment, x] : v.equipment.filter((y) => y !== x) })} /><span>{x}</span></label>)}</fieldset>
-          <fieldset className="gs-chips full"><legend>Verpflegung</legend>{MEETING_CATERING.map((x) => <label key={x}><input type="checkbox" checked={v.catering.includes(x)} onChange={(e) => setV({ ...v, catering: e.target.checked ? [...v.catering, x] : v.catering.filter((y) => y !== x) })} /><span>{x}</span></label>)}</fieldset>
+          {F.layouts.length > 0 && f('layout', 'Bestuhlung', <select value={v.layout} onChange={set('layout')}><option value="">egal / bitte beraten</option>{F.layouts.map((x) => <option key={x}>{x}</option>)}</select>, 'full')}
+          {F.equipment.length > 0 && <fieldset className="gs-chips full"><legend>Technik</legend>{F.equipment.map((x) => <label key={x}><input type="checkbox" checked={v.equipment.includes(x)} onChange={(e) => setV({ ...v, equipment: e.target.checked ? [...v.equipment, x] : v.equipment.filter((y) => y !== x) })} /><span>{x}</span></label>)}</fieldset>}
+          {F.catering.length > 0 && <fieldset className="gs-chips full"><legend>Verpflegung</legend>{F.catering.map((x) => <label key={x}><input type="checkbox" checked={v.catering.includes(x)} onChange={(e) => setV({ ...v, catering: e.target.checked ? [...v.catering, x] : v.catering.filter((y) => y !== x) })} /><span>{x}</span></label>)}</fieldset>}
         </>}
         {v.type === 'voucher' && f('value', 'Wert oder Wunsch', <input value={v.value} onChange={set('value')} placeholder="z. B. 50 € oder „Abendessen für zwei“" />, 'full')}
         {f('name', 'Ihr Name', <input autoComplete="name" value={v.name} onChange={set('name')} />, 'wide')}
