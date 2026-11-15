@@ -14,7 +14,7 @@ export const toUserDto = (u: UserRow): UserDto => ({
   id: u.id, username: u.username, name: u.name, role: u.role, active: u.active, modules: u.modules as Module[],
   lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
   lockedUntil: u.lockedUntil && u.lockedUntil > new Date() ? u.lockedUntil.toISOString() : null,
-  createdAt: u.createdAt.toISOString(), version: u.version,
+  createdAt: u.createdAt.toISOString(), version: u.version, twoFactor: u.totpEnabled,
 });
 const forAudit = (u: UserRow) => ({ username: u.username, name: u.name, role: u.role, active: u.active, modules: u.modules.join(', ') });
 
@@ -87,9 +87,21 @@ export async function emergencyReset(db: Db, username: string | null) {
   const password = randomBytes(9).toString('base64url');
   const passwordHash = await hashPassword(password);
   await db.transaction(async (tx) => {
-    await tx.update(users).set({ passwordHash, failedLogins: 0, lockedUntil: null, active: true, updatedAt: new Date(), version: sql`${users.version} + 1` }).where(eq(users.id, user.id));
+    // Notfall: auch die Zwei-Faktor-Anmeldung wird aufgehoben (Handy verloren)
+    await tx.update(users).set({ passwordHash, failedLogins: 0, lockedUntil: null, active: true, totpEnabled: false, totpSecretEnc: null, totpLastStep: null, updatedAt: new Date(), version: sql`${users.version} + 1` }).where(eq(users.id, user.id));
     await tx.delete(sessions).where(eq(sessions.userId, user.id));
     await record(tx, SYSTEM, { action: 'password_reset', entity: 'user', entityId: user.id, after: { via: 'Notfall-Zurücksetzung am PMS-Rechner' } });
   });
   return { ok: true as const, username: user.username, name: user.name, password };
+}
+
+/** Administrator hebt die Zwei-Faktor-Anmeldung eines Benutzers auf (z. B. Handy verloren). */
+export async function resetTwoFactor(db: Db, actor: Actor, id: string) {
+  return db.transaction(async (tx) => {
+    const [u] = await tx.select().from(users).where(eq(users.id, id)).for('update');
+    if (!u) throw notFound('Benutzer');
+    await tx.update(users).set({ totpEnabled: false, totpSecretEnc: null, totpLastStep: null, updatedAt: new Date(), version: u.version + 1 }).where(eq(users.id, id));
+    await record(tx, actor, { action: 'totp_reset', entity: 'user', entityId: id, after: { username: u.username } });
+    return toUserDto({ ...u, totpEnabled: false, version: u.version + 1 });
+  });
 }

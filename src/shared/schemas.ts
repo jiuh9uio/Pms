@@ -23,7 +23,14 @@ export const username = z
   .string().trim().toLowerCase()
   .regex(/^[a-z0-9._-]{3,40}$/, '3–40 Zeichen: Buchstaben, Ziffern, Punkt, Binde- oder Unterstrich');
 
-export const loginInput = z.object({ username: z.string().trim().toLowerCase().min(1, 'Pflichtfeld').max(100), password: z.string().min(1, 'Pflichtfeld').max(200) });
+export const loginInput = z.object({ username: z.string().trim().toLowerCase().min(1, 'Pflichtfeld').max(100), password: z.string().min(1, 'Pflichtfeld').max(200), /** Code aus der Authenticator-App, wenn die Zwei-Faktor-Anmeldung eingeschaltet ist */ code: z.string().trim().max(12).optional() });
+const totpCode = z.string().trim().regex(/^\d{6}$/, 'Der Code hat 6 Ziffern');
+export const totpConfirmInput = z.object({ code: totpCode });
+export const totpDisableInput = z.object({ password: z.string().min(1, 'Pflichtfeld').max(200) });
+export interface TotpSetupDto { secret: string; qr: string; account: string }
+/** Sicherheit: Abmelden nach Minuten ohne Eingabe (0 = aus) */
+export const securityInput = z.object({ idleMinutes: z.number('Bitte eine Zahl eingeben').int().min(0).max(720) }).refine((v) => v.idleMinutes === 0 || v.idleMinutes >= 5, { message: 'Mindestens 5 Minuten (oder 0 für aus)', path: ['idleMinutes'] });
+export type SecuritySettings = z.infer<typeof securityInput>;
 export const setupInput = z.object({ username, name: required(100), password });
 export const changePasswordInput = z.object({ current: z.string().min(1, 'Pflichtfeld').max(200), password });
 
@@ -66,6 +73,7 @@ export const taxRateUpdateInput = z.object({
 export interface UserDto {
   id: string; username: string; name: string; role: Role; active: boolean; modules: Module[];
   lastLoginAt: string | null; lockedUntil: string | null; createdAt: string; version: number;
+  /** Zwei-Faktor-Anmeldung eingeschaltet */ twoFactor: boolean;
 }
 export interface TaxRateDto { id: string; name: string; ratePercent: number; defaultFor: 'lodging' | 'services' | null; active: boolean; version: number }
 export interface AuditDto {

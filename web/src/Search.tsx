@@ -45,6 +45,8 @@ const PAGES: Page[] = [
   { to: '/erechnung?ansicht=archiv', title: 'E-Rechnungs-Archiv', area: 'E-Rechnung', words: 'archiv erechnung zugferd xml steuerberater export paket zip liste', module: 'erechnung' },
   { to: '/als-programm', title: 'Als Programm öffnen (Symbol auf Desktop und Taskleiste)', area: 'Verwaltung', words: 'programm fenster symbol desktop verknüpfung taskleiste anheften startmenü app installieren icon' },
   { to: '/einstellungen?ansicht=mitteilungen', title: 'Mitteilungen', area: 'Einstellungen', words: 'mitteilungen hinweise meldungen benachrichtigung abfrage popup zähler warnung ein aus schalten', admin: true },
+  { to: '/einstellungen?ansicht=sicherheit', title: 'Sicherheit (automatisches Abmelden, Zwei-Faktor)', area: 'Einstellungen', words: 'sicherheit abmelden automatisch zwei faktor 2fa authenticator code datenschutz', admin: true },
+  { to: '/konto', title: 'Mein Konto (Passwort, Zwei-Faktor-Anmeldung)', area: 'Konto', words: 'konto passwort zwei faktor 2fa authenticator code darstellung' },
   { to: '/erste-schritte', title: 'Erste Schritte (Start-Checkliste)', area: 'Verwaltung', words: 'start checkliste einrichtung erste schritte anfangen inbetriebnahme', admin: true },
   { to: '/einstellungen?ansicht=steuern', title: 'Rechnungsnummern', area: 'Einstellungen', words: 'rechnungsnummer nummernkreis startnummer erste nummer', admin: true },
   { to: '/einstellungen?ansicht=tse', title: 'TSE', area: 'Einstellungen', words: 'tse epson stick kassensicherung selbsttest zertifikat seriennummer finanzamt', admin: true },

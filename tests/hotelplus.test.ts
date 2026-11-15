@@ -411,4 +411,52 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     await ok('PUT', '/settings/notices', admin, { ...all, hygieneClean: false, teamCount: false });
     expect(await ok('GET', '/settings/notices', user)).toMatchObject({ hygieneTemp: true, hygieneClean: false, teamCount: false, backupWarn: true });
   });
+
+  it('schützt die Anmeldung mit einem zweiten Faktor (Code aus der Authenticator-App)', async () => {
+    const { codeAt, stepOf, verifyCode, base32, fromBase32 } = await import('../src/server/lib/totp.js');
+    // Prüfwert aus RFC 6238 (SHA-1, Zeit 59 s → 94287082, sechs Stellen: 287082)
+    const rfc = base32(Buffer.from('12345678901234567890'));
+    expect(codeAt(rfc, 1)).toBe('287082');
+    expect(fromBase32(rfc).toString()).toBe('12345678901234567890');
+    expect(verifyCode(rfc, '287082', 59_000)).toBe(1);
+    expect(verifyCode(rfc, '000000', 59_000)).toBeNull();
+
+    await ok('POST', '/users', admin, { username: 'zweifaktor', name: 'Zwei Faktor', password: 'ganz-geheim-123', role: 'user', modules: ['hotel'] });
+    const login = (body: object) => app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { username: 'zweifaktor', password: 'ganz-geheim-123', ...body } });
+    const me = { pms_session: (await login({})).cookies.find((c) => c.name === 'pms_session')!.value };
+    const setup = await ok('POST', '/auth/totp/begin', me, {});
+    expect(setup.qr).toMatch(/^data:image\/png/);
+    // noch nicht bestätigt: Anmeldung weiter ohne Code
+    expect((await login({})).statusCode).toBe(200);
+    expect((await call('POST', '/auth/totp/confirm', me, { code: '000000' })).statusCode).toBe(400);
+    await ok('POST', '/auth/totp/confirm', me, { code: codeAt(setup.secret, stepOf() - 1) });
+    expect((await ok('GET', '/auth/state', me)).user.twoFactor).toBe(true);
+    const stored = await db.execute(sql`select totp_secret_enc as s from users where username = 'zweifaktor'`);
+    expect(String(stored[0]!.s)).not.toContain(setup.secret); // Geheimnis nur verschlüsselt
+
+    const need = await login({});
+    expect(need.statusCode).toBe(401);
+    expect(need.json().error.code).toBe('totp_required');
+    expect(need.cookies.find((c) => c.name === 'pms_session')).toBeUndefined();
+    expect((await login({ code: '123456' })).json().error.code).toBe('totp_invalid');
+    const good = codeAt(setup.secret, stepOf());
+    expect((await login({ code: good })).statusCode).toBe(200);
+    expect((await login({ code: good })).json().error.code).toBe('totp_invalid'); // derselbe Code gilt nicht zweimal
+    // falsches Passwort verrät nicht, ob ein zweiter Faktor eingerichtet ist
+    expect((await login({ password: 'falsch-falsch-1' })).json().error.code).not.toBe('totp_required');
+
+    // ausschalten nur mit Passwort; Administrator kann aufheben
+    expect((await call('POST', '/auth/totp/disable', me, { password: 'falsch' })).statusCode).toBe(400);
+    const id = (await ok('GET', '/users', admin)).find((u: { username: string }) => u.username === 'zweifaktor').id;
+    expect((await call('POST', `/users/${id}/totp-reset`, user, {})).statusCode).toBe(403);
+    expect((await ok('POST', `/users/${id}/totp-reset`, admin, {})).twoFactor).toBe(false);
+    expect((await login({})).statusCode).toBe(200);
+
+    // automatisches Abmelden: Einstellung
+    expect(await ok('GET', '/settings/security', user)).toEqual({ idleMinutes: 0 });
+    expect((await call('PUT', '/settings/security', user, { idleMinutes: 15 })).statusCode).toBe(403);
+    expect((await call('PUT', '/settings/security', admin, { idleMinutes: 2 })).statusCode).toBe(400);
+    expect(await ok('PUT', '/settings/security', admin, { idleMinutes: 15 })).toEqual({ idleMinutes: 15 });
+    await ok('PUT', '/settings/security', admin, { idleMinutes: 0 });
+  });
 });

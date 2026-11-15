@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.48.0
+
+- Zwei-Faktor-Anmeldung: Unter „Mein Konto“ kann jeder Benutzer einstellen, dass bei der Anmeldung zusätzlich zum Passwort ein 6-stelliger Code aus einer Authenticator-App verlangt wird. Aufheben: selbst mit Passwort, durch einen Administrator unter Benutzer, oder im Notfall mit „Passwort vergessen.bat“ am PMS-Rechner.
+- Einstellungen → System → „Sicherheit“: automatisches Abmelden nach einer einstellbaren Zeit ohne Eingabe; Überblick, wer die Zwei-Faktor-Anmeldung nutzt.
+- „Mein Konto“ steht jetzt allen Benutzern offen (bisher nur Administratoren) – damit jeder sein Passwort ändern und den zweiten Faktor einrichten kann.
+
 ## 1.47.0
 
 - Einstellungen → Betrieb → neuer Reiter „Mitteilungen“: Für das ganze Haus lässt sich ein- und ausschalten, was das Programm von sich aus meldet – die Abfragen der Eigenkontrolle beim Start (Temperatur, Reinigung), der Hinweis „Internet ausgefallen“, die Zähler an den Kacheln E-Mail und Team sowie die Hinweise für den Administrator (Datensicherung, Programm-Update, Einrichtung).

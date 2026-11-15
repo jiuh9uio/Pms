@@ -25,7 +25,7 @@ export function Users() {
                   <td>{u.username}</td>
                   <td>{u.role === 'admin' ? <Badge tone="accent">{ROLE_LABEL.admin}</Badge> : ROLE_LABEL.user}</td>
                   <td className="hide-sm">{u.role === 'admin' ? 'alle' : u.modules.map((m) => MODULE_LABEL[m]).join(', ') || <span className="muted">keine</span>}</td>
-                  <td>{!u.active ? <Badge tone="neutral">Deaktiviert</Badge> : u.lockedUntil ? <Badge tone="warn">Vorübergehend gesperrt</Badge> : <Badge tone="ok">Aktiv</Badge>}</td>
+                  <td>{!u.active ? <Badge tone="neutral">Deaktiviert</Badge> : u.lockedUntil ? <Badge tone="warn">Vorübergehend gesperrt</Badge> : <Badge tone="ok">Aktiv</Badge>}{u.twoFactor && <> <Badge tone="accent">2-Faktor</Badge></>}</td>
                   <td className="muted">{fmtDateTime(u.lastLoginAt)}</td>
                 </tr>
               ))}
@@ -114,6 +114,11 @@ function EditUser({ user, onClose, onDone }: { user: UserDto; onClose: () => voi
         </label>
         <button type="submit" hidden />
       </form>
+      <div className="subform">
+        <h3>Zwei-Faktor-Anmeldung</h3>
+        <p>{user.twoFactor ? <><Badge tone="ok">eingeschaltet</Badge> Der Benutzer meldet sich mit Passwort und Code aus seiner Authenticator-App an.</> : <><Badge>aus</Badge> Jeder Benutzer schaltet sie selbst unter „Mein Konto“ ein.</>}</p>
+        {user.twoFactor && <Button onClick={() => { if (window.confirm(`Zwei-Faktor-Anmeldung für ${user.name} aufheben? Danach genügt wieder das Passwort, bis sie neu eingerichtet wird.`)) void api('POST', `/users/${user.id}/totp-reset`, {}).then(async () => { toast('Zwei-Faktor-Anmeldung aufgehoben'); if (user.id === me.user.id) await me.refresh(); onDone(); }).catch((e) => toast(e instanceof Error ? e.message : 'Fehler', 'error')); }}>Aufheben (Handy verloren)</Button>}
+      </div>
       <form className="subform" onSubmit={(e) => void reset.submit({ password: pw }, e)} noValidate>
         <h3>Passwort zurücksetzen</h3>
         <div className="inline">

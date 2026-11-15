@@ -23,7 +23,7 @@ const TILES: Tile[] = [
   { group: 'haus', to: '/internet', title: 'Internet', text: 'Verbindung, Gäste-WLAN, Geräte im Hausnetz', icon: '⌁', module: 'internet' },
   { group: 'haus', to: '/schnelldruck', title: 'Schnelldruck', text: 'Öffnungszeiten, WLAN und Info-Zettel aus dem Bondrucker', icon: '⎙', module: 'schnelldruck' },
   { group: 'haus', to: '/einstellungen', title: 'Verwaltung', text: 'Einstellungen, Benutzer, Änderungsprotokoll', icon: '⚙', admin: true },
-  { group: 'haus', to: '/konto', title: 'Mein Konto', text: 'Passwort, Darstellung', icon: '◐', admin: true },
+  { group: 'haus', to: '/konto', title: 'Mein Konto', text: 'Passwort, Zwei-Faktor-Anmeldung, Darstellung', icon: '◐' },
 ];
 const allowed = (user: Parameters<typeof hasModule>[0], m: Tile['module']) => !m || (Array.isArray(m) ? m.some((x) => hasModule(user, x)) : hasModule(user, m));
 

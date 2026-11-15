@@ -239,6 +239,13 @@
       "when": 1794748123088,
       "tag": "0033_nachlass_einzelbelegung",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1794749947534,
+      "tag": "0034_zwei_faktor",
+      "breakpoints": true
     }
   ]
 }

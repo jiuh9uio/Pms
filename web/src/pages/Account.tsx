@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ROLE_LABEL, changePasswordInput } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { useAuth } from '../App.tsx';
+import { TwoFactorCard } from './TwoFactorCard.tsx';
 import { applyMotion, applyTheme, storedMotion, storedTheme, type Theme } from '../theme.ts';
 import { Button, Field, PageHeader, useSubmit, useToast } from '../ui.tsx';
 
@@ -48,6 +49,7 @@ export function Account() {
         </div>
         <label className="check" style={{ marginTop: 14 }}><input type="checkbox" checked={motion} onChange={(e) => { setMotion(e.target.checked); applyMotion(e.target.checked); }} /><span>Animationen und weiche Übergänge <small>– gilt für dieses Gerät; auf langsamen Rechnern ausschalten</small></span></label>
       </section>
+      <TwoFactorCard />
       <form className="card" onSubmit={(e) => void f.submit(v, e)} noValidate>
         <h2>Passwort ändern</h2>
         <div className="formgrid">

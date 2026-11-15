@@ -1,4 +1,4 @@
-import { Fragment, createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { ROLE_LABEL, hasModule, type Module, type UserDto } from '../../src/shared/schemas.js';
 import { api } from './api.ts';
@@ -118,6 +118,28 @@ export function App() {
   );
 }
 
+/** Meldet ab, wenn so lange nichts getippt, geklickt oder bewegt wurde, wie unter Einstellungen → Sicherheit festgelegt ist. */
+function useIdleLogout(logout: () => Promise<void>) {
+  const [minutes, setMinutes] = useState(0);
+  const out = useRef(logout);
+  out.current = logout;
+  useEffect(() => {
+    const load = () => void api<{ idleMinutes: number }>('GET', '/settings/security').then((r) => setMinutes(r.idleMinutes)).catch(() => {});
+    load();
+    window.addEventListener('pms-sicherheit', load);
+    return () => window.removeEventListener('pms-sicherheit', load);
+  }, []);
+  useEffect(() => {
+    if (!minutes) return;
+    let last = Date.now();
+    const touch = () => { last = Date.now(); };
+    const events = ['pointerdown', 'keydown', 'pointermove', 'wheel', 'touchstart'] as const;
+    events.forEach((e) => window.addEventListener(e, touch, { passive: true }));
+    const t = setInterval(() => { if (Date.now() - last >= minutes * 60_000) { last = Date.now(); void out.current(); } }, 15_000);
+    return () => { clearInterval(t); events.forEach((e) => window.removeEventListener(e, touch)); };
+  }, [minutes]);
+}
+
 function Shell({ user }: { user: UserDto }) {
   const isAdmin = user.role === 'admin';
   const { pathname, search } = useLocation();
@@ -141,6 +163,7 @@ function Shell({ user }: { user: UserDto }) {
   const erechnung = hasModule(user, 'erechnung');
   const internet = hasModule(user, 'internet');
   const email = hasModule(user, 'email');
+  useIdleLogout(logout);
   if (pathname === '/') return <DataProvider><NetAlert /><Launcher /></DataProvider>;
   if (hotel && pathname.startsWith('/meldeschein/')) return <Routes><Route path="/meldeschein/:id" element={<RegistrationPrint />} /></Routes>;
   return (
@@ -162,7 +185,7 @@ function Shell({ user }: { user: UserDto }) {
               </Link>
             </Fragment>
           ))}
-          {isAdmin && <NavLink to="/konto" className="konto"><span className="ico" aria-hidden>◐</span><span className="full">Mein Konto</span><span className="short">Konto</span></NavLink>}
+          {<NavLink to="/konto" className="konto"><span className="ico" aria-hidden>◐</span><span className="full">Mein Konto</span><span className="short">Konto</span></NavLink>}
         </nav>
         <div className="whoami"><b>{user.name}</b><span>{ROLE_LABEL[user.role]}</span><button type="button" className="linkbtn" onClick={() => void logout()}>Abmelden</button></div>
       </aside>
@@ -183,7 +206,7 @@ function Shell({ user }: { user: UserDto }) {
           {hotel && <Route path="/firmen" element={<Companies />} />}
           {hotel && <Route path="/auswertung" element={<Report />} />}
           {isAdmin && <Route path="/zimmer" element={<RoomsPrices />} />}
-          {isAdmin && <Route path="/konto" element={<Account />} />}
+          <Route path="/konto" element={<Account />} />
           <Route path="/als-programm" element={<AsProgram />} />
           {isAdmin && <Route path="/erste-schritte" element={<Setup />} />}
           {isAdmin && <Route path="/benutzer" element={<Users />} />}

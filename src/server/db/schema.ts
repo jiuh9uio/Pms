@@ -31,6 +31,11 @@ export const users = pgTable('users', {
   failedLogins: integer('failed_logins').notNull().default(0),
   lockedUntil: ts('locked_until'),
   lastLoginAt: ts('last_login_at'),
+  /** Zwei-Faktor-Anmeldung: Geheimnis (verschlüsselt); gilt erst, wenn totpEnabled gesetzt ist */
+  totpSecretEnc: text('totp_secret_enc'),
+  totpEnabled: boolean('totp_enabled').notNull().default(false),
+  /** zuletzt verwendeter Zeitschritt – derselbe Code gilt nicht zweimal */
+  totpLastStep: integer('totp_last_step'),
   ...stamps,
 });
 
