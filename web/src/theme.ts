@@ -14,3 +14,12 @@ export function applyTheme(theme: Theme) {
   else document.documentElement.dataset.theme = theme;
   try { localStorage.setItem('pms-theme', theme); } catch { /* privater Modus */ }
 }
+
+/** Animationen der Oberfläche: an (Standard) oder aus – je Gerät gespeichert. Die Geräteeinstellung „Bewegung reduzieren“ schaltet sie ebenfalls ab. */
+export function storedMotion(): boolean {
+  try { return localStorage.getItem('pms-motion') !== 'aus'; } catch { return true; }
+}
+export function applyMotion(on: boolean) {
+  if (on) delete document.documentElement.dataset.motion; else document.documentElement.dataset.motion = 'off';
+  try { localStorage.setItem('pms-motion', on ? 'an' : 'aus'); } catch { /* privater Modus */ }
+}

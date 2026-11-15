@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.44.0
+
+- Oberfläche überarbeitet: Seiten, Kacheln und Kennzahlen blenden weich ein; Fenster öffnen sich mit sanfter Bewegung vor unscharfem Hintergrund; Knöpfe, Kacheln, Tabellenzeilen und Balken im Belegungsplan reagieren beim Überfahren und Drücken; Eingabefelder mit weichem Leuchtrand; feinere Schatten; schimmernde Ladeanzeige statt „Lädt …“; Markierung des aktiven Menüpunkts.
+- Mein Konto → Darstellung: „Animationen und weiche Übergänge“ lässt sich je Gerät ausschalten. Die Windows-Einstellung „Animationseffekte“ aus wird ebenfalls beachtet.
+
 ## 1.43.0
 
 - Das PMS wie ein Programm öffnen: Verwaltung → „Als Programm öffnen“ bietet eine Datei zum Herunterladen, die auf dem jeweiligen Windows-PC ein Symbol auf dem Desktop und im Startmenü anlegt. Das Symbol öffnet das PMS in einem eigenen Fenster ohne Adressleiste und lässt sich an die Taskleiste anheften. Im Programmordner liegt dafür zusätzlich „Als Programm einrichten.bat“ (bei neuen Installationen).

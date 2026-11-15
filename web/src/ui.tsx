@@ -96,7 +96,7 @@ export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
 
 export function LoadState({ error, loading }: { error: string | null; loading: boolean }) {
   if (error) return <p className="notice danger" role="alert">{error}</p>;
-  if (loading) return <p className="muted">Lädt …</p>;
+  if (loading) return <div className="skeleton" role="status" aria-label="Lädt"><i /><i /><i /><span className="sr-only">Lädt …</span></div>;
   return null;
 }
 

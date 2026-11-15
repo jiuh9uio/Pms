@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ROLE_LABEL, changePasswordInput } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { useAuth } from '../App.tsx';
-import { applyTheme, storedTheme, type Theme } from '../theme.ts';
+import { applyMotion, applyTheme, storedMotion, storedTheme, type Theme } from '../theme.ts';
 import { Button, Field, PageHeader, useSubmit, useToast } from '../ui.tsx';
 
 const THEMES: [Theme, string][] = [['system', 'Wie Gerät'], ['light', 'Hell'], ['dark', 'Dunkel']];
@@ -13,6 +13,7 @@ export function Account() {
   const toast = useToast();
   const navigate = useNavigate();
   const [theme, setTheme] = useState<Theme>(storedTheme());
+  const [motion, setMotion] = useState(storedMotion());
   const [v, setV] = useState({ current: '', password: '' });
   const [out, setOut] = useState(false);
   const f = useSubmit(changePasswordInput, async (d) => {
@@ -45,6 +46,7 @@ export function Account() {
               onClick={() => { setTheme(t); applyTheme(t); }}>{label}</button>
           ))}
         </div>
+        <label className="check" style={{ marginTop: 14 }}><input type="checkbox" checked={motion} onChange={(e) => { setMotion(e.target.checked); applyMotion(e.target.checked); }} /><span>Animationen und weiche Übergänge <small>– gilt für dieses Gerät; auf langsamen Rechnern ausschalten</small></span></label>
       </section>
       <form className="card" onSubmit={(e) => void f.submit(v, e)} noValidate>
         <h2>Passwort ändern</h2>

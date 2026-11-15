@@ -7,10 +7,11 @@ import { GuestFormPage } from './pages/GuestFormPage.tsx';
 import { BookingPage } from './pages/BookingPage.tsx';
 import { RequestPage } from './pages/RequestPage.tsx';
 import { ToastProvider } from './ui.tsx';
-import { applyTheme, storedTheme } from './theme.ts';
+import { applyMotion, applyTheme, storedMotion, storedTheme } from './theme.ts';
 import './styles.css';
 
 applyTheme(storedTheme());
+applyMotion(storedMotion());
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {window.location.pathname.startsWith('/gast/')
