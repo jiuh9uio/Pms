@@ -396,12 +396,12 @@ tfoot td { font-weight: 600; border-top: 2px solid var(--border); }
 .guestinfo { margin-top: 26px; break-inside: avoid; page-break-inside: avoid; }
 .cutline { border-top: 2px dashed #999; position: relative; margin-bottom: 18px; } .cutline span { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); background: #fff; padding: 0 10px; font-size: 11px; color: #777; }
 .gi-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; } .gi-head h2 { margin: 0; font-size: 20px; } .gi-head span { font-size: 13px; color: #555; }
-.gi-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 20px; align-items: start; } .gi-body.nowifi { grid-template-columns: 1fr; }
+.gi-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
 .gi-wifi { display: flex; gap: 14px; align-items: center; border: 1px solid #ccc; border-radius: 10px; padding: 12px; } .gi-wifi img { width: 120px; height: 120px; flex: none; }
-.gi-wifi > div { display: flex; flex-direction: column; gap: 4px; font-size: 14px; } .gi-wifi small { display: block; font-size: 10px; color: #777; text-transform: uppercase; letter-spacing: .04em; }
+.gi-wifi > div { display: flex; flex-direction: column; gap: 4px; font-size: 14px; min-width: 0; } .gi-wifi span, .gi-wifi code { overflow-wrap: anywhere; word-break: break-word; } .gi-wifi small { display: block; font-size: 10px; color: #777; text-transform: uppercase; letter-spacing: .04em; }
 .gi-wifi code { font-size: 15px; font-weight: 600; letter-spacing: .03em; } .gi-wifi .gi-hint { text-transform: none; letter-spacing: 0; font-size: 11px; margin-top: 4px; }
 .gi-lines { margin: 0; display: grid; gap: 6px; font-size: 13px; } .gi-lines > div { display: grid; grid-template-columns: 130px 1fr; gap: 10px; } .gi-lines > div.full { grid-template-columns: 1fr; }
-.gi-lines dt { font-weight: 600; } .gi-lines dd { margin: 0; }
+.gi-lines dt { font-weight: 600; } .gi-lines dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .gi-closing { margin: 16px 0 0; font-style: italic; text-align: center; }
 @media (max-width: 640px) { .gi-body { grid-template-columns: 1fr; } }
 .sheet-wifi { display: grid; grid-template-columns: 1fr 130px; gap: 16px; align-items: center; } .sheet-qr { display: grid; place-items: center; min-height: 120px; border: 1px dashed var(--line-strong); border-radius: 10px; background: #fff; }

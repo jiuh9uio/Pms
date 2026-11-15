@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.62.1
+
+- Meldeschein (A4): Lange WLAN-Namen liefen aus dem Kasten und über die Hausinformationen. Jetzt steht der WLAN-Kasten über die ganze Breite, darunter die Hausinformationen; lange Namen und Texte werden umbrochen. Passt weiterhin auf eine Seite.
+
 ## 1.62.0
 
 - Neu: Meldeschein-Archiv (Hotel → Kunden → Meldeschein-Archiv). Alle Check-ins mit Anreise, Abreise, Gast, Zimmer, Personen und Reservierungsnummer; Suche nach Name, Ort, Zimmer oder Reservierung; Zeitraum wählbar.
