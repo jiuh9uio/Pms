@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.66.0
+
+- Gästeseite, Gutscheine: Beträge 25 €, 50 €, 75 €, 100 € und „Individuell“ zum Antippen – direkt im Abschnitt Gutscheine (öffnet die Anfrage mit dem Betrag) und im Anfrageformular. Bei „Individuell“ erscheint ein Feld für den Wunschbetrag oder Wunsch (z. B. „Abendessen für zwei“). Der Betrag steht im Betreff der Anfrage im Posteingang.
+
 ## 1.65.0
 
 - Reinigung: „+ Reinigung von Hand eintragen“ – Zimmer wählen, Komplettreinigung oder Zwischenreinigung (Gäste noch da), optional eine Notiz (z. B. „Handtücher wechseln“). Die Einträge stehen über der Liste, lassen sich mit „Fertig“ abhaken oder entfernen.

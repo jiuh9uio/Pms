@@ -861,6 +861,7 @@ tbody tr { transition: background .15s; }
 .gs .gs-link { background: none; border: 0; border-bottom: 1px solid var(--gs-accent); cursor: pointer; padding: 0 0 3px; font: inherit; font-size: 14px; color: inherit; }
 .gs-types .gs-type { padding: 22px 12px; border: 0; border-right: 1px solid var(--gs-line); background: transparent; font: 14px Arial, Helvetica, sans-serif; color: var(--gs-dark); cursor: pointer; transition: background .2s, color .2s; }
 .gs-types .gs-type:last-child { border-right: 0; } .gs-types .gs-type:hover { background: var(--gs-bg); color: var(--gs-accent); }
+.gs-amounts { margin: 22px 0 6px; border: 1px solid var(--gs-line); background: #fff; } .gs-amounts .gs-type { padding: 16px 8px; font-size: 15px; font-weight: 600; }
 #gs-anfrage .gs-request { box-shadow: 0 24px 50px -30px rgba(52, 41, 35, .45); }
 @media (max-width: 600px) { .gs-types .gs-type { border-bottom: 1px solid var(--gs-line); } }
 .gs-form > *, .gs-search > * { min-width: 0; } .gs input[type='date'] { min-width: 0; }

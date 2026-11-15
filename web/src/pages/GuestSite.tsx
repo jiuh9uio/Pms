@@ -141,6 +141,10 @@ export function GuestSite({ staffLink = false }: { staffLink?: boolean }) {
             <div className="gs-gift"><span className="gs-kicker">{h.name}</span><h3>Gute Zeit.<br /><em>Verschenkt.</em></h3><small>Gutschein auf Anfrage</small></div>
             <div className="gs-copy">
               <span className="gs-kicker">{S.vouchers.kicker}</span><Title s={S.vouchers} />{S.vouchers.text && <p>{S.vouchers.text}</p>}
+              {on('voucher') && <div className="gs-types gs-amounts" style={{ ['--n' as string]: 5 }}>
+                {VOUCHER_AMOUNTS.map((a) => <button type="button" key={a} className="gs-type" onClick={() => ask({ type: 'voucher', value: a })}>{a}</button>)}
+                <button type="button" className="gs-type" onClick={() => ask({ type: 'voucher', value: '' })}>Individuell</button>
+              </div>}
               <div className="gs-actions">{on('voucher') ? askBtn('voucher', 'Gutschein anfragen') : <a className="gs-btn" href={mail(h.email, 'Unverbindliche Gutscheinanfrage')}>Gutschein per E-Mail anfragen</a>}</div>
               {S.vouchers.note && <p className="gs-note">{S.vouchers.note}</p>}
             </div>
@@ -305,7 +309,9 @@ function Hotel({ data, img, letter, ask: askUp }: { data: SitePublic; img: strin
 /** Anlässe, die eher eine Tagung sind – führen zum Tagungsformular */
 const MEETING_WORDS = /tagung|seminar|fortbildung|schulung|konferenz|workshop|kongress|firmen|innung|versammlung|verein|verband|sitzung|vortrag/i;
 
-interface Want { type: RequestType; category?: string; from?: string; to?: string; adults?: string; children?: string; occasion?: string; message?: string; n?: number }
+interface Want { type: RequestType; category?: string; from?: string; to?: string; adults?: string; children?: string; occasion?: string; message?: string; value?: string; n?: number }
+/** feste Gutscheinbeträge zur Auswahl, daneben „Individuell“ */
+const VOUCHER_AMOUNTS = ['25 €', '50 €', '75 €', '100 €'];
 
 /** Ein Anfrageformular für alles: Zimmer, Tisch, Feier, Gutschein, Frage. Es wird nichts gebucht. */
 function RequestForm({ site, want }: { site: SitePublic; want: Want | null }) {
@@ -315,13 +321,15 @@ function RequestForm({ site, want }: { site: SitePublic; want: Want | null }) {
     date: addDays(today, 1), time: tableTimes(site.form).includes('19:00') ? '19:00' : (tableTimes(site.form)[0] ?? '19:00'), persons: '2', guests: '', occasion: '', value: '',
     organization: '', kind: '', participants: '', rooms: '0', layout: '', equipment: [] as string[], catering: [] as string[] };
   const [v, setV] = useState(empty);
+  const [customValue, setCustomValue] = useState(false);
   const [err, setErr] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<RequestType | null>(null);
   useEffect(() => {
     if (!want) return;
     setDone(null); setErr({});
-    setV((x) => ({ ...x, type: want.type, category: want.category ?? x.category, from: want.from ?? x.from, to: want.to ?? x.to, adults: want.adults ?? x.adults, children: want.children ?? x.children, occasion: want.occasion ?? x.occasion, message: want.message ?? x.message }));
+    setV((x) => ({ ...x, type: want.type, category: want.category ?? x.category, from: want.from ?? x.from, to: want.to ?? x.to, adults: want.adults ?? x.adults, children: want.children ?? x.children, occasion: want.occasion ?? x.occasion, message: want.message ?? x.message, value: want.value ?? x.value }));
+    if (want.type === 'voucher') setCustomValue(want.value === '' || (!!want.value && !VOUCHER_AMOUNTS.includes(want.value)));
   }, [want]);
   const F = site.form;
   const types = REQUEST_TYPES.filter((t) => F.types[t]).filter((t) => t !== 'room' || (site.categories.length > 0 && site.sections.hotel.show)).filter((t) => t !== 'table' || site.sections.reservation.show || site.sections.restaurant.show)
@@ -378,7 +386,11 @@ function RequestForm({ site, want }: { site: SitePublic; want: Want | null }) {
           {F.equipment.length > 0 && <fieldset className="gs-chips full"><legend>Technik</legend>{F.equipment.map((x) => <label key={x}><input type="checkbox" checked={v.equipment.includes(x)} onChange={(e) => setV({ ...v, equipment: e.target.checked ? [...v.equipment, x] : v.equipment.filter((y) => y !== x) })} /><span>{x}</span></label>)}</fieldset>}
           {F.catering.length > 0 && <fieldset className="gs-chips full"><legend>Verpflegung</legend>{F.catering.map((x) => <label key={x}><input type="checkbox" checked={v.catering.includes(x)} onChange={(e) => setV({ ...v, catering: e.target.checked ? [...v.catering, x] : v.catering.filter((y) => y !== x) })} /><span>{x}</span></label>)}</fieldset>}
         </>}
-        {v.type === 'voucher' && f('value', 'Wert oder Wunsch', <input value={v.value} onChange={set('value')} placeholder="z. B. 50 € oder „Abendessen für zwei“" />, 'full')}
+        {v.type === 'voucher' && <fieldset className="gs-chips full" role="radiogroup"><legend>Betrag</legend>
+          {VOUCHER_AMOUNTS.map((a) => <label key={a}><input type="radio" name="gs-amount" checked={!customValue && v.value === a} onChange={() => { setCustomValue(false); setV({ ...v, value: a }); }} /><span>{a}</span></label>)}
+          <label><input type="radio" name="gs-amount" checked={customValue} onChange={() => { setCustomValue(true); setV({ ...v, value: VOUCHER_AMOUNTS.includes(v.value) ? '' : v.value }); }} /><span>Individuell</span></label>
+        </fieldset>}
+        {v.type === 'voucher' && customValue && f('value', 'Ihr Wunschbetrag oder Wunsch', <input value={v.value} onChange={set('value')} placeholder="z. B. 40 € oder „Abendessen für zwei“" autoFocus />, 'full')}
         {f('name', 'Ihr Name', <input autoComplete="name" value={v.name} onChange={set('name')} />, 'wide')}
         {f('email', 'E-Mail', <input type="email" autoComplete="email" value={v.email} onChange={set('email')} />, 'wide')}
         {f('phone', 'Telefon (freiwillig)', <input type="tel" autoComplete="tel" value={v.phone} onChange={set('phone')} />, 'wide')}
