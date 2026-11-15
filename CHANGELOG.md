@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.53.0
+
+- Sicherheitsprüfung „von außen“ als fester Test: Jede der über 150 Adressen des Servers wird ohne Anmeldung aufgerufen – nur die öffentlichen (Gästeseite, Anfrage, Gäste-Link, Online-Meldeschein, Anmeldung) antworten, alle anderen mit „nicht angemeldet“. Ein Benutzer ohne freigegebene Bereiche kommt an keine Administrator- oder Bereichsfunktion. Geprüft werden außerdem fremde Herkunft, wiederholte Ersteinrichtung und Fehlermeldungen ohne interne Einzelheiten.
+- Neue Bremse bei der Anmeldung: höchstens 20 Versuche je 10 Minuten und Gerät (zusätzlich zur Kontosperre nach 5 Fehlversuchen); der PMS-Rechner selbst ist ausgenommen.
+- Besucher der Gästeseite laden nicht mehr den Programmcode der internen Verwaltung mit – er wird erst nach dem Aufruf der Anmeldung geladen. Die Gästeseite lädt dadurch etwa halb so viel.
+
 ## 1.52.0
 
 - Gästeseite: Video im Startbild (z. B. ein Drohnenflug über das Haus). Läuft ohne Ton in Schleife hinter der Überschrift; das Startbild dient als Vorschaubild. Mit Knopf zum Anhalten; bei Gästen mit „Bewegung reduzieren“ oder Datensparen erscheint nur das Startbild. Hochladen unter Einstellungen → Online → Gästeseite → „Kopf und Startbild“ (MP4 oder WebM, höchstens 80 MB, mit Fortschrittsanzeige).

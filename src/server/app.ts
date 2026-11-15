@@ -196,12 +196,24 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
       const g = await site.getSite(db);
       return { needsSetup: await auth.needsSetup(db), user: null, guestHome: g.enabled && g.homepage };
     });
-    api.post('/auth/setup', async (req, reply) => {
+    // Bremse gegen massenhaftes Ausprobieren von Passwörtern: höchstens 20 Anmeldeversuche je 10 Minuten und Absender
+    // (zusätzlich zur Sperre eines Kontos nach 5 Fehlversuchen). Der PMS-Rechner selbst ist ausgenommen.
+    const tries = new Map<string, { n: number; reset: number }>();
+    const loginLimit = async (req: FastifyRequest) => {
+      const ip = req.ip ?? '';
+      if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') return;
+      const now = Date.now();
+      if (tries.size > 5000) tries.clear();
+      const t = tries.get(ip);
+      if (!t || t.reset < now) { tries.set(ip, { n: 1, reset: now + 10 * 60_000 }); return; }
+      if (++t.n > 20) throw new AppError(429, 'too_many', 'Zu viele Anmeldeversuche von diesem Gerät. Bitte in einigen Minuten erneut versuchen.');
+    };
+    api.post('/auth/setup', { preHandler: loginLimit }, async (req, reply) => {
       const r = await auth.setup(db, S.setupInput.parse(req.body), meta(req));
       setCookie(reply, r.token);
       return { user: r.user };
     });
-    api.post('/auth/login', async (req, reply) => {
+    api.post('/auth/login', { preHandler: loginLimit }, async (req, reply) => {
       const r = await auth.login(db, S.loginInput.parse(req.body), meta(req));
       setCookie(reply, r.token);
       return { user: r.user };
