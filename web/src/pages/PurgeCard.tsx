@@ -4,13 +4,15 @@ import { api } from '../api.ts';
 import { useData } from '../data.tsx';
 import { Button, Field, useToast } from '../ui.tsx';
 
-type Sel = { billing: boolean; bookings: 'none' | 'past' | 'all'; guests: boolean; resetNumbers: boolean; inbox: boolean };
+type Sel = { billing: boolean; bookings: 'none' | 'past' | 'all'; guests: boolean; resetNumbers: boolean; inbox: boolean; companies: boolean };
+/** Komplett zurücksetzen: alle Hotel-Daten, Nummern wieder ab 1 – Einrichtung (Zimmer, Preise, Benutzer, Einstellungen) bleibt */
+const ALL: Sel = { billing: true, bookings: 'all', guests: true, resetNumbers: true, inbox: true, companies: true };
 
 /** Hotel-Daten löschen: Auswahl → Vorschau (zählt nur) → Passwort und Bestätigung → löschen. */
 export function PurgeCard() {
   const toast = useToast();
   const { bump } = useData();
-  const [sel, setSel] = useState<Sel>({ billing: false, bookings: 'none', guests: false, resetNumbers: false, inbox: false });
+  const [sel, setSel] = useState<Sel>({ billing: false, bookings: 'none', guests: false, resetNumbers: false, inbox: false, companies: false });
   const [preview, setPreview] = useState<PurgeResult | null>(null);
   const [done, setDone] = useState<PurgeResult | null>(null);
   const [password, setPassword] = useState('');
@@ -18,7 +20,8 @@ export function PurgeCard() {
   const [busy, setBusy] = useState(false);
   const [fail, setFail] = useState<string | null>(null);
   const change = (p: Partial<Sel>) => { setSel({ ...sel, ...p }); setPreview(null); setDone(null); setFail(null); };
-  const nothing = !sel.billing && sel.bookings === 'none' && !sel.guests && !sel.inbox;
+  const nothing = !sel.billing && sel.bookings === 'none' && !sel.guests && !sel.inbox && !sel.companies;
+  const isAll = JSON.stringify(sel) === JSON.stringify(ALL);
   const run = async (dryRun: boolean) => {
     setBusy(true); setFail(null);
     try {
@@ -38,13 +41,21 @@ export function PurgeCard() {
       {r.keptBookings > 0 && <li><b>{r.keptBookings}</b> Buchungen bleiben stehen, weil Rechnungen oder Zahlungen daran hängen. Sollen sie auch weg, zusätzlich „Rechnungen und Zahlungen“ ankreuzen.</li>}
       {sel.guests && <li><b>{r.guests}</b> Gäste ohne Buchung</li>}
       {sel.inbox && <li><b>{r.mails}</b> abgerufene E-Mails (im Postfach bleiben sie erhalten)</li>}
+      {sel.companies && <li><b>{r.companies}</b> Firmen ohne Buchung (mit ihren vereinbarten Preisen)</li>}
+      {sel.bookings === 'all' && <li>Alle Zimmer gelten danach wieder als sauber; von Hand eingetragene Reinigungen entfallen</li>}
+      {sel.resetNumbers && <li>Rechnungs- und Buchungsnummern beginnen wieder bei 1</li>}
     </ul>
   );
   return (
     <section className="card">
       <h2>Hotel-Daten löschen</h2>
       <p className="notice danger"><b>Gelöschtes ist endgültig weg.</b> Gedacht ist das zum Aufräumen von Probedaten, bevor der echte Betrieb beginnt. Echte Rechnungen und Zahlungen müssen nach Steuerrecht mehrere Jahre aufbewahrt werden – bitte nicht löschen, ohne das mit der Steuerberatung geklärt zu haben.</p>
-      <p className="muted">Zimmer, Preise, Firmen, Benutzer, Einstellungen, Restaurant und Kontrollen bleiben unberührt. Das Protokoll bleibt ebenfalls erhalten.</p>
+      <p className="muted">Zimmer, Preise, Benutzer, Einstellungen, Restaurant und Kontrollen bleiben unberührt. Das Protokoll bleibt ebenfalls erhalten.</p>
+      <div className={`purgeall${isAll ? ' on' : ''}`}>
+        <div><b>Alles auf Null</b><small>Rechnungen, Zahlungen und Umsätze, alle Buchungen, Gäste, Firmen und der E-Mail-Posteingang – Nummern beginnen wieder bei 1. Die Einrichtung (Zimmer, Preise, Benutzer, Einstellungen) bleibt. Gedacht für das Ende der Testphase.</small></div>
+        <Button variant={isAll ? 'primary' : undefined} onClick={() => change(ALL)}>{isAll ? 'Ausgewählt' : 'Alles auswählen'}</Button>
+      </div>
+      <p className="muted small">Oder einzeln auswählen:</p>
       <div className="formgrid">
         <label className="check wide"><input type="checkbox" checked={sel.billing} onChange={(e) => change({ billing: e.target.checked, resetNumbers: e.target.checked && sel.resetNumbers })} /><span>Rechnungen und Zahlungen<small>alle Rechnungen, Stornobelege, Zahlungen und das Rechnungsarchiv</small></span></label>
         {sel.billing && <label className="check wide"><input type="checkbox" checked={sel.resetNumbers} onChange={(e) => change({ resetNumbers: e.target.checked })} /><span>Rechnungsnummern wieder bei 1 beginnen<small>nur sinnvoll, wenn bisher keine echte Rechnung an einen Gast ging – sonst gäbe es Nummern doppelt</small></span></label>}
@@ -56,6 +67,7 @@ export function PurgeCard() {
           </select>
         </Field>
         <label className="check wide"><input type="checkbox" checked={sel.guests} onChange={(e) => change({ guests: e.target.checked })} /><span>Gäste ohne Buchung<small>Gäste, zu denen danach keine Buchung mehr gehört</small></span></label>
+        <label className="check wide"><input type="checkbox" checked={sel.companies} onChange={(e) => change({ companies: e.target.checked })} /><span>Firmen ohne Buchung<small>Firmenkunden mit ihren vereinbarten Preisen, zu denen danach keine Buchung mehr gehört</small></span></label>
         <label className="check wide"><input type="checkbox" checked={sel.inbox} onChange={(e) => change({ inbox: e.target.checked })} /><span>E-Mail-Posteingang<small>alle im Programm gespeicherten Nachrichten; im Postfach selbst bleibt alles, es wird aber nicht erneut abgeholt</small></span></label>
       </div>
       <div className="formactions"><Button busy={busy && !preview} disabled={nothing || busy} onClick={() => void run(true)}>Prüfen, was gelöscht würde</Button></div>

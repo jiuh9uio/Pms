@@ -124,4 +124,27 @@ describe('Hotel-Daten löschen', () => {
     for (const t of ['bookings', 'booking_rooms', 'room_allocations', 'guests', 'invoices']) expect(await n(t), t).toBe(0);
     expect(await n('rooms')).toBe(1); // Zimmer und Preise bleiben
   });
+
+  it('setzt mit „Alles auf Null“ alle Hotel-Daten zurück – die Einrichtung bleibt', async () => {
+    const company = await ok('POST', '/companies', admin, { name: 'Muster GmbH', street: '', zip: '', city: '', country: 'Deutschland', vatId: '', contactName: '', email: '', phone: '', paymentTermDays: 14, notes: '', active: true, rates: [] });
+    const b1 = await booking();
+    await issue(b1);
+    expect((await pay({ bookingId: b1, amountCents: 1000, method: 'Bar' })).statusCode).toBe(200);
+    await ok('POST', '/housekeeping/manual', user, { date: today, roomId: roomIds[0], kind: 'interim', note: '' });
+    await db.execute(sql`update rooms set housekeeping = 'dirty'`);
+    const all = { billing: true, bookings: 'all', guests: true, resetNumbers: true, inbox: true, companies: true };
+    const r = (await purge(all)).json();
+    expect(r).toMatchObject({ invoices: 1, payments: 1, bookings: 1, guests: 1 });
+    expect(company.id).toBeTruthy();
+    expect(r.companies).toBe(1);
+    for (const t of ['bookings', 'booking_rooms', 'room_allocations', 'guests', 'invoices', 'payments', 'companies', 'inbox_mails']) expect(await n(t), t).toBe(0);
+    expect((await db.execute(sql`select count(*)::int as n from rooms where housekeeping = 'dirty'`))[0]!.n).toBe(0);
+    expect((await ok('GET', `/housekeeping?date=${today}`, user)).manual).toEqual([]);
+    expect(await n('rooms')).toBe(1); // Zimmer, Preise, Benutzer bleiben
+    expect(await n('users')).toBe(2);
+    // Nummern beginnen wieder bei 1
+    const b2 = await booking();
+    expect((await ok('GET', `/bookings/${b2}`, user)).number).toMatch(/0*1$/);
+    expect((await issue(b2)).number).toMatch(/-0001$/);
+  });
 });

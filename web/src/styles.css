@@ -224,6 +224,8 @@ textarea { width: 100%; height: auto; min-height: 38px; padding: 8px 11px; borde
 .manualclean .mc-list li:last-child { border-bottom: 1px solid var(--line); }
 .mc-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; border: 1px dashed var(--line-strong); border-radius: 10px; background: var(--surface-2); }
 .mc-form select { width: auto; min-width: 180px; } .mc-form input { flex: 1 1 220px; }
+.purgeall { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 16px; margin: 12px 0; border: 2px solid var(--line-strong); border-radius: 12px; }
+.purgeall.on { border-color: #c0392b; background: color-mix(in srgb, #c0392b 6%, var(--surface)); } .purgeall small { display: block; color: var(--muted); margin-top: 4px; }
 /* Zettel für die Buchhaltung */
 .acctbox { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; padding: 12px 14px; border: 1px dashed var(--line-strong); border-radius: 10px; background: var(--surface-2); }
 .acctslip header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #222; padding-bottom: 8px; margin-bottom: 6px; } .acctslip header span { font-weight: 600; }
