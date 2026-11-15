@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.43.0
+
+- Das PMS wie ein Programm öffnen: Verwaltung → „Als Programm öffnen“ bietet eine Datei zum Herunterladen, die auf dem jeweiligen Windows-PC ein Symbol auf dem Desktop und im Startmenü anlegt. Das Symbol öffnet das PMS in einem eigenen Fenster ohne Adressleiste und lässt sich an die Taskleiste anheften. Im Programmordner liegt dafür zusätzlich „Als Programm einrichten.bat“ (bei neuen Installationen).
+- Eigenes Programm-Symbol (blaues „S“) für Fenster, Browser-Tab und Verknüpfung; der Browser kann das PMS jetzt auch selbst „als App installieren“.
+
 ## 1.42.1
 
 - Internet → Geräte: Die FRITZ!Box hängt an jeden Gerätenamen „.fritz.box“ an – dadurch wurden alle Geräte als Router eingeschätzt. Der angehängte Netzname (auch „.lan“, „.local“, „.speedport.ip“ u. a.) wird jetzt vor der Einschätzung entfernt und in der Liste und bei „im Internet suchen“ nicht mehr mitgeführt.

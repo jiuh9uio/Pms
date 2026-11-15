@@ -62,6 +62,11 @@ writeFileSync(join(out, 'Firewall freigeben.bat'), crlf('@echo off\nrem Erlaubt 
   'netsh advfirewall firewall delete rule name="Schuetzenhaus PMS" >nul 2>&1\n' +
   'netsh advfirewall firewall add rule name="Schuetzenhaus PMS" dir=in action=allow protocol=TCP localport=3000 profile=private,domain\n' +
   'if errorlevel 1 echo Das hat nicht geklappt - bitte mit Rechtsklick "Als Administrator ausfuehren" starten.\npause\n'));
+writeFileSync(join(out, 'Als Programm einrichten.bat'), crlf('@echo off\nrem Legt ein Symbol auf dem Desktop und im Startmenue an, das das PMS in einem eigenen Fenster oeffnet. Das PMS muss laufen.\n' +
+  'set "PORT=3000"\nfor /f "tokens=2 delims==" %%a in (\'findstr /b /i "PORT=" "%~dp0pms.env" 2^>nul\') do set "PORT=%%a"\n' +
+  'curl -s -f -o "%TEMP%\\pms-symbol.bat" "http://localhost:%PORT%/api/v1/desktop-shortcut.bat"\n' +
+  'if errorlevel 1 (\n  echo Das PMS antwortet nicht. Bitte zuerst pms.exe starten und es dann noch einmal versuchen.\n  pause\n  exit /b 1\n)\n' +
+  'call "%TEMP%\\pms-symbol.bat"\n'));
 writeFileSync(join(out, 'pms.env'), crlf(
   '# Einstellungen fuer das Schuetzenhaus PMS (Zeilen mit # sind Kommentare)\n' +
   '# Port, unter dem das PMS im Browser erreichbar ist\nPORT=3000\n' +
@@ -84,6 +89,8 @@ Passwort vergessen: "Passwort vergessen.bat" doppelt anklicken – erzeugt ein n
 Update:     Im PMS unter Verwaltung - Einstellungen - "Programm-Update". Das Programm sichert die Daten, lädt die neue
             Version herunter, tauscht die Programmdateien aus und startet neu. Die bisherigen Programmdateien liegen
             danach im Ordner "update\\previous", das Protokoll in "update\\update.log".
+Als Programm: "Als Programm einrichten.bat" ausführen (PMS muss laufen): legt ein Symbol auf dem Desktop und im Startmenü an,
+            das das PMS in einem eigenen Fenster öffnet. Für andere PCs: im PMS unter Verwaltung → "Als Programm öffnen".
 Autostart:  "Autostart einrichten.bat" ausführen: PMS startet bei jeder Windows-Anmeldung, Sicherung täglich 02:00 Uhr.
 Zurückspielen einer Sicherung (ersetzt alle Daten!), in einer Eingabeaufforderung in diesem Ordner, PMS vorher beenden:
             pms.exe --restore backups\\pms-JJJJMMTT-HHMMSS.dump --ja

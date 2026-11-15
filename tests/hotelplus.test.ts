@@ -390,4 +390,16 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect(pdf.statusCode).toBe(200);
     expect(pdf.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
   });
+
+  it('liefert die Datei, die das PMS als Programm-Symbol einrichtet', async () => {
+    const r = await app.inject({ method: 'GET', url: '/api/v1/desktop-shortcut.bat', headers: { host: '192.168.178.20:3000' }, remoteAddress: '10.9.9.1' });
+    expect(r.statusCode).toBe(200);
+    expect(r.headers['content-disposition']).toContain('.bat');
+    expect(r.body).toContain('set "URL=http://192.168.178.20:3000/"');
+    expect(r.body).toContain("'--app=' + $env:URL");
+    expect(r.body.split('\r\n').length).toBeGreaterThan(20); // Windows-Zeilenenden
+    expect(r.body).not.toMatch(/[^\x00-\x7f]/); // nur ASCII, damit die Eingabeaufforderung nichts verstümmelt
+    // eine untergeschobene Adresse mit Sonderzeichen wird nicht in die Datei geschrieben
+    expect((await app.inject({ method: 'GET', url: '/api/v1/desktop-shortcut.bat', headers: { host: 'x" & calc & "' }, remoteAddress: '10.9.9.1' })).statusCode).toBe(400);
+  });
 });

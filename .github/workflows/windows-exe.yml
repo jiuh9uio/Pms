@@ -138,6 +138,29 @@ jobs:
           & "$dir\pms.exe" --backup
           if (-not (Get-ChildItem "$dir\backups\*.dump")) { throw 'Keine Sicherung geschrieben' }
 
+          # Symbol „als Programm": Datei abrufen, ohne Fenster ausführen, Verknüpfungen prüfen
+          $env:PMS_NOSTART = '1'
+          & curl.exe -s -f -o "$env:TEMP\pms-symbol.bat" "$base/desktop-shortcut.bat"
+          if ($LASTEXITCODE -ne 0) { throw 'Die Datei für das Programm-Symbol war nicht abrufbar' }
+          & cmd.exe /c "`"$env:TEMP\pms-symbol.bat`""
+          $code = $LASTEXITCODE
+          if ($code -eq 2) { Write-Host 'Kein Edge/Chrome auf dem Bau-Rechner – Symbol nicht prüfbar' }
+          elseif ($code -ne 0) { throw "Programm-Symbol: Datei endete mit Fehler $code" }
+          else {
+            foreach ($d in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))) {
+              $lnk = Join-Path $d 'Schuetzenhaus PMS.lnk'
+              if (-not (Test-Path $lnk)) { throw "Programm-Symbol fehlt: $lnk" }
+              $sc = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
+              if ($sc.Arguments -ne '--app=http://127.0.0.1:3000/' -or -not (Test-Path $sc.TargetPath)) { throw "Programm-Symbol falsch: $($sc.TargetPath) $($sc.Arguments)" }
+              if ($sc.IconLocation -notmatch 'pms\.ico') { throw "Programm-Symbol ohne eigenes Bild: $($sc.IconLocation)" }
+            }
+            Write-Host "Programm-Symbol angelegt: $($sc.TargetPath) $($sc.Arguments)"
+          }
+          # die Hilfsdatei im Programmordner tut dasselbe
+          & cmd.exe /c "`"$dir\Als Programm einrichten.bat`""
+          if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 2) { throw "Als Programm einrichten.bat endete mit Fehler $LASTEXITCODE" }
+          Remove-Item Env:PMS_NOSTART
+
           Stop-Pms $p
           $p = Start-Pms; Wait-Pms
           $s2 = New-Object Microsoft.PowerShell.Commands.WebRequestSession

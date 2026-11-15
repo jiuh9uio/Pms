@@ -17,6 +17,7 @@ import * as network from './modules/network.js';
 import * as quickprint from './modules/quickprint.js';
 import { overview } from './modules/overview.js';
 import { search } from './modules/search.js';
+import { shortcutBat, validHost } from './lib/shortcut.js';
 import * as tse from './modules/tse.js';
 import * as tsesign from './modules/tsesign.js';
 import { guestFormInput } from '../shared/hotel.js';
@@ -244,6 +245,14 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.get('/sync', { preHandler: requireUser }, async () => {
       const [r] = await db.execute(sql`select coalesce(max(id), 0)::int as rev from audit_log where action not in ('login', 'logout', 'login_failed')`);
       return { rev: Number(r!.rev) };
+    });
+    // Datei, die auf einem Windows-PC ein Symbol für das PMS als eigenes Fenster anlegt. Enthält nur die Adresse, unter der
+    // das PMS gerade aufgerufen wurde – nichts Geheimes; deshalb ohne Anmeldung abrufbar (auch für die Hilfsdatei im Programmordner).
+    api.get('/desktop-shortcut.bat', { preHandler: publicLimit }, async (req, reply) => {
+      const host = String(req.headers.host ?? '');
+      if (!validHost(host)) throw new AppError(400, 'validation', 'Unter dieser Adresse lässt sich keine Verknüpfung erzeugen');
+      const proto = cookieSecure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+      return reply.header('Content-Type', 'application/bat').header('Content-Disposition', 'attachment; filename="PMS als Programm einrichten.bat"').send(shortcutBat(`${proto}://${host}/`));
     });
     // Hinweis „Internet ist weg“ für alle angemeldeten Benutzer
     api.get('/network/alert', { preHandler: requireUser }, () => network.netAlert(db));

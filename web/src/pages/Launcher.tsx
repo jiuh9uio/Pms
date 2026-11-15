@@ -47,7 +47,7 @@ export function Launcher() {
     <div className="launcher">
       <header>
         <div className="brand big">{logo ? <img className="brandlogo" src="/api/v1/settings/logo" alt="" /> : <span className="mark">S</span>}<span>Schützenhaus<small>Hotel &amp; Restaurant</small></span></div>
-        <p className="muted">{user.name} · {ROLE_LABEL[user.role]} <button type="button" className="btn" onClick={() => void logout()}>Abmelden</button></p>
+        <p className="muted">{user.name} · {ROLE_LABEL[user.role]} <button type="button" className="btn" onClick={() => void logout()}>Abmelden</button> <Link className="small" to="/als-programm">Als Programm öffnen (Symbol einrichten)</Link></p>
       </header>
       <Search variant="big" />
       {upd?.available && <p className="notice warn">Programm-Update verfügbar: Version {upd.latest}. <Link to="/einstellungen?ansicht=update">Jetzt ansehen und einspielen</Link></p>}
