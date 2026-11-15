@@ -595,3 +595,25 @@ tbody tr { transition: background .15s; }
 :root[data-motion='off'] *, :root[data-motion='off'] *::before, :root[data-motion='off'] *::after { animation: none !important; transition: none !important; }
 @media print { *, *::before, *::after { animation: none !important; transition: none !important; } body { background: #fff; } }
 .btnrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .btnrow .btn { margin: 0; }
+
+/* ---------- Gliederung: Gruppen im Startmenü, in der Seitenleiste und in den Einstellungen ---------- */
+.tilegroup { margin-bottom: 26px; } .tilegroup-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); margin: 0 0 10px 2px; }
+.tilegroup .tiles { margin-bottom: 0; } .tile-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+/* Büro und Haus & Technik: flache, kleinere Kacheln – das Tagesgeschäft bleibt groß */
+.tilegroup.buero .tiles, .tilegroup.haus .tiles { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.tilegroup.buero .tile, .tilegroup.haus .tile { flex-direction: row; align-items: center; gap: 14px; min-height: 0; padding: 14px 16px; }
+.tilegroup.buero .tile-icon, .tilegroup.haus .tile-icon { width: 38px; height: 38px; border-radius: 10px; flex: none; margin: 0; }
+.tilegroup.buero .tile-title, .tilegroup.haus .tile-title { font-size: 15px; } .tilegroup.buero .tile-body, .tilegroup.haus .tile-body { gap: 1px; }
+.tilegroup.buero .tile-text, .tilegroup.haus .tile-text { font-size: 12px; }
+.tilegroup.haus .tile { background: color-mix(in srgb, var(--surface) 70%, transparent); }
+
+.sidebar nav .navgroup { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); padding: 12px 10px 4px; }
+.sidebar nav .navgroup:first-of-type { padding-top: 4px; }
+.sidebar nav a.jump { color: var(--ink-2); } .sidebar nav a .jumpmark { margin-left: auto; color: var(--ink-3); transition: transform .2s var(--ease-out); } .sidebar nav a.jump:hover .jumpmark { transform: translateX(3px); }
+.sidebar nav a.backlink { color: var(--accent-text); margin-bottom: 4px; }
+.sidebar { overflow-y: auto; }
+.brand .histnav { margin-left: auto; display: flex; gap: 2px; } .brand .histnav .iconbtn { width: 26px; height: 26px; font-size: 18px; line-height: 1; border: 1px solid var(--line); background: var(--surface); }
+.brand .histnav .iconbtn:hover { border-color: var(--ink-3); }
+.settingsgroups { margin-bottom: 14px; }
+@media (max-width: 760px) { .sidebar nav .navgroup, .sidebar nav a .jumpmark, .brand .histnav { display: none; } .sidebar { overflow-y: visible; } }
+.tilegroup.tag .tiles { grid-template-columns: repeat(auto-fit, minmax(205px, 1fr)); }

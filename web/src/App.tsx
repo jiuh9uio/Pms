@@ -1,6 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { ROLE_LABEL, hasModule, type UserDto } from '../../src/shared/schemas.js';
+import { Fragment, createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { ROLE_LABEL, hasModule, type Module, type UserDto } from '../../src/shared/schemas.js';
 import { api } from './api.ts';
 import { Account } from './pages/Account.tsx';
 import { Audit } from './pages/Audit.tsx';
@@ -50,32 +50,44 @@ export function useLogout() {
   };
 }
 
-const NAV = [
-  { to: '/hotel', label: 'Übersicht', icon: '◧', admin: false, module: 'hotel' },
-  { to: '/plan', label: 'Belegungsplan', short: 'Plan', icon: '▦', admin: false, module: 'hotel' },
-  { to: '/reservierungen', label: 'Reservierungen', short: 'Buchungen', icon: '☷', admin: false, module: 'hotel' },
-  { to: '/fruehstueck', label: 'Frühstück', icon: '☕', admin: false, module: 'hotel' },
-  { to: '/reinigung', label: 'Reinigung', icon: '✧', admin: false, module: 'hotel' },
-  { to: '/gaeste', label: 'Gäste', icon: '☺', admin: false, module: 'hotel' },
-  { to: '/firmen', label: 'Firmen', icon: '⌘', admin: false, module: 'hotel', more: true },
-  { to: '/rechnungen', label: 'Rechnungsarchiv', short: 'Rechn.', icon: '€', admin: false, module: 'hotel' },
-  { to: '/tagesabschluss', label: 'Tagesabschluss', short: 'Abschluss', icon: '∑', admin: false, module: 'hotel', more: true },
-  { to: '/auswertung', label: 'Auswertung', icon: '◔', admin: false, module: 'hotel', more: true },
-  { to: '/zimmer', label: 'Zimmer & Preise', short: 'Zimmer', icon: '⌂', admin: true, more: true, module: 'hotel' },
-  { to: '/restaurant', label: 'Tischreservierungen', short: 'Tische', icon: '◍', admin: false, module: 'restaurant' },
-  { to: '/schnelldruck', label: 'Schnelldruck', short: 'Druck', icon: '⎙', admin: false, module: 'schnelldruck' },
-  { to: '/kontrollen', label: 'Kontrollen', icon: '✓', admin: false, module: 'kontrollen' },
-  { to: '/erechnung', label: 'E-Rechnung', icon: '✉', admin: false, module: 'erechnung' },
-  { to: '/internet', label: 'Geräte im Netz', short: 'Geräte', icon: '⌁', admin: false, module: 'internet' },
-  { to: '/team', label: 'Übergabebuch', short: 'Team', icon: '✎', admin: false, module: 'team' },
-  { to: '/email', label: 'Posteingang', short: 'E-Mail', icon: '✉', admin: false, module: 'email' },
-  { to: '/erste-schritte', label: 'Erste Schritte', short: 'Start', icon: '✔', admin: true, module: 'verwaltung' },
-  { to: '/als-programm', label: 'Als Programm öffnen', short: 'Programm', icon: '▣', module: 'verwaltung' },
-  { to: '/benutzer', label: 'Benutzer', icon: '◉', admin: true, module: 'verwaltung' },
-  { to: '/protokoll', label: 'Protokoll', icon: '☰', admin: true, module: 'verwaltung' },
-  { to: '/einstellungen', label: 'Einstellungen', short: 'Einstell.', icon: '⚙', admin: true, module: 'verwaltung' },
-] as { to: string; label: string; short?: string; icon: string; admin: boolean; more?: boolean; module: string }[];
-const MODULE_TITLE: Record<string, string> = { hotel: 'Hotel', restaurant: 'Restaurant', schnelldruck: 'Schnelldruck', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet', email: 'E-Mail', team: 'Team', verwaltung: 'Verwaltung' };
+/**
+ * Navigation je Bereich. `group` setzt eine Zwischenüberschrift, `need` ist die nötige Freigabe (wenn sie vom Bereich abweicht),
+ * `jump` ist ein Sprung in einen anderen Bereich (bestimmt nicht, in welchem Bereich man gerade ist), `tab` wählt einen Reiter der Zielseite.
+ */
+interface NavItem { to: string; label: string; short?: string; icon: string; admin?: boolean; more?: boolean; module: string; group?: string; need?: Module; jump?: boolean; tab?: string }
+const NAV: NavItem[] = [
+  { to: '/hotel', label: 'Übersicht', icon: '◧', module: 'hotel', group: 'Heute' },
+  { to: '/plan', label: 'Belegungsplan', short: 'Plan', icon: '▦', module: 'hotel', group: 'Heute' },
+  { to: '/reservierungen', label: 'Reservierungen', short: 'Buchungen', icon: '☷', module: 'hotel', group: 'Heute' },
+  { to: '/fruehstueck', label: 'Frühstück', icon: '☕', module: 'hotel', group: 'Haus' },
+  { to: '/reinigung', label: 'Reinigung', icon: '✧', module: 'hotel', group: 'Haus' },
+  { to: '/gaeste', label: 'Gäste', icon: '☺', module: 'hotel', group: 'Kunden' },
+  { to: '/firmen', label: 'Firmen', icon: '⌘', module: 'hotel', more: true, group: 'Kunden' },
+  { to: '/rechnungen', label: 'Rechnungen', short: 'Rechn.', icon: '€', module: 'hotel', group: 'Abrechnung', jump: true },
+  { to: '/tagesabschluss', label: 'Tagesabschluss', short: 'Abschluss', icon: '∑', module: 'hotel', more: true, group: 'Abrechnung' },
+  { to: '/auswertung', label: 'Auswertung', icon: '◔', module: 'hotel', more: true, group: 'Abrechnung' },
+  { to: '/zimmer', label: 'Zimmer & Preise', short: 'Zimmer', icon: '⌂', admin: true, more: true, module: 'hotel', group: 'Einrichtung' },
+  { to: '/restaurant', label: 'Tischreservierungen', short: 'Tische', icon: '◍', module: 'restaurant' },
+  // Rechnungen: alles, was mit Rechnungen zu tun hat, an einem Ort – jede Zeile verlangt ihre eigene Freigabe
+  { to: '/rechnungen', label: 'Hotelrechnungen', short: 'Hotel', icon: '€', module: 'rechnungen', need: 'hotel', group: 'Hotel' },
+  { to: '/tagesabschluss', label: 'Tagesabschluss', short: 'Abschluss', icon: '∑', module: 'rechnungen', need: 'hotel', group: 'Hotel', jump: true },
+  { to: '/erechnung', label: 'E-Rechnung erstellen', short: 'E-Rechn.', icon: '✉', module: 'rechnungen', need: 'erechnung', group: 'E-Rechnung' },
+  { to: '/erechnung', tab: 'archiv', label: 'E-Rechnungs-Archiv', short: 'Archiv', icon: '▤', module: 'rechnungen', need: 'erechnung', group: 'E-Rechnung' },
+  { to: '/einstellungen', tab: 'steuern', label: 'Steuern & Nummern', short: 'Steuern', icon: '％', module: 'rechnungen', admin: true, more: true, group: 'Einrichtung', jump: true },
+  { to: '/schnelldruck', label: 'Schnelldruck', short: 'Druck', icon: '⎙', module: 'schnelldruck' },
+  { to: '/kontrollen', label: 'Kontrollen', icon: '✓', module: 'kontrollen' },
+  { to: '/internet', label: 'Internet', short: 'Netz', icon: '⌁', module: 'internet' },
+  { to: '/team', label: 'Übergabebuch', short: 'Team', icon: '✎', module: 'team' },
+  { to: '/reinigung', label: 'Reinigung (Hotel)', short: 'Reinig.', icon: '✧', module: 'team', need: 'hotel', jump: true },
+  { to: '/email', label: 'Posteingang', short: 'E-Mail', icon: '✉', module: 'email' },
+  { to: '/einstellungen', tab: 'email', label: 'Einrichtung', short: 'Einricht.', icon: '⚙', module: 'email', admin: true, jump: true, group: 'Einrichtung' },
+  { to: '/einstellungen', label: 'Einstellungen', short: 'Einstell.', icon: '⚙', admin: true, module: 'verwaltung', group: 'Verwaltung' },
+  { to: '/benutzer', label: 'Benutzer', icon: '◉', admin: true, module: 'verwaltung', group: 'Verwaltung' },
+  { to: '/protokoll', label: 'Protokoll', icon: '☰', admin: true, module: 'verwaltung', group: 'Verwaltung' },
+  { to: '/erste-schritte', label: 'Erste Schritte', short: 'Start', icon: '✔', admin: true, module: 'verwaltung', group: 'Hilfe' },
+  { to: '/als-programm', label: 'Als Programm öffnen', short: 'Programm', icon: '▣', module: 'verwaltung', group: 'Hilfe' },
+];
+const MODULE_TITLE: Record<string, string> = { hotel: 'Hotel', restaurant: 'Restaurant', schnelldruck: 'Schnelldruck', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet', email: 'E-Mail', team: 'Team', verwaltung: 'Verwaltung', rechnungen: 'Rechnungen' };
 
 export function App() {
   const [state, setState] = useState<AuthState | null>(null);
@@ -108,10 +120,21 @@ export function App() {
 
 function Shell({ user }: { user: UserDto }) {
   const isAdmin = user.role === 'admin';
-  const { pathname } = useLocation();
-  // Der Bereich (Hotel, Kontrollen, Verwaltung) ergibt sich aus der Adresse; das Startmenü hat keine Seitenleiste.
-  const module = NAV.find((n) => pathname === n.to || pathname.startsWith(n.to + '/'))?.module;
-  const nav = NAV.filter((n) => n.module === module && (!n.admin || isAdmin));
+  const { pathname, search } = useLocation();
+  const go = useNavigate();
+  const here = (n: NavItem) => pathname === n.to || pathname.startsWith(n.to + '/');
+  // Der Bereich (Hotel, Rechnungen, Verwaltung …) ergibt sich aus der Adresse; Sprünge in andere Bereiche zählen dabei nicht.
+  const module = NAV.find((n) => !n.jump && here(n))?.module;
+  const nav = NAV.filter((n) => n.module === module && (!n.admin || isAdmin) && (!n.need || hasModule(user, n.need)));
+  const ansicht = new URLSearchParams(search).get('ansicht');
+  /** Aktiv ist ein Punkt, wenn Adresse und – bei Punkten derselben Seite – der Reiter passen. */
+  const active = (n: NavItem) => {
+    if (n.jump || !here(n) || (n.to === '/hotel' && pathname !== '/hotel')) return false;
+    if (n.tab) return ansicht === n.tab;
+    return !nav.some((o) => o !== n && o.to === n.to && o.tab && o.tab === ansicht);
+  };
+  // Aus einem anderen Bereich hierher gesprungen (z. B. Hotel → Rechnungen): Rückweg anbieten
+  const home = module === 'rechnungen' && hasModule(user, 'hotel') ? { to: '/hotel', label: 'Hotel' } : null;
   const logout = useLogout();
   const hotel = hasModule(user, 'hotel');
   const kontrollen = hasModule(user, 'kontrollen');
@@ -125,12 +148,19 @@ function Shell({ user }: { user: UserDto }) {
     <NetAlert />
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand"><span className="mark">S</span><span>Schützenhaus<small>{module ? MODULE_TITLE[module] : 'PMS'}</small></span></div>
+        <div className="brand"><span className="mark">S</span><span>Schützenhaus<small>{module ? MODULE_TITLE[module] : 'PMS'}</small></span>
+          <span className="histnav noprint"><button type="button" className="iconbtn" onClick={() => go(-1)} aria-label="Zurück" title="Zurück">‹</button><button type="button" className="iconbtn" onClick={() => go(1)} aria-label="Vor" title="Vor">›</button></span></div>
         <nav aria-label="Hauptnavigation">
           <NavLink to="/" end className="menu"><span className="ico" aria-hidden>☰</span><span className="full">Menü</span><span className="short">Menü</span></NavLink>
           <Search variant="nav" />
-          {nav.map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.to === '/hotel'} className={n.more ? 'more' : undefined}><span className="ico" aria-hidden>{n.icon}</span><span className="full">{n.label}</span><span className="short">{n.short ?? n.label}</span></NavLink>
+          {home && <Link to={home.to} className="backlink"><span className="ico" aria-hidden>←</span><span className="full">Zurück zu {home.label}</span><span className="short">{home.label}</span></Link>}
+          {nav.map((n, i) => (
+            <Fragment key={`${n.to}?${n.tab ?? ''}`}>
+              {n.group && n.group !== nav[i - 1]?.group && <span className="navgroup" aria-hidden>{n.group}</span>}
+              <Link to={n.tab ? `${n.to}?ansicht=${n.tab}` : n.to} aria-current={active(n) ? 'page' : undefined} className={[active(n) ? 'active' : '', n.more ? 'more' : '', n.jump ? 'jump' : ''].filter(Boolean).join(' ') || undefined}>
+                <span className="ico" aria-hidden>{n.icon}</span><span className="full">{n.label}</span><span className="short">{n.short ?? n.label}</span>{n.jump && <span className="jumpmark" aria-hidden>›</span>}
+              </Link>
+            </Fragment>
           ))}
           {isAdmin && <NavLink to="/konto" className="konto"><span className="ico" aria-hidden>◐</span><span className="full">Mein Konto</span><span className="short">Konto</span></NavLink>}
         </nav>

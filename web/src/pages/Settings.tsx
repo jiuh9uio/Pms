@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { hotelSettings, taxRateCreateInput, taxRateUpdateInput, type HotelSettings, type TaxRateDto } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
@@ -23,13 +24,32 @@ export const SETTINGS_TABS = [
   ['haus', 'Haus'], ['email', 'E-Mail'], ['drucker', 'Drucker'], ['ecgeraet', 'EC-Gerät'], ['tse', 'TSE'], ['steuern', 'Steuern & Nummern'], ['algorithmen', 'Algorithmen'], ['netz', 'Hausnetz'], ['sicherung', 'Datensicherung'], ['update', 'Programm-Update'], ['loeschen', 'Daten löschen'],
 ] as const;
 
+/** Die Reiter in vier Gruppen – so stehen nie mehr als vier nebeneinander. */
+const SETTINGS_GROUPS = [
+  { key: 'betrieb', label: 'Betrieb', sub: 'Angaben zum Haus, Rechnungslayout, Steuersätze, Rechnungsnummern und Regeln', tabs: ['haus', 'steuern', 'algorithmen'] },
+  { key: 'geraete', label: 'Geräte', sub: 'Bondrucker, EC-Gerät, TSE und die Geräte im Hausnetz', tabs: ['drucker', 'ecgeraet', 'tse', 'netz'] },
+  { key: 'kommunikation', label: 'E-Mail', sub: 'Versand, Posteingang und Online-Anfrage', tabs: ['email'] },
+  { key: 'system', label: 'System', sub: 'Datensicherung, Programm-Update und Aufräumen', tabs: ['sicherung', 'update', 'loeschen'] },
+] as const;
+
 /** Einstellungen, aufgeteilt in Reiter – jeder Reiter ist über /einstellungen?ansicht=… direkt erreichbar. */
 export function Settings() {
-  const { current, bar } = useTabs(SETTINGS_TABS);
+  const { current } = useTabs(SETTINGS_TABS);
+  const [params, setParams] = useSearchParams();
+  const show = (k: string) => { const next = new URLSearchParams(params); next.set('ansicht', k); setParams(next); };
+  const group = SETTINGS_GROUPS.find((g) => (g.tabs as readonly string[]).includes(current)) ?? SETTINGS_GROUPS[0]!;
+  const label = (k: string) => SETTINGS_TABS.find(([t]) => t === k)![1];
   return (
     <>
-      <PageHeader title="Einstellungen" sub="Angaben zum Haus, E-Mail, Drucker, EC-Gerät, TSE, Steuersätze, Algorithmen, Hausnetz, Datensicherung und Programm-Update" />
-      {bar}
+      <PageHeader title="Einstellungen" sub={group.sub} />
+      <div className="segmented settingsgroups noprint" role="tablist" aria-label="Bereich der Einstellungen">
+        {SETTINGS_GROUPS.map((g) => <button key={g.key} type="button" role="tab" aria-selected={g === group} className={g === group ? 'on' : ''} onClick={() => show(g.tabs[0]!)}>{g.label}</button>)}
+      </div>
+      {group.tabs.length > 1 && (
+        <div className="tabs noprint" role="tablist">
+          {group.tabs.map((k) => <button key={k} type="button" role="tab" aria-selected={k === current} className={k === current ? 'on' : ''} onClick={() => show(k)}>{label(k)}</button>)}
+        </div>
+      )}
       {current === 'haus' && <><HotelForm /><LogoCard /><InvoiceLayoutCard /><GuideCard /></>}
       {current === 'email' && <><MailSettings /><InboxSettings /><WebRequestCard /></>}
       {current === 'drucker' && <><KitchenPrinterCard kind="kitchen" /><KitchenPrinterCard kind="front" /></>}

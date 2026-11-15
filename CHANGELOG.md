@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.45.0
+
+- Neue Gliederung. Startmenü in drei Gruppen: Tagesgeschäft (Hotel, Restaurant, E-Mail, Team – große Kacheln), Büro (Rechnungen, Auswertung, Kontrollen) und Haus & Technik (Internet, Schnelldruck, Verwaltung, Mein Konto – kleine Kacheln).
+- Neuer Bereich „Rechnungen“: Hotelrechnungen, Tagesabschluss, E-Rechnung erstellen und E-Rechnungs-Archiv an einem Ort. Aus dem Hotel führt „Rechnungen“ dorthin, „Zurück zu Hotel“ wieder zurück. Jede Zeile erscheint nur mit der passenden Freigabe – niemand sieht mehr als vorher.
+- Menü links mit Zwischenüberschriften (Hotel: Heute, Haus, Kunden, Abrechnung, Einrichtung) und Vor-/Zurück-Knöpfen oben. Sprünge in einen anderen Bereich sind mit „›“ gekennzeichnet (z. B. E-Mail → Einrichtung, Team → Reinigung).
+- Einstellungen in vier Gruppen statt elf Reitern: Betrieb, Geräte, E-Mail, System. Alle bisherigen Adressen und die Suche funktionieren unverändert.
+
 ## 1.44.0
 
 - Oberfläche überarbeitet: Seiten, Kacheln und Kennzahlen blenden weich ein; Fenster öffnen sich mit sanfter Bewegung vor unscharfem Hintergrund; Knöpfe, Kacheln, Tabellenzeilen und Balken im Belegungsplan reagieren beim Überfahren und Drücken; Eingabefelder mit weichem Leuchtrand; feinere Schatten; schimmernde Ladeanzeige statt „Lädt …“; Markierung des aktiven Menüpunkts.

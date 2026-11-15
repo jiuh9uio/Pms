@@ -8,19 +8,22 @@ import { useLoad } from '../ui.tsx';
 import { backupWarning, type BackupStatus } from './BackupCard.tsx';
 import type { UpdateStatus } from './UpdateCard.tsx';
 
-interface Tile { to: string; title: string; text: string; icon: string; admin?: boolean; module?: Module }
+interface Tile { to: string; title: string; text: string; icon: string; admin?: boolean; /** nötige Freigabe; mehrere = eine davon genügt */ module?: Module | Module[]; /** Ziel, wenn die erste Freigabe fehlt */ alt?: string; group: 'tag' | 'buero' | 'haus' }
+const GROUPS: [Tile['group'], string][] = [['tag', 'Tagesgeschäft'], ['buero', 'Büro'], ['haus', 'Haus & Technik']];
 const TILES: Tile[] = [
-  { to: '/hotel', title: 'Hotel', text: 'Übersicht, Belegungsplan, Reservierungen, Gäste, Rechnungen', icon: '▦', module: 'hotel' },
-  { to: '/restaurant', title: 'Restaurant', text: 'Tischreservierungen je Tag, Tische verwalten', icon: '◍', module: 'restaurant' },
-  { to: '/schnelldruck', title: 'Schnelldruck', text: 'Öffnungszeiten, Telefon, WLAN und eigene Info-Zettel aus dem Bondrucker', icon: '⎙', module: 'schnelldruck' },
-  { to: '/kontrollen', title: 'Kontrollen', text: 'Hygieneamt, Finanzamt und weitere: Unterlagen, Temperaturprotokolle, Besuche', icon: '✓', module: 'kontrollen' },
-  { to: '/erechnung', title: 'E-Rechnung', text: 'PDF-Rechnungen in ZUGFeRD umwandeln und per E-Mail versenden', icon: '✉', module: 'erechnung' },
-  { to: '/internet', title: 'Internet', text: 'Internetverbindung prüfen, Geräte im Hausnetz anzeigen und benennen', icon: '⌁', module: 'internet' },
-  { to: '/team', title: 'Team', text: 'Übergabebuch, Aufgaben und Reparaturen für alle Schichten', icon: '✎' },
-  { to: '/email', title: 'E-Mail', text: 'Geschäftspostfach lesen, Zimmer- und Tischanfragen erkennen und übernehmen', icon: '✉', module: 'email' },
-  { to: '/benutzer', title: 'Verwaltung', text: 'Benutzer, Änderungsprotokoll, Einstellungen', icon: '⚙', admin: true },
-  { to: '/konto', title: 'Mein Konto', text: 'Passwort, Darstellung', icon: '◐', admin: true },
+  { group: 'tag', to: '/hotel', title: 'Hotel', text: 'Übersicht, Belegungsplan, Reservierungen, Gäste, Frühstück, Reinigung', icon: '▦', module: 'hotel' },
+  { group: 'tag', to: '/restaurant', title: 'Restaurant', text: 'Tischreservierungen je Tag, Tische verwalten', icon: '◍', module: 'restaurant' },
+  { group: 'tag', to: '/email', title: 'E-Mail', text: 'Geschäftspostfach lesen, Zimmer- und Tischanfragen übernehmen und beantworten', icon: '✉', module: 'email' },
+  { group: 'tag', to: '/team', title: 'Team', text: 'Übergabebuch, Aufgaben und Reparaturen für alle Schichten', icon: '✎' },
+  { group: 'buero', to: '/rechnungen', alt: '/erechnung', title: 'Rechnungen', text: 'Hotelrechnungen, Tagesabschluss, E-Rechnung und Archiv', icon: '€', module: ['hotel', 'erechnung'] },
+  { group: 'buero', to: '/auswertung', title: 'Auswertung', text: 'Belegungsvorschau, Jahresvergleich, Herkunft der Gäste, Buchungsquellen', icon: '◔', module: 'hotel' },
+  { group: 'buero', to: '/kontrollen', title: 'Kontrollen', text: 'Hygieneamt, Finanzamt und weitere: Unterlagen, Temperaturprotokolle, Besuche', icon: '✓', module: 'kontrollen' },
+  { group: 'haus', to: '/internet', title: 'Internet', text: 'Verbindung, Gäste-WLAN, Geräte im Hausnetz', icon: '⌁', module: 'internet' },
+  { group: 'haus', to: '/schnelldruck', title: 'Schnelldruck', text: 'Öffnungszeiten, WLAN und Info-Zettel aus dem Bondrucker', icon: '⎙', module: 'schnelldruck' },
+  { group: 'haus', to: '/einstellungen', title: 'Verwaltung', text: 'Einstellungen, Benutzer, Änderungsprotokoll', icon: '⚙', admin: true },
+  { group: 'haus', to: '/konto', title: 'Mein Konto', text: 'Passwort, Darstellung', icon: '◐', admin: true },
 ];
+const allowed = (user: Parameters<typeof hasModule>[0], m: Tile['module']) => !m || (Array.isArray(m) ? m.some((x) => hasModule(user, x)) : hasModule(user, m));
 
 /** Startmenü nach der Anmeldung: von hier geht es in die einzelnen Bereiche. */
 export function Launcher() {
@@ -42,7 +45,8 @@ export function Launcher() {
   // Start-Checkliste: Hinweis für den Administrator, solange Grundlagen fehlen
   const setup = useLoad(() => (user.role === 'admin' ? api<{ ready: boolean; open: number }>('GET', '/setup/checklist') : Promise.resolve(null))).data;
   const teamNew = useLoad(() => api<{ unread: number; openTasks: number }>('GET', '/team/state')).data;
-  const tiles = TILES.filter((t) => (!t.admin || user.role === 'admin') && (!t.module || hasModule(user, t.module)));
+  const tiles = TILES.filter((t) => (!t.admin || user.role === 'admin') && allowed(user, t.module))
+    .map((t) => (t.alt && Array.isArray(t.module) && !hasModule(user, t.module[0]!) ? { ...t, to: t.alt } : t));
   return (
     <div className="launcher">
       <header>
@@ -61,15 +65,26 @@ export function Launcher() {
           ))}
         </section>
       )}
-      <nav className="tiles" aria-label="Bereiche">
-        {tiles.map((t) => (
-          <Link key={t.to} to={t.to} className="tile">
-            <span className="tile-icon" aria-hidden>{t.icon}</span>
-            <span className="tile-title">{t.title}{t.module === 'email' && mailNew && mailNew.newCount > 0 && <span className="tile-count" aria-label={`${mailNew.newCount} offen`}>{mailNew.newCount}</span>}{t.to === '/team' && teamNew && teamNew.unread > 0 && <span className="tile-count" aria-label={`${teamNew.unread} ungelesen`}>{teamNew.unread}</span>}</span>
-            <span className="tile-text">{t.text}</span>
-          </Link>
-        ))}
-      </nav>
+      {GROUPS.map(([g, label]) => {
+        const list = tiles.filter((t) => t.group === g);
+        if (!list.length) return null;
+        return (
+          <section key={g} className={`tilegroup ${g}`}>
+            <h2 className="tilegroup-title">{label}</h2>
+            <nav className="tiles" aria-label={label}>
+              {list.map((t) => (
+                <Link key={t.to} to={t.to} className="tile">
+                  <span className="tile-icon" aria-hidden>{t.icon}</span>
+                  <span className="tile-body">
+                    <span className="tile-title">{t.title}{t.to === '/email' && mailNew && mailNew.newCount > 0 && <span className="tile-count" aria-label={`${mailNew.newCount} offen`}>{mailNew.newCount}</span>}{t.to === '/team' && teamNew && teamNew.unread > 0 && <span className="tile-count" aria-label={`${teamNew.unread} ungelesen`}>{teamNew.unread}</span>}</span>
+                    <span className="tile-text">{t.text}</span>
+                  </span>
+                </Link>
+              ))}
+            </nav>
+          </section>
+        );
+      })}
       {tiles.length === 0 && <p className="notice">Für dieses Konto ist noch kein Bereich freigegeben. Bitte den Administrator ansprechen.</p>}
     </div>
   );
