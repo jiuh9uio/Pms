@@ -79,17 +79,39 @@ async function get(url: string) {
   return res;
 }
 
+/**
+ * Ersatzweg, wenn die GitHub-Schnittstelle die Abfrage ablehnt (403/429: Begrenzung für Abfragen ohne Anmeldung, 60 je Stunde und
+ * Internetanschluss – teilen sich mehrere Geräte einen Anschluss, ist sie schnell erreicht): Die normale Seite „neueste Version“
+ * leitet auf die Versionsnummer weiter; daraus ergeben sich die Download-Adressen. Diese Seiten sind nicht so begrenzt.
+ */
+async function latestViaRedirect(): Promise<{ tag_name: string; body: string; assets: { name: string; browser_download_url: string }[] }> {
+  const base = RELEASES_URL.replace('https://api.github.com/repos/', 'https://github.com/').replace(/\/latest$/, '');
+  const res = await fetch(`${base}/latest`, { headers: { 'User-Agent': 'pms-updater' }, signal: AbortSignal.timeout(30_000), redirect: 'manual' });
+  const tag = /\/releases\/tag\/([^/?#]+)$/.exec(res.headers.get('location') ?? '')?.[1];
+  await res.arrayBuffer().catch(() => {});
+  if (!tag || !/^v?\d+\.\d+\.\d+$/.test(decodeURIComponent(tag))) throw new Error(`Antwort ${res.status} von github.com`);
+  const dl = (name: string) => ({ name, browser_download_url: `${base}/download/${tag}/${name}` });
+  return { tag_name: decodeURIComponent(tag), body: '', assets: [dl(ASSET), dl(`${ASSET}.sha256`)] };
+}
+
 export async function checkForUpdate(): Promise<UpdateStatus> {
   if (!ctx) return status;
   try {
-    const data = (await (await get(process.env.PMS_UPDATE_URL || RELEASES_URL)).json()) as { tag_name?: string; body?: string; assets?: { name: string; browser_download_url: string }[] };
+    let data: { tag_name?: string; body?: string; assets?: { name: string; browser_download_url: string }[] };
+    try { data = (await (await get(process.env.PMS_UPDATE_URL || RELEASES_URL)).json()) as typeof data; }
+    catch (e) {
+      // Schnittstelle begrenzt oder gesperrt: über die normale GitHub-Seite weiter (nicht im Testbetrieb mit eigener Adresse)
+      if (process.env.PMS_UPDATE_URL || !/Antwort (403|429)/.test(e instanceof Error ? e.message : '')) throw e;
+      data = await latestViaRedirect();
+    }
     const zip = data.assets?.find((a) => a.name === ASSET);
     if (!data.tag_name || !zip) throw new Error('Die Veröffentlichung enthält kein Programmpaket');
     release = { version: data.tag_name.replace(/^v/, ''), zipUrl: zip.browser_download_url, shaUrl: data.assets?.find((a) => a.name === `${ASSET}.sha256`)?.browser_download_url ?? null, notes: (data.body ?? '').slice(0, 2000) };
     status = { ...status, latest: release.version, available: isNewer(release.version, ctx.version), checkedAt: new Date().toISOString(), error: null, notes: release.notes };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    status = { ...status, checkedAt: new Date().toISOString(), error: /fetch failed|ENOTFOUND|EAI_AGAIN|timeout|aborted/i.test(msg) ? 'Keine Verbindung zum Update-Server (Internet erreichbar?)' : msg };
+    status = { ...status, checkedAt: new Date().toISOString(), error: /fetch failed|ENOTFOUND|EAI_AGAIN|timeout|aborted/i.test(msg) ? 'Keine Verbindung zum Update-Server (Internet erreichbar?)'
+      : /Antwort (403|429)/.test(msg) ? `GitHub hat die Abfrage vorübergehend begrenzt (${msg}). Bitte in einer Stunde erneut versuchen.` : msg };
   }
   return status;
 }
