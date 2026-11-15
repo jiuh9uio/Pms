@@ -13,8 +13,13 @@ import { ToastProvider } from './ui.tsx';
 import { applyMotion, applyTheme, storedMotion, storedTheme } from './theme.ts';
 import './styles.css';
 
-applyTheme(storedTheme());
-applyMotion(storedMotion());
+// Öffentliche Seiten für Gäste lesen nichts aus dem Speicher des Browsers (§ 25 TDDDG: kein Zugriff ohne Notwendigkeit);
+// Farbschema und Animationen gelten nur in der Verwaltung.
+const PUBLIC = /^\/(willkommen|anfrage|gast\/|buchung\/)/.test(window.location.pathname);
+if (!PUBLIC) {
+  applyTheme(storedTheme());
+  applyMotion(storedMotion());
+}
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Suspense fallback={null}>

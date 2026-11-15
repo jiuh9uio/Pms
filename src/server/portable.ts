@@ -105,7 +105,11 @@ function backup(url: string) {
   const keep = Number(process.env.BACKUP_KEEP) || 30;
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
   const file = join(backupDir, `pms-${stamp}.dump`);
-  execFileSync(exe('pg_dump'), ['--format=custom', '--no-owner', `--dbname=${url}`, `--file=${file}`], { stdio: 'inherit', windowsHide: true });
+  // Passwort über die Umgebung statt in der Befehlszeile (dort wäre es für andere Programme auf dem Rechner sichtbar)
+  const u = new URL(url);
+  const env = { ...process.env, PGPASSWORD: decodeURIComponent(u.password) };
+  u.password = '';
+  execFileSync(exe('pg_dump'), ['--format=custom', '--no-owner', `--dbname=${u.toString()}`, `--file=${file}`], { stdio: 'inherit', windowsHide: true, env });
   execFileSync(exe('pg_restore'), ['--list', file], { stdio: 'ignore', windowsHide: true }); // Sicherung muss lesbar sein
   console.log(`Sicherung geschrieben: ${file} (${Math.round(statSync(file).size / 1024)} kB)`);
   const old = readdirSync(backupDir).filter((f) => /^pms-\d{8}-\d{6}\.dump$/.test(f)).sort().slice(0, -keep);
@@ -141,7 +145,10 @@ async function main() {
       if (!file || !existsSync(file)) fail('Bitte die Sicherungsdatei angeben: pms.exe --restore backups\\pms-JJJJMMTT-HHMMSS.dump --ja');
       if (!pg.started) fail('Das PMS läuft noch. Bitte zuerst das PMS-Fenster schließen und dann erneut versuchen.');
       if (!args.includes('--ja')) fail(`Dies ersetzt ALLE Daten durch den Stand aus ${file}. Zum Bestätigen --ja anhängen.`);
-      execFileSync(exe('pg_restore'), ['--clean', '--if-exists', '--no-owner', '--single-transaction', `--dbname=${pg.url}`, file], { stdio: 'inherit', windowsHide: true });
+      const ru = new URL(pg.url);
+      const renv = { ...process.env, PGPASSWORD: decodeURIComponent(ru.password) };
+      ru.password = '';
+      execFileSync(exe('pg_restore'), ['--clean', '--if-exists', '--no-owner', '--single-transaction', `--dbname=${ru.toString()}`, file], { stdio: 'inherit', windowsHide: true, env: renv });
       console.log('Wiederherstellung abgeschlossen. Das PMS kann wieder gestartet werden.');
     } finally { await pg.stop(); }
     return;

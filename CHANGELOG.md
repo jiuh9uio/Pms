@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.55.1
+
+- Sicherheitsprüfung (Prüfbericht unter docs/pruefbericht-2026-11.md). Kleine Härtungen: zusätzliche Sicherheits-Header (Permissions-Policy, Cross-Origin-Opener-/Resource-Policy, HSTS im HTTPS-Betrieb); öffentliche Seiten greifen nicht mehr auf den Speicher des Browsers zu; das Datenbank-Passwort steht bei Sicherung und Wiederherstellung nicht mehr in der Befehlszeile; Fehlermeldungen des Servers durchgehend auf Deutsch.
+
 ## 1.55.0
 
 - Einstellungen → Online → Gästeseite → „Anfrageformular bearbeiten“: ein Fenster, in dem Sie festlegen, welche Anfragen Gäste stellen können (Zimmer, Tisch, Feier, Tagung, Gutschein, Frage), und die Auswahllisten selbst pflegen – Art der Veranstaltung, Bestuhlung, Technik, Verpflegung: eigene Einträge hinzufügen, löschen, verschieben, Vorgabe wiederherstellen. Für Tischanfragen: früheste und späteste Uhrzeit, Abstand und Höchstzahl Personen.

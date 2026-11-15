@@ -87,6 +87,26 @@ describe('Sicherheit: Zugriff ohne Anmeldung und ohne Rechte', () => {
     expect(overview.json()).toEqual([]); // ohne Bereiche: nichts
   });
 
+  it('setzt die Sicherheits-Header, mit HSTS nur im HTTPS-Betrieb', async () => {
+    const h = (await call('GET', '/api/v1/health')).headers;
+    expect(h['content-security-policy']).toContain("default-src 'self'");
+    expect(h['content-security-policy']).toContain("frame-ancestors 'none'");
+    expect(h['x-content-type-options']).toBe('nosniff');
+    expect(h['x-frame-options']).toBe('DENY');
+    expect(h['permissions-policy']).toContain('camera=()');
+    expect(h['cross-origin-opener-policy']).toBe('same-origin');
+    expect(h['strict-transport-security']).toBeUndefined(); // ohne HTTPS (Betrieb im Hausnetz) kein HSTS
+    const secure = await buildApp({ db, webDir: '/nonexistent', cookieSecure: true });
+    expect((await secure.inject({ method: 'GET', url: '/api/v1/health' })).headers['strict-transport-security']).toBe('max-age=31536000');
+    await secure.close();
+  });
+
+  it('meldet Eingabefehler auf Deutsch und ohne interne Einzelheiten', async () => {
+    const r = await app.inject({ method: 'GET', url: '/api/v1/public/site/availability?from=2026-13-45&to=x&adults=-1', remoteAddress: '10.66.0.1' });
+    expect(r.statusCode).toBe(400);
+    expect(r.body).not.toMatch(/Invalid|expected|Too small/);
+  });
+
   it('verrät öffentlich keine internen Angaben und lässt die Ersteinrichtung nicht wiederholen', async () => {
     const state = await call('GET', '/api/v1/auth/state');
     expect(state.json()).toEqual({ needsSetup: false, user: null, guestHome: false });

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import cookie from '@fastify/cookie';
 import fastifyStatic from '@fastify/static';
 import { sql } from 'drizzle-orm';
+import '../shared/zod-de.js';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { z, ZodError } from 'zod';
 import * as S from '../shared/schemas.js';
@@ -72,6 +73,12 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     reply.header('X-Content-Type-Options', 'nosniff');
     reply.header('X-Frame-Options', 'DENY');
     reply.header('Referrer-Policy', 'same-origin');
+    // Browser-Funktionen, die das Programm nicht braucht, abschalten; Fenster nicht mit fremden Seiten teilen
+    reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()');
+    reply.header('Cross-Origin-Opener-Policy', 'same-origin');
+    reply.header('Cross-Origin-Resource-Policy', 'same-origin');
+    // nur über HTTPS (Server-Betrieb mit COOKIE_SECURE=true): Browser sollen die Seite künftig nur noch verschlüsselt aufrufen
+    if (cookieSecure) reply.header('Strict-Transport-Security', 'max-age=31536000');
     reply.header('Content-Security-Policy', "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
     if (req.url.startsWith('/api/')) reply.header('Cache-Control', 'no-store');
     // Schreibende Anfragen nur von der eigenen Seite (zusätzlich zu SameSite=Strict)
