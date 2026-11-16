@@ -577,6 +577,11 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     await ok('POST', '/public/booking-request', anon, { name: 'Erika Gast', email: 'erika@example.org', phone: '', from: addDays(today, 330), to: addDays(today, 332), adults: 2, children: 0, message: '', category: 'Doppelzimmer', consent: true, website: '' });
     const mail = await db.execute(sql`select body from inbox_mails where uid_validity = 'web' order by received_at desc limit 1`);
     expect(String(mail[0]!.body)).toContain('Gewünschte Zimmerkategorie: Doppelzimmer');
+    // Grenze je Absender aus dem Internet (hinter dem Proxy auf diesem Rechner): 6 am Tag; Hausnetz zählt nicht
+    const fromNet = (n: number) => app.inject({ method: 'POST', url: '/api/v1/public/booking-request', headers: { 'x-forwarded-for': '203.0.113.9' },
+      payload: { name: `Netz Gast${n}`, email: 'netz@example.org', phone: '', from: addDays(today, 340), to: addDays(today, 341), adults: 1, children: 0, message: '', consent: true, website: '' } });
+    for (let n = 0; n < 6; n++) expect((await fromNet(n)).statusCode).toBe(200);
+    expect((await fromNet(6)).statusCode).toBe(429);
     // Video im Startbild: nur echte Videos, Teilabruf (Range) für iPhone/iPad
     const mp4 = Buffer.concat([Buffer.from('00000018667479706d703432', 'hex'), Buffer.alloc(2000, 7)]);
     const putVideo = (body: Buffer, who = admin, type = 'video/mp4') => app.inject({ method: 'PUT', url: '/api/v1/settings/site/video', cookies: who, headers: { 'content-type': type }, payload: body, remoteAddress: clientIp });

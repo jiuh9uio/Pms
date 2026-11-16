@@ -261,10 +261,12 @@ export function StatusFlow({ booking: b, kind, roomIds, onClose }: { booking: Bo
     if (window.confirm(f.ask)) void direct(); else onClose(false);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!b.guest.email) return null;
-  const rooms = roomIds.length && kind === 'cancel' ? `&rooms=${roomIds.join(',')}` : '';
+  const rooms = roomIds.length ? `&rooms=${roomIds.join(',')}` : '';
   return (
     <MailDialog path={`/bookings/${b.id}/mail?as=${f.as}${rooms}`} title={`${f.title} zu ${b.number}`} sendLabel={f.send}
       intro={f.target ? <p className="notice small">Geändert wird erst mit „{f.send}“ oder „{f.without}“. „Abbrechen“ ändert nichts.</p> : <p className="notice small">Bitte ergänzen, was noch fehlt. Die Anfrage bleibt dabei unverändert offen.</p>}
+      appliedIntro={f.target ? <p className="notice warn small"><b>{f.done}.</b> Nur die E-Mail ist noch nicht gesendet – „Abbrechen“ schließt jetzt ohne E-Mail.</p> : undefined}
+      appliedText={f.target ? `${f.done}, aber die E-Mail wurde nicht gesendet: ` : undefined}
       beforeSend={f.target ? apply : undefined}
       onSent={() => { if (kind === 'question') void note().then(bump); else bump(); onClose(true); }}
       onClose={() => { bump(); onClose(false); }}
@@ -303,7 +305,7 @@ function RoomCard({ room: r, busy, onStatus, onFlow, onRevive, onCheckin, onChec
         {r.status === 'confirmed' && <Button variant="danger" busy={busy} onClick={() => onFlow('cancel')}>Stornieren</Button>}
         {r.status === 'confirmed' && r.from <= todayBerlin() && <Button busy={busy} onClick={() => onStatus(r, 'no_show', `Zimmer ${r.roomNumber} als nicht angereist markieren? Das Zimmer wird wieder frei.`)}>Nicht angereist</Button>}
         {r.status === 'checked_in' && <Button busy={busy} onClick={() => onStatus(r, 'confirmed', 'Check-in zurücknehmen?')}>Check-in zurücknehmen</Button>}
-        {r.status === 'checked_out' && <Button busy={busy} onClick={() => onStatus(r, 'checked_in', 'Check-out zurücknehmen? Der Gast gilt wieder als im Haus.')}>Check-out zurücknehmen</Button>}
+        {r.status === 'checked_out' && <Button busy={busy} onClick={() => onStatus(r, 'checked_in', 'Check-out zurücknehmen? Der Gast gilt wieder als im Haus.\n\nHinweis: Ist alles bezahlt und die Abreisezeit vorbei, checkt das Programm den Gast automatisch wieder aus (Einstellung „Bezahlte Gäste automatisch auschecken“). Das Zimmer bleibt auf „zu reinigen“.')}>Check-out zurücknehmen</Button>}
         {(r.status === 'cancelled' || r.status === 'no_show') && <Button busy={busy} onClick={onRevive}>Reaktivieren</Button>}
       </div>
     </div>
@@ -522,6 +524,8 @@ function Charges({ booking }: { booking: BookingDto }) {
     ...(free ? { name: v.name, unitPriceCents: parseMoney(v.price), taxRateId: v.taxRateId || base.data?.rates.find((r) => r.defaultFor === 'services')?.id } : { serviceId: v.serviceId || undefined }),
   }, e);
   const remove = async (id: string) => {
+    const c = booking.charges.find((x) => x.id === id);
+    if (!window.confirm(`„${c?.name ?? 'Leistung'}“ entfernen?`)) return;
     try { await api('POST', `/charges/${id}/remove`); bump(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
   };
   const errs = [...new Set(Object.values(f.errors))];

@@ -3,6 +3,26 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.75.0
+
+- Temperaturkontrolle beim Start: Statt „Ja, alles im Sollbereich“ wird je Messstelle der **abgelesene Wert angetippt** (z. B. Tiefkühler −18° bis −25°, Kühlschrank +2° bis +7°) oder eingetippt. Gespeichert wird der echte Wert mit Name und Uhrzeit. Werte außerhalb des Sollbereichs gehen über „Nein – Werte eintragen“ (mit Maßnahme).
+- Durchsicht auf Logikfehler – behoben:
+  - Übersicht: „Check-out“ bei den Abreisen öffnet jetzt die Reservierung (mit Prüfung offener Beträge) statt sofort auszuchecken.
+  - Zusage/Absage für ein einzelnes Zimmer: die E-Mail nennt nur dieses Zimmer. Klappt das Senden nach der Änderung nicht, steht klar da, was schon geändert ist („Abbrechen“ heißt dann „Schließen ohne E-Mail“).
+  - Belegungsplan: Verschieben per Ziehen erst nach Rückfrage (vorher/nachher).
+  - Leistung entfernen: mit Rückfrage.
+  - Check-out zurücknehmen nach vorzeitiger Abreise wird abgelehnt (die entfernten Nächte kämen sonst nicht zurück); Hinweis auf das automatische Auschecken.
+  - Temperaturprotokoll: Eingaben in anderen Bereichen gehen beim Speichern nicht mehr verloren; Warnung beim Datumswechsel mit ungespeicherten Werten.
+  - Startabfrage Reinigung: „Ja“ ist nicht mehr vorausgewählt (Eingabetaste bestätigt nichts mehr ungesehen); „Nein – einzeln abhaken“ öffnet das Reinigungsprotokoll.
+  - Zimmerreinigung: „Fertig/Zu reinigen“ nur in der Liste von heute.
+  - Restaurant: „Gäste da“ nur am Tag der Reservierung, „Nicht erschienen“ nicht im Voraus.
+  - Übergabebuch: ein zweites „Erledigt“ überschreibt den ersten Vermerk nicht mehr; „Wieder öffnen“ mit Rückfrage.
+  - Gästeseite: Stornieren bricht ab, wenn sich die angezeigte Gebühr inzwischen geändert hat; die Ankunftszeit erzeugt nur bei Änderung einen Eintrag im Übergabebuch; Online-Anfragen aus dem Internet höchstens 6 je Absender und Tag.
+  - Online-Meldeschein: leere Felder löschen keine vorhandenen Angaben (z. B. Ausweisnummer).
+  - Kartenzahlung „Nur buchen (ohne Gerät)“ mit Rückfrage; „Neue Rechnung“ legt bei Doppelklick nur eine an.
+  - Anfrageformular der Gästeseite speichert keine anderen, noch ungespeicherten Änderungen mehr mit.
+  - Benutzer: Rückfrage, bevor man das eigene Konto deaktiviert oder sich selbst die Administrator-Rechte nimmt.
+
 ## 1.74.0
 
 - Reservierung: Zusagen, Absagen und Stornieren laufen jetzt immer gleich – **zuerst erscheint die E-Mail an den Gast**, geändert wird erst mit „… und senden“ oder „Ohne E-Mail …“. **„Abbrechen“ ändert nichts.** Ohne E-Mail-Adresse kommt eine Rückfrage.

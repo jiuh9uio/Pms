@@ -64,7 +64,7 @@ export function Housekeeping() {
                   <td>{r.guest ? `${r.guest} (${r.persons})` : '–'}</td>
                   <td>{r.nextGuest ? `${r.nextGuest} (${r.nextPersons})` : '–'}</td>
                   <td>{r.housekeeping === 'clean' ? <Badge tone="ok">sauber</Badge> : <Badge tone="warn">zu reinigen</Badge>}</td>
-                  <td className="noprint">{r.housekeeping === 'dirty' ? <Button variant="primary" onClick={() => void set(r, 'clean')}>Fertig</Button> : <Button onClick={() => void set(r, 'dirty')}>Zu reinigen</Button>}</td>
+                  <td className="noprint">{date !== today ? <small className="muted">nur heute änderbar</small> : r.housekeeping === 'dirty' ? <Button variant="primary" onClick={() => void set(r, 'clean')}>Fertig</Button> : <Button onClick={() => void set(r, 'dirty')}>Zu reinigen</Button>}</td>
                 </tr>
               ))}</tbody>
             </table></div>

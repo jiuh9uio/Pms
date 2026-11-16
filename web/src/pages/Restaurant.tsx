@@ -91,10 +91,10 @@ export function Restaurant() {
                   <td>{r.tableName ?? <span className="muted">offen</span>}</td>
                   <td><Badge tone={TONE[r.status]}>{TABLE_STATUS_LABEL[r.status]}</Badge></td>
                   <td className="noprint rowactions">
-                    {r.status === 'booked' && <Button variant="primary" busy={busy === r.id} onClick={() => void setStatus(r, 'seated')}>Gäste da</Button>}
+                    {r.status === 'booked' && r.date === today && <Button variant="primary" busy={busy === r.id} onClick={() => void setStatus(r, 'seated')}>Gäste da</Button>}
                     {r.status === 'seated' && <Button busy={busy === r.id} onClick={() => void setStatus(r, 'done')}>Tisch frei</Button>}
                     {holdsTable(r.status) && <Button onClick={() => setDlg(<ReservationDialog date={date} tables={data.tables} list={data.list} res={r} onClose={close} />)}>Ändern</Button>}
-                    {r.status === 'booked' && <Button busy={busy === r.id} onClick={() => void setStatus(r, 'no_show', `${r.name} als nicht erschienen markieren?`)}>Nicht erschienen</Button>}
+                    {r.status === 'booked' && r.date <= today && <Button busy={busy === r.id} onClick={() => void setStatus(r, 'no_show', `${r.name} als nicht erschienen markieren?`)}>Nicht erschienen</Button>}
                     {r.status === 'booked' && <Button variant="danger" busy={busy === r.id} onClick={() => void setStatus(r, 'cancelled', `Reservierung von ${r.name} stornieren?`)}>Stornieren</Button>}
                     {!holdsTable(r.status) && <Button busy={busy === r.id} onClick={() => void setStatus(r, r.status === 'done' ? 'seated' : 'booked')}>Zurücknehmen</Button>}
                   </td>

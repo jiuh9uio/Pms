@@ -55,7 +55,7 @@ export function Team() {
             </div>
             <div className="actions">
               {!n.readByMe && <Button onClick={() => void act(`/team/notes/${n.id}/read`, {}, 'Als gelesen vermerkt')}>Gelesen</Button>}
-              {n.status === 'open' ? <Button variant="primary" onClick={() => done(n)}>Erledigt</Button> : <Button onClick={() => void act(`/team/notes/${n.id}/done`, { done: false }, 'Wieder offen')}>Wieder öffnen</Button>}
+              {n.status === 'open' ? <Button variant="primary" onClick={() => done(n)}>Erledigt</Button> : <Button onClick={() => { if (window.confirm('Wieder öffnen? Der Erledigt-Vermerk wird entfernt (im Protokoll bleibt er erhalten).')) void act(`/team/notes/${n.id}/done`, { done: false }, 'Wieder offen'); }}>Wieder öffnen</Button>}
             </div>
           </div>
         </section>

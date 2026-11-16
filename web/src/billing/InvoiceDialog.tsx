@@ -229,7 +229,10 @@ export function PaymentForm({ bookingId, invoiceId, suggestCents, onDone }: { bo
     }
   };
   return (
-    <form className="payform" noValidate onSubmit={(e) => void f.submit({ bookingId, invoiceId, amountCents: parseMoney(v.amount), method: v.method, date: v.date, payer: v.payer, note: v.note }, e)}>
+    <form className="payform" noValidate onSubmit={(e) => {
+      if (terminal?.ready && v.method === 'Karte' && !window.confirm('Kartenzahlung buchen, ohne das EC-Gerät zu benutzen?\n\nNur verwenden, wenn die Zahlung am Gerät bereits erfolgreich war.')) { e.preventDefault(); return; }
+      void f.submit({ bookingId, invoiceId, amountCents: parseMoney(v.amount), method: v.method, date: v.date, payer: v.payer, note: v.note }, e);
+    }}>
       <div className="segmented" role="radiogroup" aria-label="Zahlungsart">
         {PAYMENT_METHODS_BILLING.slice(0, 3).map((m) => <button key={m} type="button" role="radio" aria-checked={v.method === m} className={v.method === m ? 'on' : ''} onClick={() => setV({ ...v, method: m })}>{m}</button>)}
         <select value={PAYMENT_METHODS_BILLING.slice(0, 3).includes(v.method as never) ? '' : v.method} onChange={(e) => e.target.value && setV({ ...v, method: e.target.value })} aria-label="Weitere Zahlungsart">

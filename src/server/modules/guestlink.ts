@@ -152,15 +152,18 @@ export async function setArrival(db: Db, token: string, v: PublicCred & { time: 
   if (!b.canArrival) throw conflict('Für diese Reservierung lässt sich die Ankunftszeit hier nicht ändern.');
   await db.update(bookings).set({ arrivalTime: v.time, guestMessage: v.message, updatedAt: new Date() }).where(eq(bookings.id, id));
   await record(db, { ...GUEST, ip }, { action: 'guest_arrival', entity: 'booking', entityId: id, after: { arrivalTime: v.time, message: v.message.slice(0, 200) } });
-  if (v.time || v.message) await tellTeam(db, `Reservierung ${b.number} (${b.guestName}, Anreise ${de(b.from)}): ${v.time ? `Ankunft voraussichtlich ${v.time} Uhr` : 'Nachricht des Gastes'}${v.message ? ` – „${v.message}“` : ''}`);
+  const changed = v.time !== b.arrivalTime || v.message !== b.guestMessage;
+  if (changed && (v.time || v.message)) await tellTeam(db, `Reservierung ${b.number} (${b.guestName}, Anreise ${de(b.from)}): ${v.time ? `Ankunft voraussichtlich ${v.time} Uhr` : 'Nachricht des Gastes'}${v.message ? ` – „${v.message}“` : ''}`);
   return view(db, id);
 }
 
 /** Storno durch den Gast – nur wenn die Bedingungen es online erlauben. Gibt die Zimmer frei und meldet es dem Personal. */
-export async function cancelByGuest(db: Db, token: string, cred: PublicCred, ip: string | null) {
+export async function cancelByGuest(db: Db, token: string, cred: PublicCred & { feeCents?: number }, ip: string | null) {
   const id = await enter(db, token, cred);
   const b = await view(db, id);
   if (!b.canCancel) throw conflict(b.cancelHint || 'Diese Reservierung lässt sich hier nicht stornieren.', 'cancel_not_possible');
+  if (cred.feeCents !== undefined && cred.feeCents !== b.terms.feeCents)
+    throw conflict('Die Stornobedingungen haben sich inzwischen geändert (z. B. ist die kostenfreie Frist abgelaufen). Bitte die Seite neu laden und die aktuellen Bedingungen prüfen.', 'terms_changed');
   const full = await getBooking(db, id);
   for (const r of full.rooms.filter((x) => x.status === 'tentative' || x.status === 'confirmed'))
     await setRoomStatus(db, { ...GUEST, ip }, r.id, { status: 'cancelled', version: r.version });

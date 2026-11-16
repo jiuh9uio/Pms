@@ -34,9 +34,9 @@ export function signature(h: Awaited<ReturnType<typeof getHotel>>) {
 }
 
 /** asConfirmed: Text einer Zusage, auch wenn die Zimmer noch vorläufig sind (Zusage wird erst beim Senden gebucht) */
-export async function bookingMailDraft(db: Exec, bookingId: string, asConfirmed = false): Promise<MailDraft> {
+export async function bookingMailDraft(db: Exec, bookingId: string, asConfirmed = false, roomIds: string[] = []): Promise<MailDraft> {
   const [b, h] = [await getBooking(db, bookingId), await getHotel(db)];
-  const rooms = b.rooms.filter((r) => isActiveStatus(r.status));
+  const rooms = b.rooms.filter((r) => isActiveStatus(r.status) && (!roomIds.length || roomIds.includes(r.id)));
   if (rooms.length === 0) throw conflict('Die Reservierung enthält kein aktives Zimmer – eine Bestätigung ist nicht möglich');
   const tentative = !asConfirmed && rooms.some((r) => r.status === 'tentative');
   const lines = rooms.map((r) =>

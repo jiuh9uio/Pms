@@ -51,10 +51,13 @@ export function HygienePrompt({ temp: askTemp = true, clean: askClean = true }: 
     setBusy(false);
   };
   const no = async () => {
-    const types = await api<InspectionTypeDto[]>('GET', '/inspection-types');
-    const hygiene = types.find((t) => t.kind === 'hygiene' && t.active) ?? types.find((t) => t.kind === 'hygiene');
-    setSkipped(open.map((x) => x.key));
-    if (hygiene) navigate(`/kontrollen/${hygiene.id}?bereich=${area.areaId}`);
+    try {
+      const types = await api<InspectionTypeDto[]>('GET', '/inspection-types');
+      const hygiene = types.find((t) => t.kind === 'hygiene' && t.active) ?? types.find((t) => t.kind === 'hygiene');
+      if (!hygiene) { toast('Die Eigenkontrolle ist noch nicht eingerichtet (Kontrollen).', 'error'); return; }
+      setSkipped(open.map((x) => x.key));
+      navigate(`/kontrollen/${hygiene.id}?bereich=${area.areaId}&ansicht=${q.kind === 'temp' ? 'temperatur' : 'reinigung'}`);
+    } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
   };
 
   return (
@@ -64,7 +67,7 @@ export function HygienePrompt({ temp: askTemp = true, clean: askClean = true }: 
         <Button onClick={() => void no()}>{q.kind === 'temp' ? 'Nein – Werte eintragen' : 'Nein – einzeln abhaken'}</Button>
         {q.kind === 'temp'
           ? <Button variant="primary" busy={busy} className="big" disabled={!allSet || anyOut} onClick={() => void yes()}>Speichern</Button>
-          : <Button variant="primary" busy={busy} className="big" onClick={() => void yes()} autoFocus>Ja</Button>}
+          : <Button variant="primary" busy={busy} className="big" onClick={() => void yes()}>Ja</Button>}
       </>}>
       {q.kind === 'temp' && <p className="muted small">Thermometer ablesen und den Wert antippen (oder eintippen). Gespeichert wird der abgelesene Wert.</p>}
       <ul className="plain">

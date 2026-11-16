@@ -31,7 +31,7 @@ export function BookingPage() {
   const f = useSubmit(publicArrivalInput, async (d) => { setB(await api<PublicBooking>('POST', `${path}/arrival`, d)); setSaved(true); });
   const cancel = async () => {
     setBusy(true); setFail(null);
-    try { setB(await api<PublicBooking>('POST', `${path}/cancel`, { ...cred, confirm: true })); setAsk(false); }
+    try { setB(await api<PublicBooking>('POST', `${path}/cancel`, { ...cred, confirm: true, feeCents: b?.terms.feeCents ?? 0 })); setAsk(false); }
     catch (e) { setFail(e instanceof Error ? e.message : 'Das hat nicht geklappt.'); }
     setBusy(false);
   };

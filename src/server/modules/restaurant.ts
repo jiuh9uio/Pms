@@ -85,6 +85,10 @@ export async function setStatus(db: Db, actor: Actor, id: string, status: TableS
     const [before] = await tx.select().from(tableReservations).where(eq(tableReservations.id, id)).for('update');
     if (!before) throw notFound('Reservierung');
     if (before.version !== version) throw stale();
+    // „Gäste da“ nur am Tag selbst, „Nicht erschienen“ nicht im Voraus
+    const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+    if (status === 'seated' && before.status === 'booked' && before.date !== today) throw conflict('„Gäste da“ geht nur am Tag der Reservierung.');
+    if (status === 'no_show' && before.date > today) throw conflict('„Nicht erschienen“ geht erst am Tag der Reservierung.');
     // beim Reaktivieren muss der Tisch noch frei sein
     if (holdsTable(status) && !holdsTable(before.status)) await checkTable(tx, before, id);
     await tx.update(tableReservations).set({ status, version: version + 1, updatedAt: new Date() }).where(eq(tableReservations.id, id));

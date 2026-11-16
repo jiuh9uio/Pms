@@ -221,7 +221,8 @@ export function GuestSiteCard() {
         <div><b>Anfrageformular</b><p className="muted small">Welche Anfragen Gäste stellen können (Zimmer, Tisch, Feier, Tagung, Gutschein, Frage) und was sie dabei auswählen – Art der Veranstaltung, Bestuhlung, Technik, Verpflegung, Tischzeiten.</p></div>
         <Button onClick={() => setFormDlg(true)}>Anfrageformular bearbeiten</Button>
       </div>
-      {formDlg && <RequestFormDialog site={v} onClose={() => setFormDlg(false)} onSaved={(s) => setV(s)} />}
+      {/* Formular-Einstellungen auf dem zuletzt gespeicherten Stand speichern – ungespeicherte Änderungen der Karte bleiben ungespeichert, aber erhalten */}
+      {formDlg && <RequestFormDialog site={data ?? v} onClose={() => setFormDlg(false)} onSaved={(s) => setV((prev) => (prev ? { ...prev, form: s.form } : s))} />}
       {(!v.imprintUrl || !v.privacyUrl) && <p className="notice warn">Eine öffentlich erreichbare Seite braucht in Deutschland in der Regel ein Impressum und eine Datenschutzerklärung. Tragen Sie unter „Rechtliches“ die Adressen Ihrer bestehenden Seiten ein. Ob die Inhalte genügen, kann das Programm nicht prüfen – bitte rechtlich prüfen lassen.</p>}
       {req && !req.enabled && <p className="notice warn">Die Online-Anfrage ist ausgeschaltet – auf der Gästeseite erscheint dann kein „Anfragen“ für Zimmer. Einschalten unter E-Mail → Online-Anfrage.</p>}
       <div className="formactions"><Button type="submit" variant="primary" busy={f.busy}>Speichern</Button></div>

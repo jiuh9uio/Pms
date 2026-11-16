@@ -97,6 +97,10 @@ export function Plan() {
     if (!d.moved) return e.kind === 'block' ? openBlock({ entry: e }) : openBooking(e.bookingId!);
     const p = preview(d);
     if (p.roomId === e.roomId && p.from === e.from && p.to === e.to) return;
+    // Verschieben erst nach Rückfrage – sonst genügt ein versehentliches Ziehen
+    const room0 = data.rooms.find((r) => r.id === e.roomId), room1 = data.rooms.find((r) => r.id === p.roomId);
+    const what = e.kind === 'block' ? 'Sperre' : `Reservierung ${e.guestName ?? ''}`.trim();
+    if (!window.confirm(`${what} ändern?\n\nvorher: Zimmer ${room0?.number ?? '?'}, ${deShort(e.from)} – ${deShort(e.to)}\nneu: Zimmer ${room1?.number ?? '?'}, ${deShort(p.from)} – ${deShort(p.to)}${e.kind === 'block' ? '' : '\n\nNeue Nächte werden nach den aktuellen Preisregeln berechnet. Eine bereits ausgestellte Rechnung ändert sich dadurch nicht.'}`)) return;
     try {
       if (e.kind === 'block') await api('PUT', `/blocks/${e.blockId}`, { ...p, reason: e.reason ?? '', version: e.version });
       else await api('PATCH', `/booking-rooms/${e.bookingRoomId}`, { ...p, version: e.version });

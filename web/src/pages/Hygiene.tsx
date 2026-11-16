@@ -74,7 +74,9 @@ export function Hygiene() {
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    const entries = points.filter((p) => draft[p.id]?.value.trim()).map((p) => ({ pointId: p.id, date, valueC: parseTemp(draft[p.id]!.value), note: draft[p.id]!.note.trim() }));
+    // alle Bereiche speichern (nicht nur den sichtbaren) – sonst gingen Eingaben in anderen Reitern beim Neuladen verloren; nur Geänderte zählen
+    const entries = changed.map((p) => ({ pointId: p.id, date, valueC: parseTemp(draft[p.id]!.value), note: draft[p.id]!.note.trim() }));
+    if (!entries.length) { toast('Keine Änderungen zu speichern'); return; }
     const parsed = hygieneReadingsInput.safeParse({ entries });
     if (!parsed.success) { setErrors([...new Set(parsed.error.issues.map((i) => i.message))]); return; }
     setBusy(true);
@@ -87,6 +89,14 @@ export function Hygiene() {
     }
     setBusy(false);
   };
+  // geänderte Eingaben (gegenüber dem gespeicherten Stand des Tages), über alle Bereiche
+  const allPoints = visible.flatMap((a) => a.points);
+  const changed = allPoints.filter((p) => {
+    const d = draft[p.id]; if (!d?.value.trim()) return false;
+    const r = at(p.id, date);
+    return !r || r.valueC == null || parseTemp(d.value) !== Number(r.valueC) || d.note.trim() !== (r.note ?? '');
+  });
+  const leave = () => !changed.length || window.confirm(`${changed.length} ${changed.length === 1 ? 'Eingabe ist' : 'Eingaben sind'} noch nicht gespeichert und ${changed.length === 1 ? 'geht' : 'gehen'} verloren. Trotzdem wechseln?`);
   const setCell = (id: string, patch: Partial<{ value: string; note: string }>) => setDraft((d) => ({ ...d, [id]: { value: '', note: '', ...d[id], ...patch } }));
   const cell = (r: HygieneReadingDto | undefined, p: HygienePointDto) => {
     if (!r) return <span className="muted">–</span>;
@@ -135,7 +145,7 @@ export function Hygiene() {
                   <thead><tr>
                     <th>Messstelle</th>
                     {days.slice(0, 6).map((d) => <th key={d} className="num hide-sm">{WD[weekdayOf(d)]} {deShort(d)}</th>)}
-                    <th className="entrycol"><label>Wert in °C am <input type="date" value={date} max={today} onChange={(e) => e.target.value && e.target.value <= today && setDate(e.target.value)} /></label></th>
+                    <th className="entrycol"><label>Wert in °C am <input type="date" value={date} max={today} onChange={(e) => e.target.value && e.target.value <= today && leave() && setDate(e.target.value)} /></label></th>
                     <th>Bemerkung / Maßnahme</th>
                   </tr></thead>
                   <tbody>

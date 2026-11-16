@@ -29,15 +29,6 @@ export function Dashboard() {
     catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
     setBusy(null);
   };
-  const checkout = async (r: BookingListRow) => {
-    setBusy(r.id);
-    try {
-      await api('POST', `/booking-rooms/${r.id}/status`, { status: 'checked_out', version: r.version });
-      toast(`Zimmer ${r.roomNumber} ausgecheckt`);
-      bump();
-    } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
-    setBusy(null);
-  };
   const kpi = (label: string, value: string | number, sub?: string) => <div className="card kpicard"><span>{label}</span><b>{value}</b>{sub && <small>{sub}</small>}</div>;
 
   return (
@@ -96,7 +87,7 @@ export function Dashboard() {
             </section>
             <section className="card flush">
               <h2 className="pad">Abreisen heute</h2>
-              {data.departures.length ? <BookingTable compact rows={data.departures} action={(r) => <Button variant="primary" busy={busy === r.id} onClick={() => void checkout(r)}>Check-out</Button>} /> : <p className="muted pad">Keine offenen Abreisen.</p>}
+              {data.departures.length ? <BookingTable compact rows={data.departures} action={(r) => <Button variant="primary" onClick={() => openBooking(r.bookingId)}>Check-out</Button>} /> : <p className="muted pad">Keine offenen Abreisen.</p>}
             </section>
           </div>
         </>

@@ -23,9 +23,13 @@ export function Invoices() {
   const { data, error } = useLoad(() => api<InvoiceListRow[]>('GET', '/invoices?' + params), [params.toString(), rev]);
   const sum = (k: 'grossCents' | 'paidCents' | 'openCents') => (data ?? []).filter((i) => i.status !== 'draft').reduce((s, i) => s + i[k], 0);
   const set = (patch: Partial<typeof f>) => setF({ ...f, ...patch });
+  const [creating, setCreating] = useState(false);
   const free = async () => {
+    if (creating) return;
+    setCreating(true);
     try { const r = await api<{ id: string }>('POST', '/invoices', { include: 'none' }); bump(); openInvoice(r.id); }
     catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+    setCreating(false);
   };
   const filtered = !!(f.from || f.to || f.serviceFrom || f.serviceTo || f.method);
   return (

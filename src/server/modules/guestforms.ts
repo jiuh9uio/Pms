@@ -67,12 +67,14 @@ export async function submitForm(db: Db, token: string, v: GuestFormInput, ip: s
     const b = await getBooking(tx, f.bookingId);
     const { companions, ...data } = v;
     const [g] = await tx.select().from(guests).where(eq(guests.id, b.guest.id)).for('update');
-    await tx.update(guests).set({ ...data, version: g!.version + 1, updatedAt: new Date() }).where(eq(guests.id, g!.id));
+    // leere Felder des Formulars überschreiben keine vorhandenen Angaben (z. B. Ausweisnummer)
+    const filled = Object.fromEntries(Object.entries(data).filter(([, x]) => !(typeof x === 'string' && x.trim() === '') && x != null));
+    await tx.update(guests).set({ ...filled, version: g!.version + 1, updatedAt: new Date() }).where(eq(guests.id, g!.id));
     await tx.update(guestForms).set({ submittedAt: new Date() }).where(eq(guestForms.id, f.id));
     const actor: Actor = { userId: null, userName: 'Gast (Online-Meldeschein)', ip };
     await record(tx, actor, { action: 'guest_form', entity: 'booking', entityId: b.id, after: { companions } });
     await record(tx, actor, { action: 'update', entity: 'guest', entityId: g!.id,
       before: { firstName: g!.firstName, lastName: g!.lastName, birthdate: g!.birthdate, nationality: g!.nationality, street: g!.street, zip: g!.zip, city: g!.city, country: g!.country, idNumber: g!.idNumber },
-      after: data });
+      after: filled });
   });
 }

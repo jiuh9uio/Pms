@@ -306,6 +306,18 @@ export async function sendReply(db: Db, actor: Actor, id: string, v: { to: strin
 // ---------- Online-Buchungsanfrage ----------
 /** höchstens so viele Online-Anfragen in 24 Stunden */
 export const WEB_PER_DAY = 40;
+/** je Absender-Adresse (IP) höchstens so viele Anfragen in 24 Stunden – damit einer allein die Tagesgrenze nicht aufbraucht */
+export const WEB_PER_IP = 6;
+const perIp = new Map<string, number[]>();
+const LOCAL_IP = /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|::ffff:127\.|f[cd][0-9a-f]{2}:)/i;
+function ipLimit(ip: string | null) {
+  // Geräte im Hausnetz (und der Rechner selbst) zählen nicht – die Grenze gilt Anfragen aus dem Internet
+  if (!ip || LOCAL_IP.test(ip)) return;
+  const now = Date.now(), list = (perIp.get(ip) ?? []).filter((t) => t > now - 24 * 3600_000);
+  if (list.length >= WEB_PER_IP) throw new AppError(429, 'too_many', 'Von Ihrem Anschluss sind heute schon mehrere Anfragen eingegangen. Bitte rufen Sie uns an oder schreiben Sie uns eine E-Mail.');
+  if (perIp.size > 5000) perIp.clear();
+  perIp.set(ip, [...list, now]);
+}
 const WEB0: WebRequestSettings = { enabled: false, intro: '', privacy: '' };
 export const getWebRequest = (db: Exec) => read(db, 'web_request', WEB0);
 export async function saveWebRequest(db: Db, actor: Actor, v: WebRequestSettings) {
@@ -328,6 +340,7 @@ export async function submitWebRequest(db: Db, v: { name: string; email: string;
   // Obergrenze gegen Überfluten des Posteingangs, unabhängig vom Absender
   const [day] = await db.execute(sql`select count(*)::int as n from inbox_mails where uid_validity = 'web' and received_at > now() - interval '24 hours'`);
   if (Number(day!.n) >= WEB_PER_DAY) throw new AppError(429, 'too_many', 'Heute sind schon sehr viele Anfragen eingegangen. Bitte rufen Sie uns an oder schreiben Sie uns eine E-Mail.');
+  ipLimit(ip);
   if (v.from < todayOf(new Date())) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { from: 'Die Anreise liegt in der Vergangenheit' });
   const body = [`Online-Anfrage über die Website`, '', `Name: ${v.name}`, `E-Mail: ${v.email}`, ...(v.phone ? [`Telefon: ${v.phone}`] : []),
     `Anreise: ${deDay(v.from)}`, `Abreise: ${deDay(v.to)}`, `Personen: ${v.adults} Erwachsene${v.children ? `, ${v.children} Kinder` : ''}`, ...(v.category ? [`Gewünschte Zimmerkategorie: ${v.category}`] : []), ...(v.message ? ['', 'Nachricht:', v.message] : [])].join('\n');
@@ -371,6 +384,7 @@ export async function submitSiteRequest(db: Db, v: SiteRequest, ip: string | nul
   }
   const [day] = await db.execute(sql`select count(*)::int as n from inbox_mails where uid_validity = 'web' and received_at > now() - interval '24 hours'`);
   if (Number(day!.n) >= WEB_PER_DAY) throw new AppError(429, 'too_many', 'Heute sind schon sehr viele Anfragen eingegangen. Bitte rufen Sie uns an oder schreiben Sie uns eine E-Mail.');
+  ipLimit(ip);
   const today = todayOf(new Date());
   const past = (d: string, field: string) => { if (d && d < today) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { [field]: 'Das Datum liegt in der Vergangenheit' }); };
   const who = [`Name: ${v.name}`, `E-Mail: ${v.email}`, ...(v.phone ? [`Telefon: ${v.phone}`] : [])];

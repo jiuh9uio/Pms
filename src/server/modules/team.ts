@@ -3,7 +3,7 @@ import { todayBerlin } from '../../shared/hotel.js';
 import type { CleanList, CleanRow, DayReport, NoteKind, RecurringDto, TeamNoteDto, TeamState } from '../../shared/team.js';
 import type { Db, Exec } from '../db/client.js';
 import { teamNoteReads, teamNotes, teamRecurring } from '../db/schema.js';
-import { notFound } from '../lib/errors.js';
+import { conflict, notFound } from '../lib/errors.js';
 import { record, SYSTEM, type Actor } from './audit.js';
 
 /** Übergabebuch, Aufgaben und Reparaturmeldungen. Alle angemeldeten Benutzer sehen und schreiben alles; nichts wird gelöscht. */
@@ -48,8 +48,12 @@ export async function markRead(db: Db, actor: Actor, id: string) {
 /** Erledigt melden oder wieder öffnen. */
 export async function setDone(db: Db, actor: Actor, id: string, done: boolean, note: string) {
   const [r] = await db.update(teamNotes).set(done ? { status: 'done', doneBy: actor.userName, doneAt: new Date(), doneNote: note } : { status: 'open', doneBy: '', doneAt: null, doneNote: '' })
-    .where(eq(teamNotes.id, id)).returning();
-  if (!r) throw notFound('Eintrag');
+    .where(and(eq(teamNotes.id, id), eq(teamNotes.status, done ? 'open' : 'done'))).returning();
+  if (!r) {
+    const [x] = await db.select({ status: teamNotes.status, doneBy: teamNotes.doneBy }).from(teamNotes).where(eq(teamNotes.id, id));
+    if (!x) throw notFound('Eintrag');
+    throw conflict(done ? `Schon erledigt${x.doneBy ? ` (von ${x.doneBy})` : ''}.` : 'Der Eintrag ist bereits offen.');
+  }
   await record(db, actor, { action: done ? 'done' : 'reopen', entity: 'team_note', entityId: id, after: { kind: r.kind, text: r.text.slice(0, 120), note } });
   return { ok: true };
 }

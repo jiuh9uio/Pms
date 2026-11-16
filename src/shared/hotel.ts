@@ -348,7 +348,8 @@ export interface PublicBooking {
 const cred = { lastName: z.string().trim().min(1, 'Bitte Ihren Nachnamen eintragen').max(80), zip: z.string().trim().max(12).default('') };
 export const publicCredInput = z.object(cred);
 export type PublicCred = z.infer<typeof publicCredInput>;
-export const publicCancelInput = z.object({ ...cred, confirm: z.literal(true) });
+/** feeCents: die Gebühr, die dem Gast beim Bestätigen angezeigt wurde – weicht sie inzwischen ab, wird nicht storniert */
+export const publicCancelInput = z.object({ ...cred, confirm: z.literal(true), feeCents: z.number().int().min(0).optional() });
 /** Was die Seite vor der Eingabe zeigen darf: nichts über die Reservierung selbst */
 export interface PublicBookingGate { hotelName: string; hotelPhone: string; needsZip: boolean }
 export const STAY_REQUESTS = ['cleaning', 'no_cleaning', 'need', 'checkout'] as const;

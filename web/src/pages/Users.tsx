@@ -91,6 +91,9 @@ function EditUser({ user, onClose, onDone }: { user: UserDto; onClose: () => voi
   const [v, setV] = useState({ name: user.name, username: user.username, role: user.role, active: user.active, modules: user.modules });
   const [pw, setPw] = useState('');
   const f = useSubmit(userUpdateInput, async (d) => {
+    if (user.id === me.user.id && (!d.active || d.role !== 'admin') && !window.confirm(!d.active
+      ? 'Sie deaktivieren Ihr eigenes Konto und werden sofort abgemeldet. Wirklich?'
+      : 'Sie nehmen sich selbst die Administrator-Rechte. Danach können Sie Benutzer und Einstellungen nicht mehr ändern. Wirklich?')) return;
     await api('PATCH', `/users/${user.id}`, d);
     toast('Gespeichert');
     if (user.id === me.user.id) await me.refresh();

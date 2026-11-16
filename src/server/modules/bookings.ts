@@ -302,7 +302,15 @@ export async function setRoomStatus(db: Db, actor: Actor, id: string, v: { statu
       if (alloc.from > today) throw conflict('Check-in ist erst am Anreisetag möglich. Bei früherer Anreise bitte zuerst das Anreisedatum ändern.');
       set.checkedInAt = new Date();
     }
-    if (v.status === 'checked_in' && br.status === 'checked_out') set.checkedOutAt = null;
+    if (v.status === 'checked_in' && br.status === 'checked_out') {
+      // Nach vorzeitiger Abreise wurden Nächte entfernt und der Zeitraum gekürzt – das lässt sich nicht einfach zurücknehmen
+      const [last] = await tx.execute(sql`select after from audit_log where entity = 'booking' and entity_id = ${br.bookingId} and action = 'status'
+        and after->>'status' = 'checked_out' order by id desc limit 1`) as unknown as { after: { room?: string; earlyDeparture?: unknown } }[];
+      const [rm] = await tx.select({ number: rooms.number }).from(rooms).where(eq(rooms.id, alloc.roomId));
+      if (last?.after?.earlyDeparture && last.after.room === rm?.number)
+        throw conflict('Der Gast ist vorzeitig abgereist; dabei wurden die restlichen Nächte entfernt. Zurücknehmen geht hier nicht – bitte eine neue Zimmerbuchung für die fehlenden Nächte anlegen.');
+      set.checkedOutAt = null;
+    }
     if (v.status === 'confirmed' && br.status === 'checked_in') set.checkedInAt = null;
     if (v.status === 'checked_out') {
       set.checkedOutAt = new Date();
