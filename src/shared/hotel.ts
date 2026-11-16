@@ -23,7 +23,7 @@ export const TRANSITIONS: Record<RoomStatus, RoomStatus[]> = {
   confirmed: ['checked_in', 'tentative', 'cancelled', 'no_show'],
   checked_in: ['checked_out', 'confirmed'],
   checked_out: ['checked_in'],
-  cancelled: ['confirmed'],
+  cancelled: ['confirmed', 'tentative'],
   no_show: ['confirmed'],
 };
 export const isActiveStatus = (s: RoomStatus) => s !== 'cancelled' && s !== 'no_show';

@@ -30,6 +30,8 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
   const [mail, setMail] = useState(false);
   const [qr, setQr] = useState(false);
   const [request, setRequest] = useState(false);
+  const [flow, setFlow] = useState<{ kind: FlowKind; roomIds: string[] } | null>(null);
+  const [revive, setRevive] = useState<BookingRoomDto | null>(null);
 
   const setStatus = async (room: BookingRoomDto, status: RoomStatus, confirmText?: string) => {
     if (confirmText && !window.confirm(confirmText)) return;
@@ -98,7 +100,7 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
 
           <h3>Zimmer</h3>
           {b.rooms.map((r) => (
-            <RoomCard key={r.id} room={r} busy={busy === r.id} onStatus={setStatus}
+            <RoomCard key={r.id} room={r} busy={busy === r.id} onStatus={setStatus} onFlow={(kind) => setFlow({ kind, roomIds: [r.id] })} onRevive={() => setRevive(r)}
               onCheckin={() => setSub({ kind: 'checkin', room: r })} onCheckout={() => setSub({ kind: 'checkout', room: r })} onEdit={() => setSub({ kind: 'edit', room: r })} />
           ))}
           <p><Button onClick={() => setSub({ kind: 'add' })}>+ Weiteres Zimmer</Button></p>
@@ -128,6 +130,16 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
       {b && sub?.kind === 'checkout' && <Checkout booking={b} room={sub.room} onClose={() => setSub(null)} />}
       {b && sub?.kind === 'edit' && <RoomForm booking={b} room={sub.room} onClose={() => setSub(null)} />}
       {b && sub?.kind === 'add' && <RoomForm booking={b} room={null} onClose={() => setSub(null)} />}
+      {b && flow && <StatusFlow booking={b} kind={flow.kind} roomIds={flow.roomIds} onClose={() => setFlow(null)} />}
+      {b && revive && (
+        <Dialog title={`Zimmer ${revive.roomNumber} reaktivieren`} onClose={() => setRevive(null)}
+          footer={<><Button onClick={() => setRevive(null)}>Abbrechen</Button>
+            {revive.status === 'cancelled' && <Button onClick={() => { const r = revive; setRevive(null); void setStatus(r, 'tentative'); }}>Als Anfrage (vorläufig)</Button>}
+            <Button variant="primary" onClick={() => { const r = revive; setRevive(null); void setStatus(r, 'confirmed'); }}>Fest buchen</Button></>}>
+          <p>Wie soll Zimmer {revive.roomNumber} ({deDate(revive.from)} – {deDate(revive.to)}) wieder aufgenommen werden?</p>
+          <p className="muted small">Es wird keine E-Mail gesendet. Eine Anfrage lässt sich danach über „Anfrage ❗“ → „Zusagen“ mit E-Mail bestätigen. Ist das Zimmer inzwischen anderweitig belegt, ist Reaktivieren nicht möglich.</p>
+        </Dialog>
+      )}
       {b && paying && <SettleDialog booking={b} onClose={() => { setPaying(false); bump(); }} />}
     </Dialog>
   );
@@ -149,23 +161,7 @@ function RequestPanel({ booking: b, onClose }: { booking: BookingDto; onClose: (
   const phone = b.guest.phone.trim();
   const tel = phone.replace(/[^\d+]/g, '');
   const expired = !!b.optionUntil && b.optionUntil < today;
-  const [confirming, setConfirming] = useState(false);
-  /** alle noch vorläufigen Zimmer umstellen – frisch geladen, damit ein zweiter Versuch nichts doppelt macht */
-  const apply = async (status: 'confirmed' | 'cancelled') => {
-    const fresh = await api<BookingDto>('GET', `/bookings/${b.id}`);
-    for (const r of fresh.rooms.filter((x) => x.status === 'tentative')) await api('POST', `/booking-rooms/${r.id}/status`, { status, version: r.version });
-  };
-  const all = async (status: 'confirmed' | 'cancelled', done: string) => {
-    setBusy(status);
-    try { await apply(status); toast(done); bump(); onClose(); }
-    catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); bump(); }
-    setBusy(null);
-  };
-  // Zusagen: mit E-Mail-Adresse erst die Zusage-E-Mail zeigen – gebucht wird erst beim Senden (oder „Ohne E-Mail zusagen“); Abbrechen ändert nichts
-  const confirm = () => {
-    if (b.guest.email) { setConfirming(true); return; }
-    if (window.confirm(`Anfrage ${b.number} zusagen? Die Zimmer werden fest gebucht.`)) void all('confirmed', `Zugesagt – Reservierung ${b.number} ist fest gebucht`);
-  };
+  const [flow, setFlow] = useState<FlowKind | null>(null);
   const newOption = (() => {
     if (extend === '0') return undefined;
     const base = b.optionUntil && b.optionUntil > today ? b.optionUntil : today;
@@ -211,27 +207,78 @@ function RequestPanel({ booking: b, onClose }: { booking: BookingDto; onClose: (
         </div>
       ) : (
         <div className="btnrow">
-          <Button variant="primary" busy={busy === 'confirmed'} disabled={!!busy} onClick={confirm}>✓ Zusagen (fest buchen)</Button>
+          <Button variant="primary" disabled={!!busy} onClick={() => setFlow('confirm')}>✓ Zusagen (fest buchen)</Button>
+          <Button disabled={!!busy || !b.guest.email} title={b.guest.email ? 'Rückfrage per E-Mail, z. B. wenn Angaben fehlen' : 'keine E-Mail-Adresse hinterlegt'} onClick={() => setFlow('question')}>✉ Nachfrage per E-Mail</Button>
           <Button busy={busy === 'follow'} disabled={!!busy} onClick={() => setFollow(true)}>Nachfrage vermerken</Button>
-          <Button variant="danger" busy={busy === 'cancelled'} disabled={!!busy} onClick={() => { if (window.confirm(`Anfrage ${b.number} absagen? Das Zimmer wird wieder frei.`)) void all('cancelled', `Anfrage ${b.number} abgesagt – Zimmer wieder frei`); }}>Absagen / Stornieren</Button>
+          <Button variant="danger" disabled={!!busy} onClick={() => setFlow('decline')}>Absagen</Button>
         </div>
       )}
-      {!follow && <p className="muted small">{b.guest.email ? '„Zusagen“ zeigt zuerst die Bestätigungs-E-Mail – fest gebucht wird erst beim Senden oder mit „Ohne E-Mail zusagen“. „Abbrechen“ ändert nichts.' : 'Ohne E-Mail-Adresse wird nach einer Rückfrage direkt fest gebucht.'} Eine Anfrage-Bestätigung („vorgemerkt“) gibt es unten über „Bestätigung per E-Mail“.</p>}
-      {confirming && <MailDialog path={`/bookings/${b.id}/mail?as=confirmed`} title={`Zusage zu Anfrage ${b.number}`} sendLabel="Zusagen und senden"
-        intro={<p className="notice small">Die Anfrage wird erst fest gebucht, wenn Sie auf „Zusagen und senden“ oder „Ohne E-Mail zusagen“ drücken. „Abbrechen“ ändert nichts.</p>}
-        beforeSend={() => apply('confirmed')} onSent={() => { bump(); onClose(); }} onClose={() => { setConfirming(false); bump(); }}
-        extra={<Button busy={busy === 'confirmed'} onClick={() => { setConfirming(false); void all('confirmed', `Zugesagt – Reservierung ${b.number} ist fest gebucht (ohne E-Mail)`); }}>Ohne E-Mail zusagen</Button>} />}
+      {!follow && <p className="muted small">{b.guest.email ? 'Zusagen und Absagen zeigen zuerst die E-Mail an den Gast – geändert wird erst beim Senden oder mit „Ohne E-Mail …“. „Abbrechen“ ändert nichts.' : 'Ohne E-Mail-Adresse wird nach einer Rückfrage direkt zugesagt bzw. abgesagt.'} Eine Anfrage-Bestätigung („vorgemerkt“) gibt es unten über „Bestätigung per E-Mail“.</p>}
+      {flow && <StatusFlow booking={b} kind={flow} roomIds={open.map((r) => r.id)} onClose={(changed) => { setFlow(null); if (changed && flow !== 'question') onClose(); }} />}
     </section>
   );
 }
 
-function RoomCard({ room: r, busy, onStatus, onCheckin, onCheckout, onEdit }: {
+/**
+ * Statuswechsel mit E-Mail an den Gast: zuerst erscheint der E-Mail-Entwurf; geändert wird erst mit „… und senden“
+ * oder „Ohne E-Mail …“. „Abbrechen“ ändert nichts. Ohne E-Mail-Adresse: Rückfrage, dann direkt.
+ */
+export type FlowKind = 'confirm' | 'decline' | 'cancel' | 'question';
+const FLOW: Record<FlowKind, { as: string; target: RoomStatus | null; from: RoomStatus[]; title: string; send: string; without: string; done: string; ask: string }> = {
+  confirm: { as: 'confirmed', target: 'confirmed', from: ['tentative'], title: 'Zusage', send: 'Zusagen und senden', without: 'Ohne E-Mail zusagen', done: 'Zugesagt – fest gebucht', ask: 'Anfrage zusagen? Die Zimmer werden fest gebucht.' },
+  decline: { as: 'declined', target: 'cancelled', from: ['tentative'], title: 'Absage', send: 'Absagen und senden', without: 'Ohne E-Mail absagen', done: 'Anfrage abgesagt – Zimmer wieder frei', ask: 'Anfrage absagen? Das Zimmer wird wieder frei.' },
+  cancel: { as: 'cancelled', target: 'cancelled', from: ['tentative', 'confirmed'], title: 'Stornierung', send: 'Stornieren und senden', without: 'Ohne E-Mail stornieren', done: 'Storniert – Zimmer wieder frei', ask: 'Wirklich stornieren? Das Zimmer wird wieder frei.' },
+  question: { as: 'question', target: null, from: [], title: 'Rückfrage', send: 'Senden', without: '', done: 'Rückfrage gesendet', ask: '' },
+};
+export function StatusFlow({ booking: b, kind, roomIds, onClose }: { booking: BookingDto; kind: FlowKind; roomIds: string[]; onClose: (changed: boolean) => void }) {
+  const { bump } = useData();
+  const { user } = useAuth();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const f = FLOW[kind];
+  /** frisch laden, damit ein zweiter Versuch nichts doppelt macht */
+  const apply = async () => {
+    if (!f.target) return;
+    const fresh = await api<BookingDto>('GET', `/bookings/${b.id}`);
+    for (const r of fresh.rooms.filter((x) => roomIds.includes(x.id) && f.from.includes(x.status))) await api('POST', `/booking-rooms/${r.id}/status`, { status: f.target, version: r.version });
+  };
+  const note = async () => {
+    // Rückfrage in der Notiz vermerken (wie „Nachfrage vermerken“)
+    const fresh = await api<BookingDto>('GET', `/bookings/${b.id}`);
+    const now = new Date();
+    const line = `${now.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} ${now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} ${user.name}: Rückfrage per E-Mail gesendet`;
+    await api('PATCH', `/bookings/${b.id}`, { notes: (fresh.notes.trim() ? `${fresh.notes.trim()}\n${line}` : line).slice(-2000), version: fresh.version }).catch(() => {});
+  };
+  const direct = async () => {
+    setBusy(true);
+    try { await apply(); toast(`${f.done} (ohne E-Mail)`); bump(); onClose(true); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); bump(); }
+    setBusy(false);
+  };
+  useEffect(() => {
+    if (b.guest.email) return;
+    if (kind === 'question') { toast('Für diesen Gast ist keine E-Mail-Adresse hinterlegt – bitte anrufen oder im Gästeprofil ergänzen.', 'error'); onClose(false); return; }
+    if (window.confirm(f.ask)) void direct(); else onClose(false);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!b.guest.email) return null;
+  const rooms = roomIds.length && kind === 'cancel' ? `&rooms=${roomIds.join(',')}` : '';
+  return (
+    <MailDialog path={`/bookings/${b.id}/mail?as=${f.as}${rooms}`} title={`${f.title} zu ${b.number}`} sendLabel={f.send}
+      intro={f.target ? <p className="notice small">Geändert wird erst mit „{f.send}“ oder „{f.without}“. „Abbrechen“ ändert nichts.</p> : <p className="notice small">Bitte ergänzen, was noch fehlt. Die Anfrage bleibt dabei unverändert offen.</p>}
+      beforeSend={f.target ? apply : undefined}
+      onSent={() => { if (kind === 'question') void note().then(bump); else bump(); onClose(true); }}
+      onClose={() => { bump(); onClose(false); }}
+      extra={f.target ? <Button busy={busy} onClick={() => void direct()}>{f.without}</Button> : undefined} />
+  );
+}
+
+function RoomCard({ room: r, busy, onStatus, onFlow, onRevive, onCheckin, onCheckout, onEdit }: {
   room: BookingRoomDto; busy: boolean; onStatus: (r: BookingRoomDto, s: RoomStatus, confirm?: string) => void;
+  onFlow: (kind: FlowKind) => void; onRevive: () => void;
   onCheckin: () => void; onCheckout: () => void; onEdit: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const editable = ['tentative', 'confirmed', 'checked_in'].includes(r.status);
-  const cancelText = `Zimmer ${r.roomNumber} wirklich stornieren? Das Zimmer wird wieder frei.`;
   return (
     <div className={`roomcard st-${r.status}`}>
       <div className="roomcard-main">
@@ -248,15 +295,16 @@ function RoomCard({ room: r, busy, onStatus, onCheckin, onCheckout, onEdit }: {
         </tbody></table>
       )}
       <div className="roomcard-actions">
-        {r.status === 'tentative' && <Button variant="primary" busy={busy} onClick={() => onStatus(r, 'confirmed')}>Bestätigen</Button>}
+        {r.status === 'tentative' && <Button variant="primary" busy={busy} onClick={() => onFlow('confirm')}>Bestätigen</Button>}
         {r.status === 'confirmed' && <Button variant="primary" busy={busy} onClick={onCheckin}>Check-in</Button>}
         {r.status === 'checked_in' && <Button variant="primary" busy={busy} onClick={onCheckout}>Check-out</Button>}
         {editable && <Button onClick={onEdit}>Ändern</Button>}
-        {(r.status === 'tentative' || r.status === 'confirmed') && <Button variant="danger" busy={busy} onClick={() => onStatus(r, 'cancelled', cancelText)}>Stornieren</Button>}
+        {r.status === 'tentative' && <Button variant="danger" busy={busy} onClick={() => onFlow('decline')}>Absagen</Button>}
+        {r.status === 'confirmed' && <Button variant="danger" busy={busy} onClick={() => onFlow('cancel')}>Stornieren</Button>}
         {r.status === 'confirmed' && r.from <= todayBerlin() && <Button busy={busy} onClick={() => onStatus(r, 'no_show', `Zimmer ${r.roomNumber} als nicht angereist markieren? Das Zimmer wird wieder frei.`)}>Nicht angereist</Button>}
         {r.status === 'checked_in' && <Button busy={busy} onClick={() => onStatus(r, 'confirmed', 'Check-in zurücknehmen?')}>Check-in zurücknehmen</Button>}
         {r.status === 'checked_out' && <Button busy={busy} onClick={() => onStatus(r, 'checked_in', 'Check-out zurücknehmen? Der Gast gilt wieder als im Haus.')}>Check-out zurücknehmen</Button>}
-        {(r.status === 'cancelled' || r.status === 'no_show') && <Button busy={busy} onClick={() => onStatus(r, 'confirmed')}>Reaktivieren</Button>}
+        {(r.status === 'cancelled' || r.status === 'no_show') && <Button busy={busy} onClick={onRevive}>Reaktivieren</Button>}
       </div>
     </div>
   );

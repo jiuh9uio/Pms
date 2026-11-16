@@ -82,6 +82,25 @@ describe('Anfragen am Telefon (vorläufige Reservierungen)', () => {
     expect(draft.text).not.toMatch(/Vorläufig/);
     expect((await ok('GET', '/bookings?status=tentative', user))).toHaveLength(1);
     expect((await call('GET', `/bookings/${row.bookingId}/mail?as=anything`, user)).statusCode).toBe(400);
+    const decl = await ok('GET', `/bookings/${row.bookingId}/mail?as=declined`, user);
+    expect(decl.text).toMatch(/kein passendes Zimmer/);
+    const q = await ok('GET', `/bookings/${row.bookingId}/mail?as=question`, user);
+    expect(q.subject).toMatch(/^Rückfrage zu Ihrer Anfrage/);
+    const c = await ok('GET', `/bookings/${row.bookingId}/mail?as=cancelled&rooms=${row.id}`, user);
+    expect(c.text).toMatch(/Stornierung Ihrer Reservierung|bestätigen wir die Stornierung/);
+    expect((await ok('GET', '/bookings?status=tentative', user))).toHaveLength(1);
+  });
+
+  it('storniert lässt sich als Anfrage oder fest wieder aufnehmen', async () => {
+    const far = addDays(today, 300);
+    const x = await book(rooms[2]!, 'tentative', far);
+    const [r1] = (await ok('GET', `/bookings/${x.id}`, user)).rooms;
+    await ok('POST', `/booking-rooms/${r1.id}/status`, user, { status: 'cancelled', version: r1.version });
+    const [r2] = (await ok('GET', `/bookings/${x.id}`, user)).rooms;
+    await ok('POST', `/booking-rooms/${r2.id}/status`, user, { status: 'tentative', version: r2.version });
+    const [r3] = (await ok('GET', `/bookings/${x.id}`, user)).rooms;
+    expect(r3.status).toBe('tentative');
+    await ok('POST', `/booking-rooms/${r3.id}/status`, user, { status: 'cancelled', version: r3.version });
   });
 
   it('nach dem Bestätigen ist die Anfrage nicht mehr offen', async () => {

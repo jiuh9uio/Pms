@@ -3,6 +3,16 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.74.0
+
+- Reservierung: Zusagen, Absagen und Stornieren laufen jetzt immer gleich – **zuerst erscheint die E-Mail an den Gast**, geändert wird erst mit „… und senden“ oder „Ohne E-Mail …“. **„Abbrechen“ ändert nichts.** Ohne E-Mail-Adresse kommt eine Rückfrage.
+  - **Zusagen / Bestätigen** (Anfrage): Text „Wir bestätigen Ihnen …“, danach fest gebucht.
+  - **Absagen** (Anfrage): Text „Leider können wir Ihnen … kein passendes Zimmer anbieten“, danach ist das Zimmer wieder frei.
+  - **Stornieren** (fest gebuchtes Zimmer): Text „Hiermit bestätigen wir die Stornierung …“ mit dem betroffenen Zimmer.
+- Neu bei Anfragen: **„✉ Nachfrage per E-Mail“** – Vorlage „Damit wir Ihre Reservierung bearbeiten können, benötigen wir noch folgende Angaben: …“. Die Anfrage bleibt offen; in der Notiz wird „Rückfrage per E-Mail gesendet“ vermerkt.
+- **Reaktivieren** eines stornierten Zimmers fragt jetzt nach: „Als Anfrage (vorläufig)“ oder „Fest buchen“ – vorher wurde ohne Rückfrage fest gebucht.
+- Alle Texte sind vor dem Senden änderbar.
+
 ## 1.73.1
 
 - Fehler behoben: Bei einer offenen Anfrage hat „Zusagen“ sofort fest gebucht – auch wenn man die E-Mail danach mit „Abbrechen“ geschlossen hat. Jetzt erscheint zuerst die Zusage-E-Mail (Text „Wir bestätigen Ihnen …“), und gebucht wird erst mit **„Zusagen und senden“** oder **„Ohne E-Mail zusagen“**. **„Abbrechen“ ändert nichts** – die Anfrage bleibt offen. Ohne E-Mail-Adresse des Gastes kommt wie bisher eine Rückfrage.

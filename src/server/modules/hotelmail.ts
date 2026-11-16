@@ -65,6 +65,27 @@ export async function bookingMailDraft(db: Exec, bookingId: string, asConfirmed 
   return { to: b.guest.email, subject: `${tentative ? 'Ihre Anfrage' : 'Reservierungsbestätigung'} ${b.number} – ${h.name}`, text, attachment: null, ready: await ready(db) };
 }
 
+/** Entwürfe zu einer Reservierung: Absage einer Anfrage, Stornobestätigung (bestimmte Zimmer) und Rückfrage an den Gast. */
+export async function statusMailDraft(db: Exec, bookingId: string, kind: 'declined' | 'cancelled' | 'question', roomIds: string[] = []): Promise<MailDraft> {
+  const [b, h] = [await getBooking(db, bookingId), await getHotel(db)];
+  const chosen = roomIds.length ? b.rooms.filter((r) => roomIds.includes(r.id)) : b.rooms.filter((r) => isActiveStatus(r.status));
+  const rooms = chosen.length ? chosen : b.rooms;
+  const from = rooms.map((r) => r.from).sort()[0]!, to = rooms.map((r) => r.to).sort().at(-1)!;
+  const lines = rooms.map((r) => `- ${r.categoryName}: ${de(r.from)} bis ${de(r.to)}, ${r.nights} ${r.nights === 1 ? 'Nacht' : 'Nächte'}, ${r.adults} ${r.adults === 1 ? 'Erwachsener' : 'Erwachsene'}${r.children ? `, ${r.children} ${r.children === 1 ? 'Kind' : 'Kinder'}` : ''}`);
+  const body = {
+    declined: [`vielen Dank für Ihre Anfrage (Nr. ${b.number}) und Ihr Interesse an unserem Haus.`, '',
+      `Leider können wir Ihnen für den Zeitraum vom ${de(from)} bis ${de(to)} kein passendes Zimmer anbieten. Das bedauern wir sehr.`, '',
+      'Wir würden uns freuen, Sie zu einem anderen Zeitpunkt bei uns begrüßen zu dürfen.'],
+    cancelled: [`hiermit bestätigen wir die Stornierung Ihrer Reservierung Nr. ${b.number}:`, '', ...lines, '',
+      'Wir würden uns freuen, Sie zu einem anderen Zeitpunkt bei uns begrüßen zu dürfen.'],
+    question: [`vielen Dank für Ihre Anfrage (Nr. ${b.number}) für den Zeitraum vom ${de(from)} bis ${de(to)}.`, '',
+      'Damit wir Ihre Reservierung bearbeiten können, benötigen wir noch folgende Angaben:', '', '- ', '',
+      'Antworten Sie einfach auf diese E-Mail oder rufen Sie uns an. Vielen Dank!'],
+  }[kind];
+  const subject = { declined: `Ihre Anfrage ${b.number}`, cancelled: `Stornierung Ihrer Reservierung ${b.number}`, question: `Rückfrage zu Ihrer Anfrage ${b.number}` }[kind];
+  return { to: b.guest.email, subject: `${subject} – ${h.name}`, text: [greeting(b.guest), '', ...body, '', signature(h)].join('\n'), attachment: null, ready: await ready(db) };
+}
+
 export async function sendBookingMail(db: Db, actor: Actor, bookingId: string, v: { to: string; subject: string; text: string }) {
   const b = await getBooking(db, bookingId);
   await sendMail(db, actor, v);
