@@ -3,6 +3,16 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.71.0
+
+- Offene Anfragen direkt bearbeiten: In einer vorläufigen Reservierung erscheint oben das Feld **„Offene Anfrage“** mit
+  - **Anrufen** (zeigt die Telefonnummer; öffnet das Telefonprogramm des Geräts, falls eines eingerichtet ist – am Handy die Telefon-App),
+  - E-Mail-Adresse zum Anklicken,
+  - **Nachfrage vermerken**: Ergebnis antippen („nicht erreicht“, „Nachricht hinterlassen“, „überlegt noch“, „ruft zurück“, „wartet auf Angebot“) oder frei eintippen, auf Wunsch die Option um 1/3/7/14 Tage verlängern (höchstens bis zur Anreise). Der Vermerk wird mit Datum, Uhrzeit und Namen in die Notiz geschrieben,
+  - **Zusagen** (alle vorläufigen Zimmer werden fest gebucht; ist eine E-Mail-Adresse da, öffnet sich gleich die Bestätigungs-E-Mail zum Prüfen und Senden),
+  - **Absagen / Stornieren** (mit Rückfrage; das Zimmer wird wieder frei).
+- Angezeigt werden außerdem, wann angefragt wurde und bis wann die Option läuft (rot, wenn abgelaufen).
+
 ## 1.70.0
 
 - Neue Reservierung, schneller am Telefon: Anreise und Abreise stehen jetzt ganz oben, darunter sofort die freien Zimmer.

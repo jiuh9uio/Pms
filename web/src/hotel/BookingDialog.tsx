@@ -92,6 +92,8 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
             </div>
           </section>
 
+          {b.rooms.some((r) => r.status === 'tentative') && <RequestPanel booking={b} onConfirmed={() => { if (b.guest.email) setMail(true); }} />}
+
           <h3>Zimmer</h3>
           {b.rooms.map((r) => (
             <RoomCard key={r.id} room={r} busy={busy === r.id} onStatus={setStatus}
@@ -126,6 +128,85 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
       {b && sub?.kind === 'add' && <RoomForm booking={b} room={null} onClose={() => setSub(null)} />}
       {b && paying && <SettleDialog booking={b} onClose={() => { setPaying(false); bump(); }} />}
     </Dialog>
+  );
+}
+
+/** Offene Anfrage: Gast erreichen und entscheiden – Anrufen, E-Mail, Nachfrage vermerken (mit Option verlängern), Zusagen, Absagen. */
+const FOLLOW_UP = ['nicht erreicht', 'Nachricht hinterlassen', 'überlegt noch', 'ruft zurück', 'wartet auf Angebot'];
+function RequestPanel({ booking: b, onConfirmed }: { booking: BookingDto; onConfirmed: () => void }) {
+  const { bump } = useData();
+  const { user } = useAuth();
+  const toast = useToast();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [follow, setFollow] = useState(false);
+  const [text, setText] = useState('');
+  const [extend, setExtend] = useState('0');
+  const today = todayBerlin();
+  const open = b.rooms.filter((r) => r.status === 'tentative');
+  const arrival = open.map((r) => r.from).sort()[0] ?? today;
+  const phone = b.guest.phone.trim();
+  const tel = phone.replace(/[^\d+]/g, '');
+  const expired = !!b.optionUntil && b.optionUntil < today;
+  const all = async (status: 'confirmed' | 'cancelled', done: string) => {
+    setBusy(status);
+    try {
+      for (const r of open) await api('POST', `/booking-rooms/${r.id}/status`, { status, version: r.version });
+      toast(done); bump();
+      if (status === 'confirmed') onConfirmed();
+    } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); bump(); }
+    setBusy(null);
+  };
+  const newOption = (() => {
+    if (extend === '0') return undefined;
+    const base = b.optionUntil && b.optionUntil > today ? b.optionUntil : today;
+    const d = addDays(base, Number(extend));
+    return d > arrival ? arrival : d;
+  })();
+  const saveFollow = async () => {
+    const what = text.trim();
+    if (!what && !newOption) return;
+    setBusy('follow');
+    const now = new Date();
+    const stamp = `${now.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} ${now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} ${user.name}`;
+    const line = `${stamp}: ${what || 'nachgefragt'}${newOption ? ` – Option bis ${deDate(newOption).slice(0, 6)}` : ''}`;
+    const notes = (b.notes.trim() ? `${b.notes.trim()}\n${line}` : line).slice(-2000);
+    try {
+      await api('PATCH', `/bookings/${b.id}`, { notes, ...(newOption ? { optionUntil: newOption } : {}), version: b.version });
+      toast('Nachfrage vermerkt'); setFollow(false); setText(''); setExtend('0'); bump();
+    } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+    setBusy(null);
+  };
+  return (
+    <section className="card bk-request">
+      <div className="bk-request-head">
+        <h3 className="first">Offene Anfrage</h3>
+        <small className="muted">angefragt am {fmtDateTime(b.createdAt)}{b.optionUntil && <> · <span className={expired ? 'danger-text' : ''}>Option bis {deDate(b.optionUntil)}{expired ? ' – abgelaufen' : b.optionUntil === today ? ' – läuft heute ab' : ''}</span></>}</small>
+      </div>
+      <div className="bk-request-contact">
+        {phone ? <a className="btn primary" href={`tel:${tel}`} title="öffnet das Telefonprogramm dieses Geräts (falls eingerichtet)">📞 Anrufen · {phone}</a> : <span className="muted">Keine Telefonnummer hinterlegt – im Gästeprofil ergänzen.</span>}
+        {b.guest.email && <a className="btn" href={`mailto:${b.guest.email}`}>✉ {b.guest.email}</a>}
+      </div>
+      {b.notes.trim() && <pre className="bk-request-notes">{b.notes.trim()}</pre>}
+      {follow ? (
+        <div className="bk-request-follow">
+          <div className="chips">{FOLLOW_UP.map((t) => <button type="button" key={t} className={`chip${text === t ? ' on' : ''}`} onClick={() => setText(t)}>{t}</button>)}</div>
+          <div className="formgrid">
+            <Field label="Ergebnis / Notiz"><input value={text} maxLength={300} onChange={(e) => setText(e.target.value)} placeholder="z. B. ruft Freitag zurück" /></Field>
+            <Field label="Option verlängern" hint={newOption ? `neu: bis ${deDate(newOption)}` : `bleibt ${b.optionUntil ? `bis ${deDate(b.optionUntil)}` : 'ohne Frist'}`}>
+              <select value={extend} onChange={(e) => setExtend(e.target.value)}><option value="0">nicht verlängern</option><option value="1">um 1 Tag</option><option value="3">um 3 Tage</option><option value="7">um 7 Tage</option><option value="14">um 14 Tage</option></select>
+            </Field>
+          </div>
+          <div className="formactions"><Button onClick={() => setFollow(false)}>Abbrechen</Button><Button variant="primary" busy={busy === 'follow'} disabled={!text.trim() && !newOption} onClick={() => void saveFollow()}>Vermerken</Button></div>
+        </div>
+      ) : (
+        <div className="btnrow">
+          <Button variant="primary" busy={busy === 'confirmed'} disabled={!!busy} onClick={() => void all('confirmed', `Zugesagt – Reservierung ${b.number} ist fest gebucht`)}>✓ Zusagen (fest buchen)</Button>
+          <Button busy={busy === 'follow'} disabled={!!busy} onClick={() => setFollow(true)}>Nachfrage vermerken</Button>
+          <Button variant="danger" busy={busy === 'cancelled'} disabled={!!busy} onClick={() => { if (window.confirm(`Anfrage ${b.number} absagen? Das Zimmer wird wieder frei.`)) void all('cancelled', `Anfrage ${b.number} abgesagt – Zimmer wieder frei`); }}>Absagen / Stornieren</Button>
+        </div>
+      )}
+      {!follow && <p className="muted small">Nach „Zusagen“ öffnet sich die Bestätigungs-E-Mail{b.guest.email ? '' : ' (nur wenn eine E-Mail-Adresse hinterlegt ist)'}. Eine Anfrage-Bestätigung („vorgemerkt“) gibt es unten über „Bestätigung per E-Mail“.</p>}
+    </section>
   );
 }
 

@@ -898,3 +898,11 @@ a.linkcard.attention { border-color: var(--warn); background: var(--warn-soft); 
 a.linkcard.attention b { color: var(--warn); }
 .reqnote { display: block; color: var(--warn); }
 .nb-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.bk-request { border-color: var(--warn); background: var(--warn-soft); margin: 14px 0 0; }
+.bk-request-head { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; justify-content: space-between; }
+.bk-request-contact { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+.bk-request-contact .btn { text-decoration: none; }
+.bk-request-notes { white-space: pre-wrap; font: inherit; font-size: 13px; margin: 0 0 10px; padding: 8px 10px; background: var(--surface); border-radius: 8px; max-height: 140px; overflow: auto; }
+.bk-request .btnrow { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip.on { border-style: solid; border-color: var(--accent); color: var(--accent-text); background: var(--accent-soft, var(--surface)); }
+.danger-text { color: var(--danger); font-weight: 600; }
