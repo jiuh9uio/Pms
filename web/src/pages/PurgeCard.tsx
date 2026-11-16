@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { PurgeResult } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { useData } from '../data.tsx';
-import { Button, Field, useToast } from '../ui.tsx';
+import { Button, Field, useLoad, useToast } from '../ui.tsx';
 
 type Sel = { billing: boolean; bookings: 'none' | 'past' | 'all'; guests: boolean; resetNumbers: boolean; inbox: boolean; companies: boolean };
 /** Komplett zurücksetzen: alle Hotel-Daten, Nummern wieder ab 1 – Einrichtung (Zimmer, Preise, Benutzer, Einstellungen) bleibt */
@@ -19,6 +19,8 @@ export function PurgeCard() {
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [fail, setFail] = useState<string | null>(null);
+  const goLive = useLoad(() => api<{ active: boolean; at: string | null; by: string }>('GET', '/settings/go-live'));
+  const live = !!goLive.data?.active;
   const change = (p: Partial<Sel>) => { setSel({ ...sel, ...p }); setPreview(null); setDone(null); setFail(null); };
   const nothing = !sel.billing && sel.bookings === 'none' && !sel.guests && !sel.inbox && !sel.companies;
   const isAll = JSON.stringify(sel) === JSON.stringify(ALL);
@@ -53,11 +55,12 @@ export function PurgeCard() {
       <p className="muted">Zimmer, Preise, Benutzer, Einstellungen, Restaurant und Kontrollen bleiben unberührt. Das Protokoll bleibt ebenfalls erhalten.</p>
       <div className={`purgeall${isAll ? ' on' : ''}`}>
         <div><b>Alles auf Null</b><small>Rechnungen, Zahlungen und Umsätze, alle Buchungen, Gäste, Firmen und der E-Mail-Posteingang – Nummern beginnen wieder bei 1. Die Einrichtung (Zimmer, Preise, Benutzer, Einstellungen) bleibt. Gedacht für das Ende der Testphase.</small></div>
-        <Button variant={isAll ? 'primary' : undefined} onClick={() => change(ALL)}>{isAll ? 'Ausgewählt' : 'Alles auswählen'}</Button>
+        <Button variant={isAll ? 'primary' : undefined} disabled={live} onClick={() => change(ALL)}>{isAll ? 'Ausgewählt' : 'Alles auswählen'}</Button>
       </div>
       <p className="muted small">Oder einzeln auswählen:</p>
       <div className="formgrid">
-        <label className="check wide"><input type="checkbox" checked={sel.billing} onChange={(e) => change({ billing: e.target.checked, resetNumbers: e.target.checked && sel.resetNumbers })} /><span>Rechnungen und Zahlungen<small>alle Rechnungen, Stornobelege, Zahlungen und das Rechnungsarchiv</small></span></label>
+        {live && <p className="notice wide small">Echtbetrieb seit {new Date(goLive.data!.at!).toLocaleDateString('de-DE')} ({goLive.data!.by}): Rechnungen, Zahlungen und TSE-Aufzeichnungen werden nicht mehr gelöscht.</p>}
+        <label className="check wide"><input type="checkbox" checked={sel.billing} disabled={live} onChange={(e) => change({ billing: e.target.checked, resetNumbers: e.target.checked && sel.resetNumbers })} /><span>Rechnungen und Zahlungen<small>alle Rechnungen, Stornobelege, Zahlungen, das Rechnungsarchiv und die TSE-Aufzeichnungen der Zahlungen</small></span></label>
         {sel.billing && <label className="check wide"><input type="checkbox" checked={sel.resetNumbers} onChange={(e) => change({ resetNumbers: e.target.checked })} /><span>Rechnungsnummern wieder bei 1 beginnen<small>nur sinnvoll, wenn bisher keine echte Rechnung an einen Gast ging – sonst gäbe es Nummern doppelt</small></span></label>}
         <Field label="Buchungen" wide>
           <select value={sel.bookings} onChange={(e) => change({ bookings: e.target.value as Sel['bookings'] })}>
@@ -84,6 +87,7 @@ export function PurgeCard() {
           <div className="formactions"><Button variant="danger" busy={busy} disabled={!password || confirm.trim().toUpperCase() !== 'LÖSCHEN'} onClick={() => void run(false)}>Jetzt endgültig löschen</Button></div>
         </>
       )}
+      <GoLiveBox live={goLive.data ?? null} onDone={() => { goLive.reload(); setSel({ ...sel, billing: false, resetNumbers: false }); }} />
       {done && (
         <div className="notice">
           <b>Gelöscht:</b>
@@ -92,5 +96,36 @@ export function PurgeCard() {
         </div>
       )}
     </section>
+  );
+}
+
+/** Testphase beenden: ab dann sind Rechnungen, Zahlungen und TSE-Aufzeichnungen vor dem Löschen geschützt. */
+function GoLiveBox({ live, onDone }: { live: { active: boolean } | null; onDone: () => void }) {
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [pw, setPw] = useState('');
+  const [word, setWord] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [fail, setFail] = useState<string | null>(null);
+  if (!live || live.active) return null;
+  const go = async () => {
+    setBusy(true); setFail(null);
+    try { await api('POST', '/settings/go-live', { password: pw, confirm: word }); toast('Testphase beendet – Rechnungen sind jetzt vor dem Löschen geschützt'); setOpen(false); onDone(); }
+    catch (e) { const err = e as { message?: string; fields?: Record<string, string> }; setFail(Object.values(err.fields ?? {}).join(' · ') || err.message || 'Fehler'); }
+    setBusy(false);
+  };
+  return (
+    <div className="purgeall golive">
+      <div><b>Testphase beenden</b><small>Ab dann lassen sich Rechnungen, Zahlungen und TSE-Aufzeichnungen hier nicht mehr löschen (Aufbewahrungspflicht). Buchungen ohne Rechnung, Gäste, Firmen und der Posteingang lassen sich weiterhin aufräumen. Das lässt sich im Programm nicht rückgängig machen – vorher die Probedaten mit „Alles auf Null“ entfernen.</small>
+        {open && <div className="formgrid cols3" style={{ marginTop: 8 }}>
+          <Field label="Ihr Passwort"><input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" /></Field>
+          <Field label="Zur Bestätigung ECHTBETRIEB eintippen"><input value={word} onChange={(e) => setWord(e.target.value)} /></Field>
+        </div>}
+        {fail && <p className="notice danger small" role="alert">{fail}</p>}
+      </div>
+      {open
+        ? <Button variant="danger" busy={busy} disabled={!pw || word.trim().toUpperCase() !== 'ECHTBETRIEB'} onClick={() => void go()}>Testphase beenden</Button>
+        : <Button onClick={() => setOpen(true)}>Testphase beenden …</Button>}
+    </div>
   );
 }

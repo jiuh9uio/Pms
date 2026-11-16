@@ -93,7 +93,15 @@ describe('Umzugspaket', () => {
     const noConfirm = await bin('import', admin, pkg, { 'x-package-password': encodeURIComponent(PW) });
     expect(noConfirm.statusCode).toBe(400);
     expect((await bin('import', user, pkg, { 'x-package-password': encodeURIComponent(PW), 'x-confirm': 'UMZUG' })).statusCode).toBe(403);
-    const res = await bin('import', admin, pkg, { 'x-package-password': encodeURIComponent(PW), 'x-confirm': 'UMZUG' });
+    const H = { 'x-package-password': encodeURIComponent(PW), 'x-confirm': 'UMZUG' };
+    // eigenes Passwort nötig; Zielrechner hat schon Buchungen → nur mit ausdrücklicher Bestätigung
+    expect((await bin('import', admin, pkg, { ...H, 'x-admin-password': encodeURIComponent('falsch-falsch') })).statusCode).toBe(400);
+    const notEmpty = await bin('import', admin, pkg, { ...H, 'x-admin-password': encodeURIComponent('sehr-geheim-123') });
+    expect(notEmpty.statusCode).toBe(409);
+    expect(notEmpty.json().error.code).toBe('target_not_empty');
+    const check = (await bin('check', admin, pkg, { 'x-package-password': encodeURIComponent(PW) })).json();
+    expect(check.target.bookings).toBeGreaterThan(0);
+    const res = await bin('import', admin, pkg, { ...H, 'x-admin-password': encodeURIComponent('sehr-geheim-123'), 'x-overwrite': 'yes' });
     expect(res.statusCode, res.body).toBe(200);
     for (const t of TABLES) expect(await n(t), t).toBe(t === 'audit_log' ? before[t]! + 1 : before[t]); // + Eintrag „Umzug eingespielt“ (der Export-Eintrag bleibt auf dem alten Rechner)
     expect((await db.execute(sql`select count(*)::int as n from guests where last_name = 'NachDemExport'`))[0]!.n).toBe(0);

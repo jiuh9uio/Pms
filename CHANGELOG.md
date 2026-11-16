@@ -3,6 +3,18 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.76.0
+
+Korrekturen bei Rechnungen, Zahlungen, Löschen und TSE (aus der Logik-Durchsicht, freigegeben):
+- **Anzahlung bei Teilrechnungen:** Landet eine Anzahlung ganz auf der ersten Rechnung (z. B. „nur Übernachtung“), wird der Überschuss automatisch mit den übrigen Rechnungen derselben Reservierung verrechnet. Es wird nichts mehr doppelt zum Kassieren angeboten; offene Rechnungen, Übersicht und Rechnungs-PDF zeigen die Verrechnung („Verrechnet aus Anzahlung“). Die Zahlungen selbst bleiben unverändert.
+- **Zahlungen:** Mitarbeiter buchen immer genau den offenen Betrag (Feld ist gesperrt). Teilzahlungen (z. B. Teilüberweisung) und Minusbeträge (Erstattungen) bucht nur der Administrator.
+- **Testphase beenden** (Einstellungen → System → Daten löschen, mit Passwort und dem Wort ECHTBETRIEB): Danach lassen sich Rechnungen, Zahlungen und TSE-Aufzeichnungen nicht mehr löschen. Probedaten vorher mit „Alles auf Null“ entfernen. Im Programm nicht rückgängig zu machen.
+- **Umzugspaket einspielen:** verlangt jetzt Ihr Passwort; stehen auf dem Zielrechner schon Buchungen oder Rechnungen, muss das Ersetzen ausdrücklich angekreuzt werden; vorher wird automatisch gesichert (Windows-Version).
+- **E-Rechnung:** je Rechnung höchstens eine unversendete (erneutes Erzeugen ersetzt sie mit aktuellem Stand); zu einer stornierten Rechnung wird keine E-Rechnung mehr versendet.
+- **Unklare Kartenzahlung:** Nach „Ja, am Gerät gezahlt“ geht es wie beim normalen Bezahlen weiter (Rechnung, Check-out).
+- **TSE:** Nach einer abgelehnten PIN bleibt die Aufzeichnung pausiert, bis eine neue PIN eingetragen wird – Aus- und Einschalten verbraucht keinen weiteren PIN-Versuch mehr. Neues Häkchen „TSE verwenden“; ist es aus, greift das Programm nicht auf die TSE zu (Zahlungen werden als nicht aufgezeichnet vermerkt). Lesen/Selbsttest schalten die Verbindung nicht mehr stillschweigend ein.
+- **Rechnung ausstellen:** Wurde die Reservierung nach dem Anlegen des Entwurfs geändert (Preis, Nächte, Leistungen), wird nicht ausgestellt – Hinweis: Entwurf löschen und neu erstellen.
+
 ## 1.75.0
 
 - Temperaturkontrolle beim Start: Statt „Ja, alles im Sollbereich“ wird je Messstelle der **abgelesene Wert angetippt** (z. B. Tiefkühler −18° bis −25°, Kühlschrank +2° bis +7°) oder eingetippt. Gespeichert wird der echte Wert mit Name und Uhrzeit. Werte außerhalb des Sollbereichs gehen über „Nein – Werte eintragen“ (mit Maßnahme).

@@ -39,7 +39,9 @@ const issue = async (bookingId: string, include = 'all') => {
   const d = await ok('GET', `/invoices/${id}`, user);
   return ok('POST', `/invoices/${id}/issue`, user, { version: d.version });
 };
-const pay = (body: object) => call('POST', '/payments', user, { date: today, payer: '', note: '', ...body });
+const pay = (body: object, who = user) => call('POST', '/payments', who, { date: today, payer: '', note: '', ...body });
+/** Teilzahlungen bucht nur der Administrator */
+const payAdmin = (body: object) => pay(body, admin);
 const billing = (bookingId: string) => ok('GET', `/bookings/${bookingId}/billing`, user);
 
 beforeAll(async () => {
@@ -104,24 +106,24 @@ describe('Bezahlen und Abrechnen', () => {
 
   it('verteilt Anzahlung und Teilzahlungen mit verschiedenen Zahlungsarten und verhindert Überzahlung und Doppelklick', async () => {
     const b = await booking(true); // 198 € + 48 €
-    expect((await pay({ bookingId: b, amountCents: 5000, method: 'Überweisung' })).statusCode).toBe(200); // Anzahlung vor dem Aufenthalt
-    const twice = await pay({ bookingId: b, amountCents: 5000, method: 'Überweisung' });
+    expect((await payAdmin({ bookingId: b, amountCents: 5000, method: 'Überweisung' })).statusCode).toBe(200); // Anzahlung vor dem Aufenthalt
+    const twice = await payAdmin({ bookingId: b, amountCents: 5000, method: 'Überweisung' });
     expect(twice.statusCode).toBe(409);
     expect(twice.json().error.code).toBe('duplicate_payment');
     const a = await issue(b, 'lodging'); // Anzahlung wird verrechnet
     expect(a).toMatchObject({ grossCents: 19800, paidCents: 5000, openCents: 14800 });
     const c = await issue(b, 'extras');
     expect(c.openCents).toBe(4800);
-    expect((await pay({ bookingId: b, amountCents: 30000, method: 'Bar' })).json().error.code).toBe('overpay');
-    expect((await pay({ bookingId: b, amountCents: 16000, method: 'Karte' })).statusCode).toBe(200); // füllt Rechnung 1 (148 €), Rest 12 € auf Rechnung 2
+    expect((await payAdmin({ bookingId: b, amountCents: 30000, method: 'Bar' })).json().error.code).toBe('overpay');
+    expect((await payAdmin({ bookingId: b, amountCents: 16000, method: 'Karte' })).statusCode).toBe(200); // füllt Rechnung 1 (148 €), Rest 12 € auf Rechnung 2
     expect((await ok('GET', `/invoices/${a.id}`, user)).openCents).toBe(0);
     expect((await ok('GET', `/invoices/${c.id}`, user)).openCents).toBe(3600);
-    expect((await pay({ invoiceId: c.id, amountCents: 3700, method: 'Bar' })).json().error.code).toBe('overpay');
-    expect((await pay({ invoiceId: c.id, amountCents: 3600, method: 'Bar' })).statusCode).toBe(200);
+    expect((await payAdmin({ invoiceId: c.id, amountCents: 3700, method: 'Bar' })).json().error.code).toBe('overpay');
+    expect((await payAdmin({ invoiceId: c.id, amountCents: 3600, method: 'Bar' })).statusCode).toBe(200);
     const bill = await billing(b);
     expect(bill.paidCents).toBe(24600);
     expect(bill.payments.map((p: { method: string }) => p.method).sort()).toEqual(['Bar', 'Karte', 'Karte', 'Überweisung']);
-    expect((await pay({ bookingId: b, amountCents: 100, method: 'Bar' })).json().error.code).toBe('overpay');
+    expect((await payAdmin({ bookingId: b, amountCents: 100, method: 'Bar' })).json().error.code).toBe('overpay');
   });
 
   it('lässt die Rechnung bei Überweisung offen, bis der Zahlungseingang gebucht ist', async () => {

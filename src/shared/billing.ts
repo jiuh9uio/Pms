@@ -62,6 +62,8 @@ export interface InvoiceDto {
   recipientCompany: string; recipientName: string; recipientStreet: string; recipientZip: string; recipientCity: string; recipientCountry: string; recipientVatId: string;
   serviceFrom: string | null; serviceTo: string | null; issueDate: string | null; dueDate: string | null; notes: string; cancelReason: string;
   grossCents: number; paidCents: number; openCents: number; createdBy: string; issuedBy: string; issuedAt: string | null; version: number;
+  /** Verrechnung zwischen Rechnungen derselben Reservierung: + = Überschuss einer anderen Rechnung hierher übernommen, − = Überschuss an andere abgegeben (in paidCents enthalten) */
+  creditCents?: number;
   issuer: IssuerDto | null; lines: InvoiceLineDto[]; payments: PaymentDto[]; taxes: ReturnType<typeof taxBreakdown>;
 }
 export type InvoiceListRow = Omit<InvoiceDto, 'lines' | 'payments' | 'taxes' | 'issuer'>;

@@ -736,8 +736,8 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
 
   it('erstellt einen Zettel für die Buchhaltung mit Zahlungen, Rückgeld und offenem Betrag', async () => {
     const bid = await booking();
-    await ok('POST', '/payments', user, { bookingId: bid, amountCents: 5000, method: 'Karte', date: today, payer: '', note: '' });
-    const paid = await ok('POST', '/payments', user, { bookingId: bid, amountCents: 10000, method: 'Bar', date: today, payer: '', note: '', givenCents: 12000 });
+    await ok('POST', '/payments', admin, { bookingId: bid, amountCents: 5000, method: 'Karte', date: today, payer: '', note: '' });
+    const paid = await ok('POST', '/payments', admin, { bookingId: bid, amountCents: 10000, method: 'Bar', date: today, payer: '', note: '', givenCents: 12000 });
     const recent = await ok('GET', `/bookings/${bid}/accounting-slip?payment=${paid.id}`, user);
     expect(recent).toMatchObject({ onlyRecent: true, paymentsTotalCents: 10000, byMethod: [{ method: 'Bar', amountCents: 10000 }], totalCents: 19800, paidCents: 15000, openCents: 4800 });
     expect(recent.payments).toEqual([expect.objectContaining({ method: 'Bar', amountCents: 10000, givenCents: 12000, recordedBy: expect.any(String) })]);

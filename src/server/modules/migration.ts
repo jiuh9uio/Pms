@@ -5,6 +5,10 @@ import type { Db, Exec } from '../db/client.js';
 import { AppError } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 import { getSecretKey, setSecretKey } from './mail.js';
+import { getBackupStatus, runBackup } from '../backup.js';
+import { users } from '../db/schema.js';
+import { eq } from 'drizzle-orm';
+import { verifyPassword } from '../lib/password.js';
 
 /**
  * Umzug auf einen anderen Rechner oder Server: alle Daten der Datenbank plus der Schlüssel der Installation (E-Mail-Passwort,
@@ -81,6 +85,12 @@ export function readPackage(file: Buffer, password: string): Payload {
   }
 }
 
+/** Was auf DIESER Installation schon steht (würde beim Einspielen ersetzt) */
+export async function targetCounts(db: Exec) {
+  const [r] = await db.execute(sql`select (select count(*) from bookings)::int as bookings, (select count(*) from invoices)::int as invoices, (select count(*) from guests)::int as guests`) as unknown as { bookings: number; invoices: number; guests: number }[];
+  return r!;
+}
+
 export interface ImportSummary { version: string; createdAt: string; tables: number; rows: number; guests: number; bookings: number; invoices: number; users: number }
 const count = (p: Payload, t: string) => (Array.isArray(p.tables[t]) ? p.tables[t]!.length : 0);
 export const summarize = (p: Payload): ImportSummary => ({
@@ -92,8 +102,17 @@ export const summarize = (p: Payload): ImportSummary => ({
  * Umzugspaket einspielen: ersetzt ALLE Daten dieser Installation durch die aus dem Paket und übernimmt den Schlüssel.
  * Voraussetzung: dieses Programm ist mindestens so neu wie das, mit dem das Paket erstellt wurde.
  */
-export async function importPackage(db: Db, actor: Actor, file: Buffer, password: string): Promise<ImportSummary> {
+export async function importPackage(db: Db, actor: Actor, file: Buffer, password: string, o: { adminPassword: string; overwrite: boolean }): Promise<ImportSummary> {
+  // Wer einspielt, bestätigt mit dem eigenen Passwort
+  const [me] = await db.select().from(users).where(eq(users.id, actor.userId!));
+  if (!me || !(await verifyPassword(o.adminPassword, me.passwordHash))) throw new AppError(400, 'validation', 'Eingaben prüfen', { adminPassword: 'Ihr Passwort (Anmeldung auf diesem Rechner) stimmt nicht' });
   const p = readPackage(file, password);
+  // Stehen hier schon Buchungen oder Rechnungen, nur nach ausdrücklicher Bestätigung ersetzen
+  const t = await targetCounts(db);
+  if ((t.bookings > 0 || t.invoices > 0) && !o.overwrite)
+    throw new AppError(409, 'target_not_empty', `Auf diesem Rechner stehen schon ${t.bookings} Buchungen und ${t.invoices} Rechnungen. Sie würden durch das Paket ersetzt. Bitte ausdrücklich bestätigen.`);
+  // vorher sichern (nur Windows-Version mit eingebauter Sicherung)
+  if (getBackupStatus().supported) runBackup();
   const mine = await migrationCount(db);
   if (p.migrations > mine) throw new AppError(409, 'too_old', `Das Paket stammt von einer neueren Programmversion (${p.version}). Bitte dieses Programm zuerst aktualisieren.`);
   const names = await tables(db);

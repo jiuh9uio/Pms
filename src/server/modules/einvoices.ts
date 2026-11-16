@@ -73,8 +73,17 @@ export async function buildFromInvoice(db: Exec, invoiceId: string) {
   return { inv, data, xml, pdf };
 }
 
+/**
+ * Je Rechnung gibt es höchstens eine noch nicht versendete E-Rechnung: Ein erneuter Klick erzeugt sie mit dem aktuellen
+ * Stand (z. B. inzwischen bezahlt) neu und ersetzt die unversendete. Bereits versendete bleiben unverändert erhalten.
+ */
 export async function fromInvoice(db: Db, actor: Actor, invoiceId: string) {
   const { data, xml, pdf } = await buildFromInvoice(db, invoiceId);
+  const old = await db.select({ id: einvoices.id }).from(einvoices).where(and(eq(einvoices.invoiceId, invoiceId), isNull(einvoices.sentAt)));
+  for (const o of old) {
+    await db.delete(einvoices).where(eq(einvoices.id, o.id));
+    await record(db, actor, { action: 'replace', entity: 'einvoice', entityId: o.id, after: { invoiceId } });
+  }
   return store(db, actor, { source: 'invoice', invoiceId, data, xml, pdf, originalName: '', generatedPdf: true });
 }
 
@@ -110,6 +119,9 @@ export async function removeEInvoice(db: Db, actor: Actor, id: string) {
 }
 
 export async function sendEInvoice(db: Db, actor: Actor, id: string, v: { to: string; subject: string; body: string; attach: 'pdf' | 'xml' | 'both' }) {
+  const [e] = await db.select({ invoiceId: einvoices.invoiceId }).from(einvoices).where(eq(einvoices.id, id));
+  if (!e) throw notFound('E-Rechnung');
+  if (e.invoiceId && (await getInvoice(db, e.invoiceId)).status !== 'issued') throw conflict('Die zugehörige Rechnung ist storniert – diese E-Rechnung wird nicht mehr versendet.', 'invoice_cancelled');
   const attachments = [];
   if (v.attach !== 'xml') { const f = await getFile(db, id, 'pdf'); attachments.push({ filename: f.filename, content: f.content, contentType: 'application/pdf' }); }
   if (v.attach !== 'pdf') { const f = await getFile(db, id, 'xml'); attachments.push({ filename: f.filename, content: f.content, contentType: 'application/xml' }); }

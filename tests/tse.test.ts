@@ -295,6 +295,9 @@ describe('TSE (Epson) prüfen', () => {
     expect(await rec(d)).toMatchObject({ status: 'failed' });
     expect(String((await rec(e))!.error)).toContain('pausiert');
     expect((await call('GET', '/settings/tse-sign', admin)).json().pausedReason).toContain('abgelehnt');
+    // Aus- und wieder Einschalten ohne neue PIN hebt die Pause NICHT auf (kein weiterer PIN-Versuch)
+    await put({ enabled: false, pin: '' });
+    expect((await put({ pin: '' })).json().pausedReason).toContain('abgelehnt');
     // richtige PIN neu gespeichert: Pause aufgehoben, es geht ab jetzt weiter
     expect((await put({})).json().pausedReason).toBe('');
     const g = await pay(4000);

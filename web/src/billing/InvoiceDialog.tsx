@@ -96,6 +96,7 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
               <tr className="sum"><td>Gesamt (brutto)</td><td className="num">{formatMoney(inv.grossCents)}</td></tr>
               {inv.status !== 'draft' && inv.kind === 'invoice' && <>
                 <tr><td>Bezahlt</td><td className="num">{formatMoney(inv.paidCents)}</td></tr>
+                {!!inv.creditCents && <tr><td className="muted small" colSpan={2}>{inv.creditCents > 0 ? `davon ${formatMoney(inv.creditCents)} verrechnet aus der Anzahlung auf einer anderen Rechnung dieser Reservierung` : `${formatMoney(-inv.creditCents)} Überzahlung auf andere Rechnungen dieser Reservierung übertragen`}</td></tr>}
                 <tr className="sum"><td>Offen</td><td className="num">{formatMoney(inv.openCents)}</td></tr>
               </>}
             </tbody></table>
@@ -202,6 +203,9 @@ function Lines({ inv }: { inv: InvoiceDto }) {
 export function PaymentForm({ bookingId, invoiceId, suggestCents, onDone }: { bookingId?: string; invoiceId?: string; suggestCents: number; onDone?: () => void }) {
   const { bump } = useData();
   const toast = useToast();
+  const { user } = useAuth();
+  // Mitarbeiter buchen genau den offenen Betrag; Teil- und Minusbeträge nur der Administrator
+  const locked = user.role !== 'admin' && suggestCents > 0;
   const [v, setV] = useState({ amount: suggestCents > 0 ? moneyInput(suggestCents) : '', method: 'Bar', date: todayBerlin(), payer: '', note: '' });
   useEffect(() => setV((x) => ({ ...x, amount: suggestCents > 0 ? moneyInput(suggestCents) : '' })), [suggestCents]);
   const f = useSubmit(paymentInput, async (d) => {
@@ -240,7 +244,7 @@ export function PaymentForm({ bookingId, invoiceId, suggestCents, onDone }: { bo
         </select>
       </div>
       <div className="inlinefields">
-        <input inputMode="decimal" value={v.amount} onChange={(e) => setV({ ...v, amount: e.target.value })} placeholder="Betrag" aria-label="Betrag" />
+        <input inputMode="decimal" value={v.amount} readOnly={locked} title={locked ? 'Immer der volle offene Betrag – Teilzahlungen bucht der Administrator' : undefined} onChange={(e) => setV({ ...v, amount: e.target.value })} placeholder="Betrag" aria-label="Betrag" />
         <input type="date" value={v.date} max={todayBerlin()} onChange={(e) => setV({ ...v, date: e.target.value })} aria-label="Datum" />
       </div>
       <input value={v.payer} onChange={(e) => setV({ ...v, payer: e.target.value })} placeholder="Zahler (falls abweichend)" aria-label="Zahler" />

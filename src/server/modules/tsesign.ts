@@ -34,7 +34,9 @@ export async function saveUse(db: Db, actor: Actor, v: { enabled: boolean; clien
     enabled: v.enabled, clientId: v.clientId, methods: v.methods, pinEnc: v.pin ? encrypt(v.pin) : cur.pinEnc, keyEnc: v.secretKey ? encrypt(v.secretKey) : cur.keyEnc,
     // neu eingeschaltet oder nach einer Pause wieder aufgenommen: erst Zahlungen ab jetzt aufzeichnen
     since: v.enabled ? (cur.enabled && !cur.pausedReason && cur.since ? cur.since : new Date().toISOString()) : null,
-    pausedReason: v.enabled && cur.pausedReason && !v.pin ? cur.pausedReason : '',
+    // Pause wegen abgelehnter PIN bleibt bestehen, bis eine neue PIN eingetragen wird – auch über Aus- und Einschalten hinweg
+    // (sonst würde die alte PIN erneut versucht und ein weiterer Versuch verbraucht)
+    pausedReason: cur.pausedReason && !v.pin ? cur.pausedReason : '',
   };
   if (next.enabled && !next.pinEnc) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { pin: 'Bitte die Zeit-PIN eintragen' });
   if (next.enabled && !(await getTse(db)).enabled) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { enabled: 'Zuerst oben die Verbindung zur TSE einrichten und „TSE-Daten lesen“' });
@@ -131,6 +133,7 @@ async function work(db: Db) {
     const data = kassenbelegData(parts, total, group[0]!.method === 'Bar');
     const o: Outcome = s.pausedReason
       ? { ok: false, authFailed: false, error: `Aufzeichnung pausiert: ${s.pausedReason}`, serialHex: '', publicKey: '', algorithm: '' }
+      : !t.enabled ? { ok: false, authFailed: false, error: 'Die Verbindung zur TSE ist abgeschaltet (Einstellungen → TSE)', serialHex: '', publicKey: '', algorithm: '' }
       : await transact(t.host, t.port, s.clientId, decrypt(s.pinEnc), s.keyEnc ? decrypt(s.keyEnc) : 'EPSONKEY', data);
     if (o.authFailed) {
       s = { ...(await load(db)), pausedReason: `Die TSE hat die Anmeldung abgelehnt (${o.error}). Bitte Kennung und Zeit-PIN prüfen und neu speichern.` };

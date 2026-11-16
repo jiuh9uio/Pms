@@ -129,7 +129,7 @@ describe('Hotel-Daten löschen', () => {
     const company = await ok('POST', '/companies', admin, { name: 'Muster GmbH', street: '', zip: '', city: '', country: 'Deutschland', vatId: '', contactName: '', email: '', phone: '', paymentTermDays: 14, notes: '', active: true, rates: [] });
     const b1 = await booking();
     await issue(b1);
-    expect((await pay({ bookingId: b1, amountCents: 1000, method: 'Bar' })).statusCode).toBe(200);
+    expect((await call('POST', '/payments', admin, { date: today, payer: '', note: '', bookingId: b1, amountCents: 1000, method: 'Bar' })).statusCode).toBe(200); // Teilzahlung: Administrator
     await ok('POST', '/housekeeping/manual', user, { date: today, roomId: roomIds[0], kind: 'interim', note: '' });
     await db.execute(sql`update rooms set housekeeping = 'dirty'`);
     const all = { billing: true, bookings: 'all', guests: true, resetNumbers: true, inbox: true, companies: true };

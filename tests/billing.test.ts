@@ -85,7 +85,7 @@ describe('Rechnungen', () => {
   });
 
   it('stellt mit lückenloser Nummer aus und verrechnet Anzahlungen', async () => {
-    await ok('POST', '/payments', user, { bookingId, amountCents: 5000, method: 'Bar', date: today, payer: '', note: 'Anzahlung' });
+    await ok('POST', '/payments', admin, { bookingId, amountCents: 5000, method: 'Bar', date: today, payer: '', note: 'Anzahlung' });
     const draft = await ok('GET', `/invoices/${invId}`, user);
     const inv = await ok('POST', `/invoices/${invId}/issue`, user, { version: draft.version });
     expect(inv).toMatchObject({ status: 'issued', number: `RE-${year}-0001`, issueDate: today, dueDate: addDays(today, 14), grossCents: 24800, paidCents: 5000, openCents: 19800 });
@@ -105,8 +105,8 @@ describe('Rechnungen', () => {
     expect(await refused(db.execute(sql`delete from payments`))).toMatch(/Gegenbuchung/);
   });
 
-  it('bucht Teilzahlungen und korrigiert per Gegenbuchung', async () => {
-    const p = await ok('POST', '/payments', user, { invoiceId: invId, amountCents: 10000, method: 'Karte', date: today, payer: 'Beispiel GmbH', note: '' });
+  it('bucht Teilzahlungen (Administrator) und korrigiert per Gegenbuchung', async () => {
+    const p = await ok('POST', '/payments', admin, { invoiceId: invId, amountCents: 10000, method: 'Karte', date: today, payer: 'Beispiel GmbH', note: '' });
     expect((await ok('GET', `/invoices/${invId}`, user)).openCents).toBe(9800);
     expect((await call('POST', `/payments/${p.id}/reverse`, user, { note: 'falscher Betrag' })).statusCode).toBe(403); // nur Administrator
     await ok('POST', `/payments/${p.id}/reverse`, admin, { note: 'falscher Betrag' });
@@ -114,7 +114,7 @@ describe('Rechnungen', () => {
     let inv = await ok('GET', `/invoices/${invId}`, user);
     expect(inv.openCents).toBe(19800);
     expect(inv.payments.find((x: { id: string }) => x.id === p.id).reversed).toBe(true);
-    await ok('POST', '/payments', user, { invoiceId: invId, amountCents: 9800, method: 'Karte', date: today, payer: '', note: '' });
+    await ok('POST', '/payments', admin, { invoiceId: invId, amountCents: 9800, method: 'Karte', date: today, payer: '', note: '' });
     inv = await ok('GET', `/invoices/${invId}`, user);
     expect(inv.openCents).toBe(10000);
     expect((await call('POST', '/payments', user, { invoiceId: invId, amountCents: 100, method: 'Bar', date: addDays(today, 1), payer: '', note: '' })).statusCode).toBe(400);

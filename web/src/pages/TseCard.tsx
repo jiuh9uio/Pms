@@ -22,10 +22,12 @@ export function TseCard() {
   if (!v) return <section className="card"><h2>TSE</h2><LoadState error={error} loading /></section>;
   const payload = () => ({ enabled: v.enabled, host: v.host.trim(), port: Number(v.port) });
   const act = async (what: 'read' | 'test' | 'print') => {
-    setBusy(what); setFail(null);
+    setFail(null);
+    // nichts stillschweigend einschalten: die Verbindung muss ausdrücklich angekreuzt sein
+    if (!v.enabled) { setFail('Bitte zuerst „TSE verwenden“ ankreuzen.'); return; }
+    setBusy(what);
     try {
-      await api('PUT', '/settings/tse', tseSettingsInput.parse({ ...payload(), enabled: true }));
-      setV({ ...v, enabled: true });
+      await api('PUT', '/settings/tse', tseSettingsInput.parse(payload()));
       if (what === 'read') setInfo(await api<TseInfoDto>('GET', '/tse/info'));
       else if (what === 'test') { setInfo(await api<TseInfoDto>('POST', '/tse/selftest', {})); toast('Selbsttest bestanden'); }
       else { await api('POST', '/tse/print', {}); toast('TSE-Datenblatt gedruckt'); }
@@ -50,6 +52,7 @@ export function TseCard() {
         <div className="formgrid cols3">
           <Field label="Adresse des Rechners mit der TSE" error={f.errors.host} hint="dieser Rechner: 127.0.0.1"><input value={v.host} onChange={(e) => setV({ ...v, host: e.target.value })} inputMode="decimal" /></Field>
           <Field label="Port" error={f.errors.port} hint="bei Epson 8009"><input value={v.port} onChange={(e) => setV({ ...v, port: e.target.value })} inputMode="numeric" /></Field>
+          <label className="check wide"><input type="checkbox" checked={v.enabled} onChange={(e) => setV({ ...v, enabled: e.target.checked })} /><span>TSE verwenden<small>Ausgeschaltet greift das Programm nicht auf die TSE zu; Zahlungen werden dann als „nicht aufgezeichnet“ vermerkt, solange unten die Aufzeichnung eingeschaltet ist. Nach dem Ändern „Speichern“ drücken.</small></span></label>
         </div>
         {fail && <p className="notice danger" role="alert">{fail}</p>}
         <div className="formactions">

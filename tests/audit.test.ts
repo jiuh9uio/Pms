@@ -95,4 +95,30 @@ describe('Korrekturen aus der Logik-Durchsicht', () => {
     expect(g.idNumber).toBe('X123');
     expect(g.street).toBe('Neue Str. 2');
   });
+
+  it('Zahlungen: Mitarbeiter buchen genau den offenen Betrag, Teil- und Minusbeträge nur der Administrator', async () => {
+    const b = await ok('POST', '/bookings', user, { guest: { ...GUEST, lastName: 'Zahler' }, groupName: '', source: 'Telefon', paymentMethod: '', notes: '', breakfast: false,
+      rooms: [{ roomId: roomIds[1], from: addDays(today, 120), to: addDays(today, 122), adults: 2, children: 0, status: 'confirmed', pricePerNightCents: null }] });
+    const pay = (who: Record<string, string>, amountCents: number) => call('POST', '/payments', who, { bookingId: b.id, amountCents, method: 'Bar', date: today, payer: '', note: '' });
+    const part = await pay(user, 5000);
+    expect(part.statusCode).toBe(409);
+    expect(part.json().error.code).toBe('partial');
+    expect((await pay(user, -100)).statusCode).toBe(403);
+    expect((await pay(admin, 5000)).statusCode).toBe(200); // Teilzahlung durch den Administrator
+    expect((await pay(user, 19800 - 5000)).statusCode).toBe(200); // Rest genau
+    expect((await pay(user, 100)).json().error.code).toBe('overpay');
+  });
+
+  it('Testphase beenden: danach keine Rechnungen/Zahlungen mehr löschbar, anderes schon', async () => {
+    expect((await ok('GET', '/settings/go-live', admin)).active).toBe(false);
+    expect((await call('GET', '/settings/go-live', user)).statusCode).toBe(403);
+    expect((await call('POST', '/settings/go-live', admin, { password: 'falsch', confirm: 'ECHTBETRIEB' })).statusCode).toBe(400);
+    expect((await call('POST', '/settings/go-live', admin, { password: 'sehr-geheim-123', confirm: 'JA' })).statusCode).toBe(400);
+    expect((await ok('POST', '/settings/go-live', admin, { password: 'sehr-geheim-123', confirm: 'echtbetrieb' })).active).toBe(true);
+    const base = { billing: false, bookings: 'none', guests: false, resetNumbers: false, inbox: false, companies: false, dryRun: true, password: '', confirm: '' };
+    const blocked = await call('POST', '/settings/purge', admin, { ...base, billing: true });
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().error.code).toBe('go_live');
+    expect((await call('POST', '/settings/purge', admin, { ...base, guests: true })).statusCode).toBe(200);
+  });
 });

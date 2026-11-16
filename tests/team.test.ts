@@ -45,6 +45,8 @@ const issue = async (bookingId: string, include = 'all') => {
   return ok('POST', `/invoices/${id}/issue`, user, { version: d.version });
 };
 const pay = (body: object) => call('POST', '/payments', user, { date: today, payer: '', note: '', ...body });
+/** Teilzahlungen bucht nur der Administrator */
+const payAdmin = (body: object) => call('POST', '/payments', admin, { date: today, payer: '', note: '', ...body });
 const billing = (bookingId: string) => ok('GET', `/bookings/${bookingId}/billing`, user);
 
 beforeAll(async () => {
@@ -116,13 +118,13 @@ describe('Team, Reinigungsliste und Tagesabschluss', () => {
     expect(list.rows[0].staying).toBe(true);
     const id = (await db.execute(sql`select b.id from bookings b join booking_rooms br on br.booking_id = b.id join room_allocations a on a.id = br.allocation_id where lower(a.period) = ${addDays(today, -1)}::date`))[0]!.id as string;
     await issue(id);
-    expect((await pay({ bookingId: id, amountCents: 10000, method: 'Bar', givenCents: 10000 })).statusCode).toBe(200);
-    expect((await pay({ bookingId: id, amountCents: 5000, method: 'Karte' })).statusCode).toBe(200);
+    expect((await payAdmin({ bookingId: id, amountCents: 10000, method: 'Bar', givenCents: 10000 })).statusCode).toBe(200);
+    expect((await payAdmin({ bookingId: id, amountCents: 5000, method: 'Karte' })).statusCode).toBe(200);
     const r = await ok('GET', `/reports/day?date=${today}`, user);
     expect(r.payments).toEqual([{ method: 'Bar', count: 1, cents: 10000 }, { method: 'Karte', count: 1, cents: 5000 }]);
     expect(r).toMatchObject({ totalCents: 15000, cashCents: 10000, invoices: { count: 1, cancelled: 0 }, occupied: 1, rooms: 1 });
     expect(r.paymentList).toHaveLength(2);
-    expect(r.paymentList[0]).toMatchObject({ method: 'Bar', cents: 10000, by: 'Rezeption', reversal: false });
+    expect(r.paymentList[0]).toMatchObject({ method: 'Bar', cents: 10000, by: 'Chefin', reversal: false });
     // Anreise in zwei Tagen ist an dem Tag noch offen, die Abreise der laufenden Buchung ebenfalls (noch nicht ausgecheckt gilt nur für Eingecheckte)
     const d2 = await ok('GET', `/reports/day?date=${addDays(today, 2)}`, user);
     expect(d2.arrivals).toMatchObject({ expected: 1, checkedIn: 0 });

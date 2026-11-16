@@ -32,7 +32,7 @@ import { registerEInvoiceRoutes } from './routes-einvoice.js';
 import { registerHotelRoutes } from './routes-hotel.js';
 import { registerRestaurantRoutes } from './routes-restaurant.js';
 import { getBackupStatus, runBackup } from './backup.js';
-import { purge } from './modules/purge.js';
+import { getGoLive, purge, setGoLive } from './modules/purge.js';
 import { checklist } from './modules/setup.js';
 import { getLogo, invoiceNumberState, setInvoiceNumber } from './modules/billing.js';
 import * as inbox from './modules/inbox.js';
@@ -310,10 +310,12 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
       const r = await migration.exportPackage(db, actor(req), v.password, getUpdateStatus().current);
       return reply.header('Content-Type', 'application/octet-stream').header('Content-Disposition', `attachment; filename="${r.name}"`).send(r.file);
     });
-    api.post('/settings/migration/check', { preHandler: requireAdmin, bodyLimit: 400 * 1024 * 1024 }, (req) => migration.summarize(migration.readPackage(pkgBody(req), pkgPassword(req))));
+    api.post('/settings/migration/check', { preHandler: requireAdmin, bodyLimit: 400 * 1024 * 1024 }, async (req) => ({ ...migration.summarize(migration.readPackage(pkgBody(req), pkgPassword(req))), target: await migration.targetCounts(db) }));
     api.post('/settings/migration/import', { preHandler: requireAdmin, bodyLimit: 400 * 1024 * 1024 }, async (req) => {
       if (String(req.headers['x-confirm'] ?? '') !== 'UMZUG') throw new AppError(400, 'validation', 'Eingaben prüfen', { confirm: 'Bitte das Wort UMZUG eintippen' });
-      return migration.importPackage(db, actor(req), pkgBody(req), pkgPassword(req));
+      return migration.importPackage(db, actor(req), pkgBody(req), pkgPassword(req), {
+        adminPassword: decodeURIComponent(String(req.headers['x-admin-password'] ?? '')), overwrite: String(req.headers['x-overwrite'] ?? '') === 'yes',
+      });
     });
 
     // ---------- Programm-Update (nur Administrator) ----------
@@ -445,6 +447,11 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     // ---------- Datensicherung (nur Administrator) ----------
     api.get('/backup/status', { preHandler: requireAdmin }, () => getBackupStatus());
     api.post('/settings/purge', { preHandler: requireAdmin }, (req) => purge(db, actor(req), S.purgeInput.parse(req.body)));
+    api.get('/settings/go-live', { preHandler: requireAdmin }, () => getGoLive(db));
+    api.post('/settings/go-live', { preHandler: requireAdmin }, (req) => {
+      const v = z.object({ password: z.string().max(200), confirm: z.string().max(40) }).parse(req.body);
+      return setGoLive(db, actor(req), v.password, v.confirm);
+    });
     api.post('/backup/run', { preHandler: requireAdmin }, async (req) => {
       const r = runBackup();
       await record(db, actor(req), { action: 'backup', entity: 'program', after: { file: r.last?.file } });

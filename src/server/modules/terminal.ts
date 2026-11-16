@@ -7,7 +7,7 @@ import { AppError, conflict } from '../lib/errors.js';
 import { isPrivateIp } from '../lib/escpos.js';
 import { zvtRun, type ZvtResult } from '../lib/zvt.js';
 import { record, type Actor } from './audit.js';
-import { addPayment } from './billing.js';
+import { addPayment, type PayRules } from './billing.js';
 
 /** Kartenzahlung über das EC-Gerät: Betrag ans Gerät senden und bei Erfolg als Zahlung „Karte“ buchen. */
 
@@ -45,11 +45,12 @@ export async function testTerminal(db: Exec) {
   return { ok: true, message: r.message };
 }
 
-export async function payByTerminal(db: Db, actor: Actor, v: { bookingId?: string; invoiceId?: string; amountCents: number; payer: string; note: string }) {
+export async function payByTerminal(db: Db, actor: Actor, v: { bookingId?: string; invoiceId?: string; amountCents: number; payer: string; note: string }, rules?: PayRules) {
   const payment = { bookingId: v.bookingId, invoiceId: v.invoiceId, amountCents: v.amountCents, method: 'Karte', date: todayBerlin(), payer: v.payer };
   // Vorab prüfen, dass sich die Zahlung buchen lässt – sonst wäre abgebucht, aber nichts verbucht
   class DryRun extends Error {}
-  try { await db.transaction(async (tx) => { await addPayment(tx as unknown as Db, actor, { ...payment, note: v.note }); throw new DryRun(); }); }
+  // (mit den Regeln des Benutzers; nach erfolgreicher Abbuchung wird in jedem Fall gebucht)
+  try { await db.transaction(async (tx) => { await addPayment(tx as unknown as Db, actor, { ...payment, note: v.note }, rules); throw new DryRun(); }); }
   catch (e) { if (!(e instanceof DryRun)) throw e; }
 
   const r = await run(db, v.amountCents);

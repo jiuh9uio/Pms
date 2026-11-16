@@ -3,7 +3,8 @@ import { todayBerlin } from '../../shared/hotel.js';
 import type { PurgeInput, PurgeResult } from '../../shared/schemas.js';
 import { getBackupStatus, runBackup } from '../backup.js';
 import type { Db, Tx } from '../db/client.js';
-import { users } from '../db/schema.js';
+import { settings, users } from '../db/schema.js';
+import type { Exec } from '../db/client.js';
 import { AppError } from '../lib/errors.js';
 import { verifyPassword } from '../lib/password.js';
 import { record, type Actor } from './audit.js';
@@ -58,12 +59,37 @@ async function work(tx: Tx, v: PurgeInput): Promise<Omit<PurgeResult, 'dryRun' |
   return r;
 }
 
+// ---------- Ende der Testphase („Echtbetrieb“) ----------
+export interface GoLive { active: boolean; at: string | null; by: string }
+/** Ab dem Echtbetrieb werden Rechnungen, Zahlungen und TSE-Aufzeichnungen nicht mehr gelöscht (Aufbewahrungspflicht). */
+export async function getGoLive(db: Exec): Promise<GoLive> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'go_live'));
+  const v = row?.value as { at?: string; by?: string } | undefined;
+  return v?.at ? { active: true, at: v.at, by: v.by ?? '' } : { active: false, at: null, by: '' };
+}
+/** Testphase beenden – mit Passwort und dem Wort ECHTBETRIEB; im Programm nicht rückgängig zu machen. */
+export async function setGoLive(db: Db, actor: Actor, password: string, confirm: string): Promise<GoLive> {
+  const cur = await getGoLive(db);
+  if (cur.active) return cur;
+  const [user] = await db.select().from(users).where(eq(users.id, actor.userId!));
+  if (!user || !(await verifyPassword(password, user.passwordHash))) throw new AppError(400, 'validation', 'Eingaben prüfen', { password: 'Das Passwort stimmt nicht' });
+  if (confirm.trim().toUpperCase() !== 'ECHTBETRIEB') throw new AppError(400, 'validation', 'Eingaben prüfen', { confirm: 'Bitte das Wort ECHTBETRIEB eintippen' });
+  const value = { at: new Date().toISOString(), by: actor.userName };
+  await db.transaction(async (tx) => {
+    await tx.insert(settings).values({ key: 'go_live', value }).onConflictDoNothing();
+    await record(tx, actor, { action: 'go_live', entity: 'program', after: value });
+  });
+  return getGoLive(db);
+}
+
 /**
  * Hotel-Daten löschen (Rechnungen/Zahlungen, Buchungen, Gäste) – gedacht zum Aufräumen von Probedaten vor dem echten Betrieb.
  * dryRun zählt nur (alles wird zurückgerollt). Der echte Lauf verlangt das Passwort und schreibt vorher eine Datensicherung.
  */
 export async function purge(db: Db, actor: Actor, v: PurgeInput): Promise<PurgeResult> {
   if (!v.billing && v.bookings === 'none' && !v.guests && !v.inbox && !v.companies) throw new AppError(400, 'validation', 'Bitte auswählen, was gelöscht werden soll');
+  const live = await getGoLive(db);
+  if (live.active && v.billing) throw new AppError(409, 'go_live', `Seit dem Ende der Testphase (${new Date(live.at!).toLocaleDateString('de-DE')}) werden Rechnungen, Zahlungen und TSE-Aufzeichnungen nicht mehr gelöscht – sie müssen aufbewahrt werden.`);
   let backupFile: string | null = null;
   if (!v.dryRun) {
     const [user] = await db.select().from(users).where(eq(users.id, actor.userId!));

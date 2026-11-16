@@ -62,6 +62,36 @@ export function SettleDialog({ booking, onClose }: { booking: BookingDto; onClos
   const useTerminal = method === 'Karte' && !!terminal?.ready;
   const nothing = !invoiceNow && (transfer || !(amountCents > 0));
 
+  /** Nach der Zahlung: Rechnung ausstellen und abreisende Gäste auschecken (wie gewählt). */
+  const finish = async (lines: string[]) => {
+    let invoiceId: string | null = null;
+    if (invoiceNow) {
+      setStep({ kind: 'working', text: 'Rechnung wird ausgestellt …' });
+      const created = await api<{ id: string }>('POST', '/invoices', { bookingId: booking.id, include: 'all' });
+      invoiceId = created.id;
+      try {
+        const draft = await api<InvoiceDto>('GET', `/invoices/${created.id}`);
+        const issued = await api<InvoiceDto>('POST', `/invoices/${created.id}/issue`, { version: draft.version });
+        lines.push(`Rechnung ${issued.number} über ${formatMoney(issued.grossCents)} ausgestellt`);
+      } catch (e) {
+        // Ausstellen nicht möglich (z. B. fehlen Angaben in den Einstellungen): den eben angelegten Entwurf wieder entfernen
+        await api('POST', `/invoices/${created.id}/remove`).catch(() => {});
+        throw lines.length ? new Error(`Die Zahlung ist gebucht, die Rechnung konnte aber nicht ausgestellt werden: ${e instanceof Error ? e.message : 'Fehler'}`) : e;
+      }
+    }
+    if (transfer) lines.push('Zahlung per Überweisung: bleibt offen, bis der Zahlungseingang gebucht wird');
+    // Check-out abreisender Gäste
+    if (checkoutNow && !transfer && leaving.length) {
+      setStep({ kind: 'working', text: 'Gast wird ausgecheckt …' });
+      for (const r of leaving) {
+        await api('POST', `/booking-rooms/${r.id}/status`, { status: 'checked_out', version: r.version });
+        lines.push(`Zimmer ${r.roomNumber} ausgecheckt`);
+      }
+    } else if (!transfer && staying.length && hotel) lines.push(`Abreise am ${staying.map((r) => r.to).sort().at(-1)!.split('-').reverse().join('.')}: Check-out dann automatisch nach ${hotel.checkoutTime} Uhr`);
+    bump();
+    setStep({ kind: 'done', lines, invoiceId, paid: !transfer && amountCents > 0 });
+  };
+
   const run = async (manualCard = false) => {
     if (running.current) return; // Schutz gegen doppeltes Auslösen
     setError(null);
@@ -69,7 +99,6 @@ export function SettleDialog({ booking, onClose }: { booking: BookingDto; onClos
     running.current = true;
     paidId.current = null;
     const lines: string[] = [];
-    let invoiceId: string | null = null;
     try {
       // Erst die Zahlung, dann die Rechnung: So steht die Zahlung schon auf der Rechnung, wenn sie ausgestellt und archiviert wird.
       if (!transfer && amountCents > 0) {
@@ -84,31 +113,7 @@ export function SettleDialog({ booking, onClose }: { booking: BookingDto; onClos
           lines.push(`${formatMoney(amountCents)} (${method}) gebucht${change != null && change > 0 ? ` – Rückgeld ${formatMoney(change)}` : ''}`);
         }
       }
-      if (invoiceNow) {
-        setStep({ kind: 'working', text: 'Rechnung wird ausgestellt …' });
-        const created = await api<{ id: string }>('POST', '/invoices', { bookingId: booking.id, include: 'all' });
-        invoiceId = created.id;
-        try {
-          const draft = await api<InvoiceDto>('GET', `/invoices/${created.id}`);
-          const issued = await api<InvoiceDto>('POST', `/invoices/${created.id}/issue`, { version: draft.version });
-          lines.push(`Rechnung ${issued.number} über ${formatMoney(issued.grossCents)} ausgestellt`);
-        } catch (e) {
-          // Ausstellen nicht möglich (z. B. fehlen Angaben in den Einstellungen): den eben angelegten Entwurf wieder entfernen
-          await api('POST', `/invoices/${created.id}/remove`).catch(() => {});
-          throw lines.length ? new Error(`Die Zahlung ist gebucht, die Rechnung konnte aber nicht ausgestellt werden: ${e instanceof Error ? e.message : 'Fehler'}`) : e;
-        }
-      }
-      if (transfer) lines.push('Zahlung per Überweisung: bleibt offen, bis der Zahlungseingang gebucht wird');
-      // Check-out abreisender Gäste
-      if (checkoutNow && !transfer && leaving.length) {
-        setStep({ kind: 'working', text: 'Gast wird ausgecheckt …' });
-        for (const r of leaving) {
-          await api('POST', `/booking-rooms/${r.id}/status`, { status: 'checked_out', version: r.version });
-          lines.push(`Zimmer ${r.roomNumber} ausgecheckt`);
-        }
-      } else if (!transfer && staying.length && hotel) lines.push(`Abreise am ${staying.map((r) => r.to).sort().at(-1)!.split('-').reverse().join('.')}: Check-out dann automatisch nach ${hotel.checkoutTime} Uhr`);
-      bump();
-      setStep({ kind: 'done', lines, invoiceId, paid: !transfer && amountCents > 0 });
+      await finish(lines);
     } catch (e) {
       bump();
       if (e instanceof ApiFailure && e.code === 'terminal_unknown') setStep({ kind: 'unknown', amountCents, message: e.message });
@@ -123,9 +128,9 @@ export function SettleDialog({ booking, onClose }: { booking: BookingDto; onClos
     running.current = true;
     try {
       paidId.current = (await api<{ id: string }>('POST', '/payments', { bookingId: booking.id, amountCents: amountOfCard, method: 'Karte', date: today, payer: '', note: 'Terminalergebnis ungeklärt – nach Prüfung am Gerät von Hand bestätigt' })).id;
-      bump();
-      setStep({ kind: 'done', lines: [`${formatMoney(amountOfCard)} (Karte) nach Prüfung am Gerät gebucht`], invoiceId: null, paid: true });
-    } catch (e) { setError(e instanceof Error ? e.message : 'Fehler'); setStep({ kind: 'form' }); }
+      // danach wie beim normalen Bezahlen weiter: Rechnung und Check-out (soweit gewählt)
+      await finish([`${formatMoney(amountOfCard)} (Karte) nach Prüfung am Gerät gebucht`]);
+    } catch (e) { bump(); setError(e instanceof Error ? e.message : 'Fehler'); setStep({ kind: 'form' }); }
     running.current = false;
   };
 

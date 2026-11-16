@@ -181,6 +181,9 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
     const byMethod = new Map<string, number>();
     for (const p of inv.payments) byMethod.set(p.method, (byMethod.get(p.method) ?? 0) + p.amountCents);
     for (const [m, c] of byMethod) if (c !== 0) { put(`Bezahlt (${m})`, sx, y, { size: 9.5, color: grey }); put(money(-c), cols.total, y, { size: 9.5, color: grey, right: true }); y -= row; }
+    // Verrechnung mit einer anderen Rechnung derselben Reservierung (z. B. Anzahlung auf der ersten Teilrechnung)
+    const cr = inv.creditCents ?? 0;
+    if (cr !== 0) { put(cr > 0 ? 'Verrechnet aus Anzahlung (andere Rechnung)' : 'Übertrag auf andere Rechnung', sx, y, { size: 9.5, color: grey }); put(money(-cr), cols.total, y, { size: 9.5, color: grey, right: true }); y -= row; }
     y -= 2;
     put(inv.openCents > 0 ? 'Zu zahlen' : inv.openCents < 0 ? 'Guthaben' : 'Offener Betrag', sx, y, { font: bold }); put(money(Math.abs(inv.openCents)), cols.total, y, { font: bold, right: true });
     y -= row;

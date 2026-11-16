@@ -95,13 +95,13 @@ export function registerBillingRoutes(api: FastifyInstance, { db, requireUser, r
   api.get('/terminal/progress', user, () => terminal.terminalProgress());
   /** nach dem Buchen in der TSE aufzeichnen (wenn eingeschaltet); die Zahlung scheitert daran nie */
   const signed = async <T,>(r: T) => { await tsesign.signPending(db); return r; };
-  api.post('/payments/terminal', user, async (req) => signed(await terminal.payByTerminal(db, actor(req), B.terminalPayInput.parse(req.body))));
+  api.post('/payments/terminal', user, async (req) => signed(await terminal.payByTerminal(db, actor(req), B.terminalPayInput.parse(req.body), req.user!.role === 'admin' ? billing.ADMIN_RULES : billing.STAFF_RULES)));
   api.get('/settings/terminal', admin, () => terminal.getTerminal(db));
   api.put('/settings/terminal', admin, (req) => terminal.saveTerminal(db, actor(req), B.terminalSettingsInput.parse(req.body)));
   api.post('/settings/terminal/test', admin, () => terminal.testTerminal(db));
   api.get('/terminal/log', admin, () => terminal.terminalLog(db));
 
-  api.post('/payments', user, async (req) => signed(await billing.addPayment(db, actor(req), B.paymentInput.parse(req.body))));
+  api.post('/payments', user, async (req) => signed(await billing.addPayment(db, actor(req), B.paymentInput.parse(req.body), req.user!.role === 'admin' ? billing.ADMIN_RULES : billing.STAFF_RULES)));
   // Gegenbuchungen (Storno einer Zahlung) darf nur der Administrator
   api.post('/payments/:id/reverse', admin, async (req) => signed(await billing.reversePayment(db, actor(req), idOf(req), B.reverseInput.parse(req.body).note)));
 }

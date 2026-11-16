@@ -4,7 +4,7 @@ import {
 } from '../../shared/billing.js';
 import { addDays, isActiveStatus, todayBerlin } from '../../shared/hotel.js';
 import type { Db, Exec, Tx } from '../db/client.js';
-import { bookings, companies, invoiceLines, invoices, numberSequences, payments, invoiceDocuments, settings } from '../db/schema.js';
+import { bookings, charges, companies, invoiceLines, invoices, numberSequences, payments, invoiceDocuments, settings } from '../db/schema.js';
 import { DEFAULT_LAYOUT, renderInvoice, type InvoiceLayout, type Logo } from '../einvoice/invoicepdf.js';
 import { sampleInvoice } from '../einvoice/sample.js';
 import { AppError, conflict, notFound, stale } from '../lib/errors.js';
@@ -50,8 +50,7 @@ function toRow(x: Raw): InvoiceListRow {
 
 export async function listInvoices(db: Exec, f: { status?: string; q?: string; from?: string; to?: string; bookingId?: string; serviceFrom?: string; serviceTo?: string; method?: string }) {
   const c: SQL[] = [sql`true`];
-  if (f.status === 'open') c.push(sql`i.status = 'issued' and i.kind = 'invoice' and i.gross_cents <> coalesce((select sum(p.amount_cents) from payments p where p.invoice_id = i.id), 0)`);
-  else if (f.status === 'paid') c.push(sql`i.status = 'issued' and i.kind = 'invoice' and i.gross_cents = coalesce((select sum(p.amount_cents) from payments p where p.invoice_id = i.id), 0)`);
+  if (f.status === 'open' || f.status === 'paid') c.push(sql`i.status = 'issued' and i.kind = 'invoice'`);
   else if (f.status === 'archive') c.push(sql`i.status <> 'draft'`);
   else if (f.status) c.push(sql`i.status = ${f.status}`);
   // Leistungszeitraum überschneidet den gewählten Zeitraum
@@ -65,8 +64,52 @@ export async function listInvoices(db: Exec, f: { status?: string; q?: string; f
     const like = '%' + f.q.replace(/[%_\\]/g, '') + '%';
     c.push(sql`(i.number ilike ${like} or i.recipient_name ilike ${like} or i.recipient_company ilike ${like} or b.number ilike ${like})`);
   }
-  const rows = await db.execute(sql`${LIST} where ${sql.join(c, sql` and `)} order by coalesce(i.issued_at, i.created_at) desc limit 500`);
-  return Array.from(rows).map((r) => toRow(r as Raw));
+  const rows = await db.execute(sql`${LIST} where ${sql.join(c, sql` and `)} order by coalesce(i.issued_at, i.created_at) desc limit ${f.status === 'open' || f.status === 'paid' ? 5000 : 500}`);
+  const list = await applyCredits(db, Array.from(rows).map((r) => toRow(r as Raw)));
+  if (f.status === 'open') return list.filter((r) => r.openCents !== 0).slice(0, 500);
+  if (f.status === 'paid') return list.filter((r) => r.openCents === 0).slice(0, 500);
+  return list;
+}
+
+/**
+ * Rechnungen derselben Reservierung untereinander verrechnen: Ist eine Rechnung überzahlt (z. B. weil die ganze Anzahlung
+ * auf die erste von zwei Teilrechnungen ging), deckt der Überschuss die übrigen offenen Rechnungen dieser Reservierung
+ * (älteste zuerst). Die Zahlungen selbst bleiben unverändert; geändert werden nur bezahlt/offen in der Anzeige und Prüfung.
+ */
+async function applyCredits(db: Exec, rows: InvoiceListRow[]) {
+  const bookingIds = [...new Set(rows.filter((r) => r.bookingId && r.status === 'issued' && r.kind === 'invoice').map((r) => r.bookingId!))];
+  if (!bookingIds.length) return rows;
+  const all = Array.from(await db.execute(sql`
+    select i.id, i.booking_id, i.gross_cents, i.issued_at, coalesce((select sum(p.amount_cents) from payments p where p.invoice_id = i.id), 0)::int as paid
+    from invoices i where i.status = 'issued' and i.kind = 'invoice' and i.booking_id in (${sql.join(bookingIds.map((b) => sql`${b}`), sql`, `)})
+    order by i.issued_at, i.id`)) as { id: string; booking_id: string; gross_cents: number; paid: number }[];
+  const credit = new Map<string, number>();
+  for (const b of bookingIds) {
+    const inv = all.filter((x) => x.booking_id === b);
+    let pool = inv.reduce((s, x) => s + Math.max(0, x.paid - x.gross_cents), 0);
+    if (pool <= 0) continue;
+    // Überschüsse an offene Rechnungen geben …
+    for (const x of inv) {
+      const open = x.gross_cents - x.paid;
+      if (open <= 0 || pool <= 0) continue;
+      const take = Math.min(open, pool);
+      credit.set(x.id, take); pool -= take;
+    }
+    // … und bei den überzahlten Rechnungen abziehen (älteste zuerst)
+    let given = inv.reduce((s, x) => s + (credit.get(x.id) ?? 0), 0);
+    for (const x of inv) {
+      const surplus = x.paid - x.gross_cents;
+      if (surplus <= 0 || given <= 0) continue;
+      const out = Math.min(surplus, given);
+      credit.set(x.id, -out); given -= out;
+    }
+  }
+  for (const r of rows) {
+    const c = credit.get(r.id);
+    if (!c) continue;
+    r.creditCents = c; r.paidCents += c; r.openCents -= c;
+  }
+  return rows;
 }
 
 async function paymentsWhere(db: Exec, where: SQL): Promise<PaymentDto[]> {
@@ -88,7 +131,7 @@ async function paymentsWhere(db: Exec, where: SQL): Promise<PaymentDto[]> {
 export async function getInvoice(db: Exec, id: string): Promise<InvoiceDto> {
   const [row] = await db.execute(sql`${LIST} where i.id = ${id}`);
   if (!row) throw notFound('Rechnung');
-  const base = toRow(row as Raw);
+  const base = (await applyCredits(db, [toRow(row as Raw)]))[0]!;
   const lines = (await db.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, id)).orderBy(asc(invoiceLines.pos)))
     .map((l) => ({ id: l.id, pos: l.pos, description: l.description, detail: l.detail, quantity: l.quantity, unitPriceCents: l.unitPriceCents, taxRatePercent: l.taxRatePercent, totalCents: l.totalCents }));
   return {
@@ -111,12 +154,10 @@ export async function bookingBilling(db: Exec, bookingId: string): Promise<Booki
 }
 
 export async function openSummary(db: Exec) {
-  const [r] = await db.execute(sql`
-    select count(*)::int as n, coalesce(sum(open), 0)::int as cents, count(*) filter (where due_date < ${todayBerlin()}::date)::int as overdue
-    from (select i.due_date, i.gross_cents - coalesce((select sum(p.amount_cents) from payments p where p.invoice_id = i.id), 0) as open
-          from invoices i where i.status = 'issued' and i.kind = 'invoice') x where open <> 0`);
-  const x = r as Raw;
-  return { count: x.n as number, cents: x.cents as number, overdue: x.overdue as number };
+  // nach Verrechnung innerhalb der Reservierung (siehe applyCredits)
+  const open = await listInvoices(db, { status: 'open' });
+  const today = todayBerlin();
+  return { count: open.length, cents: open.reduce((s, i) => s + i.openCents, 0), overdue: open.filter((i) => i.dueDate && i.dueDate < today).length };
 }
 
 /**
@@ -291,6 +332,19 @@ export async function issueInvoice(db: Db, actor: Actor, id: string, version: nu
     const lines = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, id));
     if (!lines.length) throw conflict('Die Rechnung hat keine Positionen');
     if (!inv.recipientName && !inv.recipientCompany) throw conflict('Bitte den Rechnungsempfänger angeben');
+    // Stimmt der Entwurf noch mit der Reservierung überein? (Nächte entfallen, Preise oder Leistungen geändert …)
+    const changed: string[] = [];
+    for (const l of lines) {
+      if (l.sourceKind === 'night' && l.sourceId && l.sourceFrom && l.sourceTo) {
+        const [n] = await tx.execute(sql`select count(*)::int as n, coalesce(sum(price_cents), 0)::int as cents from booking_room_nights
+          where booking_room_id = ${l.sourceId} and date >= ${l.sourceFrom}::date and date < ${l.sourceTo}::date`) as unknown as { n: number; cents: number }[];
+        if (n!.n !== Math.round(l.quantity) || n!.cents !== l.totalCents) changed.push(`${l.description} (${l.detail})`);
+      } else if (l.sourceKind === 'charge' && l.sourceId) {
+        const [c] = await tx.select({ q: charges.quantity, p: charges.unitPriceCents }).from(charges).where(eq(charges.id, l.sourceId));
+        if (!c || c.q !== l.quantity || c.p !== l.unitPriceCents) changed.push(l.description);
+      }
+    }
+    if (changed.length) throw conflict(`Die Reservierung wurde seit dem Anlegen dieses Entwurfs geändert: ${changed.join('; ')}. Bitte den Entwurf löschen und neu aus der Reservierung erstellen.`, 'stale_draft');
     const issuer = await issuerSnapshot(tx);
     const h = await getHotel(tx);
     const today = todayBerlin();
@@ -374,11 +428,19 @@ async function insertPayment(tx: Exec, actor: Actor, v: { bookingId: string | nu
   return p!.id;
 }
 
-export async function addPayment(db: Db, actor: Actor, v: PayIn) {
+/**
+ * Regeln je Benutzer: Mitarbeiter buchen immer genau den offenen Betrag (keine Teil-, Über- oder Minuszahlungen);
+ * nur der Administrator darf Teilbeträge (z. B. Teilüberweisung) und Minusbeträge (Erstattung) buchen.
+ */
+export interface PayRules { exact: boolean; allowNegative: boolean }
+export const ADMIN_RULES: PayRules = { exact: false, allowNegative: true };
+export const STAFF_RULES: PayRules = { exact: true, allowNegative: false };
+export async function addPayment(db: Db, actor: Actor, v: PayIn, rules: PayRules = ADMIN_RULES) {
+  if (v.amountCents < 0 && !rules.allowNegative) throw new AppError(403, 'forbidden', 'Erstattungen (Minusbeträge) darf nur der Administrator buchen.');
   if (v.date > todayBerlin()) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { date: 'Das Datum liegt in der Zukunft' });
   if (v.givenCents != null && v.givenCents < v.amountCents) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { givenCents: 'Der gegebene Betrag ist kleiner als der Zahlbetrag' });
   // Zahlung auf die Reservierung: wird zuerst auf offene Rechnungen verteilt, der Rest ist Anzahlung
-  if (!v.invoiceId && v.bookingId && v.amountCents > 0) return payBooking(db, actor, { ...v, bookingId: v.bookingId });
+  if (!v.invoiceId && v.bookingId && v.amountCents > 0) return payBooking(db, actor, { ...v, bookingId: v.bookingId }, rules);
   return db.transaction(async (tx) => {
     let bookingId = v.bookingId ?? null;
     if (v.invoiceId) {
@@ -387,9 +449,9 @@ export async function addPayment(db: Db, actor: Actor, v: PayIn) {
       if (inv.status !== 'issued' || inv.kind !== 'invoice') throw conflict('Zahlungen können nur auf ausgestellte, nicht stornierte Rechnungen gebucht werden');
       if (bookingId && inv.bookingId && bookingId !== inv.bookingId) throw conflict('Rechnung gehört zu einer anderen Reservierung');
       bookingId = inv.bookingId;
-      const [{ paid }] = (await tx.execute(sql`select coalesce(sum(amount_cents), 0)::int as paid from payments where invoice_id = ${v.invoiceId}`)) as unknown as [{ paid: number }];
-      const open = inv.grossCents - paid;
+      const open = (await getInvoice(tx, v.invoiceId)).openCents;
       if (v.amountCents > 0 && v.amountCents > open) throw conflict(open > 0 ? `Auf dieser Rechnung sind nur noch ${euro(open)} offen` : 'Diese Rechnung ist bereits vollständig bezahlt', 'overpay');
+      if (rules.exact && v.amountCents > 0 && v.amountCents !== open) throw conflict(`Bitte den vollen offenen Betrag von ${euro(open)} buchen. Teilzahlungen bucht nur der Administrator.`, 'partial');
     } else {
       const [b] = await tx.select({ id: bookings.id }).from(bookings).where(eq(bookings.id, bookingId!));
       if (!b) throw notFound('Reservierung');
@@ -403,7 +465,7 @@ export async function addPayment(db: Db, actor: Actor, v: PayIn) {
  * Zahlung zu einer Reservierung: Der Betrag wird auf die offenen Rechnungen der Reservierung verteilt (älteste zuerst),
  * ein Rest wird als Anzahlung gebucht und mit der nächsten Rechnung verrechnet. Mehr als der offene Gesamtbetrag ist nicht möglich.
  */
-export async function payBooking(db: Db, actor: Actor, v: PayIn & { bookingId: string }) {
+export async function payBooking(db: Db, actor: Actor, v: PayIn & { bookingId: string }, rules: PayRules = ADMIN_RULES) {
   return db.transaction(async (tx) => {
     const [locked] = await tx.execute(sql`select id from bookings where id = ${v.bookingId} for update`);
     if (!locked) throw notFound('Reservierung');
@@ -414,6 +476,7 @@ export async function payBooking(db: Db, actor: Actor, v: PayIn & { bookingId: s
     // offen ist, was auf Rechnungen noch fehlt, mindestens aber der Rest der Reservierung
     const remaining = Math.max(total - bill.paidCents, openInvoices.reduce((s, i) => s + i.openCents, 0));
     if (v.amountCents > remaining) throw conflict(remaining > 0 ? `Für diese Reservierung sind nur noch ${euro(remaining)} offen` : 'Für diese Reservierung ist nichts mehr offen', 'overpay');
+    if (rules.exact && v.amountCents !== remaining) throw conflict(`Bitte den vollen offenen Betrag von ${euro(remaining)} buchen. Teilzahlungen bucht nur der Administrator.`, 'partial');
     await refuseRepeat(tx, actor, { bookingId: v.bookingId, amountCents: v.amountCents, method: v.method });
     let rest = v.amountCents;
     let first: string | null = null;
