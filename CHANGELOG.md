@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.78.1
+
+- Restaurant: Der **Ausblick** (Gäste ohne Reservierung / Gäste gehen früher, Wetter, Fußball, Veranstaltungen) ist vorerst ausgeblendet. Es werden dafür auch keine Wetter- oder Fußballdaten mehr abgerufen. Die Funktion bleibt im Programm erhalten und kann später wieder eingeschaltet werden. Anzahlungen und alles andere im Restaurant bleiben unverändert.
+
 ## 1.78.0
 
 - Restaurant-Ausblick nach den Erfahrungen des Hauses:

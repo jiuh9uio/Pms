@@ -12,6 +12,8 @@ import { deDate } from '../hotel/common.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useToast } from '../ui.tsx';
 import { MasterDialog } from './RoomsPrices.tsx';
 import { OutlookCard } from './OutlookCard.tsx';
+
+const SHOW_OUTLOOK = false;
 import { DepositPanel } from '../billing/DepositPanel.tsx';
 import { DEPOSIT_STATE_LABEL, type DepositDto } from '../../../src/shared/deposits.js';
 
@@ -80,7 +82,8 @@ export function Restaurant() {
       <LoadState error={error} loading={!data} />
       {data && (
         <>
-          {date >= today && <OutlookCard date={date} />}
+          {/* Ausblick (Wetter/Fußball/Veranstaltungen) vorerst ausgeblendet – auf Wunsch des Hauses; Code bleibt für später erhalten */}
+          {SHOW_OUTLOOK && date >= today && <OutlookCard date={date} />}
           <h2 className="printhead">Tischreservierungen {weekday(date)}, {deDate(date)}</h2>
           {overdueDeps.length > 0 && <p className="notice warn noprint">{overdueDeps.length === 1 ? 'Eine angeforderte Anzahlung ist' : `${overdueDeps.length} angeforderte Anzahlungen sind`} überfällig – bitte die Reservierung öffnen („Ändern“) und den Eingang vermerken oder nachfragen.</p>}
           {data.tables.length === 0 && <p className="notice warn">Es sind noch keine Tische angelegt. Reservierungen sind trotzdem möglich – nur ohne Tischzuweisung. {isAdmin ? 'Tische lassen sich unten anlegen.' : 'Tische legt der Administrator an.'}</p>}
