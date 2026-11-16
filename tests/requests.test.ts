@@ -73,6 +73,17 @@ describe('Anfragen am Telefon (vorläufige Reservierungen)', () => {
     expect(free.map((r: { id: string }) => r.id)).toEqual([rooms[2]]);
   });
 
+  it('Zusage-E-Mail als Entwurf ändert nichts an der Anfrage', async () => {
+    const [row] = await ok('GET', '/bookings?status=tentative', user);
+    expect((await ok('GET', `/bookings/${row.bookingId}/mail`, user)).subject).toMatch(/^Ihre Anfrage/);
+    const draft = await ok('GET', `/bookings/${row.bookingId}/mail?as=confirmed`, user);
+    expect(draft.subject).toMatch(/^Reservierungsbestätigung/);
+    expect(draft.text).toMatch(/Wir bestätigen Ihnen/);
+    expect(draft.text).not.toMatch(/Vorläufig/);
+    expect((await ok('GET', '/bookings?status=tentative', user))).toHaveLength(1);
+    expect((await call('GET', `/bookings/${row.bookingId}/mail?as=anything`, user)).statusCode).toBe(400);
+  });
+
   it('nach dem Bestätigen ist die Anfrage nicht mehr offen', async () => {
     const [row] = await ok('GET', '/bookings?status=tentative', user);
     await ok('POST', `/booking-rooms/${row.id}/status`, user, { status: 'confirmed', version: row.version });

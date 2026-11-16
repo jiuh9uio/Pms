@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.73.1
+
+- Fehler behoben: Bei einer offenen Anfrage hat „Zusagen“ sofort fest gebucht – auch wenn man die E-Mail danach mit „Abbrechen“ geschlossen hat. Jetzt erscheint zuerst die Zusage-E-Mail (Text „Wir bestätigen Ihnen …“), und gebucht wird erst mit **„Zusagen und senden“** oder **„Ohne E-Mail zusagen“**. **„Abbrechen“ ändert nichts** – die Anfrage bleibt offen. Ohne E-Mail-Adresse des Gastes kommt wie bisher eine Rückfrage.
+- Klappt das Senden nach der Zusage nicht (z. B. Postfach nicht erreichbar), meldet das Programm „Zugesagt, aber die E-Mail wurde nicht gesendet“ und das Fenster bleibt zum erneuten Senden offen.
+
 ## 1.73.0
 
 - Meldeschein: Auf Wunsch steht neben dem WLAN-QR-Code ein zweiter QR-Code **„Ihre Buchung online“** mit dem persönlichen Gäste-Link (A4 und Bondrucker). Einschalten unter Einstellungen → Haus → Check-in & Meldeschein → „Persönlichen Gäste-Link als QR-Code aufdrucken“; der Text daneben ist änderbar.

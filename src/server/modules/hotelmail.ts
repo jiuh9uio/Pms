@@ -33,11 +33,12 @@ export function signature(h: Awaited<ReturnType<typeof getHotel>>) {
     .filter(Boolean).join('\n');
 }
 
-export async function bookingMailDraft(db: Exec, bookingId: string): Promise<MailDraft> {
+/** asConfirmed: Text einer Zusage, auch wenn die Zimmer noch vorläufig sind (Zusage wird erst beim Senden gebucht) */
+export async function bookingMailDraft(db: Exec, bookingId: string, asConfirmed = false): Promise<MailDraft> {
   const [b, h] = [await getBooking(db, bookingId), await getHotel(db)];
   const rooms = b.rooms.filter((r) => isActiveStatus(r.status));
   if (rooms.length === 0) throw conflict('Die Reservierung enthält kein aktives Zimmer – eine Bestätigung ist nicht möglich');
-  const tentative = rooms.some((r) => r.status === 'tentative');
+  const tentative = !asConfirmed && rooms.some((r) => r.status === 'tentative');
   const lines = rooms.map((r) =>
     `- ${r.categoryName} (Zimmer ${r.roomNumber}): ${de(r.from)} bis ${de(r.to)}, ${r.nights} ${r.nights === 1 ? 'Nacht' : 'Nächte'}, ` +
     `${r.adults} ${r.adults === 1 ? 'Erwachsener' : 'Erwachsene'}${r.children ? `, ${r.children} ${r.children === 1 ? 'Kind' : 'Kinder'}` : ''} – ${formatMoney(r.lodgingCents)}` +

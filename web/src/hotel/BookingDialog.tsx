@@ -94,7 +94,7 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
             </div>
           </section>
 
-          {request && b.rooms.some((r) => r.status === 'tentative') && <RequestPanel booking={b} onClose={() => setRequest(false)} onConfirmed={() => { setRequest(false); if (b.guest.email) setMail(true); }} />}
+          {request && b.rooms.some((r) => r.status === 'tentative') && <RequestPanel booking={b} onClose={() => setRequest(false)} />}
 
           <h3>Zimmer</h3>
           {b.rooms.map((r) => (
@@ -135,7 +135,7 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
 
 /** Offene Anfrage: Gast erreichen und entscheiden – Anrufen, E-Mail, Nachfrage vermerken (mit Option verlängern), Zusagen, Absagen. */
 const FOLLOW_UP = ['nicht erreicht', 'Nachricht hinterlassen', 'überlegt noch', 'ruft zurück', 'wartet auf Angebot'];
-function RequestPanel({ booking: b, onConfirmed, onClose }: { booking: BookingDto; onConfirmed: () => void; onClose: () => void }) {
+function RequestPanel({ booking: b, onClose }: { booking: BookingDto; onClose: () => void }) {
   const { bump } = useData();
   const { user } = useAuth();
   const toast = useToast();
@@ -149,14 +149,22 @@ function RequestPanel({ booking: b, onConfirmed, onClose }: { booking: BookingDt
   const phone = b.guest.phone.trim();
   const tel = phone.replace(/[^\d+]/g, '');
   const expired = !!b.optionUntil && b.optionUntil < today;
+  const [confirming, setConfirming] = useState(false);
+  /** alle noch vorläufigen Zimmer umstellen – frisch geladen, damit ein zweiter Versuch nichts doppelt macht */
+  const apply = async (status: 'confirmed' | 'cancelled') => {
+    const fresh = await api<BookingDto>('GET', `/bookings/${b.id}`);
+    for (const r of fresh.rooms.filter((x) => x.status === 'tentative')) await api('POST', `/booking-rooms/${r.id}/status`, { status, version: r.version });
+  };
   const all = async (status: 'confirmed' | 'cancelled', done: string) => {
     setBusy(status);
-    try {
-      for (const r of open) await api('POST', `/booking-rooms/${r.id}/status`, { status, version: r.version });
-      toast(done); bump();
-      if (status === 'confirmed') onConfirmed(); else onClose();
-    } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); bump(); }
+    try { await apply(status); toast(done); bump(); onClose(); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); bump(); }
     setBusy(null);
+  };
+  // Zusagen: mit E-Mail-Adresse erst die Zusage-E-Mail zeigen – gebucht wird erst beim Senden (oder „Ohne E-Mail zusagen“); Abbrechen ändert nichts
+  const confirm = () => {
+    if (b.guest.email) { setConfirming(true); return; }
+    if (window.confirm(`Anfrage ${b.number} zusagen? Die Zimmer werden fest gebucht.`)) void all('confirmed', `Zugesagt – Reservierung ${b.number} ist fest gebucht`);
   };
   const newOption = (() => {
     if (extend === '0') return undefined;
@@ -203,12 +211,16 @@ function RequestPanel({ booking: b, onConfirmed, onClose }: { booking: BookingDt
         </div>
       ) : (
         <div className="btnrow">
-          <Button variant="primary" busy={busy === 'confirmed'} disabled={!!busy} onClick={() => void all('confirmed', `Zugesagt – Reservierung ${b.number} ist fest gebucht`)}>✓ Zusagen (fest buchen)</Button>
+          <Button variant="primary" busy={busy === 'confirmed'} disabled={!!busy} onClick={confirm}>✓ Zusagen (fest buchen)</Button>
           <Button busy={busy === 'follow'} disabled={!!busy} onClick={() => setFollow(true)}>Nachfrage vermerken</Button>
           <Button variant="danger" busy={busy === 'cancelled'} disabled={!!busy} onClick={() => { if (window.confirm(`Anfrage ${b.number} absagen? Das Zimmer wird wieder frei.`)) void all('cancelled', `Anfrage ${b.number} abgesagt – Zimmer wieder frei`); }}>Absagen / Stornieren</Button>
         </div>
       )}
-      {!follow && <p className="muted small">Nach „Zusagen“ öffnet sich die Bestätigungs-E-Mail{b.guest.email ? '' : ' (nur wenn eine E-Mail-Adresse hinterlegt ist)'}. Eine Anfrage-Bestätigung („vorgemerkt“) gibt es unten über „Bestätigung per E-Mail“.</p>}
+      {!follow && <p className="muted small">{b.guest.email ? '„Zusagen“ zeigt zuerst die Bestätigungs-E-Mail – fest gebucht wird erst beim Senden oder mit „Ohne E-Mail zusagen“. „Abbrechen“ ändert nichts.' : 'Ohne E-Mail-Adresse wird nach einer Rückfrage direkt fest gebucht.'} Eine Anfrage-Bestätigung („vorgemerkt“) gibt es unten über „Bestätigung per E-Mail“.</p>}
+      {confirming && <MailDialog path={`/bookings/${b.id}/mail?as=confirmed`} title={`Zusage zu Anfrage ${b.number}`} sendLabel="Zusagen und senden"
+        intro={<p className="notice small">Die Anfrage wird erst fest gebucht, wenn Sie auf „Zusagen und senden“ oder „Ohne E-Mail zusagen“ drücken. „Abbrechen“ ändert nichts.</p>}
+        beforeSend={() => apply('confirmed')} onSent={() => { bump(); onClose(); }} onClose={() => setConfirming(false)}
+        extra={<Button busy={busy === 'confirmed'} onClick={() => { setConfirming(false); void all('confirmed', `Zugesagt – Reservierung ${b.number} ist fest gebucht (ohne E-Mail)`); }}>Ohne E-Mail zusagen</Button>} />}
     </section>
   );
 }

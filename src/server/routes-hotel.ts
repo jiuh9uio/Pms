@@ -205,7 +205,7 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
     const base = guestBaseUrl(req);
     return guestforms.createForm(db, actor(req), idOf(req), base.url, base.localOnly);
   });
-  api.get('/bookings/:id/mail', user, (req) => hotelmail.bookingMailDraft(db, idOf(req)));
+  api.get('/bookings/:id/mail', user, (req) => hotelmail.bookingMailDraft(db, idOf(req), z.object({ as: z.literal('confirmed').optional() }).parse(req.query).as === 'confirmed'));
   api.post('/bookings/:id/mail', user, async (req) => {
     await hotelmail.sendBookingMail(db, actor(req), idOf(req), H.mailSendInput.parse(req.body));
     return { ok: true };
