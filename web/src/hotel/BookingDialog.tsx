@@ -219,7 +219,7 @@ function RequestPanel({ booking: b, onClose }: { booking: BookingDto; onClose: (
       {!follow && <p className="muted small">{b.guest.email ? '„Zusagen“ zeigt zuerst die Bestätigungs-E-Mail – fest gebucht wird erst beim Senden oder mit „Ohne E-Mail zusagen“. „Abbrechen“ ändert nichts.' : 'Ohne E-Mail-Adresse wird nach einer Rückfrage direkt fest gebucht.'} Eine Anfrage-Bestätigung („vorgemerkt“) gibt es unten über „Bestätigung per E-Mail“.</p>}
       {confirming && <MailDialog path={`/bookings/${b.id}/mail?as=confirmed`} title={`Zusage zu Anfrage ${b.number}`} sendLabel="Zusagen und senden"
         intro={<p className="notice small">Die Anfrage wird erst fest gebucht, wenn Sie auf „Zusagen und senden“ oder „Ohne E-Mail zusagen“ drücken. „Abbrechen“ ändert nichts.</p>}
-        beforeSend={() => apply('confirmed')} onSent={() => { bump(); onClose(); }} onClose={() => setConfirming(false)}
+        beforeSend={() => apply('confirmed')} onSent={() => { bump(); onClose(); }} onClose={() => { setConfirming(false); bump(); }}
         extra={<Button busy={busy === 'confirmed'} onClick={() => { setConfirming(false); void all('confirmed', `Zugesagt – Reservierung ${b.number} ist fest gebucht (ohne E-Mail)`); }}>Ohne E-Mail zusagen</Button>} />}
     </section>
   );

@@ -16,7 +16,7 @@ export function MailDialog({ path, title, onClose, onSent, beforeSend, sendLabel
   const f = useSubmit(mailSendInput, async (d) => {
     if (beforeSend) await beforeSend();
     try { await api('POST', path, d); }
-    catch (e) { if (beforeSend) onSent?.(); throw new Error(`${beforeSend ? 'Zugesagt, aber die E-Mail wurde nicht gesendet: ' : ''}${e instanceof Error ? e.message : 'Fehler'}`); }
+    catch (e) { throw new Error(`${beforeSend ? 'Zugesagt, aber die E-Mail wurde nicht gesendet: ' : ''}${e instanceof Error ? e.message : 'Fehler'}`); }
     toast(`E-Mail an ${d.to} gesendet`);
     onSent?.();
     onClose();
