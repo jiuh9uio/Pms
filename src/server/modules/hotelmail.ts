@@ -23,7 +23,7 @@ export async function ready(db: Exec) {
   const s = await getMailSettings(db);
   return s.enabled && !!s.host && !!s.user && s.hasPassword;
 }
-function greeting(g: { salutation: string; lastName: string }) {
+export function greeting(g: { salutation: string; lastName: string }) {
   if (g.salutation === 'Herr') return `Sehr geehrter Herr ${g.lastName},`;
   if (g.salutation === 'Frau') return `Sehr geehrte Frau ${g.lastName},`;
   return 'Guten Tag,';

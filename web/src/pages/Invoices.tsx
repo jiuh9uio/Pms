@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { PAYMENT_METHODS_BILLING, type InvoiceListRow } from '../../../src/shared/billing.js';
+import { CHART_DEFAULTS, PAYMENT_METHODS_BILLING, accountingSettingsInput, type AccountingSettings, type InvoiceListRow } from '../../../src/shared/billing.js';
 import { formatMoney, todayBerlin } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
 import { InvoiceStatus } from '../billing/InvoiceDialog.tsx';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
-import { Button, LoadState, PageHeader, useLoad, useToast } from '../ui.tsx';
+import { Button, Dialog, Field, LoadState, PageHeader, useLoad, useToast } from '../ui.tsx';
+import { useAuth } from '../App.tsx';
 
 const STATUS: [string, string][] = [['archive', 'Alle Rechnungen'], ['open', 'Offen'], ['paid', 'Bezahlt'], ['cancelled', 'Storniert'], ['draft', 'Entwürfe']];
 
@@ -24,6 +25,8 @@ export function Invoices() {
   const sum = (k: 'grossCents' | 'paidCents' | 'openCents') => (data ?? []).filter((i) => i.status !== 'draft').reduce((s, i) => s + i[k], 0);
   const set = (patch: Partial<typeof f>) => setF({ ...f, ...patch });
   const [creating, setCreating] = useState(false);
+  const [accounts, setAccounts] = useState(false);
+  const { user } = useAuth();
   const free = async () => {
     if (creating) return;
     setCreating(true);
@@ -75,14 +78,53 @@ export function Invoices() {
       <p className="muted small">Ausgestellte Rechnungen lassen sich nicht ändern oder löschen; eine Korrektur erfolgt durch einen Stornobeleg (nur Administrator) und eine neue Rechnung. Das PDF wird beim Ausstellen gespeichert und danach unverändert ausgegeben. In den Summen zählen Stornobelege mit negativem Betrag.</p>
       <section className="card">
         <h2>Export für die Buchhaltung</h2>
-        <p className="muted">CSV-Dateien (Semikolon, deutsche Zahlen) mit allen ausgestellten Rechnungen und Stornobelegen inkl. Netto und Umsatzsteuer je Satz sowie allen Zahlungen. Ein DATEV-Format ist noch nicht enthalten.</p>
+        <p className="muted">CSV-Dateien (Semikolon, deutsche Zahlen) mit allen ausgestellten Rechnungen und Stornobelegen inkl. Netto und Umsatzsteuer je Satz sowie allen Zahlungen. Die <b>Buchungsliste</b> enthält dieselben Vorgänge als Buchungen mit Soll- und Haben-Konto (Konten einstellbar). Ein DATEV-Importformat ist noch nicht enthalten.</p>
         <div className="filters">
           <label className="inlinelabel">von <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
           <label className="inlinelabel">bis <input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
           <a className="btn" href={`/api/v1/invoices/export.csv?from=${from}&to=${to}`}>Rechnungen (CSV)</a>
           <a className="btn" href={`/api/v1/payments/export.csv?from=${from}&to=${to}`}>Zahlungen (CSV)</a>
+          <a className="btn primary" href={`/api/v1/accounting/export.csv?from=${from}&to=${to}`}>Buchungsliste für den Steuerberater (CSV)</a>
+          {user.role === 'admin' && <Button onClick={() => setAccounts(true)}>Konten einstellen</Button>}
         </div>
+        <p className="muted small">Die Konten sind ein Vorschlag (übliche Konten im SKR03 bzw. SKR04) und <b>nicht geprüft</b> – bitte mit dem Steuerberater abstimmen, bevor die Liste verwendet wird.</p>
+        {accounts && <AccountsDialog onClose={() => setAccounts(false)} />}
       </section>
     </>
+  );
+}
+
+const ACCT_FIELDS: [keyof Omit<AccountingSettings, 'chart' | 'revenue'>, string][] = [
+  ['receivables', 'Forderungen (Rechnungen an Gäste/Firmen)'], ['cash', 'Kasse (Bar)'], ['bank', 'Bank (Überweisung)'], ['card', 'Karte (EC/Kreditkarte, z. B. Geldtransit)'],
+  ['paypal', 'PayPal'], ['voucher', 'Gutschein'],
+];
+/** Kontenzuordnung für die Buchungsliste (Administrator). */
+function AccountsDialog({ onClose }: { onClose: () => void }) {
+  const toast = useToast();
+  const { data, error } = useLoad(() => api<AccountingSettings>('GET', '/settings/accounting'));
+  const [v, setV] = useState<AccountingSettings | null>(null);
+  const [busy, setBusy] = useState(false);
+  const cur = v ?? data ?? null;
+  if (!cur) return <Dialog title="Konten für die Buchungsliste" onClose={onClose}><LoadState error={error} loading /></Dialog>;
+  const save = async () => {
+    const p = accountingSettingsInput.safeParse(cur);
+    if (!p.success) { toast(p.error.issues[0]?.message ?? 'Bitte Eingaben prüfen', 'error'); return; }
+    setBusy(true);
+    try { await api('PUT', '/settings/accounting', p.data); toast('Konten gespeichert'); onClose(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+    setBusy(false);
+  };
+  return (
+    <Dialog title="Konten für die Buchungsliste" onClose={onClose} size="lg"
+      footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={busy} onClick={() => void save()}>Speichern</Button></>}>
+      <p className="notice warn small">Vorschläge ohne Gewähr – bitte jedes Konto mit dem Steuerberater abstimmen.</p>
+      <div className="formgrid">
+        <Field label="Kontenrahmen"><select value={cur.chart} onChange={(e) => { const c = e.target.value as AccountingSettings['chart']; setV(c === 'eigen' ? { ...cur, chart: c } : { ...CHART_DEFAULTS[c] }); }}>
+          <option value="SKR03">SKR03 (Vorschlag laden)</option><option value="SKR04">SKR04 (Vorschlag laden)</option><option value="eigen">eigene Konten</option></select></Field>
+        {ACCT_FIELDS.map(([k, label]) => <Field key={k} label={label}><input inputMode="numeric" value={cur[k]} onChange={(e) => setV({ ...cur, chart: 'eigen', [k]: e.target.value })} /></Field>)}
+        {Object.keys(cur.revenue).sort((a, b) => Number(a) - Number(b)).map((r) => (
+          <Field key={r} label={`Erlöse ${r} % USt`}><input inputMode="numeric" value={cur.revenue[r]} onChange={(e) => setV({ ...cur, chart: 'eigen', revenue: { ...cur.revenue, [r]: e.target.value } })} /></Field>
+        ))}
+      </div>
+    </Dialog>
   );
 }

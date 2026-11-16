@@ -33,6 +33,12 @@ export function registerBillingRoutes(api: FastifyInstance, { db, requireUser, r
     const q = range.parse(req.query);
     return csv(reply, `rechnungen_${q.from}_${q.to}.csv`, await billing.exportCsv(db, q.from, q.to));
   });
+  api.get('/accounting/export.csv', user, async (req, reply) => {
+    const q = z.object({ from: z.string().refine(isIsoDate), to: z.string().refine(isIsoDate) }).parse(req.query);
+    return csv(reply, `buchungsliste_${q.from}_${q.to}.csv`, await billing.exportBookingList(db, q.from, q.to));
+  });
+  api.get('/settings/accounting', user, () => billing.getAccounting(db));
+  api.put('/settings/accounting', admin, (req) => billing.saveAccounting(db, actor(req), B.accountingSettingsInput.parse(req.body)));
   api.get('/payments/export.csv', user, async (req, reply) => {
     const q = range.parse(req.query);
     return csv(reply, `zahlungen_${q.from}_${q.to}.csv`, await billing.exportPaymentsCsv(db, q.from, q.to));

@@ -23,6 +23,7 @@ import { buildApp } from './app.js';
 import { startBreakfastScheduler } from './modules/breakfast.js';
 import { startInboxScheduler } from './modules/inbox.js';
 import { startAutoCheckoutScheduler } from './modules/autocheckout.js';
+import { startRegistrationPurgeScheduler } from './modules/registrations.js';
 import { startPrearrivalScheduler } from './modules/prearrival.js';
 import { startRecurringScheduler } from './modules/team.js';
 import { startOutageMonitor } from './modules/network.js';
@@ -191,6 +192,7 @@ async function main() {
   startBreakfastScheduler(db);
   startInboxScheduler(db);
   startAutoCheckoutScheduler(db);
+  startRegistrationPurgeScheduler(db);
   startPrearrivalScheduler(db);
   startRecurringScheduler(db);
 

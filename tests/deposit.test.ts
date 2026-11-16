@@ -116,4 +116,21 @@ describe('Anzahlung bei Teilrechnungen', () => {
     expect(r.statusCode).toBe(409);
     expect(r.json().error.code).toBe('stale_draft');
   });
+
+  it('Buchungsliste für den Steuerberater: Rechnungen an Erlös je Steuersatz, Zahlungen an Forderung', async () => {
+    const res = await call('GET', `/accounting/export.csv?from=${addDays(today, -5)}&to=${addDays(today, 5)}`, user);
+    expect(res.statusCode).toBe(200);
+    const text = res.body.replace(/^﻿/, '');
+    const rows = text.split('\r\n').map((l) => l.split(';').map((c) => c.replace(/^"|"$/g, '')));
+    expect(rows[0]).toEqual(['Datum', 'Belegnummer', 'Art', 'Buchungstext', 'Betrag (brutto)', 'Soll-Konto', 'Haben-Konto', 'USt-Satz %']);
+    expect(rows.some((r) => r[2] === 'Rechnung' && r[5] === '1400' && r[6] === '8300' && r[7] === '7')).toBe(true);
+    expect(rows.some((r) => r[2] === 'Rechnung' && r[6] === '8400' && r[7] === '19')).toBe(true);
+    expect(rows.some((r) => r[2] === 'Zahlung' && r[5] === '1000' && r[6] === '1400')).toBe(true);
+    // eigene Konten (nur Administrator)
+    const acc = await ok('GET', '/settings/accounting', user);
+    expect((await call('PUT', '/settings/accounting', user, acc)).statusCode).toBe(403);
+    await ok('PUT', '/settings/accounting', admin, { ...acc, chart: 'eigen', cash: '1001' });
+    const again = (await call('GET', `/accounting/export.csv?from=${addDays(today, -5)}&to=${addDays(today, 5)}`, user)).body;
+    expect(again).toContain('"1001"');
+  });
 });

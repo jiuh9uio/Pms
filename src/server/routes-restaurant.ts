@@ -6,6 +6,8 @@ import type { Db } from './db/client.js';
 import type { Actor } from './modules/audit.js';
 import { printerReady } from './modules/breakfast.js';
 import * as outlook from './modules/outlook.js';
+import * as deposits from './modules/deposits.js';
+import { depositCreateInput, depositDraftQuery, depositPaidInput } from '../shared/deposits.js';
 import * as restaurant from './modules/restaurant.js';
 import { outlookEventInput, outlookSettingsInput } from '../shared/outlook.js';
 
@@ -30,6 +32,18 @@ export function registerRestaurantRoutes(api: FastifyInstance, { db, requireUser
     return restaurant.setStatus(db, actor(req), idOf(req), v.status, v.version);
   });
 
+  // Anzahlung für Tischreservierungen (Eingang wird von Hand vermerkt)
+  api.get('/restaurant/reservations/:id/deposits', user, (req) => deposits.listFor(db, 'table', idOf(req)));
+  api.get('/restaurant/reservations/:id/deposits/draft', user, (req) => { const q = depositDraftQuery.parse(req.query); return deposits.draft(db, 'table', idOf(req), q.amountCents, q.dueDate); });
+  api.post('/restaurant/reservations/:id/deposits', user, (req) => deposits.create(db, actor(req), 'table', idOf(req), depositCreateInput.parse(req.body)));
+  api.post('/restaurant/deposits/:id/paid', user, (req) => deposits.markPaid(db, actor(req), idOf(req), depositPaidInput.parse(req.body).note));
+  api.post('/restaurant/deposits/:id/cancel', user, (req) => deposits.cancel(db, actor(req), idOf(req)));
+  api.get('/restaurant/deposits', user, async (req) => {
+    const d = z.object({ date: z.string().refine(isIsoDate) }).parse(req.query).date;
+    const ids = (await restaurant.listReservations(db, d)).map((r) => r.id);
+    return deposits.forTables(db, ids);
+  });
+  api.get('/restaurant/deposits/overdue', user, () => deposits.overdue(db, 'table'));
   // Ausblick: Gäste ohne Reservierung / früher gehen (Wetter, Fußball, Feiertage, eigene Einträge)
   api.get('/restaurant/outlook', user, (req) => outlook.outlook(db, z.object({ date: z.string().refine(isIsoDate) }).parse(req.query).date));
   api.get('/restaurant/outlook/settings', user, () => outlook.getOutlookSettings(db));

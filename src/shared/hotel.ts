@@ -178,7 +178,7 @@ export interface CalendarEntry {
   blockId?: string; reason?: string;
 }
 export interface CalendarDto { from: string; days: number; rooms: RoomDto[]; entries: CalendarEntry[] }
-export interface TaskDto { kind: 'arrival' | 'departure' | 'overdue_arrival' | 'overdue_departure' | 'tentative' | 'cleaning' | 'option'; text: string; bookingId: string; bookingRoomId: string }
+export interface TaskDto { kind: 'arrival' | 'departure' | 'overdue_arrival' | 'overdue_departure' | 'tentative' | 'cleaning' | 'option' | 'deposit'; text: string; bookingId: string; bookingRoomId: string }
 export interface HousekeepingRow { roomId: string; number: string; categoryName: string; arrivalToday: string | null; occupied: boolean }
 export interface DashboardDto {
   today: string; rooms: { total: number; occupied: number; free: number; blocked: number; occupancyPercent: number };
@@ -422,6 +422,8 @@ export interface RegistrationRow {
   missing: string[];
   /** Aufbewahrung: ein Jahr ab Anreise, danach innerhalb von drei Monaten vernichten (§ 30 Abs. 4 BMG – bitte selbst prüfen) */
   keepUntil: string; destroyBy: string;
+  /** Frist abgelaufen und Meldeschein-Angaben (Geburtsdatum, Staatsangehörigkeit, Ausweis) bereits gelöscht */
+  purged: boolean;
 }
 export const registrationQuery = z.object({
   from: z.string().refine(isIsoDate, 'Bitte ein Datum wählen').optional(),

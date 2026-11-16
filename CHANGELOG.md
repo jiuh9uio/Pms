@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.77.0
+
+- **Anzahlung anfordern – Hotel:** In der Reservierung unter „Rechnungen und Zahlungen“ → „Anzahlung anfordern“: Betrag (Vorschlag 30 %), Frist, dann erscheint die E-Mail mit Bankverbindung und Verwendungszweck zum Prüfen. „Anfordern und senden“ oder „Nur vermerken (ohne E-Mail)“; „Abbrechen“ ändert nichts. Stand je Anzahlung: offen / überfällig / eingegangen. Eingang = Zahlung buchen über „Anzahlung buchen“ (das dürfen auch Mitarbeiter, genau in Höhe der angeforderten Anzahlung). Überfällige Anzahlungen stehen als Aufgabe in der Übersicht.
+- **Anzahlung anfordern – Restaurant:** Bei einer Tischreservierung („Ändern“) → „Anzahlung anfordern“ (E-Mail-Adresse eintragen). Das Programm kassiert hier nicht: Eingang wie gewohnt in der Kasse buchen und hier „Eingang vermerken“. In der Tagesliste steht der Stand an der Reservierung; überfällige Anzahlungen werden oben angezeigt.
+- **Meldescheine automatisch löschen:** Ein Jahr nach der Anreise löscht das Programm Geburtsdatum, Staatsangehörigkeit und Ausweisnummer aus dem Gästeprofil (nur wenn der Gast inzwischen nicht wieder da war und keine Reservierung offen hat). Name und Anschrift bleiben für Rechnungen. Alte Protokolleinträge mit diesen Angaben werden anonymisiert. Im Meldeschein-Archiv steht dann „Angaben gelöscht“; der Administrator kann es dort aus- und einschalten. Papier-Meldescheine bitte weiterhin selbst vernichten.
+- **Buchungsliste für den Steuerberater** (Rechnungen → Export): Rechnungen je Steuersatz (Forderung an Erlös) und Zahlungen (Kasse/Bank/Karte an Forderung) mit Soll- und Haben-Konto. Konten einstellbar (Vorschlag SKR03 oder SKR04) – ungeprüft, bitte mit dem Steuerberater abstimmen. Ein DATEV-Importformat ist noch nicht enthalten.
+
 ## 1.76.0
 
 Korrekturen bei Rechnungen, Zahlungen, Löschen und TSE (aus der Logik-Durchsicht, freigegeben):

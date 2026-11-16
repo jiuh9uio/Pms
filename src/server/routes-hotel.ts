@@ -14,6 +14,8 @@ import { importKundenDat } from './modules/legacyimport.js';
 import { manualCleanInput } from '../shared/team.js';
 import * as lookup from './modules/lookup.js';
 import * as guestlink from './modules/guestlink.js';
+import * as deposits from './modules/deposits.js';
+import { depositCreateInput, depositDraftQuery } from '../shared/deposits.js';
 import * as stats from './modules/stats.js';
 import * as prearrival from './modules/prearrival.js';
 import { cleanList, dayReport } from './modules/team.js';
@@ -143,6 +145,8 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   // ---------- Check-in-Blatt (Meldeschein mit WLAN und Hausinformationen) ----------
   api.get('/checkin-sheet', user, () => checkinSheet.checkinSheetForPrint(db));
   api.get('/registrations', user, (req) => registrations.listRegistrations(db, H.registrationQuery.parse(req.query)));
+  api.get('/registrations/purge', user, () => registrations.getRegistrationPurge(db));
+  api.put('/registrations/purge', admin, (req) => registrations.setRegistrationPurge(db, actor(req), z.object({ enabled: z.boolean() }).parse(req.body).enabled));
   api.post('/bookings/:id/registration/bon', user, (req) => checkinSheet.printCheckinBon(db, actor(req), idOf(req), guestBaseUrl(req)));
   api.get('/settings/checkin-sheet', admin, () => checkinSheet.getCheckinSheet(db));
   api.put('/settings/checkin-sheet', admin, (req) => checkinSheet.saveCheckinSheet(db, actor(req), H.checkinSheetInput.parse(req.body)));
@@ -205,6 +209,11 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
     const base = guestBaseUrl(req);
     return guestforms.createForm(db, actor(req), idOf(req), base.url, base.localOnly);
   });
+  // Anzahlung anfordern
+  api.get('/bookings/:id/deposits', user, (req) => deposits.listFor(db, 'booking', idOf(req)));
+  api.get('/bookings/:id/deposits/draft', user, (req) => { const q = depositDraftQuery.parse(req.query); return deposits.draft(db, 'booking', idOf(req), q.amountCents, q.dueDate); });
+  api.post('/bookings/:id/deposits', user, (req) => deposits.create(db, actor(req), 'booking', idOf(req), depositCreateInput.parse(req.body)));
+  api.post('/deposits/:id/cancel', user, (req) => deposits.cancel(db, actor(req), idOf(req)));
   api.get('/bookings/:id/mail', user, (req) => {
     const q = z.object({ as: z.enum(['confirmed', 'declined', 'cancelled', 'question']).optional(), rooms: z.string().max(2000).optional() }).parse(req.query);
     const ids = (q.rooms ?? '').split(',').filter((x) => /^[0-9a-f-]{36}$/.test(x));

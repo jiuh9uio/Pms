@@ -12,6 +12,8 @@ import { deDate } from '../hotel/common.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useToast } from '../ui.tsx';
 import { MasterDialog } from './RoomsPrices.tsx';
 import { OutlookCard } from './OutlookCard.tsx';
+import { DepositPanel } from '../billing/DepositPanel.tsx';
+import { DEPOSIT_STATE_LABEL, type DepositDto } from '../../../src/shared/deposits.js';
 
 const TONE: Record<TableStatus, 'accent' | 'ok' | 'neutral' | 'danger' | 'warn'> = { booked: 'accent', seated: 'ok', done: 'neutral', cancelled: 'danger', no_show: 'warn' };
 const WEEKDAY = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
@@ -36,6 +38,8 @@ export function Restaurant() {
     return { tables, list };
   }, [date, rev]);
   const printer = useLoad(() => api<{ ready: boolean }>('GET', '/restaurant/printer')).data;
+  const deps = useLoad(() => api<DepositDto[]>('GET', `/restaurant/deposits?date=${date}`), [date, rev]).data ?? [];
+  const overdueDeps = useLoad(() => api<DepositDto[]>('GET', '/restaurant/deposits/overdue'), [rev]).data ?? [];
   const [sending, setSending] = useState(false);
   const sendKitchen = async () => {
     setSending(true);
@@ -78,6 +82,7 @@ export function Restaurant() {
         <>
           {date >= today && <OutlookCard date={date} />}
           <h2 className="printhead">Tischreservierungen {weekday(date)}, {deDate(date)}</h2>
+          {overdueDeps.length > 0 && <p className="notice warn noprint">{overdueDeps.length === 1 ? 'Eine angeforderte Anzahlung ist' : `${overdueDeps.length} angeforderte Anzahlungen sind`} überfällig – bitte die Reservierung öffnen („Ändern“) und den Eingang vermerken oder nachfragen.</p>}
           {data.tables.length === 0 && <p className="notice warn">Es sind noch keine Tische angelegt. Reservierungen sind trotzdem möglich – nur ohne Tischzuweisung. {isAdmin ? 'Tische lassen sich unten anlegen.' : 'Tische legt der Administrator an.'}</p>}
           <p className="muted">{active.length} {active.length === 1 ? 'Reservierung' : 'Reservierungen'} · {active.reduce((s, r) => s + r.persons, 0)} Personen{active.some((r) => !r.tableId) ? ` · ${active.filter((r) => !r.tableId).length} ohne Tisch` : ''}</p>
           {data.list.length === 0 ? <p className="card printable">Für diesen Tag ist nichts reserviert.</p> : (
@@ -86,7 +91,8 @@ export function Restaurant() {
               <tbody>{data.list.map((r) => (
                 <tr key={r.id} className={holdsTable(r.status) || r.status === 'done' ? undefined : 'faded'}>
                   <td className="strong nowrap">{r.time}<small className="muted"> – {endTime(r.time, r.durationMin)}</small></td>
-                  <td>{r.name}{r.phone && <><br /><small>{r.phone}</small></>}{r.note && <><br /><small className="muted">{r.note}</small></>}</td>
+                  <td>{r.name}{r.phone && <><br /><small>{r.phone}</small></>}{r.note && <><br /><small className="muted">{r.note}</small></>}
+                    {deps.filter((d) => d.refId === r.id).map((d) => <span key={d.id}><br /><Badge tone={d.state === 'paid' ? 'ok' : d.state === 'overdue' ? 'danger' : 'accent'}>Anzahlung {(d.amountCents / 100).toFixed(2).replace('.', ',')} € {DEPOSIT_STATE_LABEL[d.state]}</Badge></span>)}</td>
                   <td className="num">{r.persons}</td>
                   <td>{r.tableName ?? <span className="muted">offen</span>}</td>
                   <td><Badge tone={TONE[r.status]}>{TABLE_STATUS_LABEL[r.status]}</Badge></td>
@@ -162,6 +168,7 @@ function ReservationDialog({ date, tables, list, res, onClose }: { date: string;
         {input('note', 'Bemerkung', { wide: true, hint: 'z. B. Kinderstuhl, Allergie, Geburtstag' })}
         <button type="submit" hidden />
       </form>
+      {res && <><h3>Anzahlung</h3><DepositPanel kind="table" refId={res.id} base={`/restaurant/reservations/${res.id}`} suggestCents={0} latestDue={res.date} /></>}
     </Dialog>
   );
 }

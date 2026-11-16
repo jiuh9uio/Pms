@@ -21,7 +21,7 @@ export async function listRegistrations(db: Exec, f: { from?: string; to?: strin
   const today = todayBerlin();
   const q = f.q ? `%${f.q}%` : null;
   const rows = await db.execute(sql`
-    select b.id, b.number, g.first_name, g.last_name, g.birthdate::text as birthdate, g.nationality, g.street, g.zip, g.city, g.country,
+    select b.id, b.number, g.first_name, g.last_name, g.birthdate::text as birthdate, g.nationality, g.id_number, g.street, g.zip, g.city, g.country,
       min(lower(a.period))::text as "from", max(upper(a.period))::text as "to", min(br.checked_in_at) as checked_in_at,
       string_agg(distinct r.number, ', ' order by r.number) as rooms, sum(br.adults + br.children)::int as persons,
       max(gf.submitted_at) as online_at
@@ -52,6 +52,79 @@ export async function listRegistrations(db: Exec, f: { from?: string; to?: strin
       rooms: String(r.rooms ?? ''), from, to: String(r.to), checkedInAt: new Date(r.checked_in_at as string).toISOString(), persons: Number(r.persons ?? 0),
       onlineAt: r.online_at ? new Date(r.online_at as string).toISOString() : null, missing,
       keepUntil, destroyBy: addMonths(keepUntil, 3),
+      purged: keepUntil < today && !r.birthdate && !r.nationality && !r.id_number,
     };
   });
+}
+
+// ---------- Automatisch löschen nach Ablauf der Aufbewahrungsfrist ----------
+import { eq as eqOp } from 'drizzle-orm';
+import type { Db } from '../db/client.js';
+import { settings as settingsTable } from '../db/schema.js';
+import { record, type Actor } from './audit.js';
+
+export interface RegistrationPurge { enabled: boolean; lastRun: string | null; lastGuests: number }
+const PKEY = 'registration_purge';
+const SYSTEM: Actor = { userId: null, userName: 'Automatisch (Meldeschein-Frist)', ip: null };
+export async function getRegistrationPurge(db: Exec): Promise<RegistrationPurge> {
+  const [row] = await db.select().from(settingsTable).where(eqOp(settingsTable.key, PKEY));
+  return { enabled: true, lastRun: null, lastGuests: 0, ...((row?.value as Partial<RegistrationPurge>) ?? {}) };
+}
+async function putPurge(db: Exec, v: RegistrationPurge) {
+  await db.insert(settingsTable).values({ key: PKEY, value: v }).onConflictDoUpdate({ target: settingsTable.key, set: { value: v, updatedAt: new Date() } });
+}
+export async function setRegistrationPurge(db: Db, actor: Actor, enabled: boolean) {
+  const cur = await getRegistrationPurge(db);
+  await putPurge(db, { ...cur, enabled });
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: PKEY, after: { enabled } });
+  return { ...cur, enabled };
+}
+
+/**
+ * Meldeschein-Angaben löschen, deren Aufbewahrungsfrist (ein Jahr ab Anreise) abgelaufen ist: Geburtsdatum,
+ * Staatsangehörigkeit und Ausweisnummer im Gästeprofil – nur bei Gästen ohne laufende/künftige Reservierung und ohne
+ * Anreise innerhalb des letzten Jahres. Name und Anschrift bleiben (Rechnungen, Reservierungen). In älteren
+ * Protokolleinträgen dieser Gäste, die solche Angaben enthalten, wird der Inhalt anonymisiert (wie beim Anonymisieren).
+ * Ein Meldeschein auf Papier muss weiterhin von Hand vernichtet werden.
+ */
+export async function purgeExpiredRegistrations(db: Db, now = new Date()): Promise<{ guests: number }> {
+  const cfg = await getRegistrationPurge(db);
+  if (!cfg.enabled) return { guests: 0 };
+  const today = now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
+  const limit = addYears(today, -1);
+  const ids = (await db.execute(sql`
+    select g.id from guests g
+    where (g.birthdate is not null or g.nationality <> '' or g.id_number <> '')
+      and exists (select 1 from bookings b join booking_rooms br on br.booking_id = b.id where b.guest_id = g.id and br.checked_in_at is not null)
+      and not exists (select 1 from bookings b join booking_rooms br on br.booking_id = b.id where b.guest_id = g.id and br.status in ('tentative', 'confirmed', 'checked_in'))
+      and not exists (select 1 from bookings b join booking_rooms br on br.booking_id = b.id join room_allocations a on a.id = br.allocation_id
+        where b.guest_id = g.id and br.checked_in_at is not null and lower(a.period) >= ${limit}::date)
+    limit 500`) as unknown as { id: string }[]).map((r) => r.id);
+  if (ids.length) {
+    await db.transaction(async (tx) => {
+      for (const id of ids) {
+        await tx.execute(sql`update guests set birthdate = null, nationality = '', id_number = '', version = version + 1, updated_at = now() where id = ${id}`);
+        // nur Protokolleinträge mit Meldeschein-Angaben, die älter als ein Jahr sind
+        await tx.execute(sql`select set_config('pms.audit_scrub', ${id}, true)`);
+        await tx.execute(sql`update audit_log set
+            before = case when before is null then null else '{"anonymisiert": true}'::jsonb end,
+            after = case when after is null then null else '{"anonymisiert": true}'::jsonb end
+          where entity = 'guest' and entity_id = ${id} and at < ${limit}::date
+            and (coalesce(before->>'birthdate', '') <> '' or coalesce(after->>'birthdate', '') <> '' or coalesce(before->>'idNumber', '') <> '' or coalesce(after->>'idNumber', '') <> ''
+              or coalesce(before->>'nationality', '') <> '' or coalesce(after->>'nationality', '') <> '')`);
+        await tx.execute(sql`select set_config('pms.audit_scrub', '', true)`);
+      }
+      await record(tx, SYSTEM, { action: 'purge_registrations', entity: 'guest', after: { gaeste: ids.length, frist: limit } });
+    });
+  }
+  // abgelaufene Links zum Online-Meldeschein (enthalten keine Gästedaten) aufräumen
+  await db.execute(sql`delete from guest_forms gf using bookings b join booking_rooms br on br.booking_id = b.id join room_allocations a on a.id = br.allocation_id
+    where gf.booking_id = b.id and upper(a.period) < ${limit}::date`);
+  await putPurge(db, { ...cfg, lastRun: now.toISOString(), lastGuests: ids.length });
+  return { guests: ids.length };
+}
+export function startRegistrationPurgeScheduler(db: Db) {
+  const run = () => void purgeExpiredRegistrations(db).catch((e) => console.error('Meldescheine löschen:', e instanceof Error ? e.message : e));
+  setTimeout(run, 60_000).unref();
+  setInterval(run, 6 * 3600_000).unref();
 }

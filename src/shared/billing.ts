@@ -115,3 +115,21 @@ export interface AccountingSlipDto {
   invoices: { number: string; kind: 'invoice' | 'cancellation'; issueDate: string | null; grossCents: number; status: string; taxes: { rate: number; netCents: number; taxCents: number; grossCents: number }[] }[];
   totalCents: number; paidCents: number; openCents: number;
 }
+
+// ---------- Buchungsliste für den Steuerberater (Vorbereitung) ----------
+/**
+ * Kontenzuordnung für die Buchungsliste. Die Vorschläge sind die üblichen Konten im SKR03 – sie sind NICHT geprüft
+ * und müssen mit dem Steuerberater abgestimmt werden. Ein DATEV-Importformat ist bewusst (noch) nicht enthalten.
+ */
+const acct = z.string().trim().regex(/^\d{0,9}$/, 'Nur Ziffern');
+export const accountingSettingsInput = z.object({
+  chart: z.enum(['SKR03', 'SKR04', 'eigen']).default('SKR03'),
+  receivables: acct, cash: acct, bank: acct, card: acct, paypal: acct, voucher: acct,
+  /** Erlöskonto je Steuersatz (in %, als Text-Schlüssel, z. B. „7“, „19“, „0“) */
+  revenue: z.record(z.string().regex(/^\d{1,2}(\.\d{1,2})?$/), acct),
+});
+export type AccountingSettings = z.infer<typeof accountingSettingsInput>;
+export const CHART_DEFAULTS: Record<'SKR03' | 'SKR04', AccountingSettings> = {
+  SKR03: { chart: 'SKR03', receivables: '1400', cash: '1000', bank: '1200', card: '1360', paypal: '1360', voucher: '', revenue: { '7': '8300', '19': '8400', '0': '8100' } },
+  SKR04: { chart: 'SKR04', receivables: '1200', cash: '1600', bank: '1800', card: '1460', paypal: '1460', voucher: '', revenue: { '7': '4300', '19': '4400', '0': '4100' } },
+};

@@ -476,7 +476,9 @@ export async function payBooking(db: Db, actor: Actor, v: PayIn & { bookingId: s
     // offen ist, was auf Rechnungen noch fehlt, mindestens aber der Rest der Reservierung
     const remaining = Math.max(total - bill.paidCents, openInvoices.reduce((s, i) => s + i.openCents, 0));
     if (v.amountCents > remaining) throw conflict(remaining > 0 ? `Für diese Reservierung sind nur noch ${euro(remaining)} offen` : 'Für diese Reservierung ist nichts mehr offen', 'overpay');
-    if (rules.exact && v.amountCents !== remaining) throw conflict(`Bitte den vollen offenen Betrag von ${euro(remaining)} buchen. Teilzahlungen bucht nur der Administrator.`, 'partial');
+    const { openBookingDeposit } = await import('./deposits.js');
+    const depositOpen = rules.exact ? await openBookingDeposit(tx, v.bookingId) : 0;
+    if (rules.exact && v.amountCents !== remaining && !(depositOpen > 0 && v.amountCents === depositOpen)) throw conflict(`Bitte den vollen offenen Betrag von ${euro(remaining)} buchen. Teilzahlungen bucht nur der Administrator.`, 'partial');
     await refuseRepeat(tx, actor, { bookingId: v.bookingId, amountCents: v.amountCents, method: v.method });
     let rest = v.amountCents;
     let first: string | null = null;
@@ -626,4 +628,49 @@ export async function setInvoiceNumber(db: Db, actor: Actor, v: { year: number; 
     await record(tx, actor, { action: 'update', entity: 'settings', entityId: 'invoice_number', before: { year: v.year, next: last + 1 }, after: v });
     return invoiceNumberState(tx, v.year);
   });
+}
+
+// ---------- Buchungsliste für den Steuerberater ----------
+import { CHART_DEFAULTS, type AccountingSettings } from '../../shared/billing.js';
+export async function getAccounting(db: Exec): Promise<AccountingSettings> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'accounting_export'));
+  return { ...CHART_DEFAULTS.SKR03, ...((row?.value as Partial<AccountingSettings>) ?? {}) };
+}
+export async function saveAccounting(db: Db, actor: Actor, v: AccountingSettings) {
+  await db.insert(settings).values({ key: 'accounting_export', value: v }).onConflictDoUpdate({ target: settings.key, set: { value: v, updatedAt: new Date() } });
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: 'accounting_export', after: v });
+  return v;
+}
+/**
+ * Buchungsliste: je Rechnung/Stornobeleg und Steuersatz eine Zeile (Forderung an Erlös), je Zahlung eine Zeile
+ * (Kasse/Bank/… an Forderung). Beträge brutto; Stornobelege mit negativem Betrag. Konten laut Einstellung – ungeprüfter Vorschlag.
+ */
+export async function exportBookingList(db: Exec, from: string, to: string) {
+  const a = await getAccounting(db);
+  const inv = (await listInvoices(db, { from, to })).filter((i) => i.status !== 'draft').reverse();
+  const ids = inv.map((r) => r.id);
+  const lines = ids.length ? await db.select().from(invoiceLines).where(sql`${invoiceLines.invoiceId} in ${ids}`) : [];
+  const pays = await paymentsWhere(db, sql`p.date >= ${from}::date and p.date <= ${to}::date`);
+  const eur = (c: number) => (c / 100).toFixed(2).replace('.', ',');
+  const cell = (v: string) => { let s = v; if (/^[=+\-@\t\r]/.test(s) && !/^-?\d/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; };
+  const rateKey = (r: number) => String(r).replace(/\.0+$/, '');
+  const revenue = (r: number) => a.revenue[rateKey(r)] ?? '';
+  const methodAcct = (m: string) => ({ Bar: a.cash, Karte: a.card, 'Überweisung': a.bank, PayPal: a.paypal, Gutschein: a.voucher } as Record<string, string>)[m] ?? '';
+  type Row = { date: string; doc: string; text: string; cents: number; debit: string; credit: string; rate: string; kind: string };
+  const rows: Row[] = [];
+  for (const i of inv) {
+    if (!i.issueDate) continue;
+    const who = [i.recipientCompany, i.recipientName].filter(Boolean).join(', ');
+    for (const t of taxBreakdown(lines.filter((l) => l.invoiceId === i.id)))
+      rows.push({ date: i.issueDate, doc: i.number ?? '', text: `${i.kind === 'cancellation' ? `Storno zu ${i.cancelsNumber ?? ''}` : 'Rechnung'} ${who}`.trim(), cents: t.netCents + t.taxCents,
+        debit: a.receivables, credit: revenue(t.rate), rate: String(t.rate).replace('.', ','), kind: i.kind === 'cancellation' ? 'Stornobeleg' : 'Rechnung' });
+  }
+  for (const p of pays) {
+    rows.push({ date: p.date, doc: p.invoiceNumber ?? '', text: `Zahlung ${p.method}${p.invoiceNumber ? '' : ' (Anzahlung ohne Rechnung)'}${p.payer ? ` – ${p.payer}` : ''}${p.reversesId ? ' – Gegenbuchung' : ''}`,
+      cents: p.amountCents, debit: methodAcct(p.method), credit: a.receivables, rate: '', kind: 'Zahlung' });
+  }
+  rows.sort((x, y) => x.date.localeCompare(y.date) || x.kind.localeCompare(y.kind));
+  const head = ['Datum', 'Belegnummer', 'Art', 'Buchungstext', 'Betrag (brutto)', 'Soll-Konto', 'Haben-Konto', 'USt-Satz %'];
+  const body = rows.map((r) => [de(r.date), r.doc, r.kind, r.text, eur(r.cents), r.debit, r.credit, r.rate].map(cell).join(';'));
+  return '﻿' + [head.map(cell).join(';'), ...body].join('\r\n');
 }

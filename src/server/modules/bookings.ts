@@ -422,8 +422,16 @@ export async function dashboard(db: Exec): Promise<DashboardDto> {
     text: `Option ${(o.until as string) < today ? `abgelaufen seit ${de(o.until as string)}` : 'läuft heute ab'}: ${o.guest}, Anreise ${de(o.from as string)}${Number(o.rooms) > 1 ? `, ${o.rooms} Zimmer` : ''} – bestätigen oder stornieren`,
   }));
   const withOption = new Set(options.map((o) => o.bookingId));
+  // angeforderte Anzahlungen, deren Frist abgelaufen ist (noch nicht eingegangen)
+  const { overdue: overdueDeposits } = await import('./deposits.js');
+  const depositTasks: TaskDto[] = [];
+  for (const d of await overdueDeposits(db, 'booking')) {
+    const [b] = await db.execute(sql`select b.number, trim(g.first_name || ' ' || g.last_name) as guest from bookings b join guests g on g.id = b.guest_id where b.id = ${d.refId}`) as unknown as { number: string; guest: string }[];
+    if (b) depositTasks.push({ kind: 'deposit', bookingId: d.refId, bookingRoomId: d.id, text: `Anzahlung überfällig seit ${de(d.dueDate)}: ${b.guest} (${b.number}), ${(d.amountCents / 100).toFixed(2).replace('.', ',')} €` });
+  }
   const tasks: TaskDto[] = [
     ...options,
+    ...depositTasks,
     ...overdueDep.map((r) => task('overdue_departure', r, `Abreise überfällig: ${r.guestName}, Zimmer ${r.roomNumber} (geplant ${de(r.to)})`)),
     ...overdueArr.map((r) => task('overdue_arrival', r, `Nicht angereist seit ${de(r.from)}: ${r.guestName}, Zimmer ${r.roomNumber} – einchecken oder als nicht angereist markieren`)),
     ...departures.map((r) => task('departure', r, `Check-out: ${r.guestName}, Zimmer ${r.roomNumber}`)),
