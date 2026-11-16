@@ -20,7 +20,7 @@ const ROOM_SELECT = sql`
     lower(a.period)::text as "from", upper(a.period)::text as "to", br.status, br.adults, br.children, br.price_manual, br.version,
     br.checked_in_at, br.checked_out_at,
     coalesce((select sum(n.price_cents) from booking_room_nights n where n.booking_room_id = br.id), 0)::int as lodging_cents,
-    b.number, b.guest_id, b.group_name, b.source, trim(g.first_name || ' ' || g.last_name) as guest_name,
+    b.number, b.guest_id, b.group_name, b.source, b.notes, b.option_until::text as option_until, trim(g.first_name || ' ' || g.last_name) as guest_name,
     (select count(*) from booking_rooms x where x.booking_id = b.id)::int as room_count
   from booking_rooms br
     join room_allocations a on a.id = br.allocation_id
@@ -35,7 +35,7 @@ const toRow = (x: Raw): BookingListRow => ({
   status: x.status as RoomStatus, adults: x.adults as number, children: x.children as number, priceManual: x.price_manual as boolean,
   lodgingCents: x.lodging_cents as number, version: x.version as number, checkedInAt: iso(x.checked_in_at), checkedOutAt: iso(x.checked_out_at),
   number: x.number as string, guestId: x.guest_id as string, guestName: x.guest_name as string, groupName: x.group_name as string,
-  source: x.source as string, roomCount: x.room_count as number,
+  source: x.source as string, roomCount: x.room_count as number, notes: (x.notes as string) ?? '', optionUntil: (x.option_until as string) ?? null,
 });
 
 export async function selectRooms(db: Exec, where: SQL, order: SQL = sql`lower(a.period), r.number`, limit = 500) {
@@ -378,6 +378,7 @@ export async function dashboard(db: Exec): Promise<DashboardDto> {
     select
       (select count(*) from rooms where active)::int as total,
       (select count(*) from booking_rooms where status = 'checked_in')::int as in_house,
+      (select count(distinct booking_id) from booking_rooms where status = 'tentative')::int as open_requests,
       (select count(distinct a.room_id) from room_allocations a join rooms r on r.id = a.room_id and r.active
         where a.active and a.kind = 'block' and a.period @> ${today}::date)::int as blocked,
       (select count(distinct a.room_id) from room_allocations a join rooms r on r.id = a.room_id and r.active
@@ -426,6 +427,6 @@ export async function dashboard(db: Exec): Promise<DashboardDto> {
     today,
     rooms: { total, occupied: x.in_house as number, blocked, free: Math.max(0, total - blocked - booked), occupancyPercent: total ? Math.round((booked / total) * 100) : 0 },
     arrivals, departures, inHouse: x.in_house as number,
-    revenueTodayCents: x.rev_today as number, revenueMonthCents: x.rev_month as number, tasks, dirty,
+    revenueTodayCents: x.rev_today as number, revenueMonthCents: x.rev_month as number, tasks, dirty, openRequests: x.open_requests as number,
   };
 }

@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.70.0
+
+- Neue Reservierung, schneller am Telefon: Anreise und Abreise stehen jetzt ganz oben, darunter sofort die freien Zimmer.
+- Statt des Auswahlfelds „Status“ zwei Knöpfe: **„Als Anfrage anlegen“** (vorläufig – das Zimmer wird freigehalten, später bestätigen oder stornieren) und **„Fest buchen“**. Die Eingabetaste legt absichtlich nichts an.
+- Bei Anfragen ist „Option bis“ automatisch vorbelegt: heute + 3 Tage, höchstens bis zur Anreise. Die Anzahl Tage lässt sich unter Einstellungen → Haus ändern („Anfragen: Zimmer freihalten (Tage)“).
+- Das Feld „Notiz (intern)“ ist für Rückruf-Notizen gedacht („ruft Freitag zurück“); bei Anfragen erscheinen Notiz und Optionsfrist in der Reservierungsliste unter dem Gastnamen.
+- Übersicht: neue Kachel **„Offene Anfragen“** mit der Anzahl aller vorläufigen Reservierungen, egal wie weit die Anreise entfernt ist. Ein Klick öffnet die Liste der Anfragen.
+
 ## 1.69.0
 
 - Neu: Umzug auf einen anderen Rechner oder Server (Einstellungen → System → Datensicherung, nur Administrator). „Umzugspaket erstellen“ schreibt ALLE Daten (Gäste, Buchungen, Rechnungen, Zahlungen, Benutzerkonten samt Passwörtern und Zwei-Faktor-Anmeldung, Einstellungen, Protokoll, Bilder) und den Schlüssel dieser Installation in eine einzige Datei, verschlüsselt mit einem selbst gewählten Passwort (mind. 10 Zeichen). Auf dem neuen Rechner bzw. Server: Programm installieren (gleiche oder neuere Version), dort ein vorläufiges Administrator-Konto anlegen, Paket auswählen, Passwort eingeben, „Paket prüfen“ zeigt den Inhalt, mit dem Wort UMZUG bestätigen. Danach gelten dort die bisherigen Zugangsdaten. Das Einspielen ersetzt alle Daten des Zielrechners und geschieht in einem Schritt – klappt etwas nicht, bleibt der Zielrechner unverändert. Der Schutz von Rechnungen, Zahlungen und Protokoll gegen Ändern und Löschen ist danach wieder aktiv.

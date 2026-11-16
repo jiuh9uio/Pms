@@ -50,6 +50,8 @@ export const hotelSettings = z.object({
   invoicePrefix: z.string().trim().regex(/^[A-Za-z0-9-]{0,10}$/, 'Bis zu 10 Buchstaben, Ziffern oder Bindestriche'),
   paymentTermDays: z.number('Bitte eine Zahl eingeben').int().min(0, 'Mindestens 0').max(120, 'Höchstens 120'),
   invoiceFooter: text(500),
+  /** Neue Anfrage (vorläufige Reservierung): „Option bis“ wird auf heute + so viele Tage vorbelegt (höchstens bis zur Anreise) */
+  requestOptionDays: z.number('Bitte eine Zahl eingeben').int().min(0, 'Mindestens 0').max(60, 'Höchstens 60').default(3),
   /** Öffnungszeiten als freier Text, eine Zeile je Angabe – für den Schnelldruck am Bondrucker */
   openingHours: text(600).default(''),
   /** Frühstückszeiten als kurzer Text, z. B. „Mo–Fr 7:00–10:00, Sa/So 8:00–11:00“ – für den Zettel „Ihr Aufenthalt“ */
@@ -59,7 +61,7 @@ export type HotelSettings = z.infer<typeof hotelSettings>;
 export const HOTEL_DEFAULTS: HotelSettings = {
   name: 'Hotel & Restaurant Schützenhaus', street: '', zip: '', city: '', country: 'Deutschland', phone: '', email: '', website: '',
   taxNumber: '', vatId: '', bankName: '', iban: '', bic: '', checkinTime: '15:00', checkoutTime: '11:00',
-  invoicePrefix: 'RE', paymentTermDays: 14, invoiceFooter: '', openingHours: '', breakfastTimes: '',
+  invoicePrefix: 'RE', paymentTermDays: 14, invoiceFooter: '', requestOptionDays: 3, openingHours: '', breakfastTimes: '',
 };
 
 const rate = z.number('Bitte eine Zahl eingeben').min(0, 'Mindestens 0').max(100, 'Höchstens 100');

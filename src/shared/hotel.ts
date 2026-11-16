@@ -167,7 +167,11 @@ export interface BookingDto {
   guest: GuestDto; rooms: BookingRoomDto[]; charges: ChargeDto[];
   lodgingCents: number; chargesCents: number; totalCents: number;
 }
-export interface BookingListRow extends BookingRoomDto { number: string; guestId: string; guestName: string; groupName: string; source: string; roomCount: number }
+export interface BookingListRow extends BookingRoomDto {
+  number: string; guestId: string; guestName: string; groupName: string; source: string; roomCount: number;
+  /** interne Bemerkung (z. B. Rückruf-Notiz bei Anfragen) und Optionsfrist der Reservierung */
+  notes: string; optionUntil: string | null;
+}
 export interface CalendarEntry {
   allocationId: string; roomId: string; from: string; to: string; kind: 'stay' | 'block'; version: number;
   bookingRoomId?: string; bookingId?: string; status?: RoomStatus; guestName?: string; number?: string;
@@ -180,6 +184,8 @@ export interface DashboardDto {
   today: string; rooms: { total: number; occupied: number; free: number; blocked: number; occupancyPercent: number };
   arrivals: BookingListRow[]; departures: BookingListRow[]; inHouse: number;
   revenueTodayCents: number; revenueMonthCents: number; tasks: TaskDto[];
+  /** Reservierungen mit mindestens einem vorläufigen Zimmer (offene Anfragen), unabhängig vom Anreisedatum */
+  openRequests: number;
   dirty: HousekeepingRow[];
 }
 

@@ -3,6 +3,7 @@ import {
   PAYMENT_METHODS, SOURCES, addDays, bookingCreateInput, diffDays, formatMoney, isIsoDate, parseMoney, personAdjust, todayBerlin,
   type CategoryDto, type FreeRoomDto, type GuestDto, type RoomDto, type ServiceDto,
 } from '../../../src/shared/hotel.js';
+import type { HotelSettings } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { useData, type NewPreset } from '../data.tsx';
 import { Button, Dialog, Field, useLoad, useSubmit, useToast } from '../ui.tsx';
@@ -12,15 +13,19 @@ import { catColorIndex, groupByFloor } from './roomgroups.ts';
 
 interface Pick { adults: string; children: string; price: string }
 
-/** Neue Reservierung: Zimmer oben antippen (nach Etage, Farbe je Kategorie) → Zeitraum → Gast wählen oder eintragen → anlegen. */
+/**
+ * Neue Reservierung: Zeitraum → freies Zimmer antippen (nach Etage, Farbe je Kategorie) → Gast wählen oder eintragen →
+ * „Als Anfrage anlegen“ (vorläufig, Zimmer wird bis „Option bis“ freigehalten) oder „Fest buchen“ (bestätigt).
+ */
 export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: () => void }) {
   const { bump } = useData();
   const toast = useToast();
   const start = preset.from ?? todayBerlin();
   const [from, setFrom] = useState(start);
   const [to, setTo] = useState(preset.to ?? addDays(start, 1));
-  const [status, setStatus] = useState<'confirmed' | 'tentative'>('confirmed');
+  // leer = automatisch: heute + Tage aus den Einstellungen, höchstens bis zur Anreise
   const [optionUntil, setOptionUntil] = useState('');
+  const [sending, setSending] = useState<'confirmed' | 'tentative' | null>(null);
   const [picks, setPicks] = useState<Record<string, Pick>>({});
   const [guest, setGuest] = useState<GuestDto | null>(preset.guest ?? null);
   const [draft, setDraft] = useState<GuestDraft>(toDraft(preset.draft ?? {}));
@@ -38,6 +43,13 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
     const [cats, services, rooms] = await Promise.all([api<CategoryDto[]>('GET', '/categories'), api<ServiceDto[]>('GET', '/services'), api<RoomDto[]>('GET', '/rooms')]);
     return { cats, breakfast: services.find((s) => s.isBreakfast && s.active) ?? null, rooms: rooms.filter((r) => r.active) };
   });
+  const hotel = useLoad(() => api<HotelSettings>('GET', '/settings/hotel'));
+  const today = todayBerlin();
+  const autoOption = (() => {
+    const d = addDays(today, hotel.data?.requestOptionDays ?? 3);
+    return isIsoDate(from) && from < d ? (from < today ? today : from) : d;
+  })();
+  const option = optionUntil || autoOption;
   const std = (r: FreeRoomDto) => String(base.data?.cats.find((c) => c.id === r.categoryId)?.stdOccupancy ?? 2);
 
   // Auswahl an die freien Zimmer anpassen; Vorauswahl aus dem Belegungsplan übernehmen
@@ -76,19 +88,24 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
 
   const f = useSubmit(bookingCreateInput, async (d) => {
     const r = await api<{ id: string; number: string }>('POST', '/bookings', d);
-    toast(`Reservierung ${r.number} angelegt`);
+    toast(d.rooms[0]?.status === 'tentative' ? `Anfrage ${r.number} angelegt – Zimmer freigehalten bis ${deDate(d.optionUntil ?? '')}` : `Reservierung ${r.number} fest gebucht`);
     preset.onCreated?.(r.id);
     bump();
     onClose();
   });
-  const submit = (e?: React.FormEvent) => void f.submit({
+  const submit = async (status: 'confirmed' | 'tentative') => {
+    setSending(status);
+    await f.submit(payload(status));
+    setSending(null);
+  };
+  const payload = (status: 'confirmed' | 'tentative') => ({
     ...(guest ? { guestId: guest.id } : draft.lastName.trim() ? { guest: draft } : {}),
-    ...meta, breakfast, ...(companyId ? { companyId } : {}), ...(status === 'tentative' && optionUntil ? { optionUntil } : {}),
+    ...meta, breakfast, ...(companyId ? { companyId } : {}), ...(status === 'tentative' ? { optionUntil: option } : {}),
     rooms: selected.map((r) => {
       const p = picks[r.id]!;
       return { roomId: r.id, from, to, status, adults: Number(p.adults), children: Number(p.children), pricePerNightCents: p.price.trim() === '' ? null : parseMoney(p.price) };
     }),
-  }, e);
+  });
   const otherErrors = Object.entries(f.errors).filter(([k]) => !k.startsWith('guest.')).map(([, m]) => m);
   const toggle = (r: FreeRoomDto) => { setDropped([]); setPicks((cur) => {
     const next = { ...cur };
@@ -100,8 +117,16 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
   return (
     <Dialog title="Neue Reservierung" onClose={onClose} size="xl"
       footer={<><span className="left total">{selected.length > 0 && <>{selected.length} Zimmer · {nights} {nights === 1 ? 'Nacht' : 'Nächte'} · <b>{formatMoney(total)}</b> Logis</>}</span>
-        <Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={f.busy} onClick={() => submit()}>Reservierung anlegen</Button></>}>
-      <form onSubmit={submit} noValidate>
+        <span className="nb-actions"><Button onClick={onClose}>Abbrechen</Button>
+          <Button busy={sending === 'tentative'} disabled={!!sending} onClick={() => void submit('tentative')} title={`Zimmer wird bis ${deDate(option)} freigehalten; später bestätigen oder stornieren`}>Als Anfrage anlegen</Button>
+          <Button variant="primary" busy={sending === 'confirmed'} disabled={!!sending} onClick={() => void submit('confirmed')}>Fest buchen</Button></span></>}>
+      {/* Enter löst absichtlich nichts aus: ob Anfrage oder feste Buchung, entscheidet der Knopf */}
+      <form onSubmit={(e) => e.preventDefault()} noValidate>
+      <div className="formgrid cols3 nb-dates">
+        <Field label="Anreise"><input type="date" value={from} onChange={(e) => { setFrom(e.target.value); if (isIsoDate(e.target.value) && e.target.value >= to) setTo(addDays(e.target.value, 1)); }} /></Field>
+        <Field label="Abreise" error={!valid ? 'Muss nach der Anreise liegen' : undefined} hint={valid ? `${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}` : undefined}><input type="date" value={to} min={isIsoDate(from) ? addDays(from, 1) : undefined} onChange={(e) => setTo(e.target.value)} /></Field>
+        <Field label="Bei Anfrage: Option bis" hint="so lange bleibt das Zimmer freigehalten – danach erinnert die Übersicht"><input type="date" value={option} min={today} max={isIsoDate(from) && from >= today ? from : undefined} onChange={(e) => setOptionUntil(e.target.value)} /></Field>
+      </div>
       <section className="roomboard" aria-label="Zimmer wählen">
         <div className="roomboard-head">
           <h3 className="first">Zimmer wählen{valid && free.data ? <small className="inl"> · {free.data.length} frei {deDate(from)} – {deDate(to)}</small> : null}</h3>
@@ -134,18 +159,7 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
       </section>
       <div className="split">
         <div>
-          <h3 className="first">Zeitraum</h3>
-          <div className="formgrid cols3">
-            <Field label="Anreise"><input type="date" value={from} onChange={(e) => { setFrom(e.target.value); if (isIsoDate(e.target.value) && e.target.value >= to) setTo(addDays(e.target.value, 1)); }} /></Field>
-            <Field label="Abreise" error={!valid ? 'Muss nach der Anreise liegen' : undefined} hint={valid ? `${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}` : undefined}><input type="date" value={to} min={isIsoDate(from) ? addDays(from, 1) : undefined} onChange={(e) => setTo(e.target.value)} /></Field>
-            <Field label="Status">
-              <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
-                <option value="confirmed">Bestätigt</option><option value="tentative">Vorläufig</option>
-              </select>
-            </Field>
-            {status === 'tentative' && <Field label="Option bis" hint="freiwillig – danach erinnert die Übersicht"><input type="date" value={optionUntil} min={todayBerlin()} max={isIsoDate(from) ? from : undefined} onChange={(e) => setOptionUntil(e.target.value)} /></Field>}
-          </div>
-          <h3>Gewählte Zimmer</h3>
+          <h3 className="first">Gewählte Zimmer</h3>
           {selected.length === 0 && <p className="muted">Noch kein Zimmer gewählt – oben ein freies Zimmer antippen.</p>}
           <div className="roompick">
             {selected.map((r) => {
@@ -197,12 +211,11 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
               <label className="check wide"><input type="checkbox" checked={breakfast} onChange={(e) => setBreakfast(e.target.checked)} />
                 <span>Mit Frühstück <small className="inl">{formatMoney(base.data.breakfast.priceCents)} pro Person und Nacht</small></span></label>
             )}
-            <Field label="Interne Bemerkungen" wide><textarea rows={2} value={meta.notes} onChange={(e) => setMeta({ ...meta, notes: e.target.value })} /></Field>
+            <Field label="Notiz (intern)" wide hint="bei Anfragen z. B. „ruft Freitag zurück“ – steht dann in der Anfrageliste"><textarea rows={2} placeholder="z. B. ruft Freitag zurück, möchte ruhiges Zimmer" value={meta.notes} onChange={(e) => setMeta({ ...meta, notes: e.target.value })} /></Field>
           </div>
           {otherErrors.length > 0 && <p className="notice danger" role="alert">{[...new Set(otherErrors)].join(' · ')}</p>}
         </aside>
       </div>
-        <button type="submit" hidden />
       </form>
     </Dialog>
   );

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ROOM_STATUSES, STATUS_LABEL, formatMoney, todayBerlin, type BookingListRow } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
 import { useData } from '../data.tsx';
@@ -15,7 +16,8 @@ export function BookingTable({ rows, action, compact }: { rows: BookingListRow[]
         <tbody>
           {rows.map((r) => (
             <tr key={r.id} className="rowlink" tabIndex={0} onClick={() => openBooking(r.bookingId)} onKeyDown={(e) => { if (e.key === 'Enter') openBooking(r.bookingId); }}>
-              <td><b>{r.guestName}</b><br /><small className="nowrap">{r.number}</small><small>{r.groupName && ` · ${r.groupName}`}{r.roomCount > 1 && ` · ${r.roomCount} Zimmer`}</small></td>
+              <td><b>{r.guestName}</b><br /><small className="nowrap">{r.number}</small><small>{r.groupName && ` · ${r.groupName}`}{r.roomCount > 1 && ` · ${r.roomCount} Zimmer`}</small>
+                {r.status === 'tentative' && (r.optionUntil || r.notes) && <small className="reqnote">{r.optionUntil && <>Option bis {deDate(r.optionUntil).slice(0, 6)}</>}{r.optionUntil && r.notes && ' · '}{r.notes && (r.notes.length > 80 ? r.notes.slice(0, 80) + ' …' : r.notes)}</small>}</td>
               <td>{r.roomNumber}<br /><small>{r.categoryName}</small></td>
               <td className="nowrap">{compact ? `bis ${deDate(r.to).slice(0, 6)}` : `${deDate(r.from)} – ${deDate(r.to)}`}<br /><small>{r.nights} {r.nights === 1 ? 'Nacht' : 'Nächte'}{compact && ` · ${persons(r.adults, r.children)}`}</small></td>
               {!compact && <td className="hide-sm">{persons(r.adults, r.children)}</td>}
@@ -33,7 +35,8 @@ export function BookingTable({ rows, action, compact }: { rows: BookingListRow[]
 export function Reservations() {
   const { rev, newBooking } = useData();
   const [q, setQ] = useState('');
-  const [status, setStatus] = useState('active');
+  const [search] = useSearchParams();
+  const [status, setStatus] = useState(() => search.get('status') ?? 'active');
   const [from, setFrom] = useState(todayBerlin());
   const params = new URLSearchParams();
   if (q.trim()) params.set('q', q.trim());

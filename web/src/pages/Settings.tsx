@@ -111,6 +111,7 @@ function HotelForm() {
         {input('street', 'Straße und Hausnummer')}{input('zip', 'PLZ')}{input('city', 'Ort')}
         {input('country', 'Land')}{input('phone', 'Telefon')}{input('email', 'E-Mail', { type: 'email' })}
         {input('website', 'Website')}{input('checkinTime', 'Check-in ab', { type: 'time' })}{input('checkoutTime', 'Check-out bis', { type: 'time' })}
+        <Field label="Anfragen: Zimmer freihalten (Tage)" error={f.errors.requestOptionDays} hint="„Option bis“ bei neuen Anfragen = heute + so viele Tage (höchstens bis zur Anreise)"><input inputMode="numeric" value={String(v.requestOptionDays ?? 3)} onChange={(e) => setV({ ...v, requestOptionDays: e.target.value === '' ? ('' as never) : Number(e.target.value) })} /></Field>
       </div>
       <div className="formgrid">
         <Field label="Öffnungszeiten" error={f.errors.openingHours} wide hint="eine Zeile je Angabe, z. B. „Mo–Fr 11:30–14:00 und 17:30–22:00“, „Di Ruhetag“ – erscheint auf dem Info-Zettel im Schnelldruck">

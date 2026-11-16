@@ -48,6 +48,7 @@ export function Dashboard() {
       {data && (
         <>
           <div className="kpis">
+            <Link to="/reservierungen?status=tentative" className={`card kpicard linkcard${data.openRequests ? ' attention' : ''}`}><span>Offene Anfragen</span><b>{data.openRequests}</b><small>{data.openRequests ? 'vorläufig – bestätigen oder stornieren' : 'keine offen'}</small></Link>
             {kpi('Anreisen heute', data.arrivals.length, 'noch nicht eingecheckt')}
             {kpi('Abreisen heute', data.departures.length, 'noch nicht ausgecheckt')}
             {kpi('Belegte Zimmer', data.rooms.occupied, 'Gäste im Haus')}

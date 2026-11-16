@@ -892,3 +892,9 @@ tbody tr { transition: background .15s; }
 .listedit li .iconbtn { width: 28px; height: 28px; } .listedit li .iconbtn:disabled { opacity: .3; } .listedit li .iconbtn.danger:hover { color: var(--danger); background: var(--danger-soft); }
 .listedit-add { display: flex; gap: 6px; } .listedit-add input { flex: 1; min-width: 0; }
 @media (max-width: 760px) { .listedit-grid { grid-template-columns: 1fr; } }
+
+/* Offene Anfragen (vorläufige Reservierungen) */
+a.linkcard.attention { border-color: var(--warn); background: var(--warn-soft); }
+a.linkcard.attention b { color: var(--warn); }
+.reqnote { display: block; color: var(--warn); }
+.nb-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
