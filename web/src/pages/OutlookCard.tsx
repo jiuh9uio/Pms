@@ -101,7 +101,8 @@ function SetupDialog({ onClose }: { onClose: () => void }) {
   if (!cur) return <Dialog title="Ausblick einstellen" onClose={onClose}><LoadState error={error} loading /></Dialog>;
   const set = (k: string, x: string) => setV({ ...cur, [k]: x });
   const num = (x: string) => (x.trim() === '' ? null : Number(x.replace(',', '.')));
-  const save = () => void f.submit({ ...cur, lat: num(cur.lat!), lon: num(cur.lon!), lunchFrom: num(cur.lunchFrom!), lunchTo: num(cur.lunchTo!), dinnerFrom: num(cur.dinnerFrom!), dinnerTo: num(cur.dinnerTo!) });
+  const save = () => void f.submit({ ...cur, lat: num(cur.lat!), lon: num(cur.lon!), lunchFrom: num(cur.lunchFrom!), lunchTo: num(cur.lunchTo!), dinnerFrom: num(cur.dinnerFrom!), dinnerTo: num(cur.dinnerTo!),
+    coldC: num(cur.coldC!), coldPoints: num(cur.coldPoints!), footballLeavePoints: num(cur.footballLeavePoints!), winterSeason: cur.winterSeason === 'true' });
   const locate = async () => {
     setFinding(true);
     try { const r = await api<{ lat: number; lon: number; place: string }>('POST', '/restaurant/outlook/locate', { url: link }); setV({ ...cur, lat: String(r.lat), lon: String(r.lon), place: cur.place || r.place }); toast('Standort übernommen'); }
@@ -126,6 +127,13 @@ function SetupDialog({ onClose }: { onClose: () => void }) {
         <span />
         <Field label="Abend ab (Uhr)" error={f.errors.dinnerFrom}><input inputMode="numeric" value={cur.dinnerFrom} onChange={(e) => set('dinnerFrom', e.target.value)} /></Field>
         <Field label="Abend bis (Uhr)" error={f.errors.dinnerTo}><input inputMode="numeric" value={cur.dinnerTo} onChange={(e) => set('dinnerTo', e.target.value)} /></Field>
+      </div>
+      <h3>Erfahrungswerte des Hauses</h3>
+      <div className="formgrid cols3">
+        <Field label="Mehr Gäste ab (°C und kälter)" error={f.errors.coldC} hint="z. B. 10"><input inputMode="numeric" value={cur.coldC} onChange={(e) => set('coldC', e.target.value)} /></Field>
+        <Field label="… wie stark (Punkte)" error={f.errors.coldPoints} hint="0 = gar nicht, 15 = deutlich, 30 = sehr stark"><input inputMode="numeric" value={cur.coldPoints} onChange={(e) => set('coldPoints', e.target.value)} /></Field>
+        <Field label="Fußball: Gäste gehen früher (Punkte)" error={f.errors.footballLeavePoints} hint="35 = fast immer"><input inputMode="numeric" value={cur.footballLeavePoints} onChange={(e) => set('footballLeavePoints', e.target.value)} /></Field>
+        <label className="check wide"><input type="checkbox" checked={cur.winterSeason === 'true'} onChange={(e) => set('winterSeason', String(e.target.checked))} /><span>Wintersaison (November bis März) bringt mehr Gäste<small>für ein Haus mit deftiger Winterküche</small></span></label>
       </div>
       <h3>Fußball</h3>
       <div className="formgrid">

@@ -26,9 +26,16 @@ export const outlookSettingsInput = z.object({
   /** Verein, dessen Spiele besonders zählen (Teil des Namens genügt, z. B. „Schalke“) */
   favoriteTeam: z.string().trim().max(60).default(''),
   lunchFrom: hour.default(11), lunchTo: hour.default(14), dinnerFrom: hour.default(17), dinnerTo: hour.default(22),
+  /** Erfahrungswerte des Hauses: ab dieser Temperatur und kälter kommen mehr Gäste (deftige Winterküche) */
+  coldC: z.number('Bitte eine Zahl eingeben').min(-20).max(25).default(10),
+  coldPoints: z.number('Bitte eine Zahl eingeben').int().min(0).max(40).default(15),
+  /** November bis März: Wintersaison, mehr Nachfrage nach der Küche des Hauses */
+  winterSeason: z.boolean().default(true),
+  /** Fußball während der Öffnungszeit: Gäste gehen deutlich früher */
+  footballLeavePoints: z.number('Bitte eine Zahl eingeben').int().min(0).max(60).default(35),
 }).refine((v) => v.lunchFrom < v.lunchTo && v.dinnerFrom < v.dinnerTo, { message: 'Beginn muss vor dem Ende liegen', path: ['dinnerTo'] });
 export type OutlookSettings = z.infer<typeof outlookSettingsInput>;
-export const OUTLOOK_DEFAULTS: OutlookSettings = { lat: null, lon: null, place: '', leagues: 'bl1, bl2, dfb', favoriteTeam: '', lunchFrom: 11, lunchTo: 14, dinnerFrom: 17, dinnerTo: 22 };
+export const OUTLOOK_DEFAULTS: OutlookSettings = { lat: null, lon: null, place: '', leagues: 'bl1, bl2, dfb', favoriteTeam: '', lunchFrom: 11, lunchTo: 14, dinnerFrom: 17, dinnerTo: 22, coldC: 10, coldPoints: 15, winterSeason: true, footballLeavePoints: 35 };
 
 export const outlookEventInput = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Bitte ein Datum wählen'),
@@ -121,18 +128,23 @@ export function assess(i: AssessInput): Pick<OutlookDto, 'walkIn' | 'leaveEarly'
   else if (wd === 1) w.push({ text: 'Montag: meist ruhiger Tag', points: -10 });
   else if (wd === 2) w.push({ text: 'Dienstag: eher ruhig', points: -5 });
   if (holiday) w.push({ text: `Feiertag (${holiday}): viele haben frei`, points: 10 });
+  const month = Number(i.date.slice(5, 7));
+  if (s.winterSeason && (month >= 11 || month <= 3)) w.push({ text: 'Wintersaison: die deftige Küche des Hauses ist gefragt', points: 10 });
   if (service) {
     if (service.storm) w.push({ text: 'Gewitter/Hagel angesagt: viele bleiben zu Hause', points: -10 });
     else if (service.snow && service.wetHours >= 3) w.push({ text: 'Schneefall: viele bleiben zu Hause', points: -10 });
     else if (service.wetHours >= Math.max(1, service.hours * 0.3)) w.push({ text: 'Nass zu den Essenszeiten: Leute kehren eher spontan ein', points: 15 });
     if (service.tempAvg !== null) {
-      if (service.tempAvg < 5) w.push({ text: `Kalt (um ${Math.round(service.tempAvg)} °C): eher Lust auf warmes Essen drinnen`, points: 10 });
-      else if (service.tempAvg < 12) w.push({ text: `Kühl (um ${Math.round(service.tempAvg)} °C)`, points: 5 });
+      // Erfahrung des Hauses: ab der eingestellten Temperatur und kälter deutlich mehr Gäste
+      if (service.tempAvg <= s.coldC) w.push({ text: `Kalt (um ${Math.round(service.tempAvg)} °C – ab ${s.coldC} °C und kälter kommen erfahrungsgemäß mehr Gäste)`, points: s.coldPoints });
+      if (service.tempAvg <= 0) w.push({ text: 'Frost: Lust auf deftiges, warmes Essen', points: 5 });
       else if (service.tempAvg >= 20 && service.wetHours === 0) w.push({ text: `Warm und trocken (um ${Math.round(service.tempAvg)} °C): Leute sind eher draußen unterwegs`, points: -10 });
     }
   }
-  const evening = i.matches.filter((m) => { const k = kickoffMin(m.time); return k >= 17 * 60 + 30 && k <= 22 * 60; });
-  if (evening.length) w.push({ text: 'Fußball am Abend: manche schauen lieber zu Hause', points: -5 });
+  // Spiele mit Anpfiff während der Öffnungszeit (mittags oder abends)
+  const open = (k: number) => (k >= s.lunchFrom * 60 && k < s.lunchTo * 60) || (k >= s.dinnerFrom * 60 - 30 && k < s.dinnerTo * 60);
+  const evening = i.matches.filter((m) => open(kickoffMin(m.time)));
+  if (evening.length) w.push({ text: 'Fußball während der Öffnungszeit: manche schauen lieber zu Hause', points: -5 });
   for (const e of i.events) {
     if (e.effect === 'more') w.push({ text: `${e.title}${e.time ? ` (${e.time} Uhr)` : ''}`, points: 15 });
     if (e.effect === 'fewer') w.push({ text: `${e.title}${e.time ? ` (${e.time} Uhr)` : ''}`, points: -10 });
@@ -144,7 +156,7 @@ export function assess(i: AssessInput): Pick<OutlookDto, 'walkIn' | 'leaveEarly'
   if (wd === 5 || wd === 6) l.push({ text: 'Wochenende: man bleibt eher länger', points: -10 });
   if (evening.length) {
     const first = [...evening].sort((a, b) => a.time.localeCompare(b.time))[0]!;
-    l.push({ text: `Fußball: ${first.title} um ${first.time} Uhr${evening.length > 1 ? ` (und ${evening.length - 1} weitere${evening.length > 2 ? '' : 's'} Spiel${evening.length > 2 ? 'e' : ''})` : ''} – Gäste wollen pünktlich zum Anpfiff weg`, points: 20 });
+    l.push({ text: `Fußball: ${first.title} um ${first.time} Uhr${evening.length > 1 ? ` (und ${evening.length - 1} weitere${evening.length > 2 ? '' : 's'} Spiel${evening.length > 2 ? 'e' : ''})` : ''} – erfahrungsgemäß sind die Gäste dann schnell weg`, points: s.footballLeavePoints });
     const fav = evening.find((m) => m.favorite);
     if (fav) l.push({ text: `Spiel von ${s.favoriteTeam}: ${fav.title} um ${fav.time} Uhr`, points: 15 });
   }

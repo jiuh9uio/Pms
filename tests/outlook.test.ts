@@ -39,6 +39,21 @@ describe('Ausblick – Rechnung', () => {
     expect(calm.leaveEarly.level).toBe('niedrig');
   });
 
+  it('Erfahrung des Hauses: 10 °C und kälter plus Wintersaison → viele Walk-ins; Fußball → Gäste schnell weg', () => {
+    const cold = assess({ ...base, date: '2026-11-18', hours: hours(() => ({ temp: 8 })) }); // Mittwoch, 8 °C, trocken
+    expect(cold.walkIn.level).toBe('hoch');
+    expect(cold.walkIn.reasons.map((r) => r.text).join(' ')).toMatch(/Wintersaison/);
+    const mild = assess({ ...base, date: '2027-05-19', hours: hours(() => ({ temp: 15 })) }); // Mittwoch im Mai, 15 °C
+    expect(mild.walkIn.level).toBe('mittel');
+    const own = assess({ ...base, date: '2027-05-19', hours: hours(() => ({ temp: 8 })), settings: { ...OUTLOOK_DEFAULTS, coldC: 5 } });
+    expect(own.walkIn.reasons.some((r) => r.text.startsWith('Kalt'))).toBe(false);
+    const foot = assess({ ...base, date: '2026-11-17', hours: null, matches: [{ time: '20:45', title: 'A – B', league: 'X', favorite: false }] });
+    expect(foot.leaveEarly.level).toBe('hoch');
+    expect(foot.leaveEarly.reasons.some((r) => r.text.includes('schnell weg'))).toBe(true);
+    const off = assess({ ...base, date: '2026-11-17', hours: null, matches: [{ time: '15:30', title: 'A – B', league: 'X', favorite: false }] });
+    expect(off.leaveEarly.reasons.some((r) => r.text.includes('Fußball'))).toBe(false);
+  });
+
   it('ohne Wetter wird trotzdem gerechnet; volle Reservierung gibt einen Hinweis', () => {
     const r = assess({ ...base, date: '2026-11-20', hours: null, reservations: { persons: 36, seats: 40, count: 9 } });
     expect(r.walkIn.score).toBeGreaterThan(0);

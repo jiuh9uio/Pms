@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.78.0
+
+- Restaurant-Ausblick nach den Erfahrungen des Hauses:
+  - **Kälte:** ab 10 °C und kälter zu den Essenszeiten deutlich mehr Gäste ohne Reservierung (bei Frost noch etwas mehr). Die bisherigen Stufen „kalt/kühl“ entfallen.
+  - **Wintersaison** (November bis März): mehr Gäste – passend zur deftigen Winterküche.
+  - **Fußball:** Läuft ein Spiel während der Öffnungszeit (mittags oder abends), gehen die Gäste erfahrungsgemäß schnell – die Einschätzung „Gäste gehen früher“ steigt deutlich.
+  - Alle drei Werte lassen sich unter Ausblick → „Einstellen“ → „Erfahrungswerte des Hauses“ anpassen (Temperaturgrenze, Stärke, Wintersaison an/aus, Fußball-Stärke).
+
 ## 1.77.0
 
 - **Anzahlung anfordern – Hotel:** In der Reservierung unter „Rechnungen und Zahlungen“ → „Anzahlung anfordern“: Betrag (Vorschlag 30 %), Frist, dann erscheint die E-Mail mit Bankverbindung und Verwendungszweck zum Prüfen. „Anfordern und senden“ oder „Nur vermerken (ohne E-Mail)“; „Abbrechen“ ändert nichts. Stand je Anzahlung: offen / überfällig / eingegangen. Eingang = Zahlung buchen über „Anzahlung buchen“ (das dürfen auch Mitarbeiter, genau in Höhe der angeforderten Anzahlung). Überfällige Anzahlungen stehen als Aufgabe in der Übersicht.
