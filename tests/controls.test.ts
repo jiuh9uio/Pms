@@ -303,3 +303,16 @@ describe('Restaurant: Tischreservierungen', () => {
     expect((await ok('GET', '/inspection-types', admin)).length).toBe(types);
   });
 });
+
+describe('Schnellwahl beim Ablesen', () => {
+  it('bietet nur Werte im Sollbereich an', async () => {
+    const { quickValues, outOfRange } = await import('../src/shared/controls.js');
+    expect(quickValues({ minC: null, maxC: -18 })).toEqual([-18, -19, -20, -21, -22, -23, -24, -25]);
+    expect(quickValues({ minC: 2, maxC: 7 })).toEqual([2, 3, 4, 5, 6, 7]);
+    expect(quickValues({ minC: 65, maxC: null })).toEqual([65, 66, 67, 68, 69, 70, 71, 72]);
+    expect(quickValues({ minC: 0, maxC: 30 }).length).toBeLessThanOrEqual(8);
+    expect(quickValues({ minC: null, maxC: null })).toEqual([]);
+    for (const p of [{ minC: null, maxC: -18 }, { minC: 2, maxC: 7 }, { minC: 65, maxC: null }, { minC: -1.5, maxC: 4.5 }])
+      for (const v of quickValues(p)) expect(outOfRange(v, p)).toBe(false);
+  });
+});

@@ -23,6 +23,20 @@ export const hygieneReadingsInput = z.object({
 /** Liegt der Wert außerhalb des Sollbereichs der Messstelle? */
 export const outOfRange = (value: number, p: { minC: number | null; maxC: number | null }) =>
   (p.minC != null && value < p.minC) || (p.maxC != null && value > p.maxC);
+/**
+ * Werte zum Antippen beim Ablesen (alle im Sollbereich, ganze Grad, höchstens 8):
+ * nur Höchstwert (Tiefkühler −18) → −18, −19 … −25; nur Mindestwert (Warmhalten 65) → 65 … 72; beides → von … bis.
+ */
+export function quickValues(p: { minC: number | null; maxC: number | null }): number[] {
+  const out: number[] = [];
+  if (p.minC != null && p.maxC != null) {
+    const lo = Math.ceil(p.minC), hi = Math.floor(p.maxC);
+    const step = Math.max(1, Math.ceil((hi - lo + 1) / 8));
+    for (let v = lo; v <= hi && out.length < 8; v += step) out.push(v);
+  } else if (p.maxC != null) for (let v = Math.floor(p.maxC); out.length < 8; v--) out.push(v);
+  else if (p.minC != null) for (let v = Math.ceil(p.minC); out.length < 8; v++) out.push(v);
+  return out;
+}
 export const rangeLabel = (p: { minC: number | null; maxC: number | null }) => {
   const f = (n: number) => n.toLocaleString('de-DE');
   if (p.minC != null && p.maxC != null) return `${f(p.minC)} bis ${f(p.maxC)} °C`;

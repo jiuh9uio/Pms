@@ -940,3 +940,6 @@ a.linkcard.attention b { color: var(--warn); }
 .staybtns { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
 .staybtns .btn { justify-content: flex-start; text-align: left; padding: 12px 14px; }
 .stayform { margin-top: 12px; }
+.readrow { display: flex; flex-direction: column; align-items: stretch !important; gap: 4px; padding: 8px 0; }
+.readrow .chips { margin: 0; align-items: center; }
+.readrow .tempinput { width: 110px; }
