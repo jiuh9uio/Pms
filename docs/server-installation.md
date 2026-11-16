@@ -52,3 +52,14 @@ automatischem HTTPS-Zertifikat, Firewall (nur SSH, 80, 443), tägliche Sicherung
 - **Umzug bestehender Daten** von der Windows-Version: Sicherung dort erstellen (`backups\*.dump`), auf den Server kopieren und
   mit `npm run restore` einspielen. Der Schlüssel für das E-Mail-Passwort (`data\secret.key`) gehört nach `/var/lib/pms`.
   Dieser Umzug ist nicht erprobt.
+
+## Daten vom Windows-PC übernehmen (Umzugspaket)
+
+1. Auf dem bisherigen PC: Einstellungen → System → Datensicherung → „Umzugspaket erstellen“ (Passwort mit mindestens 10 Zeichen wählen). Es entsteht eine Datei `Umzug-JJJJMMTTHHMM.pmsumzug`.
+2. Auf dem Server dieselbe oder eine neuere Programmversion installieren und im Browser ein vorläufiges Administrator-Konto anlegen.
+3. Dort unter Einstellungen → System → Datensicherung die Datei auswählen, Passwort eingeben, „Paket prüfen“, mit UMZUG bestätigen.
+4. Neu anmelden – ab jetzt mit den Zugangsdaten vom bisherigen PC. Das vorläufige Konto ist dabei verschwunden.
+
+Das Paket wird beim Hochladen über die Internetverbindung übertragen; deshalb vorher HTTPS einrichten (siehe oben). Die Datei selbst ist verschlüsselt (AES-256-GCM, Schlüssel aus dem Passwort per scrypt), sollte aber trotzdem nach dem Umzug gelöscht werden.
+Nicht übertragen werden die Dateien außerhalb der Datenbank: `pms.env` und die alten Datensicherungen.
+Nicht getestet: der Umzug von einem echten Windows-PC auf einen echten Linux-Server. Getestet wurde zwischen zwei Testinstallationen mit erfundenen Daten.

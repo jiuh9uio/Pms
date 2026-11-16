@@ -36,6 +36,7 @@ import { purge } from './modules/purge.js';
 import { checklist } from './modules/setup.js';
 import { getLogo, invoiceNumberState, setInvoiceNumber } from './modules/billing.js';
 import * as inbox from './modules/inbox.js';
+import * as migration from './modules/migration.js';
 import * as team from './modules/team.js';
 import * as T from '../shared/team.js';
 import * as I from '../shared/inbox.js';
@@ -58,7 +59,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
   // trustProxy nur für lokale Proxys (z. B. Caddy auf demselben Rechner)
   const app = Fastify({ logger: logger ? { level: 'warn' } : false, trustProxy: 'loopback', bodyLimit: 1024 * 1024 });
   // Videos für die Gästeseite kommen als rohe Datei (nicht als JSON)
-  app.addContentTypeParser(['video/mp4', 'video/webm', 'application/octet-stream'], { parseAs: 'buffer', bodyLimit: 81 * 1024 * 1024 }, (_req, body, done) => done(null, body));
+  app.addContentTypeParser(['video/mp4', 'video/webm', 'application/octet-stream'], { parseAs: 'buffer', bodyLimit: 400 * 1024 * 1024 }, (_req, body, done) => done(null, body));
   await app.register(cookie);
   app.decorateRequest('user', null);
   app.decorateRequest('sessionId', null);
@@ -299,6 +300,20 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     registerControlRoutes(api, { db, requireUser: requireModule('kontrollen'), requireAdmin, actor });
     registerBillingRoutes(api, { db, requireUser: requireModule('hotel'), requireAdmin, actor });
     registerEInvoiceRoutes(api, { db, requireUser: requireModule('erechnung'), requireAdmin, actor });
+
+    // ---------- Umzug auf einen anderen Rechner/Server (nur Administrator) ----------
+    const pkgPassword = (req: FastifyRequest) => decodeURIComponent(String(req.headers['x-package-password'] ?? ''));
+    const pkgBody = (req: FastifyRequest) => { if (!Buffer.isBuffer(req.body)) throw new AppError(400, 'bad_file', 'Bitte das Umzugspaket auswählen'); return req.body; };
+    api.post('/settings/migration/export', { preHandler: requireAdmin }, async (req, reply) => {
+      const v = z.object({ password: z.string().max(200) }).parse(req.body);
+      const r = await migration.exportPackage(db, actor(req), v.password, getUpdateStatus().current);
+      return reply.header('Content-Type', 'application/octet-stream').header('Content-Disposition', `attachment; filename="${r.name}"`).send(r.file);
+    });
+    api.post('/settings/migration/check', { preHandler: requireAdmin, bodyLimit: 400 * 1024 * 1024 }, (req) => migration.summarize(migration.readPackage(pkgBody(req), pkgPassword(req))));
+    api.post('/settings/migration/import', { preHandler: requireAdmin, bodyLimit: 400 * 1024 * 1024 }, async (req) => {
+      if (String(req.headers['x-confirm'] ?? '') !== 'UMZUG') throw new AppError(400, 'validation', 'Eingaben prüfen', { confirm: 'Bitte das Wort UMZUG eintippen' });
+      return migration.importPackage(db, actor(req), pkgBody(req), pkgPassword(req));
+    });
 
     // ---------- Programm-Update (nur Administrator) ----------
     api.get('/update/status', { preHandler: requireAdmin }, (req) =>

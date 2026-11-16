@@ -25,6 +25,16 @@ function secretKey() {
   }
   return (key = readFileSync(file));
 }
+/** Schlüssel der Installation (für das Umzugspaket) */
+export const getSecretKey = () => secretKey();
+/** Schlüssel ersetzen (beim Einspielen eines Umzugspakets): Datei überschreiben und sofort verwenden. */
+export function setSecretKey(k: Buffer) {
+  if (k.length !== 32) throw new AppError(400, 'bad_file', 'Der Schlüssel im Umzugspaket ist ungültig.');
+  const dir = process.env.PMS_DATA_DIR ?? 'data';
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'secret.key'), k, { mode: 0o600 });
+  key = k;
+}
 /** Prüfsumme mit dem Schlüssel der Installation – für Links, die ohne gespeicherten Zugangscode auskommen */
 export const sign = (text: string) => createHmac('sha256', secretKey()).update(text).digest('base64url').slice(0, 32);
 export function encrypt(plain: string) {

@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.69.0
+
+- Neu: Umzug auf einen anderen Rechner oder Server (Einstellungen → System → Datensicherung, nur Administrator). „Umzugspaket erstellen“ schreibt ALLE Daten (Gäste, Buchungen, Rechnungen, Zahlungen, Benutzerkonten samt Passwörtern und Zwei-Faktor-Anmeldung, Einstellungen, Protokoll, Bilder) und den Schlüssel dieser Installation in eine einzige Datei, verschlüsselt mit einem selbst gewählten Passwort (mind. 10 Zeichen). Auf dem neuen Rechner bzw. Server: Programm installieren (gleiche oder neuere Version), dort ein vorläufiges Administrator-Konto anlegen, Paket auswählen, Passwort eingeben, „Paket prüfen“ zeigt den Inhalt, mit dem Wort UMZUG bestätigen. Danach gelten dort die bisherigen Zugangsdaten. Das Einspielen ersetzt alle Daten des Zielrechners und geschieht in einem Schritt – klappt etwas nicht, bleibt der Zielrechner unverändert. Der Schutz von Rechnungen, Zahlungen und Protokoll gegen Ändern und Löschen ist danach wieder aktiv.
+
 ## 1.68.0
 
 - Neu: Kunden aus dem alten Programm importieren (Gäste → „Kunden importieren“, nur Administrator). Die Datei Kunden.dat auswählen; das Programm zeigt zuerst nur an, was übernommen würde (Anzahl, Beispiele), erst „Jetzt importieren“ legt an. Privatpersonen werden Gäste (Anrede, Vor- und Nachname, Straße, PLZ, Ort, Telefon, E-Mail), Firmen (erkannt an Rechtsform/Stichwort oder Ansprechpartner „Herr/Frau …“) werden Firmen mit Ansprechpartner. Die alte Kundennummer steht in den Bemerkungen. Platzhalter („*** … ***“) und leere Datensätze werden übersprungen, schon vorhandene Gäste/Firmen (gleicher Name und PLZ) ebenfalls – ein zweiter Lauf legt nichts doppelt an. Im Protokoll stehen nur die Anzahlen.

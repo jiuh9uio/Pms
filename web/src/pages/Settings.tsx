@@ -12,6 +12,7 @@ import { GuestSiteCard } from './GuestSiteCard.tsx';
 import { SecurityCard } from './SecurityCard.tsx';
 import { MailSettings } from './MailSettings.tsx';
 import { BackupCard } from './BackupCard.tsx';
+import { MigrationCard } from './MigrationCard.tsx';
 import { KitchenPrinterCard } from './KitchenPrinterCard.tsx';
 import { TerminalCard } from './TerminalCard.tsx';
 import { PrearrivalCard } from './PrearrivalCard.tsx';
@@ -64,7 +65,7 @@ export function Settings() {
       {current === 'mitteilungen' && <NoticesCard />}
       {current === 'gaesteseite' && <GuestSiteCard />}
       {current === 'netz' && <NetworkCard />}
-      {current === 'sicherung' && <BackupCard />}
+      {current === 'sicherung' && <><BackupCard /><MigrationCard /></>}
       {current === 'sicherheit' && <SecurityCard />}
       {current === 'update' && <><UpdateCard /><Changelog /></>}
       {current === 'loeschen' && <PurgeCard />}
