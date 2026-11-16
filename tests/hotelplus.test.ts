@@ -697,6 +697,16 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
     expect(info).toContain('Passwort: geheim123');
     expect(info).toContain('Zimmerreinigung');
     expect(info).toContain('WIFI:T:WPA;S:Gast-WLAN;P:geheim123;;'); // QR-Code-Inhalt
+    expect(info).not.toContain('/buchung/');
+    // Gäste-Link als QR-Code auf dem Gäste-Bon (eingeschaltet)
+    await ok('PUT', '/settings/checkin-sheet', admin, { ...def, printMode: 'bon', showGuestLink: true, guestLinkText: 'Reinigung, Wünsche, Abreise' });
+    await ok('POST', `/bookings/${bid}/registration/bon`, user, {});
+    await new Promise((r) => setTimeout(r, 150));
+    const info2 = Buffer.concat(jobs[3]!).toString('latin1');
+    const link = (await ok('GET', `/bookings/${bid}/guest-link`, user)).url as string;
+    expect(info2).toContain(link);
+    expect(info2).toContain('Ihre Buchung online');
+    await ok('PUT', '/settings/checkin-sheet', admin, { ...def, printMode: 'bon' });
     await ok('PUT', '/settings/front-printer', admin, { enabled: false, host: '', port: 9100, width: 48 });
     printer.close();
   });

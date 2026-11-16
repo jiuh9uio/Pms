@@ -143,7 +143,7 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   // ---------- Check-in-Blatt (Meldeschein mit WLAN und Hausinformationen) ----------
   api.get('/checkin-sheet', user, () => checkinSheet.checkinSheetForPrint(db));
   api.get('/registrations', user, (req) => registrations.listRegistrations(db, H.registrationQuery.parse(req.query)));
-  api.post('/bookings/:id/registration/bon', user, (req) => checkinSheet.printCheckinBon(db, actor(req), idOf(req)));
+  api.post('/bookings/:id/registration/bon', user, (req) => checkinSheet.printCheckinBon(db, actor(req), idOf(req), guestBaseUrl(req)));
   api.get('/settings/checkin-sheet', admin, () => checkinSheet.getCheckinSheet(db));
   api.put('/settings/checkin-sheet', admin, (req) => checkinSheet.saveCheckinSheet(db, actor(req), H.checkinSheetInput.parse(req.body)));
 

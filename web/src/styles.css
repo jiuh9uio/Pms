@@ -934,3 +934,9 @@ a.linkcard.attention b { color: var(--warn); }
 .outlook-ev { display: flex; align-items: center; gap: 4px; }
 .inlinerow { display: flex; gap: 8px; } .inlinerow input { flex: 1; min-width: 0; }
 .radiolist { display: flex; flex-direction: column; gap: 6px; }
+.gi-codes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.gi-codes:empty { display: none; }
+.gi-link span { font-size: 13px; }
+.staybtns { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.staybtns .btn { justify-content: flex-start; text-align: left; padding: 12px 14px; }
+.stayform { margin-top: 12px; }

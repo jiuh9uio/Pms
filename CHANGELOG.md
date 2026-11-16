@@ -3,6 +3,17 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.73.0
+
+- Meldeschein: Auf Wunsch steht neben dem WLAN-QR-Code ein zweiter QR-Code **„Ihre Buchung online“** mit dem persönlichen Gäste-Link (A4 und Bondrucker). Einschalten unter Einstellungen → Haus → Check-in & Meldeschein → „Persönlichen Gäste-Link als QR-Code aufdrucken“; der Text daneben ist änderbar.
+- Gästeseite während des Aufenthalts (nach dem Check-in): neuer Bereich **„Während Ihres Aufenthalts“** mit
+  - **Zimmerreinigung wünschen** – Aufgabe im Übergabebuch und das Zimmer steht unter „Zu reinigen“,
+  - **Heute keine Reinigung** – Notiz im Übergabebuch,
+  - **Etwas bringen lassen** – Handtücher, Kopfkissen, Decke … antippen oder selbst schreiben; Aufgabe im Übergabebuch,
+  - **Abreise melden** – Aufgabe „Bezahlung und Check-out prüfen“; der Gast wird dabei **nicht** automatisch ausgecheckt.
+  Jede Meldung erscheint auch im Verlauf der Reservierung. Zweimal dieselbe Meldung innerhalb von 3 Minuten wird abgefangen.
+- Hinweis: Ohne eingetragene Internet-Adresse führt der QR-Code zu diesem Rechner im Hausnetz – das klappt nur, wenn das Handy des Gastes im selben Netz ist. Zuverlässig mit dem Online-Server.
+
 ## 1.72.0
 
 - Reservierung: Das Anfrage-Feld nimmt keinen Platz mehr weg. Bei vorläufigen Reservierungen steht oben neben „Gästeprofil“ der Knopf **„Anfrage ❗“** – erst ein Klick darauf öffnet Anrufen, Nachfrage vermerken, Zusagen und Absagen (mit ✕ wieder schließen).

@@ -1,12 +1,13 @@
 import { timingSafeEqual } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import QRCode from 'qrcode';
-import { cancelTerms, isActiveStatus, todayBerlin, type CancelPolicy, type GuestLinkDto, type PublicBooking, type PublicBookingGate, type PublicCred } from '../../shared/hotel.js';
+import { STAY_REQUEST_LABEL, cancelTerms, isActiveStatus, todayBerlin, type StayRequest, type CancelPolicy, type GuestLinkDto, type PublicBooking, type PublicBookingGate, type PublicCred } from '../../shared/hotel.js';
 import type { Db, Exec } from '../db/client.js';
 import { bookings, guests, settings, teamNotes } from '../db/schema.js';
 import { AppError, conflict } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 import { getBooking, setRoomStatus } from './bookings.js';
+import { setHousekeeping } from './rooms.js';
 import { activeGuide } from './guestguide.js';
 import { sign } from './mail.js';
 import { getHotel } from './settings.js';
@@ -100,6 +101,7 @@ async function view(db: Exec, bookingId: string): Promise<PublicBooking> {
     from, to, totalCents: p.showPrice ? b.totalCents : null, welcome: p.welcome, canArrival: p.allowArrival && state === 'active', state, arrivalTime: b.arrivalTime, guestMessage: b.guestMessage, checkinTime: h.checkinTime,
     guide: guide && guide.onGuestPage ? { label: guide.label, url: guide.url, text: guide.text } : null,
     terms, canCancel: state === 'active' && cancelHint === '', cancelHint,
+    canRequest: live.some((r) => r.status === 'checked_in') && to >= today, checkoutTime: h.checkoutTime,
   };
 }
 // ---------- Zugang: Link + Nachname + Postleitzahl ----------
@@ -168,6 +170,46 @@ export async function cancelByGuest(db: Db, token: string, cred: PublicCred, ip:
   await record(db, { ...GUEST, ip }, { action: 'guest_cancel', entity: 'booking', entityId: id, after: { free: b.terms.free, feeCents: b.terms.feeCents } });
   await tellTeam(db, `Storno durch den Gast: Reservierung ${b.number} (${b.guestName}, ${de(b.from)} bis ${de(b.to)}). ${fee}`);
   return view(db, id);
+}
+
+/** gleiche Meldung nicht mehrfach kurz hintereinander (z. B. doppelt getippt) */
+const recent = new Map<string, number>();
+const REPEAT_MS = 3 * 60_000;
+/**
+ * Während des Aufenthalts: Gast meldet über seinen Link Reinigungswunsch, „keine Reinigung“, einen Wunsch oder seine Abreise.
+ * Das Personal bekommt eine Aufgabe bzw. Notiz im Übergabebuch; bei Reinigungswunsch wird das Zimmer auf „zu reinigen“ gesetzt.
+ * Die Abreise-Meldung checkt NICHT aus – Bezahlen und Check-out bleiben beim Personal.
+ */
+export async function stayRequest(db: Db, token: string, v: PublicCred & { kind: StayRequest; message: string }, ip: string | null) {
+  const id = await enter(db, token, v);
+  const b = await view(db, id);
+  if (!b.canRequest) throw conflict('Das ist nur während Ihres Aufenthalts möglich. Bitte wenden Sie sich an die Rezeption.');
+  const key = `${id}|${v.kind}`, now = Date.now();
+  if ((recent.get(key) ?? 0) > now - REPEAT_MS) throw new AppError(429, 'already_sent', 'Ihre Nachricht ist schon bei uns angekommen. Vielen Dank!');
+  if (recent.size > 5000) recent.clear();
+  const full = await getBooking(db, id);
+  const inRooms = full.rooms.filter((r) => r.status === 'checked_in');
+  const place = inRooms.length ? `Zimmer ${inRooms.map((r) => r.roomNumber).join(', ')}` : '';
+  const who = `${b.guestName}${place ? `, ${place}` : ''}`;
+  const msg = v.message ? ` – „${v.message}“` : '';
+  const actor = { ...GUEST, ip };
+  const note = {
+    cleaning: { kind: 'task' as const, text: `Zimmerreinigung gewünscht (${who})${msg}` },
+    no_cleaning: { kind: 'note' as const, text: `Heute bitte keine Reinigung (${who})${msg}` },
+    need: { kind: 'task' as const, text: `Wunsch des Gastes (${who}): ${v.message}` },
+    checkout: { kind: 'task' as const, text: `Gast meldet Abreise (${who}, Reservierung ${b.number})${msg} – Bezahlung und Check-out prüfen` },
+  }[v.kind];
+  await db.insert(teamNotes).values({ kind: note.kind, text: note.text, place, createdBy: 'Gast (Link)', createdById: null });
+  if (v.kind === 'cleaning') for (const r of inRooms) await setHousekeeping(db, actor, r.roomId, 'dirty');
+  await record(db, actor, { action: 'guest_request', entity: 'booking', entityId: id, after: { kind: v.kind, label: STAY_REQUEST_LABEL[v.kind], message: v.message.slice(0, 300) } });
+  recent.set(key, now);
+  const reply: Record<StayRequest, string> = {
+    cleaning: 'Danke – wir reinigen Ihr Zimmer so bald wie möglich.',
+    no_cleaning: 'Danke – wir lassen Ihr Zimmer heute in Ruhe.',
+    need: 'Danke – wir kümmern uns darum.',
+    checkout: 'Danke für Ihren Besuch! Falls noch nicht geschehen, kommen Sie bitte zum Bezahlen kurz an der Rezeption vorbei.',
+  };
+  return { ok: true, text: reply[v.kind] };
 }
 
 /** Bedingungen für die Anzeige in der Reservierung (Personal). */

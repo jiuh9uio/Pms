@@ -8,9 +8,9 @@ import { Button, Field, LoadState, useLoad, useToast } from '../ui.tsx';
 export function CheckinSheetCard() {
   const toast = useToast();
   const { data, error } = useLoad(async () => {
-    const [sheet, wifi, print] = await Promise.all([api<CheckinSheet>('GET', '/settings/checkin-sheet'), api<WifiDto>('GET', '/network/wifi').catch(() => null),
-      api<CheckinSheetDto>('GET', '/checkin-sheet').catch(() => null)]);
-    return { sheet, wifi, bonName: print?.bonPrinter ?? null };
+    const [sheet, wifi, print, policy] = await Promise.all([api<CheckinSheet>('GET', '/settings/checkin-sheet'), api<WifiDto>('GET', '/network/wifi').catch(() => null),
+      api<CheckinSheetDto>('GET', '/checkin-sheet').catch(() => null), api<{ publicUrl: string }>('GET', '/settings/cancel-policy').catch(() => null)]);
+    return { sheet, wifi, bonName: print?.bonPrinter ?? null, publicUrl: policy?.publicUrl ?? '' };
   });
   const [v, setV] = useState<CheckinSheet | null>(null);
   const [w, setW] = useState<WifiSettings | null>(null);
@@ -73,6 +73,15 @@ export function CheckinSheetCard() {
             <div className="sheet-qr">{qr ? <img src={qr} alt="QR-Code für das WLAN" /> : <span className="muted small">QR-Code erscheint nach dem Speichern</span>}</div>
           </div>}
           <p className="muted small">Dieselben WLAN-Angaben gelten für den Aushang unter Internet → Gäste-WLAN. Das Passwort steht im Klartext auf dem Blatt – am besten ein eigenes Gäste-WLAN verwenden.</p>
+        </>}
+        <h3>Gäste-Link (QR-Code zur eigenen Buchung)</h3>
+        <label className="check"><input type="checkbox" checked={v.showGuestLink} onChange={(e) => setV({ ...v, showGuestLink: e.target.checked })} />
+          <span>Persönlichen Gäste-Link als QR-Code aufdrucken<small>Der Gast scannt ihn und kann während des Aufenthalts Zimmerreinigung wünschen, „heute keine Reinigung“ melden, etwas bestellen (z. B. Handtücher) oder seine Abreise melden. Das erscheint bei Ihnen als Aufgabe im Übergabebuch; bei Reinigungswunsch steht das Zimmer unter „Zu reinigen“. Zum Öffnen gibt der Gast seinen Nachnamen (und, falls hinterlegt, die Postleitzahl) ein.</small></span></label>
+        {v.showGuestLink && <>
+          <div className="formgrid"><Field label="Text neben dem QR-Code" wide error={errs.guestLinkText}><input value={v.guestLinkText} maxLength={200} onChange={(e) => setV({ ...v, guestLinkText: e.target.value })} /></Field></div>
+          {data?.publicUrl
+            ? <p className="muted small">Der QR-Code führt zu <code>{data.publicUrl}</code> – erreichbar aus dem Internet.</p>
+            : <p className="notice warn small"><b>Noch keine Internet-Adresse eingetragen.</b> Der QR-Code führt dann zu diesem Rechner im Hausnetz. Das klappt nur, wenn das Handy des Gastes im selben Netz ist – in einem getrennten Gäste-WLAN oder über Mobilfunk meist <b>nicht</b>. Zuverlässig funktioniert es erst mit dem Online-Server (Adresse dann unter Einstellungen → Algorithmen → Storno eintragen).</p>}
         </>}
         <h3>Hausinformationen</h3>
         <div className="formgrid">

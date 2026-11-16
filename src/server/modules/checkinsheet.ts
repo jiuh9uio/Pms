@@ -9,6 +9,7 @@ import { getBooking } from './bookings.js';
 import { getWifi, wifiQrText } from './network.js';
 import { bonTarget, printLines } from './quickprint.js';
 import { getHotel } from './settings.js';
+import { guestLink } from './guestlink.js';
 
 /** Check-in-Blatt: Meldeschein mit abtrennbaren Gästeinformationen (WLAN mit QR-Code, Frühstück, Zimmerreinigung …). */
 export async function getCheckinSheet(db: Exec): Promise<CheckinSheet> {
@@ -53,8 +54,9 @@ const center = (text: string, w: number, o: { bold?: boolean; big?: boolean } = 
  * Meldeschein auf dem Bondrucker: Bon 1 = Meldeschein zum Unterschreiben (bleibt im Haus), Bon 2 = Gästeinformationen (WLAN mit QR-Code, Hausinfos).
  * Leere Angaben erscheinen als Linie zum Ausfüllen von Hand.
  */
-export async function printCheckinBon(db: Db, actor: Actor, bookingId: string) {
+export async function printCheckinBon(db: Db, actor: Actor, bookingId: string, base?: { url: string; localOnly: boolean }) {
   const [b, h, sheet] = await Promise.all([getBooking(db, bookingId), getHotel(db), checkinSheetForPrint(db)]);
+  const link = sheet.showGuestLink && base ? await guestLink(db, bookingId, base.url, base.localOnly) : null;
   const g = b.guest;
   const rooms = b.rooms.filter((r) => isActiveStatus(r.status));
   const from = rooms.map((r) => r.from).sort()[0], to = rooms.map((r) => r.to).sort().at(-1);
@@ -76,7 +78,7 @@ export async function printCheckinBon(db: Db, actor: Actor, bookingId: string) {
     { feed: 2 }, { text: '_'.repeat(w) }, { text: 'Ort, Datum' }, { feed: 3 }, { text: '_'.repeat(w) }, { text: 'Unterschrift des Gastes' }, { feed: 1 },
   ]);
   let guest = false;
-  if (sheet.showInfo && (sheet.wifi || sheet.lines.length || sheet.title)) {
+  if (sheet.showInfo && (sheet.wifi || sheet.lines.length || sheet.title || (link && !link.blocked))) {
     guest = true;
     const wifi = sheet.wifi;
     await printLines(db, (w) => [
@@ -86,6 +88,8 @@ export async function printCheckinBon(db: Db, actor: Actor, bookingId: string) {
       ...(wifi ? [{ text: 'WLAN', align: 'center', bold: true } as Line, { qr: wifiQrText({ ssid: wifi.ssid, password: wifi.password, open: wifi.open, note: '' }), size: 6 } as Line,
         ...center(`Netz: ${wifi.ssid}`, w, { bold: true }), ...center(wifi.open ? 'ohne Passwort' : `Passwort: ${wifi.password}`, w, { bold: true }),
         ...center('QR-Code mit der Handykamera scannen', w), { rule: true } as Line] : []),
+      ...(link && !link.blocked ? [{ text: 'Ihre Buchung online', align: 'center', bold: true } as Line, { qr: link.url, size: 5 } as Line,
+        ...center(sheet.guestLinkText, w), ...center(`Zum Öffnen: Ihr Nachname${link.needsZip ? ' und Ihre Postleitzahl' : ''}`, w), { rule: true } as Line] : []),
       ...sheet.lines.flatMap((l): Line[] => l.label ? [{ text: l.label, bold: true }, ...wrap(l.value, w - 2).map((t) => ({ text: `  ${t}` })), { feed: 1 }] : [...wrap(l.value, w).map((t) => ({ text: t })), { feed: 1 }]),
       ...(sheet.closing ? [{ rule: true } as Line, ...center(sheet.closing, w, { bold: true })] : []),
     ]);

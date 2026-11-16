@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { isActiveStatus, type BookingDto, type CheckinSheetDto } from '../../../src/shared/hotel.js';
+import { isActiveStatus, type BookingDto, type CheckinSheetDto, type GuestLinkDto } from '../../../src/shared/hotel.js';
 import type { HotelSettings } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { Button, LoadState, useLoad, useToast } from '../ui.tsx';
@@ -20,7 +20,9 @@ export function RegistrationPrint() {
   };
   const { data, error } = useLoad(async () => {
     const [b, hotel, sheet] = await Promise.all([api<BookingDto>('GET', `/bookings/${id}`), api<HotelSettings>('GET', '/settings/hotel'), api<CheckinSheetDto>('GET', '/checkin-sheet').catch(() => null)]);
-    return { b, hotel, sheet };
+    // persönlicher Gäste-Link als QR-Code (nur wenn eingeschaltet und nicht gesperrt)
+    const link = sheet?.showInfo && sheet.showGuestLink ? await api<GuestLinkDto>('GET', `/bookings/${id}/guest-link`).catch(() => null) : null;
+    return { b, hotel, sheet, link: link && !link.blocked ? link : null };
   }, [id]);
   useEffect(() => { if (data) document.title = `Meldeschein ${data.b.number}`; }, [data]);
   // direkt nach dem Check-in: Druckfenster gleich öffnen (sobald der QR-Code geladen ist)
@@ -30,7 +32,7 @@ export function RegistrationPrint() {
     return () => clearTimeout(t);
   }, [data, params]);
   if (!data) return <div className="center"><LoadState error={error} loading /></div>;
-  const sheet = data.sheet?.showInfo && (data.sheet.wifi || data.sheet.lines.length || data.sheet.title || data.sheet.closing) ? data.sheet : null;
+  const sheet = data.sheet?.showInfo && (data.sheet.wifi || data.sheet.lines.length || data.sheet.title || data.sheet.closing || data.link) ? data.sheet : null;
   return (
     <div className="printpage">
       <div className="printbar noprint">
@@ -38,13 +40,13 @@ export function RegistrationPrint() {
         {data.sheet?.bonPrinter && <Button busy={bonBusy} onClick={() => void printBon()}>Stattdessen auf Bondrucker</Button>}
         <span className="muted">Leere Felder füllt der Gast von Hand aus. Ob und für welche Gäste ein Meldeschein nötig ist und wie lange er aufzubewahren ist, regelt das Melderecht – bitte selbst prüfen.</span>
       </div>
-      <RegistrationSheet b={data.b} h={data.hotel} sheet={params.get('info') === '0' ? null : sheet} />
+      <RegistrationSheet b={data.b} h={data.hotel} sheet={params.get('info') === '0' ? null : sheet} link={data.link} />
     </div>
   );
 }
 
 /** Ein Meldeschein (A4), auf Wunsch mit abtrennbaren Gästeinformationen. */
-export function RegistrationSheet({ b, h, sheet }: { b: BookingDto; h: HotelSettings; sheet: CheckinSheetDto | null }) {
+export function RegistrationSheet({ b, h, sheet, link = null }: { b: BookingDto; h: HotelSettings; sheet: CheckinSheetDto | null; link?: GuestLinkDto | null }) {
   const g = b.guest;
   const rooms = b.rooms.filter((r) => isActiveStatus(r.status));
   const from = rooms.map((r) => r.from).sort()[0];
@@ -68,7 +70,8 @@ export function RegistrationSheet({ b, h, sheet }: { b: BookingDto; h: HotelSett
           <section className="guestinfo">
             <div className="cutline"><span>✂ hier abtrennen – für den Gast</span></div>
             <div className="gi-head">{sheet.title && <h2>{sheet.title}</h2>}<span>{h.name}{rooms.length ? ` · Zimmer ${rooms.map((r) => r.roomNumber).join(', ')}` : ''}</span></div>
-            <div className={`gi-body${sheet.wifi ? '' : ' nowifi'}`}>
+            <div className={`gi-body${sheet.wifi || link ? '' : ' nowifi'}`}>
+              <div className="gi-codes">
               {sheet.wifi && (
                 <div className="gi-wifi">
                   <img src={sheet.wifi.qr} alt="" />
@@ -76,6 +79,14 @@ export function RegistrationSheet({ b, h, sheet }: { b: BookingDto; h: HotelSett
                     <small className="gi-hint">QR-Code mit der Handykamera scannen, um sich direkt zu verbinden.</small></div>
                 </div>
               )}
+              {link && (
+                <div className="gi-wifi gi-link">
+                  <img src={link.qr} alt="" />
+                  <div><b>Ihre Buchung online</b><span>{sheet.guestLinkText}</span>
+                    <small className="gi-hint">QR-Code mit der Handykamera scannen. Zum Öffnen: Ihr Nachname{link.needsZip ? ' und Ihre Postleitzahl' : ''}.</small></div>
+                </div>
+              )}
+              </div>
               {sheet.lines.length > 0 && <dl className="gi-lines">{sheet.lines.map((l, i) => l.label ? <div key={i}><dt>{l.label}</dt><dd>{l.value}</dd></div> : <div key={i} className="full"><dd>{l.value}</dd></div>)}</dl>}
             </div>
             {sheet.closing && <p className="gi-closing">{sheet.closing}</p>}

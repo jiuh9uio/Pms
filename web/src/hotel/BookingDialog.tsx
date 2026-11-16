@@ -630,6 +630,7 @@ function describe(h: AuditDto): string {
     case 'guest_link_renew': return 'Neuen Gäste-Link ausgestellt (der alte gilt nicht mehr)';
     case 'guest_arrival': return `Gast über seinen Link: ${a.arrivalTime ? `Ankunft voraussichtlich ${a.arrivalTime} Uhr` : 'Nachricht hinterlassen'}`;
     case 'guest_cancel': return `Vom Gast über seinen Link storniert${a.free ? ' (kostenfrei)' : a.feeCents ? ` – Ausfallgebühr laut Bedingungen ${formatMoney(a.feeCents as number)}` : ''}`;
+    case 'guest_request': return `Gast über seinen Link: ${a.label}${a.message ? ` – „${a.message}“` : ''}`;
     case 'guest_form_link': return 'QR-Code für den Meldeschein erzeugt';
     case 'guest_form': return `Meldeschein vom Gast ausgefüllt${a.companions ? ` (${a.companions} mitreisende ${a.companions === 1 ? 'Person' : 'Personen'})` : ''}`;
     default: return h.action;

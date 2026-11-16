@@ -40,7 +40,7 @@ import * as migration from './modules/migration.js';
 import * as team from './modules/team.js';
 import * as T from '../shared/team.js';
 import * as I from '../shared/inbox.js';
-import { mailSendInput, publicArrivalInput, publicCancelInput, publicCredInput } from '../shared/hotel.js';
+import { mailSendInput, publicArrivalInput, publicCancelInput, publicCredInput, publicStayRequestInput } from '../shared/hotel.js';
 import * as guestlink from './modules/guestlink.js';
 import { checkForUpdate, getChangelog, getUpdateStatus, installUpdate } from './update.js';
 
@@ -155,6 +155,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.get('/public/booking/:token', { preHandler: publicLimit }, (req) => guestlink.linkGate(db, linkToken(req)));
     api.post('/public/booking/:token/open', { preHandler: publicLimit, bodyLimit: 1024 }, (req) => guestlink.publicBooking(db, linkToken(req), publicCredInput.parse(req.body)));
     api.post('/public/booking/:token/arrival', { preHandler: publicLimit, bodyLimit: 4 * 1024 }, (req) => guestlink.setArrival(db, linkToken(req), publicArrivalInput.parse(req.body), req.ip ?? null));
+    api.post('/public/booking/:token/request', { preHandler: publicLimit, bodyLimit: 2 * 1024 }, (req) => guestlink.stayRequest(db, linkToken(req), publicStayRequestInput.parse(req.body), req.ip ?? null));
     api.post('/public/booking/:token/cancel', { preHandler: publicLimit, bodyLimit: 1024 }, (req) => guestlink.cancelByGuest(db, linkToken(req), publicCancelInput.parse(req.body), req.ip ?? null));
 
     // Online-Buchungsanfrage: ohne Anmeldung, nur wenn eingeschaltet; legt eine Nachricht im Posteingang an

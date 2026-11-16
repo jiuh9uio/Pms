@@ -341,6 +341,8 @@ export interface PublicBooking {
   state: 'active' | 'cancelled' | 'arrived' | 'past';
   arrivalTime: string; guestMessage: string; checkinTime: string;
   terms: CancelTerms; canCancel: boolean; /** warum nicht online storniert werden kann */ cancelHint: string;
+  /** während des Aufenthalts (eingecheckt): Reinigung, Wünsche, Abreise über den Link melden */
+  canRequest: boolean; checkoutTime: string;
 }
 /** Zugangsangaben des Gastes zum Link: Nachname und – falls bei der Reservierung hinterlegt – Postleitzahl */
 const cred = { lastName: z.string().trim().min(1, 'Bitte Ihren Nachnamen eintragen').max(80), zip: z.string().trim().max(12).default('') };
@@ -349,6 +351,11 @@ export type PublicCred = z.infer<typeof publicCredInput>;
 export const publicCancelInput = z.object({ ...cred, confirm: z.literal(true) });
 /** Was die Seite vor der Eingabe zeigen darf: nichts über die Reservierung selbst */
 export interface PublicBookingGate { hotelName: string; hotelPhone: string; needsZip: boolean }
+export const STAY_REQUESTS = ['cleaning', 'no_cleaning', 'need', 'checkout'] as const;
+export type StayRequest = (typeof STAY_REQUESTS)[number];
+export const STAY_REQUEST_LABEL: Record<StayRequest, string> = { cleaning: 'Zimmerreinigung gewünscht', no_cleaning: 'Heute bitte keine Reinigung', need: 'Wunsch', checkout: 'Abreise gemeldet' };
+export const publicStayRequestInput = z.object({ ...cred, kind: z.enum(STAY_REQUESTS), message: z.string().trim().max(300, 'Höchstens 300 Zeichen').default('') })
+  .refine((v) => v.kind !== 'need' || v.message.length >= 2, { message: 'Bitte kurz schreiben, was Sie brauchen', path: ['message'] });
 export const publicArrivalInput = z.object({ ...cred, time: z.union([z.literal(''), z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Uhrzeit im Format HH:MM')]), message: z.string().trim().max(500).default('') });
 
 // ---------- Digitale Gästemappe (z. B. Gastfreund) ----------
@@ -377,6 +384,9 @@ export function longStayDiscount(c: { stdOccupancy: number; longStayNights: numb
 export const checkinSheetInput = z.object({
   /** nach „Anreise bestätigen“ anbieten, den Meldeschein zu drucken */
   askAfterCheckin: z.boolean(),
+  /** QR-Code mit dem persönlichen Gäste-Link (Reinigung, Wünsche, Abreise) auf die Gästeinformationen drucken */
+  showGuestLink: z.boolean().default(false),
+  guestLinkText: z.string().trim().max(200).default('Ihre Buchung auf dem Handy: Zimmerreinigung wünschen, etwas bestellen oder die Abreise melden.'),
   /** Gästeinformationen unten auf dem Meldeschein (zum Abtrennen) */
   showInfo: z.boolean(),
   showWifi: z.boolean(),
@@ -392,6 +402,7 @@ export const checkinSheetInput = z.object({
 export type CheckinSheet = z.infer<typeof checkinSheetInput>;
 export const CHECKIN_SHEET_DEFAULTS: CheckinSheet = {
   askAfterCheckin: true, autoCheckout: true, showInfo: true, showWifi: true, printMode: 'a4', title: 'Herzlich willkommen!',
+  showGuestLink: false, guestLinkText: 'Ihre Buchung auf dem Handy: Zimmerreinigung wünschen, etwas bestellen oder die Abreise melden.',
   info: 'Frühstück | 7:00 – 10:00 Uhr\nZimmerreinigung | täglich zwischen 10:00 und 14:00 Uhr – bitte Schild „Bitte nicht stören“ an die Tür hängen, wenn Sie keine Reinigung wünschen\nAbreise | bitte bis 11:00 Uhr das Zimmer freigeben\nRezeption | bei Fragen einfach anrufen oder vorbeikommen',
   closing: 'Wir wünschen Ihnen einen angenehmen Aufenthalt.',
 };

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { STATUS_LABEL, formatMoney, publicArrivalInput, publicCredInput, type PublicBooking, type PublicBookingGate, type PublicCred } from '../../../src/shared/hotel.js';
+import { STATUS_LABEL, formatMoney, publicArrivalInput, publicCredInput, type PublicBooking, type PublicBookingGate, type PublicCred, type StayRequest } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
 import { deDate } from '../hotel/common.tsx';
 import { Badge, Button, Field, LoadState, useLoad, useSubmit } from '../ui.tsx';
@@ -101,7 +101,54 @@ export function BookingPage() {
           ) : <p className="muted">{b.cancelHint}</p>}
         </section>
       )}
+      {b.canRequest && cred && <StayCard path={path} cred={cred} b={b} />}
       {(b.state === 'arrived' || b.state === 'past') && <p className="notice">{b.state === 'arrived' ? 'Sie sind bereits angereist – schön, dass Sie da sind.' : 'Dieser Aufenthalt liegt in der Vergangenheit. Vielen Dank für Ihren Besuch.'}</p>}
     </div>
+  );
+}
+
+const NEEDS = ['Handtücher', 'Kopfkissen', 'Decke', 'Toilettenpapier', 'Zahnbürste', 'Föhn'];
+/** Während des Aufenthalts: Reinigung wünschen, keine Reinigung, etwas bringen lassen, Abreise melden. */
+function StayCard({ path, cred, b }: { path: string; cred: PublicCred; b: PublicBooking }) {
+  const [open, setOpen] = useState<StayRequest | null>(null);
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
+  const [fail, setFail] = useState<string | null>(null);
+  const send = async (kind: StayRequest) => {
+    setBusy(true); setFail(null); setDone(null);
+    try { const r = await api<{ text: string }>('POST', `${path}/request`, { ...cred, kind, message: msg }); setDone(r.text); setOpen(null); setMsg(''); }
+    catch (e) { setFail(e instanceof Error ? e.message : 'Das hat nicht geklappt. Bitte rufen Sie uns an.'); }
+    setBusy(false);
+  };
+  const choose = (k: StayRequest) => { setOpen(open === k ? null : k); setMsg(''); setFail(null); setDone(null); };
+  const form: Record<StayRequest, { label: string; hint: string; placeholder: string; button: string }> = {
+    cleaning: { label: 'Hinweis (freiwillig)', hint: '', placeholder: 'z. B. bitte erst ab 14 Uhr', button: 'Reinigung anfordern' },
+    no_cleaning: { label: 'Hinweis (freiwillig)', hint: '', placeholder: 'z. B. nur frische Handtücher vor die Tür', button: 'Heute keine Reinigung' },
+    need: { label: 'Was dürfen wir bringen?', hint: 'antippen oder selbst schreiben', placeholder: 'z. B. zwei Handtücher', button: 'Absenden' },
+    checkout: { label: 'Hinweis (freiwillig)', hint: '', placeholder: 'z. B. Schlüssel liegt im Zimmer', button: 'Abreise melden' },
+  };
+  return (
+    <section className="card staycard">
+      <h2>Während Ihres Aufenthalts</h2>
+      <p className="muted small">Ihre Nachricht geht direkt an unser Team.</p>
+      <div className="staybtns">
+        <Button variant={open === 'cleaning' ? 'primary' : 'default'} onClick={() => choose('cleaning')}>🧹 Zimmerreinigung wünschen</Button>
+        <Button variant={open === 'no_cleaning' ? 'primary' : 'default'} onClick={() => choose('no_cleaning')}>🚫 Heute keine Reinigung</Button>
+        <Button variant={open === 'need' ? 'primary' : 'default'} onClick={() => choose('need')}>🛎 Etwas bringen lassen</Button>
+        <Button variant={open === 'checkout' ? 'primary' : 'default'} onClick={() => choose('checkout')}>👋 Abreise melden</Button>
+      </div>
+      {open && (
+        <div className="stayform">
+          {open === 'need' && <div className="chips">{NEEDS.map((n) => <button key={n} type="button" className="chip" onClick={() => setMsg(msg ? `${msg}, ${n}` : n)}>{n}</button>)}</div>}
+          {open === 'checkout' && <p className="small">Abreise bis {b.checkoutTime} Uhr. Bezahlen Sie bitte vorher an der Rezeption, falls noch nicht geschehen.</p>}
+          <Field label={form[open].label} hint={form[open].hint || undefined}><textarea rows={2} maxLength={300} value={msg} placeholder={form[open].placeholder} onChange={(e) => setMsg(e.target.value)} /></Field>
+          <div className="formactions"><Button variant="primary" busy={busy} disabled={open === 'need' && msg.trim().length < 2} onClick={() => void send(open)}>{form[open].button}</Button></div>
+        </div>
+      )}
+      {done && <p className="notice" role="status">{done}</p>}
+      {fail && <p className="notice danger" role="alert">{fail}</p>}
+      {b.hotelPhone && <p className="muted small">Eilig? Rufen Sie uns an: <a href={`tel:${b.hotelPhone.replace(/[^\d+]/g, '')}`}>{b.hotelPhone}</a></p>}
+    </section>
   );
 }
