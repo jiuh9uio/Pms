@@ -49,9 +49,7 @@ automatischem HTTPS-Zertifikat, Firewall (nur SSH, 80, 443), tägliche Sicherung
   die Zwei-Faktor-Anmeldung für alle Administratoren einschalten.
 - **Datenschutz:** Gäste- und Rechnungsdaten liegen dann beim Anbieter. Dafür ist ein Vertrag zur Auftragsverarbeitung mit dem
   Anbieter nötig; das wurde nicht rechtlich geprüft.
-- **Umzug bestehender Daten** von der Windows-Version: Sicherung dort erstellen (`backups\*.dump`), auf den Server kopieren und
-  mit `npm run restore` einspielen. Der Schlüssel für das E-Mail-Passwort (`data\secret.key`) gehört nach `/var/lib/pms`.
-  Dieser Umzug ist nicht erprobt.
+- **Umzug bestehender Daten** von der Windows-Version: mit dem Umzugspaket, siehe nächster Abschnitt.
 
 ## Daten vom Windows-PC übernehmen (Umzugspaket)
 
