@@ -3,6 +3,21 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.79.0
+
+- **Neu: Angebote** (Hotel → Kunden → Angebote; im Restaurant über das Menü erreichbar) für Tagungen, Feiern und Gruppen:
+  - **Leistungen** (nur Administrator): Katalog mit Preis, Abrechnungsart (pro Person, pro Tag, pro Nacht, pauschal …) und Steuersatz.
+  - **Vorlagen** (nur Administrator): Tagung, Familienfeier, Weihnachtsfeier und Gruppenübernachtung sind mit Fragenkatalog vorbereitet – **noch ohne Preise**, bitte Ihre eigenen Leistungen und Preise eintragen.
+  - **AGB & Dokumente** (nur Administrator): eigene AGB als PDF hochladen; sie werden beim Versand automatisch angehängt.
+  - **Angebot erstellen:** Kunde, Termin, Personen → Positionen werden mit passenden Mengen vorgeschlagen und lassen sich ändern. Angebot als PDF im Rechnungs-Layout.
+  - **Versenden:** E-Mail mit Angebot als PDF, den AGB und einem Link. Über den Link kann der Kunde das Angebot ansehen und **online annehmen** (vollständiger Name + Bestätigung). Gespeichert werden Zeitpunkt, Name und ein Prüfwert des versendeten PDFs. Die Annahme erscheint als Aufgabe in der Übersicht.
+  - Annahme auch **von Hand** vermerken (per E-Mail, Telefon, persönlich, schriftlich).
+  - Nach der Annahme: daraus eine **Hotelreservierung** oder **Tischreservierung** anlegen und eine **Anzahlung anfordern**.
+  - Hinweis: Ob diese Form der Annahme für Ihre Verträge rechtlich ausreicht, ist nicht geprüft – bitte von einem Anwalt bestätigen lassen. Von außerhalb des Hauses funktioniert der Link erst mit dem geplanten Server.
+- Posteingang: Bei Anfragen zu Feiern und Tagungen gibt es „Angebot erstellen“ – Name, E-Mail, Telefon, Datum und Personen werden übernommen.
+- Reservierung: **Stammgast-Hinweis** neben dem Namen („War schon einmal hier“ bzw. „Stammgast“ ab zwei früheren Aufenthalten, mit Datum der letzten Abreise). Es gibt keine automatischen Rabatte.
+- **Fehler behoben:** Ein Teil der Gäste-Links (Meldeschein per QR, Gäste-Link zur Buchung) ließ sich nicht öffnen und zeigte eine leere Fehlerseite. Diese Links funktionieren jetzt.
+
 ## 1.78.1
 
 - Restaurant: Der **Ausblick** (Gäste ohne Reservierung / Gäste gehen früher, Wetter, Fußball, Veranstaltungen) ist vorerst ausgeblendet. Es werden dafür auch keine Wetter- oder Fußballdaten mehr abgerufen. Die Funktion bleibt im Programm erhalten und kann später wieder eingeschaltet werden. Anzahlungen und alles andere im Restaurant bleiben unverändert.

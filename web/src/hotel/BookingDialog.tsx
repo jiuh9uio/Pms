@@ -15,7 +15,7 @@ import { GuestFormDialog } from './GuestFormDialog.tsx';
 import { MailDialog } from './MailDialog.tsx';
 import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
-import { Button, Dialog, Field, LoadState, fmtDateTime, useLoad, useSubmit, useToast } from '../ui.tsx';
+import { Badge, Button, Dialog, Field, LoadState, fmtDateTime, useLoad, useSubmit, useToast } from '../ui.tsx';
 import { GuestFields, StatusBadge, deDate, deShort, persons, toDraft, type GuestDraft } from './common.tsx';
 
 type Sub = { kind: 'checkin' | 'checkout' | 'edit'; room: BookingRoomDto } | { kind: 'add' } | null;
@@ -77,6 +77,7 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
           <section className="bk-hero">
             <div className="bk-guest">
               <div className="bk-name">{guestName || '(ohne Namen)'}{b.guest.company && <small> · {b.guest.company}</small>}</div>
+              {b.earlierStays.count > 0 && <div className="bk-contact"><Badge tone="accent">{b.earlierStays.count >= 2 ? 'Stammgast' : 'War schon einmal hier'}</Badge> <small>{b.earlierStays.count === 1 ? '1 früherer Aufenthalt' : `${b.earlierStays.count} frühere Aufenthalte`}{b.earlierStays.last ? `, zuletzt abgereist am ${deDate(b.earlierStays.last)}` : ''}</small></div>}
               <div className="bk-contact">{[b.guest.phone, b.guest.email].filter(Boolean).join(' · ') || 'Keine Kontaktdaten'}</div>
               <div className="bk-contact">{[b.guest.street, [b.guest.zip, b.guest.city].filter(Boolean).join(' ')].filter(Boolean).join(', ') || 'Noch keine Anschrift'}</div>
               <div className="btnrow"><Button onClick={() => openGuest(b.guest.id)}>Gästeprofil</Button>

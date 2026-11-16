@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseGateway, parseNeighbors, wifiQrText } from '../src/server/modules/network.js';
 import { downloadFile, getChangelog, getUpdateStatus, installUpdate, isNewer, parseChangelog, updateErrorText } from '../src/server/update.js';
@@ -96,6 +97,8 @@ describe('Was ist neu', () => {
     expect(parseChangelog(md)).toEqual([{ version: '2.1.0', text: '- Neu A\n- Neu B' }, { version: '2.0.0', text: 'Text' }]);
     const real = getChangelog();
     expect(real.length).toBeGreaterThan(5);
-    expect(real.at(-1)!.version).toBe('1.0.0');
+    // im Programm erscheinen höchstens die letzten 100 Versionen, die neueste zuerst
+    expect(real.length).toBeLessThanOrEqual(100);
+    expect(real[0]!.version).toBe(JSON.parse(readFileSync('package.json', 'utf8')).version);
   });
 });

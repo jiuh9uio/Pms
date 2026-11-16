@@ -166,6 +166,8 @@ export interface BookingDto {
   companyId: string | null; companyName: string | null;
   guest: GuestDto; rooms: BookingRoomDto[]; charges: ChargeDto[];
   lodgingCents: number; chargesCents: number; totalCents: number;
+  /** frühere, abgeschlossene Aufenthalte dieses Gastes (andere Reservierungen) – für den Stammgast-Hinweis */
+  earlierStays: { count: number; last: string | null };
 }
 export interface BookingListRow extends BookingRoomDto {
   number: string; guestId: string; guestName: string; groupName: string; source: string; roomCount: number;

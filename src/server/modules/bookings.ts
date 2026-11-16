@@ -74,10 +74,14 @@ export async function getBooking(db: Exec, id: string): Promise<BookingDto> {
   }));
   const lodgingCents = roomDtos.filter((r) => isActiveStatus(r.status)).reduce((s, r) => s + r.lodgingCents, 0);
   const chargesCents = chargeDtos.reduce((s, c) => s + c.totalCents, 0);
+  const [earlier] = await db.execute(sql`
+    select count(distinct b2.id)::int as n, max(br.checked_out_at) as last from bookings b2 join booking_rooms br on br.booking_id = b2.id
+    where b2.guest_id = ${b.guestId} and b2.id <> ${id} and br.status = 'checked_out'`) as unknown as { n: number; last: string | Date | null }[];
+  const lastOut = earlier?.last ? new Date(earlier.last).toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' }) : null;
   return {
     id: b.id, number: b.number, groupName: b.groupName, source: b.source, paymentMethod: b.paymentMethod, notes: b.notes, version: b.version, optionUntil: b.optionUntil, arrivalTime: b.arrivalTime, guestMessage: b.guestMessage,
     createdAt: b.createdAt.toISOString(), companyId: b.companyId, companyName: company?.name ?? null, guest: toGuestDto(g!), rooms: roomDtos, charges: chargeDtos,
-    lodgingCents, chargesCents, totalCents: lodgingCents + chargesCents,
+    lodgingCents, chargesCents, totalCents: lodgingCents + chargesCents, earlierStays: { count: Number(earlier?.n ?? 0), last: lastOut },
   };
 }
 

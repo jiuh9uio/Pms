@@ -94,3 +94,17 @@ describe('Gäste-Link während des Aufenthalts', () => {
     expect((await ok('GET', '/checkin-sheet', user)).showGuestLink).toBe(true);
   });
 });
+
+describe('Stammgast-Hinweis in der Reservierung', () => {
+  it('zählt nur frühere, abgereiste Aufenthalte anderer Reservierungen', async () => {
+    const first = await ok('GET', `/bookings/${bookingId}`, user);
+    expect(first.earlierStays).toEqual({ count: 0, last: null });
+    await db.execute(sql`update booking_rooms set status = 'checked_out', checked_out_at = '2025-03-10T09:00:00Z' where booking_id = ${bookingId}`);
+    const again = await ok('POST', '/bookings', user, { guestId: first.guest.id, groupName: '', source: 'Telefon', paymentMethod: '', notes: '', breakfast: false,
+      rooms: [{ roomId, from: addDays(today, 30), to: addDays(today, 31), adults: 1, children: 0, status: 'confirmed', pricePerNightCents: null }] });
+    const second = await ok('GET', `/bookings/${again.id}`, user);
+    expect(second.earlierStays).toEqual({ count: 1, last: '2025-03-10' });
+    // die erste Reservierung zählt sich selbst nicht
+    expect((await ok('GET', `/bookings/${bookingId}`, user)).earlierStays.count).toBe(0);
+  });
+});
