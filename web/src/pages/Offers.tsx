@@ -1,0 +1,411 @@
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { addDays, formatMoney, moneyInput, parseMoney, todayBerlin } from '../../../src/shared/hotel.js';
+import {
+  AREA_LABEL, OFFER_AREAS, OFFER_STATE_LABEL, OFFER_UNITS, UNIT_LABEL, lineTotal, offerItemInput, offerTemplateInput, quantityFor,
+  type OfferArea, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferListRow, type OfferState, type OfferTemplateDto, type OfferUnit,
+} from '../../../src/shared/offers.js';
+import { api } from '../api.ts';
+import { useAuth } from '../App.tsx';
+import { DepositPanel } from '../billing/DepositPanel.tsx';
+import { useData } from '../data.tsx';
+import { deDate } from '../hotel/common.tsx';
+import { MailDialog } from '../hotel/MailDialog.tsx';
+import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useTabs, useToast } from '../ui.tsx';
+
+const TONE: Record<OfferState, 'neutral' | 'accent' | 'ok' | 'danger' | 'warn'> = { draft: 'neutral', sent: 'accent', accepted: 'ok', declined: 'danger', expired: 'warn' };
+const TABS = [['angebote', 'Angebote'], ['leistungen', 'Leistungen'], ['vorlagen', 'Vorlagen'], ['dokumente', 'AGB & Dokumente']] as const;
+
+/** Angebote für Tagungen, Feiern und Gruppen: aus Vorlagen zusammenstellen, als PDF mit AGB versenden, Annahme festhalten. */
+export function Offers() {
+  const { user } = useAuth();
+  const isAdmin = user.role === 'admin';
+  const { current, bar } = useTabs(isAdmin ? TABS : TABS.slice(0, 1));
+  return (
+    <>
+      <PageHeader title="Angebote" sub="Tagungen, Feiern und Gruppen – aus Vorlagen zusammenstellen, als PDF mit AGB versenden, Annahme festhalten" />
+      {isAdmin && bar}
+      {current === 'angebote' && <OfferList />}
+      {current === 'leistungen' && isAdmin && <ItemsAdmin />}
+      {current === 'vorlagen' && isAdmin && <TemplatesAdmin />}
+      {current === 'dokumente' && isAdmin && <DocumentsAdmin />}
+    </>
+  );
+}
+
+function OfferList() {
+  const { rev } = useData();
+  const [params, setParams] = useSearchParams();
+  const [state, setState] = useState('open');
+  const [q, setQ] = useState('');
+  const [creating, setCreating] = useState(params.get('neu') === '1');
+  const [openId, setOpenId] = useState<string | null>(params.get('angebot'));
+  const { data, error } = useLoad(() => api<OfferListRow[]>('GET', `/offers?state=${state}&q=${encodeURIComponent(q.trim())}`), [state, q, rev]);
+  const prefill = { customerName: params.get('name') ?? '', email: params.get('email') ?? '', phone: params.get('phone') ?? '', eventDate: params.get('datum') ?? '', persons: params.get('personen') ?? '' };
+  return (
+    <>
+      <div className="filters">
+        <select value={state} onChange={(e) => setState(e.target.value)} aria-label="Stand">
+          <option value="open">offen (Entwurf, versendet, abgelaufen)</option><option value="accepted">angenommen</option><option value="declined">abgelehnt</option><option value="all">alle</option>
+        </select>
+        <input type="search" placeholder="Nummer, Kunde, Titel …" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Suche" />
+        <Button variant="primary" onClick={() => setCreating(true)}>Neues Angebot</Button>
+      </div>
+      <LoadState error={error} loading={!data} />
+      {data && (data.length === 0 ? <p className="muted card">Keine Angebote.</p> : (
+        <div className="tablewrap card flush"><table>
+          <thead><tr><th>Nummer</th><th>Kunde</th><th>Termin</th><th className="num">Pers.</th><th className="num">Betrag</th><th>Stand</th></tr></thead>
+          <tbody>{data.map((o) => (
+            <tr key={o.id} className="rowlink" tabIndex={0} onClick={() => setOpenId(o.id)} onKeyDown={(e) => { if (e.key === 'Enter') setOpenId(o.id); }}>
+              <td className="nowrap"><b>{o.number}</b><br /><small className="muted">{o.title || AREA_LABEL[o.area]}</small></td>
+              <td>{o.customer}<br /><small className="muted">{o.email}</small></td>
+              <td className="nowrap">{o.eventDate ? deDate(o.eventDate) : '–'}{o.eventEnd && o.eventEnd !== o.eventDate ? ` – ${deDate(o.eventEnd)}` : ''}</td>
+              <td className="num">{o.persons}</td>
+              <td className="num">{formatMoney(o.totalCents)}</td>
+              <td><Badge tone={TONE[o.state]}>{OFFER_STATE_LABEL[o.state]}</Badge>{o.state === 'expired' && <><br /><small className="muted">nachfassen</small></>}
+                {o.state === 'sent' && o.validUntil && <><br /><small className="muted">gültig bis {deDate(o.validUntil)}</small></>}</td>
+            </tr>
+          ))}</tbody>
+        </table></div>
+      ))}
+      {creating && <NewOfferDialog prefill={prefill} onClose={() => { setCreating(false); if (params.get('neu')) { const p = new URLSearchParams(params); ['neu', 'name', 'email', 'phone', 'datum', 'personen'].forEach((k) => p.delete(k)); setParams(p, { replace: true }); } }} onCreated={(id) => { setCreating(false); setOpenId(id); }} />}
+      {openId && <OfferEditor id={openId} onClose={() => setOpenId(null)} />}
+    </>
+  );
+}
+
+function NewOfferDialog({ prefill, onClose, onCreated }: { prefill: { customerName: string; email: string; phone: string; eventDate: string; persons: string }; onClose: () => void; onCreated: (id: string) => void }) {
+  const { bump } = useData();
+  const tpls = useLoad(() => api<OfferTemplateDto[]>('GET', '/offer-templates')).data;
+  const [v, setV] = useState({ templateId: '', customerCompany: '', customerName: prefill.customerName, email: prefill.email, phone: prefill.phone, eventDate: /^\d{4}-\d{2}-\d{2}$/.test(prefill.eventDate) ? prefill.eventDate : '', eventEnd: '', persons: prefill.persons || '10' });
+  const [busy, setBusy] = useState(false);
+  const [fail, setFail] = useState<string | null>(null);
+  const create = async () => {
+    setBusy(true); setFail(null);
+    try {
+      const r = await api<{ id: string }>('POST', '/offers', { ...v, templateId: v.templateId || null, eventDate: v.eventDate || null, eventEnd: v.eventEnd || null, persons: Number(v.persons) || 0, area: 'both' });
+      bump(); onCreated(r.id);
+    } catch (e) { const err = e as { message?: string; fields?: Record<string, string> }; setFail(Object.values(err.fields ?? {}).join(' · ') || err.message || 'Fehler'); }
+    setBusy(false);
+  };
+  const set = (k: keyof typeof v, x: string) => setV({ ...v, [k]: x });
+  return (
+    <Dialog title="Neues Angebot" onClose={onClose} size="lg" footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={busy} onClick={() => void create()}>Angebot anlegen</Button></>}>
+      <Field label="Vorlage"><select value={v.templateId} onChange={(e) => set('templateId', e.target.value)}>
+        <option value="">ohne Vorlage (leer)</option>{(tpls ?? []).filter((t) => t.active).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
+      <div className="formgrid">
+        <Field label="Firma"><input value={v.customerCompany} onChange={(e) => set('customerCompany', e.target.value)} /></Field>
+        <Field label="Name (Ansprechpartner)"><input value={v.customerName} onChange={(e) => set('customerName', e.target.value)} /></Field>
+        <Field label="E-Mail"><input type="email" value={v.email} onChange={(e) => set('email', e.target.value)} /></Field>
+        <Field label="Telefon"><input value={v.phone} onChange={(e) => set('phone', e.target.value)} /></Field>
+        <Field label="Termin (Beginn)"><input type="date" value={v.eventDate} onChange={(e) => set('eventDate', e.target.value)} /></Field>
+        <Field label="bis (bei mehreren Tagen)"><input type="date" value={v.eventEnd} min={v.eventDate || undefined} onChange={(e) => set('eventEnd', e.target.value)} /></Field>
+        <Field label="Personen"><input inputMode="numeric" value={v.persons} onChange={(e) => set('persons', e.target.value)} /></Field>
+      </div>
+      {fail && <p className="notice danger" role="alert">{fail}</p>}
+      <p className="muted small">Die Leistungen der Vorlage werden mit passender Menge übernommen (z. B. pro Person und Tag = Personen × Tage) und lassen sich danach anpassen.</p>
+    </Dialog>
+  );
+}
+
+type LineDraft = { itemId: string | null; description: string; detail: string; unit: OfferUnit; quantity: string; price: string; tax: string };
+const toDraftLine = (l: OfferDto['lines'][number]): LineDraft => ({ itemId: l.itemId, description: l.description, detail: l.detail, unit: l.unit, quantity: String(l.quantity).replace('.', ','), price: moneyInput(l.unitPriceCents), tax: String(l.taxRatePercent) });
+const qty = (s: string) => Number(s.replace(',', '.'));
+
+function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
+  const { rev, bump, newBooking } = useData();
+  const toast = useToast();
+  const { data: o, error } = useLoad(() => api<OfferDto>('GET', `/offers/${id}`), [id, rev]);
+  const items = useLoad(() => api<OfferItemDto[]>('GET', '/offer-items')).data ?? [];
+  const docs = useLoad(() => api<OfferDocumentDto[]>('GET', '/offer-documents')).data ?? [];
+  const [v, setV] = useState<(Omit<OfferDto, 'lines'> & { lines: LineDraft[]; questionsText: string }) | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [mail, setMail] = useState(false);
+  const [accepting, setAccepting] = useState(false);
+  useEffect(() => { if (o) { setV({ ...o, lines: o.lines.map(toDraftLine), questionsText: o.questions.join('\n') }); setDirty(false); } }, [o]);
+  if (!o || !v) return <Dialog title="Angebot" onClose={onClose}><LoadState error={error} loading /></Dialog>;
+  const locked = o.status === 'accepted' || o.status === 'declined';
+  const ch = (p: Partial<typeof v>) => { setV({ ...v, ...p }); setDirty(true); };
+  const setLine = (i: number, p: Partial<LineDraft>) => ch({ lines: v.lines.map((l, k) => (k === i ? { ...l, ...p } : l)) });
+  const totalOf = (l: LineDraft) => { const q = qty(l.quantity), c = parseMoney(l.price); return Number.isFinite(q) && Number.isFinite(c) ? lineTotal(q, c) : 0; };
+  const total = v.lines.reduce((s, l) => s + totalOf(l), 0);
+  const addItem = (itemId: string) => {
+    const it = items.find((x) => x.id === itemId);
+    if (!it) return;
+    ch({ lines: [...v.lines, { itemId: it.id, description: it.name, detail: it.description, unit: it.unit, quantity: String(quantityFor(it.unit, v.persons, v.eventDate, v.eventEnd)).replace('.', ','), price: moneyInput(it.priceCents), tax: String(it.taxRatePercent) }] });
+  };
+  const recalc = () => ch({ lines: v.lines.map((l) => (l.unit === 'flat' ? l : { ...l, quantity: String(quantityFor(l.unit, v.persons, v.eventDate, v.eventEnd)) })) });
+  const save = async (quiet = false) => {
+    setBusy('save');
+    try {
+      const r = await api<{ backToDraft: boolean }>('PUT', `/offers/${id}`, {
+        area: v.area, customerCompany: v.customerCompany, customerName: v.customerName, email: v.email, phone: v.phone, street: v.street, zip: v.zip, city: v.city,
+        eventDate: v.eventDate || null, eventEnd: v.eventEnd || null, persons: v.persons, title: v.title, intro: v.intro, closing: v.closing,
+        questions: v.questionsText.split('\n').map((x) => x.trim()).filter(Boolean), validUntil: v.validUntil || null, depositPercent: v.depositPercent, documentIds: v.documentIds, notes: v.notes,
+        lines: v.lines.map((l) => ({ itemId: l.itemId, description: l.description, detail: l.detail, unit: l.unit, quantity: qty(l.quantity), unitPriceCents: parseMoney(l.price), taxRatePercent: Number(l.tax.replace(',', '.')) })),
+        version: o.version,
+      });
+      if (!quiet) toast(r.backToDraft ? 'Gespeichert – das Angebot ist wieder ein Entwurf und muss neu versendet werden' : 'Gespeichert');
+      setDirty(false); bump(); setBusy(null); return true;
+    } catch (e) { const err = e as { message?: string; fields?: Record<string, string> }; toast(Object.values(err.fields ?? {}).join(' · ') || err.message || 'Fehler', 'error'); setBusy(null); return false; }
+  };
+  const decline = async () => {
+    if (!window.confirm(`Angebot ${o.number} als abgelehnt markieren?`)) return;
+    try { await api('POST', `/offers/${id}/decline`); toast('Als abgelehnt markiert'); bump(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+  };
+  const openPdf = async () => { if (dirty && !(await save(true))) return; window.open(`/api/v1/offers/${id}/pdf`, '_blank', 'noopener'); };
+  const startMail = async () => { if (dirty && !(await save(true))) return; setMail(true); };
+  const hotelBooking = () => {
+    const [first, ...rest] = (o.customerName || o.customerCompany).split(' ');
+    newBooking({ from: o.eventDate ?? undefined, to: o.eventEnd && o.eventEnd !== o.eventDate ? o.eventEnd : o.eventDate ? addDays(o.eventDate, 1) : undefined, source: 'E-Mail',
+      draft: { firstName: rest.length ? first : '', lastName: rest.length ? rest.join(' ') : first ?? '', email: o.email, phone: o.phone }, notes: `Aus Angebot ${o.number}${o.title ? ` (${o.title})` : ''}`,
+      onCreated: (bid) => { void api('POST', `/offers/${id}/link-reservation`, { bookingId: bid }).then(bump); } });
+  };
+  const tableReservation = async () => {
+    const time = window.prompt('Uhrzeit der Tischreservierung (HH:MM):', '18:00');
+    if (!time || !/^\d{2}:\d{2}$/.test(time) || !o.eventDate) { if (!o.eventDate) toast('Im Angebot fehlt der Termin', 'error'); return; }
+    try {
+      const r = await api<{ id: string }>('POST', '/restaurant/reservations', { date: o.eventDate, time, durationMin: 240, persons: o.persons, name: o.customerCompany || o.customerName, phone: o.phone, note: `Angebot ${o.number}${o.title ? ` – ${o.title}` : ''}`, tableId: null });
+      await api('POST', `/offers/${id}/link-reservation`, { tableReservationId: r.id });
+      toast('Tischreservierung angelegt – Tisch im Restaurant zuweisen'); bump();
+    } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+  };
+  const f = (k: 'customerCompany' | 'customerName' | 'email' | 'phone' | 'street' | 'zip' | 'city' | 'title', label: string, type = 'text') =>
+    <Field label={label}><input type={type} value={v[k]} disabled={locked} onChange={(e) => ch({ [k]: e.target.value } as Partial<typeof v>)} /></Field>;
+  return (
+    <Dialog title={<>Angebot {o.number} <Badge tone={TONE[o.state]}>{OFFER_STATE_LABEL[o.state]}</Badge></>} onClose={() => { if (!dirty || window.confirm('Ungespeicherte Änderungen verwerfen?')) onClose(); }} size="xl"
+      footer={<>
+        <span className="left total">Gesamt <b>{formatMoney(total)}</b></span>
+        <Button onClick={() => void openPdf()}>PDF ansehen</Button>
+        {!locked && <Button busy={busy === 'save'} disabled={!dirty} onClick={() => void save()}>Speichern</Button>}
+        {!locked && <Button onClick={() => void startMail()}>{o.status === 'sent' ? 'Erneut senden' : 'Per E-Mail senden'}</Button>}
+        {!locked && <Button variant="primary" onClick={() => setAccepting(true)}>Angenommen …</Button>}
+        {!locked && <Button variant="danger" onClick={() => void decline()}>Abgelehnt</Button>}
+      </>}>
+      {o.status === 'accepted' && <p className="notice small">Angenommen am {new Date(o.acceptedAt!).toLocaleString('de-DE')} von <b>{o.acceptedBy}</b> ({({ online: 'online über den Link', email: 'per E-Mail', telefon: 'telefonisch', persoenlich: 'persönlich', schriftlich: 'schriftlich' } as Record<string, string>)[o.acceptedMethod] ?? o.acceptedMethod}). Prüfwert der angenommenen Fassung: <code className="wrapcode">{o.acceptedHash.slice(0, 16)}…</code></p>}
+      {o.status === 'sent' && <p className="notice small">Versendet am {new Date(o.sentAt!).toLocaleString('de-DE')} an {o.sentTo}. Änderungen machen es wieder zum Entwurf; der bisherige Link zur Annahme gilt dann nicht mehr.</p>}
+      {o.status === 'accepted' && (
+        <section className="card">
+          <h3 className="first">Nach der Annahme</h3>
+          <div className="btnrow">
+            {!o.bookingId ? <Button onClick={hotelBooking}>Hotelreservierung anlegen</Button> : <span className="muted small">Hotelreservierung verknüpft ✓</span>}
+            {!o.tableReservationId ? <Button onClick={() => void tableReservation()}>Tischreservierung anlegen</Button> : <span className="muted small">Tischreservierung verknüpft ✓</span>}
+          </div>
+          <h3>Anzahlung</h3>
+          <DepositPanel kind="offer" refId={o.id} base={`/offers/${o.id}`} suggestCents={Math.round((o.totalCents * o.depositPercent) / 100)} latestDue={o.eventDate ?? ''} />
+        </section>
+      )}
+      <div className="formgrid cols3">
+        {f('customerCompany', 'Firma')}{f('customerName', 'Ansprechpartner')}{f('email', 'E-Mail', 'email')}
+        {f('phone', 'Telefon')}{f('street', 'Straße')}
+        <Field label="PLZ / Ort"><div className="inlinerow"><input style={{ maxWidth: 90 }} value={v.zip} disabled={locked} onChange={(e) => ch({ zip: e.target.value })} /><input value={v.city} disabled={locked} onChange={(e) => ch({ city: e.target.value })} /></div></Field>
+        <Field label="Termin"><input type="date" value={v.eventDate ?? ''} disabled={locked} onChange={(e) => ch({ eventDate: e.target.value || null })} /></Field>
+        <Field label="bis"><input type="date" value={v.eventEnd ?? ''} disabled={locked} onChange={(e) => ch({ eventEnd: e.target.value || null })} /></Field>
+        <Field label="Personen"><input inputMode="numeric" value={String(v.persons)} disabled={locked} onChange={(e) => ch({ persons: Number(e.target.value) || 0 })} /></Field>
+        {f('title', 'Titel (z. B. Tagung Muster GmbH)')}
+        <Field label="Gültig bis"><input type="date" value={v.validUntil ?? ''} disabled={locked} onChange={(e) => ch({ validUntil: e.target.value || null })} /></Field>
+        <Field label="Anzahlung nach Annahme (%)"><input inputMode="numeric" value={String(v.depositPercent)} disabled={locked} onChange={(e) => ch({ depositPercent: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} /></Field>
+      </div>
+      <Field label="Einleitung" wide><textarea rows={3} value={v.intro} disabled={locked} onChange={(e) => ch({ intro: e.target.value })} /></Field>
+      <h3>Leistungen</h3>
+      <div className="tablewrap"><table className="lines offerlines">
+        <thead><tr><th>Leistung</th><th>Abrechnung</th><th className="num">Menge</th><th className="num">Einzelpreis</th><th className="num">USt %</th><th className="num">Gesamt</th><th /></tr></thead>
+        <tbody>{v.lines.map((l, i) => (
+          <tr key={i}>
+            <td><input value={l.description} disabled={locked} onChange={(e) => setLine(i, { description: e.target.value })} aria-label="Bezeichnung" /><input className="small" placeholder="Beschreibung (optional)" value={l.detail} disabled={locked} onChange={(e) => setLine(i, { detail: e.target.value })} aria-label="Beschreibung" /></td>
+            <td><select value={l.unit} disabled={locked} onChange={(e) => setLine(i, { unit: e.target.value as OfferUnit })} aria-label="Abrechnung">{OFFER_UNITS.map((u) => <option key={u} value={u}>{UNIT_LABEL[u]}</option>)}</select></td>
+            <td className="num"><input inputMode="decimal" className="numinput" value={l.quantity} disabled={locked} onChange={(e) => setLine(i, { quantity: e.target.value })} aria-label="Menge" /></td>
+            <td className="num"><input inputMode="decimal" className="numinput" value={l.price} disabled={locked} onChange={(e) => setLine(i, { price: e.target.value })} aria-label="Einzelpreis" /></td>
+            <td className="num"><input inputMode="decimal" className="numinput small" value={l.tax} disabled={locked} onChange={(e) => setLine(i, { tax: e.target.value })} aria-label="Umsatzsteuer" /></td>
+            <td className="num nowrap">{formatMoney(totalOf(l))}</td>
+            <td>{!locked && <button type="button" className="iconbtn" aria-label="Zeile entfernen" onClick={() => ch({ lines: v.lines.filter((_, k) => k !== i) })}>✕</button>}</td>
+          </tr>
+        ))}</tbody>
+      </table></div>
+      {!locked && <div className="btnrow">
+        <select value="" onChange={(e) => { addItem(e.target.value); e.target.value = ''; }} aria-label="Leistung aus dem Katalog hinzufügen">
+          <option value="">+ Leistung aus dem Katalog …</option>{items.filter((x) => x.active).map((x) => <option key={x.id} value={x.id}>{x.name} · {formatMoney(x.priceCents)} {UNIT_LABEL[x.unit]}</option>)}
+        </select>
+        <Button onClick={() => ch({ lines: [...v.lines, { itemId: null, description: '', detail: '', unit: 'flat', quantity: '1', price: '', tax: '19' }] })}>+ Freie Zeile</Button>
+        <Button onClick={recalc} title="Mengen aus Personen, Tagen und Nächten neu berechnen (pauschale Zeilen bleiben)">Mengen neu berechnen</Button>
+      </div>}
+      <Field label="Fragenkatalog an den Kunden (eine Frage je Zeile)" wide><textarea rows={5} value={v.questionsText} disabled={locked} onChange={(e) => ch({ questionsText: e.target.value })} /></Field>
+      <Field label="Schlusstext" wide><textarea rows={2} value={v.closing} disabled={locked} onChange={(e) => ch({ closing: e.target.value })} /></Field>
+      <Field label="Anlagen (werden mit der E-Mail versendet)" wide>
+        <div className="radiolist">{docs.filter((d) => d.active || v.documentIds.includes(d.id)).map((d) => (
+          <label key={d.id} className="check"><input type="checkbox" disabled={locked} checked={v.documentIds.includes(d.id)} onChange={(e) => ch({ documentIds: e.target.checked ? [...v.documentIds, d.id] : v.documentIds.filter((x) => x !== d.id) })} /><span>{d.name} <small className="muted">({d.fileName})</small></span></label>
+        ))}{docs.length === 0 && <span className="muted small">Noch keine AGB hochgeladen (Angebote → AGB & Dokumente, Administrator).</span>}</div>
+      </Field>
+      <Field label="Interne Notiz (erscheint nicht im Angebot)" wide><textarea rows={2} value={v.notes} onChange={(e) => ch({ notes: e.target.value })} /></Field>
+      {mail && <MailDialog path={`/offers/${id}/mail`} title={`Angebot ${o.number} senden`} sendLabel="Senden" onClose={() => setMail(false)} onSent={bump}
+        intro={<p className="muted small">Angehängt werden das Angebot als PDF und die gewählten Anlagen. Danach gilt das Angebot als versendet.</p>} />}
+      {accepting && <AcceptDialog offer={o} onClose={() => setAccepting(false)} />}
+    </Dialog>
+  );
+}
+
+function AcceptDialog({ offer: o, onClose }: { offer: OfferDto; onClose: () => void }) {
+  const { bump } = useData();
+  const toast = useToast();
+  const [v, setV] = useState({ method: 'email', name: o.customerName || o.customerCompany, note: '' });
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    try { await api('POST', `/offers/${o.id}/accept`, v); toast(`Angebot ${o.number} angenommen`); bump(); onClose(); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+    setBusy(false);
+  };
+  return (
+    <Dialog title={`Annahme von ${o.number} festhalten`} onClose={onClose} footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={busy} disabled={!v.name.trim()} onClick={() => void go()}>Als angenommen speichern</Button></>}>
+      <p className="muted small">Für Annahmen per E-Mail, Telefon, persönlich oder unterschrieben zurück. (Online über den Link nimmt der Kunde selbst an.) Festgehalten wird die {o.status === 'sent' ? 'versendete' : 'aktuelle'} Fassung des Angebots.</p>
+      <div className="formgrid">
+        <Field label="Wie angenommen?"><select value={v.method} onChange={(e) => setV({ ...v, method: e.target.value })}>
+          <option value="email">per E-Mail</option><option value="telefon">telefonisch</option><option value="persoenlich">persönlich</option><option value="schriftlich">unterschrieben zurück</option></select></Field>
+        <Field label="Von wem?"><input value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} /></Field>
+        <Field label="Notiz" wide><input value={v.note} placeholder="z. B. E-Mail vom 12.03., 18:40 Uhr" onChange={(e) => setV({ ...v, note: e.target.value })} /></Field>
+      </div>
+    </Dialog>
+  );
+}
+
+// ---------- Verwaltung (Administrator) ----------
+function ItemsAdmin() {
+  const { rev } = useData();
+  const { data, error } = useLoad(() => api<OfferItemDto[]>('GET', '/offer-items'), [rev]);
+  const [edit, setEdit] = useState<OfferItemDto | 'new' | null>(null);
+  return (
+    <section className="card">
+      <div className="cardhead"><h2>Leistungen (Katalog)</h2><div className="actions"><Button variant="primary" onClick={() => setEdit('new')}>Leistung anlegen</Button></div></div>
+      <p className="muted small">Preise sind Bruttopreise (inkl. Umsatzsteuer). Bitte den passenden Steuersatz je Leistung eintragen (z. B. 7 % Übernachtung, 19 % Getränke) – im Zweifel mit dem Steuerberater klären.</p>
+      <LoadState error={error} loading={!data} />
+      {data && (data.length === 0 ? <p className="muted">Noch keine Leistungen.</p> : (
+        <div className="tablewrap"><table><thead><tr><th>Leistung</th><th>Abrechnung</th><th className="num">Preis</th><th className="num">USt</th><th>Bereich</th></tr></thead>
+          <tbody>{data.map((i) => <tr key={i.id} className={`rowlink${i.active ? '' : ' faded'}`} onClick={() => setEdit(i)}><td><b>{i.name}</b>{i.description && <><br /><small className="muted">{i.description}</small></>}</td><td>{UNIT_LABEL[i.unit]}</td><td className="num">{formatMoney(i.priceCents)}</td><td className="num">{i.taxRatePercent} %</td><td>{AREA_LABEL[i.area]}</td></tr>)}</tbody></table></div>
+      ))}
+      {edit && <ItemDialog item={edit === 'new' ? null : edit} onClose={() => setEdit(null)} />}
+    </section>
+  );
+}
+function ItemDialog({ item, onClose }: { item: OfferItemDto | null; onClose: () => void }) {
+  const { bump } = useData();
+  const toast = useToast();
+  const [v, setV] = useState({ name: item?.name ?? '', description: item?.description ?? '', unit: item?.unit ?? 'person' as OfferUnit, price: item ? moneyInput(item.priceCents) : '', tax: String(item?.taxRatePercent ?? 19), area: item?.area ?? 'both' as OfferArea, sort: String(item?.sort ?? 0), active: item?.active ?? true });
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    const p = offerItemInput.safeParse({ ...v, priceCents: parseMoney(v.price), taxRatePercent: Number(v.tax.replace(',', '.')), sort: Number(v.sort) || 0 });
+    if (!p.success) { toast(p.error.issues[0]?.message ?? 'Bitte Eingaben prüfen', 'error'); return; }
+    setBusy(true);
+    try { await api(item ? 'PUT' : 'POST', item ? `/offer-items/${item.id}` : '/offer-items', item ? { ...p.data, version: item.version } : p.data); toast('Gespeichert'); bump(); onClose(); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+    setBusy(false);
+  };
+  return (
+    <Dialog title={item ? 'Leistung bearbeiten' : 'Leistung anlegen'} onClose={onClose} footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={busy} onClick={() => void save()}>Speichern</Button></>}>
+      <div className="formgrid">
+        <Field label="Bezeichnung" wide><input value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder="z. B. Tagungspauschale ganztags" /></Field>
+        <Field label="Beschreibung (erscheint im Angebot)" wide><input value={v.description} onChange={(e) => setV({ ...v, description: e.target.value })} placeholder="z. B. Raum, Technik, 2 Kaffeepausen, Mittagessen" /></Field>
+        <Field label="Abrechnung"><select value={v.unit} onChange={(e) => setV({ ...v, unit: e.target.value as OfferUnit })}>{OFFER_UNITS.map((u) => <option key={u} value={u}>{UNIT_LABEL[u]}</option>)}</select></Field>
+        <Field label="Preis (brutto)"><input inputMode="decimal" value={v.price} onChange={(e) => setV({ ...v, price: e.target.value })} /></Field>
+        <Field label="USt %"><input inputMode="decimal" value={v.tax} onChange={(e) => setV({ ...v, tax: e.target.value })} /></Field>
+        <Field label="Bereich"><select value={v.area} onChange={(e) => setV({ ...v, area: e.target.value as OfferArea })}>{OFFER_AREAS.map((a) => <option key={a} value={a}>{AREA_LABEL[a]}</option>)}</select></Field>
+        <Field label="Reihenfolge"><input inputMode="numeric" value={v.sort} onChange={(e) => setV({ ...v, sort: e.target.value })} /></Field>
+        <label className="check"><input type="checkbox" checked={v.active} onChange={(e) => setV({ ...v, active: e.target.checked })} /><span>In Benutzung</span></label>
+      </div>
+    </Dialog>
+  );
+}
+
+function TemplatesAdmin() {
+  const { rev } = useData();
+  const { data, error } = useLoad(() => api<OfferTemplateDto[]>('GET', '/offer-templates'), [rev]);
+  const [edit, setEdit] = useState<OfferTemplateDto | 'new' | null>(null);
+  return (
+    <section className="card">
+      <div className="cardhead"><h2>Vorlagen</h2><div className="actions"><Button variant="primary" onClick={() => setEdit('new')}>Vorlage anlegen</Button></div></div>
+      <p className="muted small">Eine Vorlage enthält Titel, Texte, den Fragenkatalog, vorausgewählte Leistungen, Gültigkeit, Anzahlung und die Anlagen (z. B. AGB). Die Mustervorlagen enthalten noch keine Leistungen und Preise – bitte ergänzen.</p>
+      <LoadState error={error} loading={!data} />
+      {data && <ul className="plain">{data.map((t) => <li key={t.id} className={`rowlink${t.active ? '' : ' faded'}`} onClick={() => setEdit(t)}><span><b>{t.name}</b> <small className="muted">{AREA_LABEL[t.area]} · {t.items.length} Leistungen · {t.questions.length} Fragen · gültig {t.validDays} Tage{t.depositPercent ? ` · Anzahlung ${t.depositPercent} %` : ''}</small></span></li>)}</ul>}
+      {edit && <TemplateDialog tpl={edit === 'new' ? null : edit} onClose={() => setEdit(null)} />}
+    </section>
+  );
+}
+function TemplateDialog({ tpl, onClose }: { tpl: OfferTemplateDto | null; onClose: () => void }) {
+  const { bump } = useData();
+  const toast = useToast();
+  const items = useLoad(() => api<OfferItemDto[]>('GET', '/offer-items')).data ?? [];
+  const docs = useLoad(() => api<OfferDocumentDto[]>('GET', '/offer-documents')).data ?? [];
+  const [v, setV] = useState({
+    name: tpl?.name ?? '', area: tpl?.area ?? 'both' as OfferArea, title: tpl?.title ?? '', intro: tpl?.intro ?? '', closing: tpl?.closing ?? '',
+    questions: (tpl?.questions ?? []).join('\n'), itemIds: (tpl?.items ?? []).map((x) => x.itemId), validDays: String(tpl?.validDays ?? 14), depositPercent: String(tpl?.depositPercent ?? 0),
+    documentIds: tpl?.documentIds ?? [], sort: String(tpl?.sort ?? 0), active: tpl?.active ?? true,
+  });
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    const p = offerTemplateInput.safeParse({ ...v, questions: v.questions.split('\n').map((x) => x.trim()).filter(Boolean), items: v.itemIds.map((itemId) => ({ itemId, quantity: null })),
+      validDays: Number(v.validDays) || 0, depositPercent: Number(v.depositPercent) || 0, sort: Number(v.sort) || 0 });
+    if (!p.success) { toast(p.error.issues[0]?.message ?? 'Bitte Eingaben prüfen', 'error'); return; }
+    setBusy(true);
+    try { await api(tpl ? 'PUT' : 'POST', tpl ? `/offer-templates/${tpl.id}` : '/offer-templates', tpl ? { ...p.data, version: tpl.version } : p.data); toast('Vorlage gespeichert'); bump(); onClose(); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+    setBusy(false);
+  };
+  const toggle = (list: string[], id: string, on: boolean) => (on ? [...list, id] : list.filter((x) => x !== id));
+  return (
+    <Dialog title={tpl ? `Vorlage „${tpl.name}“` : 'Vorlage anlegen'} onClose={onClose} size="lg" footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={busy} onClick={() => void save()}>Speichern</Button></>}>
+      <div className="formgrid cols3">
+        <Field label="Name"><input value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} /></Field>
+        <Field label="Bereich"><select value={v.area} onChange={(e) => setV({ ...v, area: e.target.value as OfferArea })}>{OFFER_AREAS.map((a) => <option key={a} value={a}>{AREA_LABEL[a]}</option>)}</select></Field>
+        <Field label="Titel im Angebot"><input value={v.title} onChange={(e) => setV({ ...v, title: e.target.value })} /></Field>
+        <Field label="Gültig (Tage)"><input inputMode="numeric" value={v.validDays} onChange={(e) => setV({ ...v, validDays: e.target.value })} /></Field>
+        <Field label="Anzahlung nach Annahme (%)"><input inputMode="numeric" value={v.depositPercent} onChange={(e) => setV({ ...v, depositPercent: e.target.value })} /></Field>
+        <Field label="Reihenfolge"><input inputMode="numeric" value={v.sort} onChange={(e) => setV({ ...v, sort: e.target.value })} /></Field>
+      </div>
+      <Field label="Einleitung" wide><textarea rows={3} value={v.intro} onChange={(e) => setV({ ...v, intro: e.target.value })} /></Field>
+      <Field label="Fragenkatalog (eine Frage je Zeile)" wide><textarea rows={6} value={v.questions} onChange={(e) => setV({ ...v, questions: e.target.value })} /></Field>
+      <Field label="Schlusstext" wide><textarea rows={2} value={v.closing} onChange={(e) => setV({ ...v, closing: e.target.value })} /></Field>
+      <Field label="Vorausgewählte Leistungen" wide><div className="radiolist">{items.filter((i) => i.active).map((i) => <label key={i.id} className="check"><input type="checkbox" checked={v.itemIds.includes(i.id)} onChange={(e) => setV({ ...v, itemIds: toggle(v.itemIds, i.id, e.target.checked) })} /><span>{i.name} <small className="muted">{formatMoney(i.priceCents)} {UNIT_LABEL[i.unit]}</small></span></label>)}{items.length === 0 && <span className="muted small">Erst Leistungen anlegen.</span>}</div></Field>
+      <Field label="Anlagen" wide><div className="radiolist">{docs.filter((d) => d.active).map((d) => <label key={d.id} className="check"><input type="checkbox" checked={v.documentIds.includes(d.id)} onChange={(e) => setV({ ...v, documentIds: toggle(v.documentIds, d.id, e.target.checked) })} /><span>{d.name}</span></label>)}{docs.length === 0 && <span className="muted small">Noch keine Dokumente hochgeladen.</span>}</div></Field>
+      <label className="check"><input type="checkbox" checked={v.active} onChange={(e) => setV({ ...v, active: e.target.checked })} /><span>In Benutzung</span></label>
+    </Dialog>
+  );
+}
+
+function DocumentsAdmin() {
+  const { rev, bump } = useData();
+  const toast = useToast();
+  const { data, error } = useLoad(() => api<OfferDocumentDto[]>('GET', '/offer-documents'), [rev]);
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const upload = async (file: File) => {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/v1/offer-documents', { method: 'POST', credentials: 'same-origin', body: file,
+        headers: { 'Content-Type': 'application/octet-stream', 'x-file-name': encodeURIComponent(file.name), 'x-doc-name': encodeURIComponent(name || file.name.replace(/\.pdf$/i, '')) } });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(j?.error?.message ?? `Fehler ${res.status}`);
+      toast('Dokument hochgeladen'); setName(''); bump();
+    } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+    setBusy(false);
+  };
+  const setActive = async (d: OfferDocumentDto, active: boolean) => {
+    try { await api('POST', `/offer-documents/${d.id}/active`, { active }); bump(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+  };
+  return (
+    <section className="card">
+      <h2>AGB & Dokumente</h2>
+      <p className="muted small">PDF-Dateien, die mit Angeboten versendet werden (z. B. AGB Hotel, AGB Veranstaltungen, Stornobedingungen). Eine neue Fassung bitte neu hochladen und die alte ausblenden – so bleibt nachvollziehbar, welche Fassung ein Kunde bekommen hat. Den Inhalt Ihrer AGB sollte ein Anwalt oder die DEHOGA-Beratung prüfen.</p>
+      <div className="filters">
+        <input placeholder="Bezeichnung, z. B. AGB Hotel 2027" value={name} onChange={(e) => setName(e.target.value)} />
+        <label className={`btn${busy ? ' disabled' : ''}`}>PDF hochladen …<input type="file" accept="application/pdf,.pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ''; }} /></label>
+      </div>
+      <LoadState error={error} loading={!data} />
+      {data && <ul className="plain">{data.map((d) => (
+        <li key={d.id} className={d.active ? undefined : 'faded'}>
+          <span><b>{d.name}</b> <small className="muted">{d.fileName} · {Math.ceil(d.sizeBytes / 1024)} kB · {new Date(d.createdAt).toLocaleDateString('de-DE')} von {d.uploadedBy}</small></span>
+          <span className="right"><a className="btn" href={`/api/v1/offer-documents/${d.id}/file`} target="_blank" rel="noopener">Ansehen</a> <Button onClick={() => void setActive(d, !d.active)}>{d.active ? 'Ausblenden' : 'Wieder anzeigen'}</Button></span>
+        </li>
+      ))}</ul>}
+    </section>
+  );
+}

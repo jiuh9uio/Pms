@@ -1,0 +1,335 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { taxBreakdown } from '../../shared/billing.js';
+import { formatMoney, todayBerlin } from '../../shared/hotel.js';
+import {
+  lineTotal, quantityFor, type OfferCreateInputT, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferItemInput, type OfferListRow,
+  type OfferState, type OfferTemplateDto, type OfferTemplateInput, type OfferUpdateInput, type PublicOffer,
+} from '../../shared/offers.js';
+import type { Db, Exec } from '../db/client.js';
+import { numberSequences, offerDocuments, offerItems, offerLines, offers, offerTemplates, settings, teamNotes } from '../db/schema.js';
+import { renderOffer } from '../einvoice/offerpdf.js';
+import { AppError, conflict, notFound, stale } from '../lib/errors.js';
+import { record, type Actor } from './audit.js';
+import { getLayout, getLogo } from './billing.js';
+import { getPolicy } from './guestlink.js';
+import { ready, signature } from './hotelmail.js';
+import { sendMail, sign } from './mail.js';
+import { getHotel } from './settings.js';
+
+/**
+ * Angebote für Tagungen, Feiern und Gruppen. Ein versendetes Angebot wird als PDF gespeichert (mit Prüfwert SHA-256);
+ * angenommen wird genau diese Fassung – per Vermerk (E-Mail, Telefon …) oder online über den Link (Name + Bestätigung).
+ * Die Online-Annahme ist eine einfache elektronische Erklärung, keine qualifizierte elektronische Signatur.
+ */
+type Row = typeof offers.$inferSelect;
+const de = (s: string | null) => (s ? `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)}` : '');
+const addDays = (d: string, n: number) => { const t = new Date(`${d}T12:00:00Z`); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
+const stateOf = (r: { status: Row['status']; validUntil: string | null }): OfferState => (r.status === 'sent' && r.validUntil && r.validUntil < todayBerlin() ? 'expired' : r.status);
+
+// ---------- Katalog ----------
+const itemDto = (r: typeof offerItems.$inferSelect): OfferItemDto => ({ id: r.id, name: r.name, description: r.description, unit: r.unit, priceCents: r.priceCents, taxRatePercent: Number(r.taxRatePercent), area: r.area, sort: r.sort, active: r.active, version: r.version });
+export const listItems = async (db: Exec) => (await db.select().from(offerItems).orderBy(asc(offerItems.sort), asc(offerItems.name))).map(itemDto);
+export async function saveItem(db: Db, actor: Actor, id: string | null, v: OfferItemInput, version?: number) {
+  return db.transaction(async (tx) => {
+    if (!id) {
+      const [r] = await tx.insert(offerItems).values(v).returning();
+      await record(tx, actor, { action: 'create', entity: 'offer_item', entityId: r!.id, after: v });
+      return itemDto(r!);
+    }
+    const [b] = await tx.select().from(offerItems).where(eq(offerItems.id, id)).for('update');
+    if (!b) throw notFound('Leistung');
+    if (b.version !== version) throw stale();
+    const [r] = await tx.update(offerItems).set({ ...v, version: b.version + 1, updatedAt: new Date() }).where(eq(offerItems.id, id)).returning();
+    await record(tx, actor, { action: 'update', entity: 'offer_item', entityId: id, before: itemDto(b), after: v });
+    return itemDto(r!);
+  });
+}
+
+// ---------- Dokumente (AGB als PDF) ----------
+const docDto = (r: typeof offerDocuments.$inferSelect): OfferDocumentDto => ({ id: r.id, name: r.name, fileName: r.fileName, sizeBytes: r.sizeBytes, active: r.active, uploadedBy: r.uploadedBy, createdAt: r.createdAt.toISOString() });
+export const listDocuments = async (db: Exec) => (await db.select({ id: offerDocuments.id, name: offerDocuments.name, fileName: offerDocuments.fileName, sizeBytes: offerDocuments.sizeBytes, active: offerDocuments.active, uploadedBy: offerDocuments.uploadedBy, createdAt: offerDocuments.createdAt, data: sql<Buffer>`''::bytea` })
+  .from(offerDocuments).orderBy(desc(offerDocuments.createdAt))).map((r) => docDto(r as typeof offerDocuments.$inferSelect));
+export async function uploadDocument(db: Db, actor: Actor, v: { name: string; fileName: string; data: Buffer }) {
+  if (v.data.length > 10 * 1024 * 1024) throw new AppError(400, 'too_large', 'Die Datei ist zu groß (höchstens 10 MB).');
+  if (v.data.subarray(0, 5).toString('latin1') !== '%PDF-') throw new AppError(400, 'bad_file', 'Bitte eine PDF-Datei wählen.');
+  const name = v.name.trim().slice(0, 120) || v.fileName.replace(/\.pdf$/i, '');
+  const [r] = await db.insert(offerDocuments).values({ name, fileName: v.fileName.slice(0, 160) || 'dokument.pdf', data: v.data, sizeBytes: v.data.length, uploadedBy: actor.userName }).returning();
+  await record(db, actor, { action: 'upload', entity: 'offer_document', entityId: r!.id, after: { name, size: v.data.length } });
+  return docDto(r!);
+}
+export async function setDocumentActive(db: Db, actor: Actor, id: string, active: boolean) {
+  const [r] = await db.update(offerDocuments).set({ active }).where(eq(offerDocuments.id, id)).returning({ id: offerDocuments.id });
+  if (!r) throw notFound('Dokument');
+  await record(db, actor, { action: active ? 'activate' : 'deactivate', entity: 'offer_document', entityId: id });
+  return { ok: true };
+}
+export async function documentFile(db: Exec, id: string) {
+  const [r] = await db.select().from(offerDocuments).where(eq(offerDocuments.id, id));
+  if (!r) throw notFound('Dokument');
+  return { fileName: r.fileName, data: r.data };
+}
+
+// ---------- Vorlagen ----------
+const tplDto = (r: typeof offerTemplates.$inferSelect): OfferTemplateDto => ({
+  id: r.id, name: r.name, area: r.area, title: r.title, intro: r.intro, closing: r.closing, questions: r.questions as string[],
+  items: r.items as OfferTemplateDto['items'], validDays: r.validDays, depositPercent: r.depositPercent, documentIds: r.documentIds as string[], sort: r.sort, active: r.active, version: r.version,
+});
+/** Beim ersten Aufruf neutrale Mustervorlagen anlegen (ohne Preise – die Leistungen und Preise legt das Haus selbst an). */
+async function ensureDefaults(db: Db) {
+  const [seeded] = await db.select().from(settings).where(eq(settings.key, 'offer_defaults'));
+  if (seeded) return;
+  const [any] = await db.select({ id: offerTemplates.id }).from(offerTemplates).limit(1);
+  if (!any) {
+    const intro = 'vielen Dank für Ihre Anfrage. Gern unterbreiten wir Ihnen folgendes Angebot:';
+    const closing = 'Wir freuen uns, Sie bei uns begrüßen zu dürfen. Bei Fragen sind wir gern für Sie da.';
+    await db.insert(offerTemplates).values([
+      { name: 'Tagung', area: 'both', title: 'Tagung', intro, closing, sort: 1, validDays: 14, depositPercent: 0,
+        questions: ['Genaue Teilnehmerzahl', 'Beginn und Ende der Tagung', 'Gewünschte Bestuhlung (z. B. Parlament, U-Form, Block)', 'Benötigte Technik (Beamer, Leinwand, Flipchart, Mikrofon)', 'Pausenzeiten und Mittagessen', 'Besondere Ernährungswünsche oder Allergien', 'Übernachtungen benötigt? Wenn ja: Anzahl Einzel-/Doppelzimmer', 'Rechnungsanschrift'] },
+      { name: 'Familienfeier', area: 'restaurant', title: 'Ihre Familienfeier', intro, closing, sort: 2, validDays: 14, depositPercent: 0,
+        questions: ['Genaue Personenzahl (davon Kinder)', 'Beginn und voraussichtliches Ende', 'Anlass (z. B. Geburtstag, Taufe, Hochzeit)', 'Menü oder Buffet?', 'Getränke: Pauschale oder nach Verbrauch?', 'Besondere Ernährungswünsche oder Allergien', 'Dekoration, Torte oder Musik mitgebracht?', 'Übernachtungen für Gäste benötigt?'] },
+      { name: 'Weihnachtsfeier', area: 'restaurant', title: 'Ihre Weihnachtsfeier', intro, closing, sort: 3, validDays: 10, depositPercent: 0,
+        questions: ['Genaue Personenzahl', 'Wunschdatum und Uhrzeit', 'Menü oder Buffet?', 'Getränke: Pauschale oder nach Verbrauch?', 'Besondere Ernährungswünsche oder Allergien', 'Rechnungsanschrift (Firma)'] },
+      { name: 'Gruppenübernachtung', area: 'hotel', title: 'Übernachtung für Ihre Gruppe', intro, closing, sort: 4, validDays: 14, depositPercent: 0,
+        questions: ['Anreise- und Abreisetag', 'Anzahl Einzel- und Doppelzimmer', 'Frühstück gewünscht?', 'Abendessen gewünscht?', 'Voraussichtliche Ankunftszeit', 'Rechnungsanschrift'] },
+    ]);
+  }
+  await db.insert(settings).values({ key: 'offer_defaults', value: { seeded: new Date().toISOString() } }).onConflictDoNothing();
+}
+export async function listTemplates(db: Db) {
+  await ensureDefaults(db);
+  return (await db.select().from(offerTemplates).orderBy(asc(offerTemplates.sort), asc(offerTemplates.name))).map(tplDto);
+}
+export async function saveTemplate(db: Db, actor: Actor, id: string | null, v: OfferTemplateInput, version?: number) {
+  return db.transaction(async (tx) => {
+    if (!id) {
+      const [r] = await tx.insert(offerTemplates).values(v).returning();
+      await record(tx, actor, { action: 'create', entity: 'offer_template', entityId: r!.id, after: { name: v.name } });
+      return tplDto(r!);
+    }
+    const [b] = await tx.select().from(offerTemplates).where(eq(offerTemplates.id, id)).for('update');
+    if (!b) throw notFound('Vorlage');
+    if (b.version !== version) throw stale();
+    const [r] = await tx.update(offerTemplates).set({ ...v, version: b.version + 1, updatedAt: new Date() }).where(eq(offerTemplates.id, id)).returning();
+    await record(tx, actor, { action: 'update', entity: 'offer_template', entityId: id, after: { name: v.name } });
+    return tplDto(r!);
+  });
+}
+
+// ---------- Angebote ----------
+async function nextNumber(tx: Exec, year: number) {
+  const [row] = await tx.insert(numberSequences).values({ key: 'offer', year, last: 1 })
+    .onConflictDoUpdate({ target: [numberSequences.key, numberSequences.year], set: { last: sql`${numberSequences.last} + 1` } }).returning();
+  return `AN-${year}-${String(row!.last).padStart(4, '0')}`;
+}
+const customerOf = (r: { customerCompany: string; customerName: string }) => [r.customerCompany, r.customerName].filter(Boolean).join(', ');
+
+export async function listOffers(db: Exec, f: { state?: string; q?: string }): Promise<OfferListRow[]> {
+  const like = f.q ? `%${f.q.replace(/[%_\\]/g, '')}%` : null;
+  const rows = await db.execute(sql`
+    select o.*, coalesce((select sum(l.total_cents) from offer_lines l where l.offer_id = o.id), 0)::int as total
+    from offers o where true ${like ? sql`and (o.number ilike ${like} or o.customer_name ilike ${like} or o.customer_company ilike ${like} or o.title ilike ${like})` : sql``}
+    order by o.created_at desc limit 300`) as unknown as Record<string, unknown>[];
+  const list = rows.map((x): OfferListRow => {
+    const r = { status: x.status as Row['status'], validUntil: (x.valid_until as string | null) ?? null };
+    return {
+      id: String(x.id), number: String(x.number), status: r.status, state: stateOf(r), area: x.area as OfferListRow['area'], title: String(x.title), customer: customerOf({ customerCompany: String(x.customer_company), customerName: String(x.customer_name) }),
+      email: String(x.email), eventDate: (x.event_date as string | null) ?? null, eventEnd: (x.event_end as string | null) ?? null, persons: Number(x.persons), totalCents: Number(x.total),
+      validUntil: r.validUntil, sentAt: x.sent_at ? new Date(x.sent_at as string).toISOString() : null, acceptedAt: x.accepted_at ? new Date(x.accepted_at as string).toISOString() : null,
+      bookingId: (x.booking_id as string | null) ?? null, tableReservationId: (x.table_reservation_id as string | null) ?? null, createdAt: new Date(x.created_at as string).toISOString(),
+    };
+  });
+  if (!f.state || f.state === 'all') return list;
+  if (f.state === 'open') return list.filter((r) => r.state === 'draft' || r.state === 'sent' || r.state === 'expired');
+  return list.filter((r) => r.state === f.state);
+}
+
+export async function getOffer(db: Exec, id: string): Promise<OfferDto> {
+  const [r] = await db.select().from(offers).where(eq(offers.id, id));
+  if (!r) throw notFound('Angebot');
+  const lines = (await db.select().from(offerLines).where(eq(offerLines.offerId, id)).orderBy(asc(offerLines.pos)))
+    .map((l) => ({ id: l.id, pos: l.pos, itemId: l.itemId, description: l.description, detail: l.detail, unit: l.unit as OfferDto['lines'][number]['unit'], quantity: Number(l.quantity), unitPriceCents: l.unitPriceCents, taxRatePercent: Number(l.taxRatePercent), totalCents: l.totalCents }));
+  const totalCents = lines.reduce((s, l) => s + l.totalCents, 0);
+  return {
+    id: r.id, number: r.number, status: r.status, state: stateOf(r), area: r.area, title: r.title, customer: customerOf(r), email: r.email,
+    eventDate: r.eventDate, eventEnd: r.eventEnd, persons: r.persons, totalCents, validUntil: r.validUntil, sentAt: r.sentAt?.toISOString() ?? null, acceptedAt: r.acceptedAt?.toISOString() ?? null,
+    bookingId: r.bookingId, tableReservationId: r.tableReservationId, createdAt: r.createdAt.toISOString(),
+    templateId: r.templateId, customerCompany: r.customerCompany, customerName: r.customerName, phone: r.phone, street: r.street, zip: r.zip, city: r.city,
+    intro: r.intro, closing: r.closing, questions: r.questions as string[], depositPercent: r.depositPercent, documentIds: r.documentIds as string[], notes: r.notes,
+    sentTo: r.sentTo, acceptedBy: r.acceptedBy, acceptedMethod: r.acceptedMethod, acceptedHash: r.acceptedHash, sentHash: r.sentHash, declinedAt: r.declinedAt?.toISOString() ?? null,
+    lines, taxes: taxBreakdown(lines), version: r.version,
+  };
+}
+
+export async function createOffer(db: Db, actor: Actor, v: OfferCreateInputT) {
+  const tpl = v.templateId ? (await db.select().from(offerTemplates).where(eq(offerTemplates.id, v.templateId)))[0] : undefined;
+  if (v.templateId && !tpl) throw notFound('Vorlage');
+  const today = todayBerlin();
+  const items = tpl ? await db.select().from(offerItems) : [];
+  return db.transaction(async (tx) => {
+    const number = await nextNumber(tx, Number(today.slice(0, 4)));
+    const [o] = await tx.insert(offers).values({
+      number, area: tpl?.area ?? v.area, templateId: tpl?.id ?? null, customerCompany: v.customerCompany, customerName: v.customerName, email: v.email, phone: v.phone,
+      street: v.street, zip: v.zip, city: v.city, eventDate: v.eventDate, eventEnd: v.eventEnd, persons: v.persons,
+      title: tpl?.title ?? '', intro: tpl?.intro ?? '', closing: tpl?.closing ?? '', questions: tpl?.questions ?? [], validUntil: addDays(today, tpl?.validDays ?? 14),
+      depositPercent: tpl?.depositPercent ?? 0, documentIds: tpl?.documentIds ?? [], createdBy: actor.userName,
+    }).returning();
+    // Leistungen der Vorlage mit vorgeschlagener Menge (aus Personen, Tagen, Nächten)
+    let pos = 1;
+    for (const t of (tpl?.items as OfferTemplateDto['items'] | undefined) ?? []) {
+      const it = items.find((x) => x.id === t.itemId && x.active);
+      if (!it) continue;
+      const q = t.quantity ?? quantityFor(it.unit, v.persons, v.eventDate, v.eventEnd);
+      await tx.insert(offerLines).values({ offerId: o!.id, pos: pos++, itemId: it.id, description: it.name, detail: it.description, unit: it.unit, quantity: q, unitPriceCents: it.priceCents, taxRatePercent: it.taxRatePercent, totalCents: lineTotal(q, it.priceCents) });
+    }
+    await record(tx, actor, { action: 'create', entity: 'offer', entityId: o!.id, after: { number, template: tpl?.name ?? null } });
+    return { id: o!.id, number };
+  });
+}
+
+export async function updateOffer(db: Db, actor: Actor, id: string, v: OfferUpdateInput) {
+  return db.transaction(async (tx) => {
+    const [b] = await tx.select().from(offers).where(eq(offers.id, id)).for('update');
+    if (!b) throw notFound('Angebot');
+    if (b.version !== v.version) throw stale();
+    if (b.status === 'accepted' || b.status === 'declined') throw conflict('Angenommene oder abgelehnte Angebote lassen sich nicht mehr ändern.');
+    const { lines, version: _v, ...rest } = v;
+    // Änderung nach dem Versand: zurück zum Entwurf, die versendete Fassung und ihr Link gelten nicht mehr
+    const wasSent = b.status === 'sent';
+    await tx.update(offers).set({ ...rest, ...(wasSent ? { status: 'draft' as const, sentPdf: null, sentHash: '', linkVersion: b.linkVersion + 1 } : {}), version: b.version + 1, updatedAt: new Date() }).where(eq(offers.id, id));
+    await tx.delete(offerLines).where(eq(offerLines.offerId, id));
+    let pos = 1;
+    for (const l of lines) await tx.insert(offerLines).values({ offerId: id, pos: pos++, itemId: l.itemId, description: l.description, detail: l.detail, unit: l.unit, quantity: l.quantity, unitPriceCents: l.unitPriceCents, taxRatePercent: l.taxRatePercent, totalCents: lineTotal(l.quantity, l.unitPriceCents) });
+    await record(tx, actor, { action: 'update', entity: 'offer', entityId: id, after: { number: b.number, lines: lines.length, backToDraft: wasSent } });
+    return { ok: true, backToDraft: wasSent };
+  });
+}
+
+async function render(db: Exec, o: OfferDto) {
+  const [h, logo, layout] = await Promise.all([getHotel(db), getLogo(db), getLayout(db)]);
+  return Buffer.from(await renderOffer(o, h, logo, layout, todayBerlin()));
+}
+/** PDF: versendete/angenommene Fassung unverändert, sonst aktuelle Vorschau */
+export async function offerPdf(db: Exec, id: string) {
+  const [r] = await db.select({ pdf: offers.sentPdf, number: offers.number }).from(offers).where(eq(offers.id, id));
+  if (!r) throw notFound('Angebot');
+  return { fileName: `Angebot_${r.number}.pdf`, pdf: r.pdf ?? await render(db, await getOffer(db, id)) };
+}
+
+// ---------- Link für die Online-Annahme ----------
+const tokenFor = (id: string, v: number) => `${id.replace(/-/g, '')}.${sign(`offer-link:${id}:${v}`)}`;
+const GONE = () => new AppError(404, 'link_gone', 'Dieser Link ist nicht (mehr) gültig. Bitte wenden Sie sich an uns.');
+async function idOfToken(db: Exec, token: string) {
+  const [hex, mac] = token.split('.');
+  if (!hex || !mac || !/^[0-9a-f]{32}$/.test(hex)) throw GONE();
+  const id = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  const [r] = await db.select({ v: offers.linkVersion, status: offers.status }).from(offers).where(eq(offers.id, id));
+  if (!r || r.status === 'draft') throw GONE();
+  const want = Buffer.from(tokenFor(id, r.v).split('.')[1]!), got = Buffer.from(mac);
+  if (want.length !== got.length || !timingSafeEqual(want, got)) throw GONE();
+  return id;
+}
+export async function offerLink(db: Exec, id: string, baseUrl: string) {
+  const [r] = await db.select({ v: offers.linkVersion }).from(offers).where(eq(offers.id, id));
+  if (!r) throw notFound('Angebot');
+  const p = await getPolicy(db);
+  return { url: `${p.publicUrl || baseUrl}/angebot/${tokenFor(id, r.v)}`, publicUrl: !!p.publicUrl };
+}
+
+/** E-Mail-Vorschlag zum Versand */
+export async function mailDraft(db: Exec, id: string, baseUrl: string) {
+  const [o, h] = [await getOffer(db, id), await getHotel(db)];
+  if (o.status === 'accepted' || o.status === 'declined') throw conflict('Das Angebot ist bereits abgeschlossen.');
+  if (!o.lines.length) throw conflict('Das Angebot hat noch keine Positionen.');
+  const link = await offerLink(db, id, baseUrl);
+  const when = o.eventDate ? (o.eventEnd && o.eventEnd !== o.eventDate ? ` vom ${de(o.eventDate)} bis ${de(o.eventEnd)}` : ` am ${de(o.eventDate)}`) : '';
+  const hello = o.customerName ? `Guten Tag ${o.customerName},` : 'Guten Tag,';
+  const docs = o.documentIds.length ? (await db.select({ name: offerDocuments.name }).from(offerDocuments).where(sql`${offerDocuments.id} in ${o.documentIds}`)).map((d) => d.name) : [];
+  const text = [hello, '', `vielen Dank für Ihre Anfrage. Anbei erhalten Sie unser Angebot ${o.number}${o.title ? ` (${o.title})` : ''}${when} für ${o.persons} ${o.persons === 1 ? 'Person' : 'Personen'}.`, '',
+    `Gesamtbetrag: ${formatMoney(o.totalCents)} (inkl. Umsatzsteuer)`, ...(o.validUntil ? [`Das Angebot gilt bis zum ${de(o.validUntil)}.`] : []),
+    ...(link.publicUrl ? ['', `Sie können das Angebot hier ansehen und direkt online annehmen: ${link.url}`] : ['', 'Zur Annahme antworten Sie uns einfach auf diese E-Mail.']),
+    ...(o.questions.length ? ['', 'Damit wir alles vorbereiten können, teilen Sie uns bitte noch mit:', ...o.questions.map((q) => `- ${q}`)] : []),
+    ...(docs.length ? ['', `Anlagen: Angebot (PDF), ${docs.join(', ')}`] : ['', 'Anlage: Angebot (PDF)']),
+    '', signature(h)].join('\n');
+  return { to: o.email, subject: `Angebot ${o.number}${o.title ? ` – ${o.title}` : ''} – ${h.name}`, text, attachment: `Angebot_${o.number}.pdf${docs.length ? ` + ${docs.join(', ')}` : ''}`, ready: await ready(db) };
+}
+
+export async function sendOffer(db: Db, actor: Actor, id: string, v: { to: string; subject: string; text: string }) {
+  const o = await getOffer(db, id);
+  if (o.status === 'accepted' || o.status === 'declined') throw conflict('Das Angebot ist bereits abgeschlossen.');
+  if (!o.lines.length) throw conflict('Das Angebot hat noch keine Positionen.');
+  // erneuter Versand ohne Änderung: dieselbe Fassung; sonst neu erzeugen
+  const [cur] = await db.select({ pdf: offers.sentPdf, hash: offers.sentHash }).from(offers).where(eq(offers.id, id));
+  const pdf = o.status === 'sent' && cur?.pdf ? cur.pdf : await render(db, o);
+  const docs = o.documentIds.length ? await db.select().from(offerDocuments).where(sql`${offerDocuments.id} in ${o.documentIds}`) : [];
+  await sendMail(db, actor, { to: v.to, subject: v.subject, text: v.text, attachments: [
+    { filename: `Angebot_${o.number}.pdf`, content: pdf, contentType: 'application/pdf' },
+    ...docs.map((d) => ({ filename: d.fileName, content: d.data, contentType: 'application/pdf' })),
+  ] });
+  await db.update(offers).set({ status: 'sent', sentAt: new Date(), sentTo: v.to, sentPdf: pdf, sentHash: sha(pdf), updatedAt: new Date(), version: o.version + 1 }).where(eq(offers.id, id));
+  await record(db, actor, { action: 'send', entity: 'offer', entityId: id, after: { to: v.to, number: o.number, documents: docs.map((d) => d.name) } });
+  return { ok: true };
+}
+
+/** Annahme von Hand vermerken (Antwort per E-Mail, Telefon, persönlich, unterschrieben zurück). */
+export async function acceptOffer(db: Db, actor: Actor, id: string, v: { method: string; name: string; note: string }) {
+  return db.transaction(async (tx) => {
+    const [b] = await tx.select().from(offers).where(eq(offers.id, id)).for('update');
+    if (!b) throw notFound('Angebot');
+    if (b.status === 'accepted' || b.status === 'declined') throw conflict('Das Angebot ist bereits abgeschlossen.');
+    // Annahme ohne Versand (z. B. am Telefon besprochen): die aktuelle Fassung wird festgehalten
+    let pdf = b.sentPdf;
+    if (!pdf) pdf = await render(tx, await getOffer(tx, id));
+    await tx.update(offers).set({ status: 'accepted', acceptedAt: new Date(), acceptedBy: v.name, acceptedMethod: v.method, acceptedHash: sha(pdf), sentPdf: pdf, sentHash: sha(pdf),
+      notes: v.note ? [b.notes, `Annahme: ${v.note}`].filter(Boolean).join('\n').slice(0, 2000) : b.notes, version: b.version + 1, updatedAt: new Date() }).where(eq(offers.id, id));
+    await record(tx, actor, { action: 'accept', entity: 'offer', entityId: id, after: { number: b.number, method: v.method, name: v.name } });
+    return { ok: true };
+  });
+}
+export async function declineOffer(db: Db, actor: Actor, id: string) {
+  const [r] = await db.update(offers).set({ status: 'declined', declinedAt: new Date(), updatedAt: new Date(), version: sql`${offers.version} + 1` })
+    .where(and(eq(offers.id, id), sql`${offers.status} in ('draft', 'sent')`)).returning({ number: offers.number });
+  if (!r) throw conflict('Das Angebot ist bereits abgeschlossen.');
+  await record(db, actor, { action: 'decline', entity: 'offer', entityId: id, after: { number: r.number } });
+  return { ok: true };
+}
+/** Angenommenes Angebot mit der angelegten Hotel- oder Tischreservierung verknüpfen */
+export async function linkReservation(db: Db, actor: Actor, id: string, v: { bookingId?: string | null; tableReservationId?: string | null }) {
+  const [r] = await db.update(offers).set({ ...('bookingId' in v ? { bookingId: v.bookingId } : {}), ...('tableReservationId' in v ? { tableReservationId: v.tableReservationId } : {}), updatedAt: new Date() })
+    .where(eq(offers.id, id)).returning({ number: offers.number });
+  if (!r) throw notFound('Angebot');
+  await record(db, actor, { action: 'link', entity: 'offer', entityId: id, after: v });
+  return { ok: true };
+}
+
+// ---------- Öffentliche Seite (über den Link) ----------
+export async function publicOffer(db: Exec, token: string): Promise<PublicOffer> {
+  const o = await getOffer(db, await idOfToken(db, token));
+  const h = await getHotel(db);
+  const docs = o.documentIds.length ? (await db.select({ id: offerDocuments.id, name: offerDocuments.name }).from(offerDocuments).where(sql`${offerDocuments.id} in ${o.documentIds}`)) : [];
+  return { hotelName: h.name, hotelPhone: h.phone, number: o.number, title: o.title, customer: o.customer, eventDate: o.eventDate, eventEnd: o.eventEnd, persons: o.persons,
+    totalCents: o.totalCents, validUntil: o.validUntil, state: o.state, documents: docs, acceptedAt: o.acceptedAt, acceptedBy: o.acceptedBy, questions: o.questions };
+}
+export async function publicPdf(db: Exec, token: string) { return offerPdf(db, await idOfToken(db, token)); }
+export async function publicDocument(db: Exec, token: string, docId: string) {
+  const o = await getOffer(db, await idOfToken(db, token));
+  if (!o.documentIds.includes(docId)) throw notFound('Dokument');
+  return documentFile(db, docId);
+}
+/** Online annehmen: Name + Bestätigung; gespeichert werden Zeitpunkt, Name, IP-Adresse und der Prüfwert der angenommenen Fassung. */
+export async function publicAccept(db: Db, token: string, v: { name: string }, ip: string | null) {
+  const id = await idOfToken(db, token);
+  return db.transaction(async (tx) => {
+    const [b] = await tx.select().from(offers).where(eq(offers.id, id)).for('update');
+    if (!b) throw GONE();
+    if (b.status === 'accepted') throw conflict('Dieses Angebot wurde bereits angenommen. Vielen Dank!');
+    if (b.status !== 'sent' || !b.sentPdf) throw conflict('Dieses Angebot kann nicht mehr online angenommen werden. Bitte wenden Sie sich an uns.');
+    if (b.validUntil && b.validUntil < todayBerlin()) throw conflict(`Dieses Angebot war bis zum ${de(b.validUntil)} gültig. Bitte sprechen Sie uns an – wir erstellen Ihnen gern ein neues.`);
+    const actor: Actor = { userId: null, userName: `Kunde online (${v.name})`, ip };
+    await tx.update(offers).set({ status: 'accepted', acceptedAt: new Date(), acceptedBy: v.name, acceptedMethod: 'online', acceptedIp: ip, acceptedHash: b.sentHash, version: b.version + 1, updatedAt: new Date() }).where(eq(offers.id, id));
+    await record(tx, actor, { action: 'accept', entity: 'offer', entityId: id, after: { number: b.number, method: 'online', name: v.name, hash: b.sentHash } });
+    await tx.insert(teamNotes).values({ kind: 'task', text: `Angebot ${b.number} wurde online angenommen von ${v.name}${b.title ? ` (${b.title})` : ''} – Reservierung anlegen und ggf. Anzahlung anfordern`, place: '', createdBy: 'Kunde (Angebots-Link)', createdById: null });
+    return { ok: true };
+  });
+}

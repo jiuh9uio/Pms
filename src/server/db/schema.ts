@@ -705,3 +705,106 @@ export const siteImages = pgTable('site_images', {
   data: bytea('data').notNull(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 });
+
+// ---------- Angebote (Tagungen, Feiern, Gruppen) ----------
+/** Katalog: Leistungen mit Preis, Abrechnungsart und Steuersatz */
+export const offerItems = pgTable('offer_items', {
+  id: id(),
+  name: text('name').notNull(),
+  description: text('description').notNull().default(''),
+  /** person, day, person_day, night, person_night, flat */
+  unit: text('unit', { enum: ['person', 'day', 'person_day', 'night', 'person_night', 'flat'] }).notNull(),
+  priceCents: integer('price_cents').notNull(),
+  taxRatePercent: numeric('tax_rate_percent', { precision: 5, scale: 2, mode: 'number' }).notNull(),
+  area: text('area', { enum: ['hotel', 'restaurant', 'both'] }).notNull().default('both'),
+  sort: integer('sort').notNull().default(0),
+  active: boolean('active').notNull().default(true),
+  ...stamps,
+});
+
+/** Hochgeladene Dokumente (z. B. AGB als PDF) – werden nicht überschrieben, damit nachvollziehbar bleibt, welche Fassung ein Kunde bekam */
+export const offerDocuments = pgTable('offer_documents', {
+  id: id(),
+  name: text('name').notNull(),
+  fileName: text('file_name').notNull(),
+  data: bytea('data').notNull(),
+  sizeBytes: integer('size_bytes').notNull(),
+  active: boolean('active').notNull().default(true),
+  uploadedBy: text('uploaded_by').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});
+
+/** Vorlagen: Texte, Fragenkatalog, vorausgewählte Leistungen, Gültigkeit, Anzahlung, angehängte Dokumente */
+export const offerTemplates = pgTable('offer_templates', {
+  id: id(),
+  name: text('name').notNull(),
+  area: text('area', { enum: ['hotel', 'restaurant', 'both'] }).notNull().default('both'),
+  title: text('title').notNull().default(''),
+  intro: text('intro').notNull().default(''),
+  closing: text('closing').notNull().default(''),
+  questions: jsonb('questions').notNull().default(sql`'[]'::jsonb`),
+  items: jsonb('items').notNull().default(sql`'[]'::jsonb`),
+  validDays: integer('valid_days').notNull().default(14),
+  depositPercent: integer('deposit_percent').notNull().default(0),
+  documentIds: jsonb('document_ids').notNull().default(sql`'[]'::jsonb`),
+  sort: integer('sort').notNull().default(0),
+  active: boolean('active').notNull().default(true),
+  ...stamps,
+});
+
+export const offers = pgTable('offers', {
+  id: id(),
+  number: text('number').notNull().unique(),
+  status: text('status', { enum: ['draft', 'sent', 'accepted', 'declined'] }).notNull().default('draft'),
+  area: text('area', { enum: ['hotel', 'restaurant', 'both'] }).notNull().default('both'),
+  templateId: uuid('template_id').references(() => offerTemplates.id, { onDelete: 'set null' }),
+  customerCompany: text('customer_company').notNull().default(''),
+  customerName: text('customer_name').notNull().default(''),
+  email: text('email').notNull().default(''),
+  phone: text('phone').notNull().default(''),
+  street: text('street').notNull().default(''),
+  zip: text('zip').notNull().default(''),
+  city: text('city').notNull().default(''),
+  eventDate: date('event_date', { mode: 'string' }),
+  eventEnd: date('event_end', { mode: 'string' }),
+  persons: integer('persons').notNull().default(1),
+  title: text('title').notNull().default(''),
+  intro: text('intro').notNull().default(''),
+  closing: text('closing').notNull().default(''),
+  questions: jsonb('questions').notNull().default(sql`'[]'::jsonb`),
+  validUntil: date('valid_until', { mode: 'string' }),
+  depositPercent: integer('deposit_percent').notNull().default(0),
+  documentIds: jsonb('document_ids').notNull().default(sql`'[]'::jsonb`),
+  notes: text('notes').notNull().default(''),
+  sentAt: ts('sent_at'),
+  sentTo: text('sent_to').notNull().default(''),
+  /** die zuletzt versendete Fassung als PDF und ihr Prüfwert (SHA-256) – so ist belegbar, was angenommen wurde */
+  sentPdf: bytea('sent_pdf'),
+  sentHash: text('sent_hash').notNull().default(''),
+  /** Annahme: wie (E-Mail/Telefon von Hand vermerkt oder online), wann, durch wen; Prüfwert der angenommenen Fassung */
+  acceptedAt: ts('accepted_at'),
+  acceptedBy: text('accepted_by').notNull().default(''),
+  acceptedMethod: text('accepted_method').notNull().default(''),
+  acceptedIp: text('accepted_ip'),
+  acceptedHash: text('accepted_hash').notNull().default(''),
+  declinedAt: ts('declined_at'),
+  bookingId: uuid('booking_id').references(() => bookings.id, { onDelete: 'set null' }),
+  tableReservationId: uuid('table_reservation_id').references(() => tableReservations.id, { onDelete: 'set null' }),
+  linkVersion: integer('link_version').notNull().default(0),
+  createdBy: text('created_by').notNull(),
+  ...stamps,
+}, (t) => [index('offers_status_idx').on(t.status), index('offers_event_idx').on(t.eventDate)]);
+
+export const offerLines = pgTable('offer_lines', {
+  id: id(),
+  offerId: uuid('offer_id').notNull().references(() => offers.id, { onDelete: 'cascade' }),
+  pos: integer('pos').notNull(),
+  itemId: uuid('item_id').references(() => offerItems.id, { onDelete: 'set null' }),
+  description: text('description').notNull(),
+  detail: text('detail').notNull().default(''),
+  unit: text('unit').notNull().default('flat'),
+  quantity: numeric('quantity', { precision: 10, scale: 2, mode: 'number' }).notNull(),
+  unitPriceCents: integer('unit_price_cents').notNull(),
+  taxRatePercent: numeric('tax_rate_percent', { precision: 5, scale: 2, mode: 'number' }).notNull(),
+  totalCents: integer('total_cents').notNull(),
+}, (t) => [index('offer_lines_offer_idx').on(t.offerId)]);

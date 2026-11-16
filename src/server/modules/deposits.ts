@@ -84,6 +84,13 @@ async function subjectOf(db: Exec, kind: DepositKind, refId: string) {
     const from = live.map((r) => r.from).sort()[0]!, to = live.map((r) => r.to).sort().at(-1)!;
     return { number: b.number, email: b.guest.email, greet: greeting(b.guest), what: `Ihre Reservierung Nr. ${b.number} vom ${de(from)} bis ${de(to)}`, total: b.totalCents, start: from };
   }
+  if (kind === 'offer') {
+    const { getOffer } = await import('./offers.js');
+    const o = await getOffer(db, refId).catch(() => { throw notFound('Angebot'); });
+    if (o.status !== 'accepted') throw conflict('Eine Anzahlung kann erst nach Annahme des Angebots angefordert werden.');
+    const when = o.eventDate ? ` am ${de(o.eventDate)}` : '';
+    return { number: o.number, email: o.email, greet: o.customerName ? `Guten Tag ${o.customerName},` : 'Guten Tag,', what: `die Annahme unseres Angebots ${o.number}${o.title ? ` (${o.title})` : ''}${when}`, total: o.totalCents, start: o.eventDate ?? todayBerlin() };
+  }
   const [t] = await db.select().from(tableReservations).where(eq(tableReservations.id, refId));
   if (!t) throw notFound('Tischreservierung');
   if (t.status === 'cancelled' || t.status === 'no_show') throw conflict('Die Tischreservierung ist nicht mehr aktiv');
@@ -110,7 +117,7 @@ export async function create(db: Db, actor: Actor, kind: DepositKind, refId: str
     const r: Raw = { id: randomUUID(), kind, refId, amountCents: v.amountCents, dueDate: v.dueDate, createdAt: new Date().toISOString(), createdBy: actor.userName,
       to: v.send ? v.to : '', mailed: v.send, status: 'open', paidAt: null, paidBy: '', paidNote: '', cancelledBy: '' };
     await save(tx, [...list, r].slice(-5000));
-    await record(tx, actor, { action: 'deposit_request', entity: kind === 'booking' ? 'booking' : 'table_reservation', entityId: refId, after: { amountCents: v.amountCents, dueDate: v.dueDate, mailed: v.send, to: r.to } });
+    await record(tx, actor, { action: 'deposit_request', entity: kind === 'booking' ? 'booking' : kind === 'offer' ? 'offer' : 'table_reservation', entityId: refId, after: { amountCents: v.amountCents, dueDate: v.dueDate, mailed: v.send, to: r.to } });
     return { id: r.id };
   });
 }
@@ -122,13 +129,13 @@ async function change(db: Db, actor: Actor, id: string, fn: (r: Raw) => void, ac
     if (!r) throw notFound('Anzahlung');
     fn(r);
     await save(tx, list);
-    await record(tx, actor, { action, entity: r.kind === 'booking' ? 'booking' : 'table_reservation', entityId: r.refId, after: { amountCents: r.amountCents, note: r.paidNote } });
+    await record(tx, actor, { action, entity: r.kind === 'booking' ? 'booking' : r.kind === 'offer' ? 'offer' : 'table_reservation', entityId: r.refId, after: { amountCents: r.amountCents, note: r.paidNote } });
     return { ok: true };
   });
 }
 /** Restaurant: Eingang von Hand vermerken (die Buchung in der Kasse erfolgt dort). */
 export const markPaid = (db: Db, actor: Actor, id: string, note: string) => change(db, actor, id, (r) => {
-  if (r.kind !== 'table') throw conflict('Bei Hotelreservierungen wird die Anzahlung als Zahlung in der Reservierung gebucht.');
+  if (r.kind === 'booking') throw conflict('Bei Hotelreservierungen wird die Anzahlung als Zahlung in der Reservierung gebucht.');
   if (r.status !== 'open') throw conflict('Diese Anzahlung ist nicht mehr offen.');
   r.status = 'paid'; r.paidAt = new Date().toISOString(); r.paidBy = actor.userName; r.paidNote = note;
 }, 'deposit_paid');

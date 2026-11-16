@@ -5,7 +5,7 @@ import { z } from 'zod';
  * Hotel: „bezahlt“ ergibt sich aus den gebuchten Zahlungen der Reservierung.
  * Restaurant: das Programm kassiert hier nicht – der Eingang wird von Hand vermerkt (die Buchung in der Kasse erfolgt dort).
  */
-export type DepositKind = 'booking' | 'table';
+export type DepositKind = 'booking' | 'table' | 'offer';
 export type DepositState = 'open' | 'overdue' | 'paid' | 'cancelled';
 export interface DepositDto {
   id: string; kind: DepositKind; refId: string; amountCents: number; dueDate: string;

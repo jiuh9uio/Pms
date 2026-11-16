@@ -42,7 +42,7 @@ const range = z.object({ from: z.string().refine(H.isIsoDate), to: z.string().re
  * Adresse, unter der ein Gast das PMS mit dem eigenen Gerät erreicht: PUBLIC_URL aus pms.env, sonst die Adresse,
  * die das Personal gerade benutzt. „localhost“ wird durch die Netzwerkadresse des Rechners ersetzt.
  */
-function guestBaseUrl(req: FastifyRequest): { url: string; localOnly: boolean } {
+export function guestBaseUrl(req: FastifyRequest): { url: string; localOnly: boolean } {
   const fixed = (process.env.PUBLIC_URL ?? '').trim().replace(/\/+$/, '');
   if (/^https?:\/\//.test(fixed)) return { url: fixed, localOnly: false };
   const u = new URL(`${req.protocol}://${req.headers.host ?? 'localhost'}`);

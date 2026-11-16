@@ -138,7 +138,10 @@ function MailDetail({ id, onGone }: { id: string; onGone: () => void }) {
         <section className="card">
           <h2>{data.kind === 'event' ? 'Feier / Veranstaltung' : 'Tagung / Versammlung'} – erkannte Angaben</h2>
           <p>{x.dates.length ? `Termin: ${x.dates.slice(0, 3).map(deDate).join(', ')}` : 'Kein Termin erkannt'}{x.time ? ` · ${x.time} Uhr` : ''}{x.persons ? ` · etwa ${x.persons} ${data.kind === 'meeting' ? 'Teilnehmer' : 'Gäste'}` : ''}{x.phone ? ` · Tel. ${x.phone}` : ''}</p>
-          <p className="muted small">Für Feiern und Tagungen gibt es noch keine eigene Planung im Programm. Bitte über „Antworten“ ein Angebot schicken; benötigte Zimmer lassen sich wie gewohnt im Hotel reservieren. Die Angaben sind Vorschläge – bitte mit dem Text vergleichen.</p>
+          {(hasModule(user, 'hotel') || hasModule(user, 'restaurant')) && <div className="formactions">
+            <a className="btn primary" href={`/angebote?neu=1&name=${encodeURIComponent(data.fromName || '')}&email=${encodeURIComponent(data.fromAddr)}&phone=${encodeURIComponent(x.phone ?? '')}&datum=${x.dates[0] ?? ''}&personen=${x.persons ?? ''}`}>Angebot erstellen</a>
+          </div>}
+          <p className="muted small">„Angebot erstellen“ öffnet ein neues Angebot mit Name und E-Mail-Adresse aus dieser Nachricht – Vorlage, Termin und Personenzahl dort wählen. Die erkannten Angaben sind Vorschläge – bitte mit dem Text vergleichen.</p>
         </section>
       )}
       {data.kind === 'hotel' && !data.linkKind && (

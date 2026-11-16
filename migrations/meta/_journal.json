@@ -260,6 +260,13 @@
       "when": 1794751835942,
       "tag": "0036_gaesteseite_bilder",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1794866249587,
+      "tag": "0037_angebote",
+      "breakpoints": true
     }
   ]
 }

@@ -25,6 +25,7 @@ import { Login } from './pages/Login.tsx';
 import { Plan } from './pages/Plan.tsx';
 import { QuickPrint } from './pages/QuickPrint.tsx';
 import { Reservations } from './pages/Reservations.tsx';
+import { Offers } from './pages/Offers.tsx';
 import { Restaurant } from './pages/Restaurant.tsx';
 import { DayReport } from './pages/DayReport.tsx';
 import { Housekeeping } from './pages/Housekeeping.tsx';
@@ -67,12 +68,14 @@ const NAV: NavItem[] = [
   { to: '/reinigung', label: 'Reinigung', icon: '✧', module: 'hotel', group: 'Haus' },
   { to: '/gaeste', label: 'Gäste', icon: '☺', module: 'hotel', group: 'Kunden' },
   { to: '/firmen', label: 'Firmen', icon: '⌘', module: 'hotel', more: true, group: 'Kunden' },
+  { to: '/angebote', label: 'Angebote', icon: '✍', module: 'hotel', group: 'Kunden' },
   { to: '/meldescheine', label: 'Meldeschein-Archiv', short: 'Meldescheine', icon: '▤', module: 'hotel', more: true, group: 'Kunden' },
   { to: '/rechnungen', label: 'Rechnungen', short: 'Rechn.', icon: '€', module: 'hotel', group: 'Abrechnung', jump: true },
   { to: '/tagesabschluss', label: 'Tagesabschluss', short: 'Abschluss', icon: '∑', module: 'hotel', more: true, group: 'Abrechnung' },
   { to: '/auswertung', label: 'Auswertung', icon: '◔', module: 'hotel', more: true, group: 'Abrechnung' },
   { to: '/zimmer', label: 'Zimmer & Preise', short: 'Zimmer', icon: '⌂', admin: true, more: true, module: 'hotel', group: 'Einrichtung' },
   { to: '/restaurant', label: 'Tischreservierungen', short: 'Tische', icon: '◍', module: 'restaurant' },
+  { to: '/angebote', label: 'Angebote', icon: '✍', module: 'restaurant', jump: true },
   // Rechnungen: alles, was mit Rechnungen zu tun hat, an einem Ort – jede Zeile verlangt ihre eigene Freigabe
   { to: '/rechnungen', label: 'Hotelrechnungen', short: 'Hotel', icon: '€', module: 'rechnungen', need: 'hotel', group: 'Hotel' },
   { to: '/tagesabschluss', label: 'Tagesabschluss', short: 'Abschluss', icon: '∑', module: 'rechnungen', need: 'hotel', group: 'Hotel', jump: true },
@@ -206,6 +209,7 @@ function Shell({ user }: { user: UserDto }) {
           {kontrollen && <Route path="/kontrollen/:id" element={<ControlType />} />}
           {hotel && <Route path="/plan" element={<Plan />} />}
           {hotel && <Route path="/reservierungen" element={<Reservations />} />}
+          {(hotel || hasModule(user, 'restaurant')) && <Route path="/angebote" element={<Offers />} />}
           {hotel && <Route path="/fruehstueck" element={<Breakfast />} />}
           {hotel && <Route path="/reinigung" element={<Housekeeping />} />}
           {hotel && <Route path="/tagesabschluss" element={<DayReport />} />}

@@ -29,6 +29,7 @@ import * as usersMod from './modules/users.js';
 import { registerBillingRoutes } from './routes-billing.js';
 import { registerControlRoutes } from './routes-controls.js';
 import { registerEInvoiceRoutes } from './routes-einvoice.js';
+import { registerOfferRoutes } from './routes-offers.js';
 import { registerHotelRoutes } from './routes-hotel.js';
 import { registerRestaurantRoutes } from './routes-restaurant.js';
 import { getBackupStatus, runBackup } from './backup.js';
@@ -301,6 +302,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     registerControlRoutes(api, { db, requireUser: requireModule('kontrollen'), requireAdmin, actor });
     registerBillingRoutes(api, { db, requireUser: requireModule('hotel'), requireAdmin, actor });
     registerEInvoiceRoutes(api, { db, requireUser: requireModule('erechnung'), requireAdmin, actor });
+    registerOfferRoutes(api, { db, requireUser, requireAdmin, actor, publicLimit });
 
     // ---------- Umzug auf einen anderen Rechner/Server (nur Administrator) ----------
     const pkgPassword = (req: FastifyRequest) => decodeURIComponent(String(req.headers['x-package-password'] ?? ''));
@@ -468,7 +470,9 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     app.setNotFoundHandler((req, reply) => {
       // Seiten der Oberfläche (ohne Dateiendung) liefert index.html; fehlende Dateien bleiben 404
       const path = req.url.split('?')[0]!;
-      if (req.method === 'GET' && !path.startsWith('/api/') && !/\.[a-z0-9]+$/i.test(path)) return reply.sendFile('index.html');
+      // Links für Gäste und Kunden enthalten einen Punkt im Zugangscode – das sind Seiten, keine Dateien
+      const page = /^\/(buchung|angebot|gast)\/[^/]+$/.test(path) || !/\.[a-z0-9]+$/i.test(path);
+      if (req.method === 'GET' && !path.startsWith('/api/') && page) return reply.sendFile('index.html');
       return reply.status(404).send({ error: { code: 'not_found', message: 'Unbekannte Adresse' } });
     });
   }

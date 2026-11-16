@@ -29,7 +29,7 @@ export function DepositPanel({ kind, refId, base, suggestCents, latestDue, onPay
     if (what === 'cancel' && !window.confirm(`Anzahlung über ${formatMoney(d.amountCents)} zurückziehen? (Es wird keine E-Mail gesendet.)`)) return;
     setBusy(d.id);
     try {
-      await api('POST', `${kind === 'table' ? '/restaurant' : ''}/deposits/${d.id}/${what}`, what === 'paid' ? { note } : {});
+      await api('POST', `${kind === 'table' ? '/restaurant' : kind === 'offer' ? '/offers' : ''}/deposits/${d.id}/${what}`, what === 'paid' ? { note } : {});
       toast(what === 'paid' ? 'Eingang vermerkt' : 'Anzahlung zurückgezogen'); bump();
     } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
     setBusy(null);
@@ -49,14 +49,14 @@ export function DepositPanel({ kind, refId, base, suggestCents, latestDue, onPay
               <span><b>{formatMoney(d.amountCents)}</b> bis {deDate(d.dueDate)} <Badge tone={TONE[d.state]}>{DEPOSIT_STATE_LABEL[d.state]}</Badge><br />
                 <small className="muted">angefordert {deDate(d.createdAt.slice(0, 10))} von {d.createdBy}{d.mailed ? ` · E-Mail an ${d.to}` : ' · ohne E-Mail'}{d.paidAt ? ` · Eingang vermerkt von ${d.paidBy}${d.paidNote ? `: ${d.paidNote}` : ''}` : ''}{d.cancelledBy ? ` · zurückgezogen von ${d.cancelledBy}` : ''}</small></span>
               <span className="right">
-                {kind === 'table' && (d.state === 'open' || d.state === 'overdue') && <Button busy={busy === d.id} onClick={() => void act(d, 'paid')}>Eingang vermerken</Button>}
+                {kind !== 'booking' && (d.state === 'open' || d.state === 'overdue') && <Button busy={busy === d.id} onClick={() => void act(d, 'paid')}>Eingang vermerken</Button>}
                 {(d.state === 'open' || d.state === 'overdue') && <Button busy={busy === d.id} onClick={() => void act(d, 'cancel')}>Zurückziehen</Button>}
               </span>
             </li>
           ))}
         </ul>
       )}
-      {kind === 'table' && live.length > 0 && <p className="muted small">Das Programm kassiert hier nicht: Bitte die Anzahlung wie gewohnt in der Kasse buchen und hier nur den Eingang vermerken.</p>}
+      {kind !== 'booking' && live.length > 0 && <p className="muted small">Das Programm kassiert hier nicht: Bitte die Anzahlung wie gewohnt in der Kasse buchen und hier nur den Eingang vermerken.</p>}
       {asking && <RequestDialog kind={kind} base={base} suggestCents={suggestCents} latestDue={latestDue} onClose={() => setAsking(false)} />}
     </div>
   );
@@ -104,7 +104,7 @@ function RequestDialog({ kind, base, suggestCents, latestDue, onClose }: { kind:
       {!mail ? <p className="muted small">Im nächsten Schritt erscheint die E-Mail an den Gast zum Prüfen. Angefordert ist erst nach „Anfordern und senden“ oder „Nur vermerken“ – „Abbrechen“ ändert nichts.</p> : <>
         {!ready && <p className="notice warn small">Der E-Mail-Versand ist noch nicht eingerichtet – nur „Nur vermerken“ ist möglich.</p>}
         <div className="formgrid">
-          <Field label="An" wide hint={kind === 'table' ? 'Tischreservierungen haben keine E-Mail-Adresse gespeichert – bitte eintragen' : undefined}><input type="email" value={mail.to} onChange={(e) => setMail({ ...mail, to: e.target.value })} /></Field>
+          <Field label="An" wide hint={kind === 'table' && !mail.to ? 'Tischreservierungen haben keine E-Mail-Adresse gespeichert – bitte eintragen' : undefined}><input type="email" value={mail.to} onChange={(e) => setMail({ ...mail, to: e.target.value })} /></Field>
           <Field label="Betreff" wide><input value={mail.subject} onChange={(e) => setMail({ ...mail, subject: e.target.value })} /></Field>
           <Field label="Text" wide><textarea rows={14} value={mail.text} onChange={(e) => setMail({ ...mail, text: e.target.value })} /></Field>
         </div>
