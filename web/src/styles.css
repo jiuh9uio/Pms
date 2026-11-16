@@ -906,3 +906,31 @@ a.linkcard.attention b { color: var(--warn); }
 .bk-request .btnrow { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip.on { border-style: solid; border-color: var(--accent); color: var(--accent-text); background: var(--accent-soft, var(--surface)); }
 .danger-text { color: var(--danger); font-weight: 600; }
+.bk-guest .btnrow { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn.reqbtn { border-color: var(--warn); color: var(--warn); background: var(--warn-soft); font-weight: 600; }
+.btn.reqbtn.on { background: var(--warn); color: var(--surface); }
+.bk-request-head { position: relative; padding-right: 36px; }
+.bk-request-head .iconbtn { position: absolute; top: -4px; right: 0; }
+.bk-request-meta { flex-basis: 100%; }
+
+/* Restaurant: Ausblick */
+.outlook-gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; align-items: start; }
+.outlook-gauge { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--surface); }
+.outlook-gauge summary { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: baseline; cursor: pointer; list-style: none; }
+.outlook-gauge summary::-webkit-details-marker { display: none; }
+.outlook-gauge summary span { font-size: 13px; color: var(--ink-2); }
+.outlook-gauge summary b { font-size: 18px; text-transform: capitalize; }
+.outlook-bar { grid-column: 1 / -1; display: block; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.outlook-bar > i { display: block; height: 100%; background: var(--muted); }
+.outlook-gauge.low b { color: var(--muted); }
+.outlook-gauge.mid b { color: var(--warn); } .outlook-gauge.mid .outlook-bar > i { background: var(--warn); }
+.outlook-gauge.high b { color: var(--ok); } .outlook-gauge.high .outlook-bar > i { background: var(--ok); }
+.outlook-gauge ul { list-style: none; padding: 0; margin: 8px 0 0; font-size: 13px; }
+.outlook-gauge li { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-top: 1px solid var(--line); }
+.outlook-gauge li small { color: var(--muted); font-variant-numeric: tabular-nums; }
+.outlook-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 16px; margin: 12px 0 4px; font-size: 14px; }
+.outlook-facts > div { display: flex; flex-direction: column; gap: 2px; }
+.outlook-facts small { font-size: 12px; color: var(--ink-2); font-weight: 500; }
+.outlook-ev { display: flex; align-items: center; gap: 4px; }
+.inlinerow { display: flex; gap: 8px; } .inlinerow input { flex: 1; min-width: 0; }
+.radiolist { display: flex; flex-direction: column; gap: 6px; }

@@ -5,7 +5,9 @@ import * as R from '../shared/restaurant.js';
 import type { Db } from './db/client.js';
 import type { Actor } from './modules/audit.js';
 import { printerReady } from './modules/breakfast.js';
+import * as outlook from './modules/outlook.js';
 import * as restaurant from './modules/restaurant.js';
+import { outlookEventInput, outlookSettingsInput } from '../shared/outlook.js';
 
 interface Ctx { db: Db; requireUser: (req: FastifyRequest) => Promise<void>; requireAdmin: (req: FastifyRequest) => Promise<void>; actor: (req: FastifyRequest) => Actor }
 const idOf = (req: FastifyRequest) => z.object({ id: z.uuid() }).parse(req.params).id;
@@ -27,4 +29,13 @@ export function registerRestaurantRoutes(api: FastifyInstance, { db, requireUser
     const v = R.tableStatusInput.parse(req.body);
     return restaurant.setStatus(db, actor(req), idOf(req), v.status, v.version);
   });
+
+  // Ausblick: Gäste ohne Reservierung / früher gehen (Wetter, Fußball, Feiertage, eigene Einträge)
+  api.get('/restaurant/outlook', user, (req) => outlook.outlook(db, z.object({ date: z.string().refine(isIsoDate) }).parse(req.query).date));
+  api.get('/restaurant/outlook/settings', user, () => outlook.getOutlookSettings(db));
+  api.put('/restaurant/outlook/settings', admin, (req) => outlook.saveOutlookSettings(db, actor(req), outlookSettingsInput.parse(req.body)));
+  api.post('/restaurant/outlook/locate', admin, (req) => outlook.coordsFromLink(z.object({ url: z.string().trim().min(10, 'Bitte den Google-Maps-Link einfügen').max(2000) }).parse(req.body).url));
+  api.get('/restaurant/events', user, (req) => outlook.listEvents(db, z.object({ from: z.string().refine(isIsoDate).optional() }).parse(req.query).from));
+  api.post('/restaurant/events', user, (req) => outlook.addEvent(db, actor(req), outlookEventInput.parse(req.body)));
+  api.delete('/restaurant/events/:id', user, (req) => outlook.deleteEvent(db, actor(req), z.object({ id: z.uuid() }).parse(req.params).id));
 }

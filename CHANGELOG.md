@@ -3,6 +3,18 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.72.0
+
+- Reservierung: Das Anfrage-Feld nimmt keinen Platz mehr weg. Bei vorläufigen Reservierungen steht oben neben „Gästeprofil“ der Knopf **„Anfrage ❗“** – erst ein Klick darauf öffnet Anrufen, Nachfrage vermerken, Zusagen und Absagen (mit ✕ wieder schließen).
+- Neu im Restaurant: **Ausblick** über der Reservierungsliste (heute und künftige Tage). Zwei Einschätzungen – „Gäste ohne Reservierung“ und „Gäste gehen früher“ – jeweils niedrig/mittel/hoch; ein Klick zeigt die Gründe mit Punkten. Berücksichtigt werden:
+  - Wochentag und bundesweite Feiertage (heute und morgen),
+  - Wetter zu den Essenszeiten (kalt oder nass → eher mehr Gäste ohne Reservierung; warm und trocken → eher weniger; Gewitter/Schnee → eher weniger) – Daten des Deutschen Wetterdienstes über den freien Dienst Bright Sky,
+  - Fußball am Abend (1./2. Bundesliga, DFB-Pokal über OpenLigaDB; ein Lieblingsverein zählt extra) → Gäste gehen eher früher,
+  - selbst eingetragene Veranstaltungen („+ Veranstaltung“: bringt Gäste / hält fern / Gäste gehen früher),
+  - wie viele Plätze schon reserviert sind (Hinweis bei fast voll).
+- Einrichten (Administrator, „Einstellen“): Standort per Google-Maps-Link übernehmen, Essenszeiten, Ligen, Lieblingsverein. An die Dienste gehen nur die Koordinaten des Hauses bzw. das Liga-Kürzel, keine Gästedaten.
+- Wichtig: Das ist eine einfache Regel-Schätzung mit selbst gewählten Gewichten, keine Vorhersage aus Erfahrungsdaten. Schulferien, regionale Feiertage, Länderspiele und Champions League sind nicht automatisch dabei.
+
 ## 1.71.0
 
 - Offene Anfragen direkt bearbeiten: In einer vorläufigen Reservierung erscheint oben das Feld **„Offene Anfrage“** mit

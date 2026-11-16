@@ -29,6 +29,7 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
   const [busy, setBusy] = useState<string | null>(null);
   const [mail, setMail] = useState(false);
   const [qr, setQr] = useState(false);
+  const [request, setRequest] = useState(false);
 
   const setStatus = async (room: BookingRoomDto, status: RoomStatus, confirmText?: string) => {
     if (confirmText && !window.confirm(confirmText)) return;
@@ -76,7 +77,8 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
               <div className="bk-name">{guestName || '(ohne Namen)'}{b.guest.company && <small> · {b.guest.company}</small>}</div>
               <div className="bk-contact">{[b.guest.phone, b.guest.email].filter(Boolean).join(' · ') || 'Keine Kontaktdaten'}</div>
               <div className="bk-contact">{[b.guest.street, [b.guest.zip, b.guest.city].filter(Boolean).join(' ')].filter(Boolean).join(', ') || 'Noch keine Anschrift'}</div>
-              <div className="btnrow"><Button onClick={() => openGuest(b.guest.id)}>Gästeprofil</Button></div>
+              <div className="btnrow"><Button onClick={() => openGuest(b.guest.id)}>Gästeprofil</Button>
+                {b.rooms.some((r) => r.status === 'tentative') && <Button className={`reqbtn${request ? ' on' : ''}`} aria-expanded={request} onClick={() => setRequest(!request)} title="Anrufen, Nachfrage vermerken, Zusagen oder Absagen">Anfrage ❗</Button>}</div>
             </div>
             <div className="bk-facts">
               <span><small>Anreise</small>{deDate(from)}</span><span><small>Abreise</small>{deDate(to)}</span>
@@ -92,7 +94,7 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
             </div>
           </section>
 
-          {b.rooms.some((r) => r.status === 'tentative') && <RequestPanel booking={b} onConfirmed={() => { if (b.guest.email) setMail(true); }} />}
+          {request && b.rooms.some((r) => r.status === 'tentative') && <RequestPanel booking={b} onClose={() => setRequest(false)} onConfirmed={() => { setRequest(false); if (b.guest.email) setMail(true); }} />}
 
           <h3>Zimmer</h3>
           {b.rooms.map((r) => (
@@ -133,7 +135,7 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
 
 /** Offene Anfrage: Gast erreichen und entscheiden – Anrufen, E-Mail, Nachfrage vermerken (mit Option verlängern), Zusagen, Absagen. */
 const FOLLOW_UP = ['nicht erreicht', 'Nachricht hinterlassen', 'überlegt noch', 'ruft zurück', 'wartet auf Angebot'];
-function RequestPanel({ booking: b, onConfirmed }: { booking: BookingDto; onConfirmed: () => void }) {
+function RequestPanel({ booking: b, onConfirmed, onClose }: { booking: BookingDto; onConfirmed: () => void; onClose: () => void }) {
   const { bump } = useData();
   const { user } = useAuth();
   const toast = useToast();
@@ -152,7 +154,7 @@ function RequestPanel({ booking: b, onConfirmed }: { booking: BookingDto; onConf
     try {
       for (const r of open) await api('POST', `/booking-rooms/${r.id}/status`, { status, version: r.version });
       toast(done); bump();
-      if (status === 'confirmed') onConfirmed();
+      if (status === 'confirmed') onConfirmed(); else onClose();
     } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); bump(); }
     setBusy(null);
   };
@@ -180,7 +182,8 @@ function RequestPanel({ booking: b, onConfirmed }: { booking: BookingDto; onConf
     <section className="card bk-request">
       <div className="bk-request-head">
         <h3 className="first">Offene Anfrage</h3>
-        <small className="muted">angefragt am {fmtDateTime(b.createdAt)}{b.optionUntil && <> · <span className={expired ? 'danger-text' : ''}>Option bis {deDate(b.optionUntil)}{expired ? ' – abgelaufen' : b.optionUntil === today ? ' – läuft heute ab' : ''}</span></>}</small>
+        <button type="button" className="iconbtn" aria-label="Anfrage-Feld schließen" title="schließen" onClick={onClose}>✕</button>
+        <small className="muted bk-request-meta">angefragt am {fmtDateTime(b.createdAt)}{b.optionUntil && <> · <span className={expired ? 'danger-text' : ''}>Option bis {deDate(b.optionUntil)}{expired ? ' – abgelaufen' : b.optionUntil === today ? ' – läuft heute ab' : ''}</span></>}</small>
       </div>
       <div className="bk-request-contact">
         {phone ? <a className="btn primary" href={`tel:${tel}`} title="öffnet das Telefonprogramm dieses Geräts (falls eingerichtet)">📞 Anrufen · {phone}</a> : <span className="muted">Keine Telefonnummer hinterlegt – im Gästeprofil ergänzen.</span>}

@@ -11,6 +11,7 @@ import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useToast } from '../ui.tsx';
 import { MasterDialog } from './RoomsPrices.tsx';
+import { OutlookCard } from './OutlookCard.tsx';
 
 const TONE: Record<TableStatus, 'accent' | 'ok' | 'neutral' | 'danger' | 'warn'> = { booked: 'accent', seated: 'ok', done: 'neutral', cancelled: 'danger', no_show: 'warn' };
 const WEEKDAY = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
@@ -75,6 +76,7 @@ export function Restaurant() {
       <LoadState error={error} loading={!data} />
       {data && (
         <>
+          {date >= today && <OutlookCard date={date} />}
           <h2 className="printhead">Tischreservierungen {weekday(date)}, {deDate(date)}</h2>
           {data.tables.length === 0 && <p className="notice warn">Es sind noch keine Tische angelegt. Reservierungen sind trotzdem möglich – nur ohne Tischzuweisung. {isAdmin ? 'Tische lassen sich unten anlegen.' : 'Tische legt der Administrator an.'}</p>}
           <p className="muted">{active.length} {active.length === 1 ? 'Reservierung' : 'Reservierungen'} · {active.reduce((s, r) => s + r.persons, 0)} Personen{active.some((r) => !r.tableId) ? ` · ${active.filter((r) => !r.tableId).length} ohne Tisch` : ''}</p>
