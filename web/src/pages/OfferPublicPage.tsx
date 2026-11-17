@@ -4,6 +4,7 @@ import { OFFER_STATE_LABEL, type PublicOffer } from '../../../src/shared/offers.
 import { api } from '../api.ts';
 import { deDate } from '../hotel/common.tsx';
 import { Button, Field, LoadState, useLoad } from '../ui.tsx';
+import { GuestLogo } from '../logo.tsx';
 
 /** Seite für den Kunden (ohne Anmeldung, über den Link in der E-Mail): Angebot und Anlagen ansehen, online annehmen. */
 export function OfferPublicPage() {
@@ -24,7 +25,7 @@ export function OfferPublicPage() {
   const when = data.eventDate ? (data.eventEnd && data.eventEnd !== data.eventDate ? `${deDate(data.eventDate)} – ${deDate(data.eventEnd)}` : deDate(data.eventDate)) : '';
   return (
     <div className="guestform">
-      <header><b>{data.hotelName}</b><h1>Angebot {data.number}</h1><p className="muted">{data.title}{data.title && data.customer ? ' · ' : ''}{data.customer}</p></header>
+      <header><GuestLogo /><b>{data.hotelName}</b><h1>Angebot {data.number}</h1><p className="muted">{data.title}{data.title && data.customer ? ' · ' : ''}{data.customer}</p></header>
       <section className="card">
         <ul className="plain">
           {when && <li><span>Termin</span><b>{when}</b></li>}

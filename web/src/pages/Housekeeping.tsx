@@ -6,6 +6,7 @@ import { api } from '../api.ts';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
 import { Badge, Button, LoadState, PageHeader, useLoad, useToast } from '../ui.tsx';
+import { PrintLogo } from '../logo.tsx';
 
 const WEEKDAY = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 const work = (r: CleanRow) => (r.departing ? 'Endreinigung' : r.staying ? 'Zwischenreinigung' : r.housekeeping === 'dirty' ? 'Reinigen' : '–');
@@ -44,7 +45,7 @@ export function Housekeeping() {
       <LoadState error={error} loading={!data} />
       {data && (
         <>
-          <h2 className="printhead">Reinigungsliste {deDate(date)}</h2>
+          <h2 className="printhead"><PrintLogo />Reinigungsliste {deDate(date)}</h2>
           <div className="kpis">
             <div className="card kpicard printable"><span>Abreisen</span><b>{data.total.departures}</b><small>Endreinigung</small></div>
             <div className="card kpicard printable"><span>Bleiber</span><b>{data.total.stays}</b><small>Zwischenreinigung</small></div>

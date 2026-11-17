@@ -3,6 +3,15 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.83.0
+
+- **Logo überall** (Einstellungen → Betrieb → Haus → Logo → „Logo außerdem zeigen auf“):
+  - **Ausdrucke:** Meldeschein, Tagesabschluss, Frühstücks-, Reinigungs- und Tischliste, Auswertungen, Temperaturprotokoll und Buchhaltungszettel tragen Ihr Logo (voreingestellt: an).
+  - **Seiten für Gäste:** Gäste-Link zur Reservierung, Online-Meldeschein, Angebot zum Annehmen und Anfrageformular zeigen oben Ihr Logo (voreingestellt: an).
+  - **E-Mails:** Bestätigungen, Angebote, Rechnungen usw. erhalten oben Ihr Logo; der Text bleibt unverändert (voreingestellt: aus – bitte vor dem Einschalten eine Test-E-Mail an sich selbst senden).
+  - Rechnungen und Angebote hatten das Logo schon; Lage und Größe stellen Sie dort im Rechnungslayout bzw. unter Angebote → Gestaltung ein.
+  - Der Bondrucker druckt weiterhin kein Logo aus dem Programm.
+
 ## 1.82.0
 
 - **Neu: Gestaltung der Angebote** (Angebote → Reiter „Gestaltung“, Administrator):

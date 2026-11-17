@@ -8,6 +8,8 @@ import * as billing from './modules/billing.js';
 import * as slip from './modules/accountingslip.js';
 import * as terminal from './modules/terminal.js';
 import * as tsesign from './modules/tsesign.js';
+import * as logoMod from './modules/logo.js';
+import { logoUsageInput } from '../shared/schemas.js';
 
 interface Ctx { db: Db; requireUser: (req: FastifyRequest) => Promise<void>; requireAdmin: (req: FastifyRequest) => Promise<void>; actor: (req: FastifyRequest) => Actor }
 const idOf = (req: FastifyRequest) => z.object({ id: z.uuid() }).parse(req.params).id;
@@ -79,7 +81,8 @@ export function registerBillingRoutes(api: FastifyInstance, { db, requireUser, r
   api.put('/settings/invoice-layout', admin, (req) => billing.saveLayout(db, actor(req), B.invoiceLayoutInput.parse(req.body)));
   api.get('/settings/invoice-layout/preview', admin, async (req, reply) =>
     reply.header('Content-Type', 'application/pdf').header('Content-Disposition', 'inline; filename="Muster-Rechnung.pdf"').send(await billing.layoutPreview(db, B.invoiceLayoutInput.parse(req.query))));
-  api.get('/settings/logo-info', user, async () => ({ present: !!(await billing.getLogo(db)) }));
+  api.get('/settings/logo-info', user, async () => ({ present: !!(await billing.getLogo(db)), ...(await logoMod.getLogoUsage(db)) }));
+  api.put('/settings/logo-usage', admin, (req) => logoMod.saveLogoUsage(db, actor(req), logoUsageInput.parse(req.body)));
   api.get('/settings/logo', user, async (_req, reply) => {
     const logo = await billing.getLogo(db);
     if (!logo) return reply.status(404).send({ error: { code: 'not_found', message: 'Kein Logo hinterlegt' } });

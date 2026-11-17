@@ -11,6 +11,7 @@ import { useData } from '../data.tsx';
 import { WD, deDate, deShort } from '../hotel/common.tsx';
 import { Button, LoadState, printOnly, useLoad, useToast } from '../ui.tsx';
 import { MasterDialog } from './RoomsPrices.tsx';
+import { PrintLogo } from '../logo.tsx';
 
 const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
 const num = (n: number) => n.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -112,7 +113,7 @@ export function Hygiene() {
   return (
     <section className="card hygiene">
       <div className="cardhead">
-        <div><h2>Temperaturprotokoll</h2><p className="muted">Bereiche</p></div>
+        <div><h2><PrintLogo className="printlogo onlyprint" />Temperaturprotokoll</h2><p className="muted">Bereiche</p></div>
         <div className="actions noprint">
           <div className="segmented" role="radiogroup" aria-label="Ansicht">
             <button type="button" role="radio" aria-checked={mode === 'entry'} className={mode === 'entry' ? 'on' : ''} onClick={() => setMode('entry')}>Eintragen</button>

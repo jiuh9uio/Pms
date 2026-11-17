@@ -210,6 +210,13 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
       if (start > end || start >= size) return reply.status(416).header('Content-Range', `bytes */${size}`).send();
       return reply.status(206).header('Content-Range', `bytes ${start}-${end}/${size}`).header('Content-Length', end - start + 1).send(v.data.subarray(start, end + 1));
     });
+    // Logo für die Seiten der Gäste (Gäste-Link, Online-Meldeschein, Angebot, Anfrage) – nur wenn unter „Logo“ eingeschaltet
+    api.get('/public/logo', { preHandler: mediaLimit }, async (_req, reply) => {
+      const { getLogoUsage } = await import('./modules/logo.js');
+      const logo = (await getLogoUsage(db)).guestPages ? await getLogo(db) : null;
+      if (!logo) return reply.status(404).send({ error: { code: 'not_found', message: 'Kein Logo' } });
+      return reply.header('Content-Type', logo.mime).header('Cache-Control', 'public, max-age=3600').send(logo.data);
+    });
     api.get('/public/site/logo', { preHandler: mediaLimit }, async (req, reply) => {
       const logo = await site.publicSiteLogo(db, await isAdminPreview(req));
       if (!logo) return reply.status(404).send({ error: { code: 'not_found', message: 'Kein Logo' } });

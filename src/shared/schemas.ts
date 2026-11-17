@@ -256,3 +256,14 @@ export const invoiceNumberInput = z.object({
   next: z.number('Bitte eine Zahl eingeben').int().min(1, 'Mindestens 1').max(999_999),
 });
 export interface InvoiceNumberState { year: number; next: number; /** höchste schon vergebene laufende Nummer des Jahres */ issued: number; sample: string }
+
+/** Wo das Logo (Einstellungen → Haus → Logo) zusätzlich erscheint. Rechnung und Angebot haben eigene Gestaltungseinstellungen. */
+export const logoUsageInput = z.object({
+  /** Ausdrucke aus dem Browser: Meldeschein, Tagesabschluss, Listen (Frühstück, Reinigung, Tische), Auswertungen, Buchhaltungszettel */
+  printouts: z.boolean().default(true),
+  /** Seiten für Gäste: Gäste-Link, Online-Meldeschein, Angebots-Link, Anfrageformular */
+  guestPages: z.boolean().default(true),
+  /** E-Mails an Gäste und Kunden: Logo oben in der Nachricht (zusätzlich zum reinen Text) */
+  emails: z.boolean().default(false),
+});
+export type LogoUsage = z.infer<typeof logoUsageInput>;

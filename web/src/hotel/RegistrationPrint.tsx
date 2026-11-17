@@ -5,6 +5,7 @@ import type { HotelSettings } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { Button, LoadState, useLoad, useToast } from '../ui.tsx';
 import { deDate } from './common.tsx';
+import { PrintLogo } from '../logo.tsx';
 
 /** Meldeschein zum Ausdrucken und Unterschreiben – vorausgefüllt aus Reservierung und Gästeprofil. */
 export function RegistrationPrint() {
@@ -55,7 +56,7 @@ export function RegistrationSheet({ b, h, sheet, link = null }: { b: BookingDto;
   const row = (label: string, value: string | null | undefined) => <tr><th>{label}</th><td>{value || '\u00a0'}</td></tr>;
   return (
       <article className={`invoice regform${sheet ? ' withinfo' : ''}`}>
-        <header><b>{h.name}</b><br /><small>{[h.street, [h.zip, h.city].filter(Boolean).join(' ')].filter(Boolean).join(', ')}</small></header>
+        <header><PrintLogo className="doclogo" /><b>{h.name}</b><br /><small>{[h.street, [h.zip, h.city].filter(Boolean).join(' ')].filter(Boolean).join(', ')}</small></header>
         <h1>Meldeschein</h1>
         <table><tbody>
           {row('Ankunft', from ? deDate(from) : '')}{row('Voraussichtliche Abreise', to ? deDate(to) : '')}

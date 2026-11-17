@@ -5,6 +5,7 @@ import { api } from '../api.ts';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
 import { Badge, Button, Field, LoadState, PageHeader, useLoad } from '../ui.tsx';
+import { PrintLogo } from '../logo.tsx';
 
 /** Tagesabschluss: Zahlungen je Zahlungsart, Rechnungen, offene An- und Abreisen – zum Abgleich mit Kasse und EC-Gerät. */
 export function DayReport() {
@@ -27,7 +28,7 @@ export function DayReport() {
       <LoadState error={error} loading={!data} />
       {data && (
         <>
-          <h2 className="printhead">Tagesabschluss {deDate(date)}</h2>
+          <h2 className="printhead"><PrintLogo />Tagesabschluss {deDate(date)}</h2>
           <div className="kpis">
             <div className="card kpicard printable"><span>Zahlungen gesamt</span><b>{formatMoney(data.totalCents)}</b><small>{data.paymentList.length} Buchungen</small></div>
             <div className="card kpicard printable"><span>davon bar</span><b>{formatMoney(data.cashCents)}</b><small>laut Programm</small></div>

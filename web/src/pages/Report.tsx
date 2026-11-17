@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { addDays, formatMoney, todayBerlin, type ForecastDto, type OriginStats, type SourceStats, type YearReport } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
 import { Button, LoadState, PageHeader, useLoad, useTabs } from '../ui.tsx';
+import { PrintLogo } from '../logo.tsx';
 
 const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
 const WD = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
@@ -34,7 +35,7 @@ function Forecast() {
   return (
     <>
       <p className="noprint yearnav"><Button onClick={() => setFrom(addDays(from, -30))}>‹ 30 Tage früher</Button> <Button onClick={() => setFrom(todayBerlin())}>Heute</Button> <Button onClick={() => setFrom(addDays(from, 30))}>30 Tage später ›</Button></p>
-      <h2 className="printhead">Belegungsvorschau ab {from.slice(8)}.{from.slice(5, 7)}.{from.slice(0, 4)}</h2>
+      <h2 className="printhead"><PrintLogo />Belegungsvorschau ab {from.slice(8)}.{from.slice(5, 7)}.{from.slice(0, 4)}</h2>
       <div className="tablewrap card flush printable"><table>
         <thead><tr><th>Tag</th><th>Auslastung</th><th className="num">belegt</th><th className="num">vorläufig</th><th className="num">gesperrt</th><th className="num">frei</th>
           {data.categories.map((c) => <th key={c.id} className="num hide-sm">frei {c.name}</th>)}<th className="num">Anreisen</th><th className="num">Abreisen</th></tr></thead>
@@ -67,7 +68,7 @@ function Year() {
       <LoadState error={error} loading={!data} />
       {data && (
         <>
-          <h2 className="printhead">Auswertung {year} – Auslastung und Umsatz je Monat</h2>
+          <h2 className="printhead"><PrintLogo />Auswertung {year} – Auslastung und Umsatz je Monat</h2>
           <div className="tablewrap card flush printable"><table>
             <thead><tr><th>Monat</th><th className="num">Zimmernächte</th><th>Auslastung</th><th className="num">Logisumsatz gebucht</th><th className="num hide-sm">Ø Preis je Nacht</th><th className="num hide-sm">Umsatz je verfügbarem Zimmer</th><th className="num">Rechnungen</th><th className="num">Rechnungssumme</th></tr></thead>
             <tbody>{data.months.map((m) => (
@@ -110,7 +111,7 @@ function Origin() {
       <LoadState error={error} loading={!data} />
       {data && (
         <>
-          <h2 className="printhead">Ankünfte und Übernachtungen {MONTHS[month - 1]} {year}</h2>
+          <h2 className="printhead"><PrintLogo />Ankünfte und Übernachtungen {MONTHS[month - 1]} {year}</h2>
           <div className="kpis">
             <div className="card kpicard printable"><span>Ankünfte</span><b>{data.total.arrivals}</b><small>Personen</small></div>
             <div className="card kpicard printable"><span>Übernachtungen</span><b>{data.total.nights}</b><small>Personen × Nächte</small></div>
@@ -142,7 +143,7 @@ function Sources() {
       <LoadState error={error} loading={!data} />
       {data && (data.rows.length === 0 ? <p className="card printable">In diesem Jahr gibt es keine Übernachtungen.</p> : (
         <>
-          <h2 className="printhead">Buchungsquellen {year}</h2>
+          <h2 className="printhead"><PrintLogo />Buchungsquellen {year}</h2>
           <div className="tablewrap card flush printable"><table>
             <thead><tr><th>Buchungsquelle</th><th className="num">Reservierungen</th><th className="num">Zimmernächte</th><th className="num">Logisumsatz</th><th>Anteil</th></tr></thead>
             <tbody>{data.rows.map((r) => {

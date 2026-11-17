@@ -16,6 +16,7 @@ import { OutlookCard } from './OutlookCard.tsx';
 const SHOW_OUTLOOK = false;
 import { DepositPanel } from '../billing/DepositPanel.tsx';
 import { DEPOSIT_STATE_LABEL, type DepositDto } from '../../../src/shared/deposits.js';
+import { PrintLogo } from '../logo.tsx';
 
 const TONE: Record<TableStatus, 'accent' | 'ok' | 'neutral' | 'danger' | 'warn'> = { booked: 'accent', seated: 'ok', done: 'neutral', cancelled: 'danger', no_show: 'warn' };
 const WEEKDAY = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
@@ -84,7 +85,7 @@ export function Restaurant() {
         <>
           {/* Ausblick (Wetter/Fußball/Veranstaltungen) vorerst ausgeblendet – auf Wunsch des Hauses; Code bleibt für später erhalten */}
           {SHOW_OUTLOOK && date >= today && <OutlookCard date={date} />}
-          <h2 className="printhead">Tischreservierungen {weekday(date)}, {deDate(date)}</h2>
+          <h2 className="printhead"><PrintLogo />Tischreservierungen {weekday(date)}, {deDate(date)}</h2>
           {overdueDeps.length > 0 && <p className="notice warn noprint">{overdueDeps.length === 1 ? 'Eine angeforderte Anzahlung ist' : `${overdueDeps.length} angeforderte Anzahlungen sind`} überfällig – bitte die Reservierung öffnen („Ändern“) und den Eingang vermerken oder nachfragen.</p>}
           {data.tables.length === 0 && <p className="notice warn">Es sind noch keine Tische angelegt. Reservierungen sind trotzdem möglich – nur ohne Tischzuweisung. {isAdmin ? 'Tische lassen sich unten anlegen.' : 'Tische legt der Administrator an.'}</p>}
           <p className="muted">{active.length} {active.length === 1 ? 'Reservierung' : 'Reservierungen'} · {active.reduce((s, r) => s + r.persons, 0)} Personen{active.some((r) => !r.tableId) ? ` · ${active.filter((r) => !r.tableId).length} ohne Tisch` : ''}</p>

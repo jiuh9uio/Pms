@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { webRequestInput, type WebRequestPublic } from '../../../src/shared/inbox.js';
 import { api } from '../api.ts';
 import { Button, Field, LoadState, useLoad, useSubmit } from '../ui.tsx';
+import { GuestLogo } from '../logo.tsx';
 
 /** Öffentliche Seite „Zimmeranfrage“ – ohne Anmeldung, ohne Menü. Es wird nichts gebucht, nur angefragt. */
 export function RequestPage() {
@@ -16,7 +17,7 @@ export function RequestPage() {
   );
   return (
     <div className="guestform">
-      <header><b>{data.hotelName}</b><h1>Zimmeranfrage</h1>{data.intro && <p className="muted">{data.intro}</p>}</header>
+      <header><GuestLogo /><b>{data.hotelName}</b><h1>Zimmeranfrage</h1>{data.intro && <p className="muted">{data.intro}</p>}</header>
       {!data.enabled ? <p className="notice">Online-Anfragen sind derzeit nicht möglich. Bitte rufen Sie uns an oder schreiben Sie uns eine E-Mail.</p>
         : done ? <p className="notice">Vielen Dank – Ihre Anfrage ist bei uns angekommen. Wir melden uns so bald wie möglich bei Ihnen. Die Anfrage ist noch keine Buchung.</p> : (
           <form className="card" onSubmit={(e) => void f.submit({ ...v, adults: num(v.adults), children: num(v.children) || 0 }, e)} noValidate>

@@ -5,6 +5,7 @@ import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
 import { Badge, Button, LoadState, PageHeader, useLoad, useToast } from '../ui.tsx';
+import { PrintLogo } from '../logo.tsx';
 
 const WEEKDAY = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 const weekday = (d: string) => WEEKDAY[new Date(`${d}T12:00:00Z`).getUTCDay()];
@@ -51,7 +52,7 @@ export function Breakfast() {
       <LoadState error={error} loading={!data} />
       {data && (
         <>
-          <h2 className="printhead">Frühstück {weekday(date)}, {deDate(date)}</h2>
+          <h2 className="printhead"><PrintLogo />Frühstück {weekday(date)}, {deDate(date)}</h2>
           {!data.printerReady && <p className="notice noprint">Der Küchendrucker ist noch nicht eingerichtet. {user.role === 'admin' ? 'Das geht unter Verwaltung → Einstellungen → Küchendrucker.' : 'Das richtet der Administrator ein.'} Die Liste lässt sich solange über „Drucken“ auf einem normalen Drucker ausgeben.</p>}
           {data.autoTime && <p className="muted noprint">Die Liste des Tages wird täglich um {data.autoTime} Uhr von selbst in der Küche gedruckt{data.autoLast ? ` (zuletzt für den ${deDate(data.autoLast)})` : ''}.</p>}
           {data.variant && <p className="notice warn printable"><b>{data.variant.text}</b> <span className="muted small noprint">· Regel „{data.variant.name}“</span></p>}

@@ -3,6 +3,7 @@ import { guestFormInput, type GuestFormPublic } from '../../../src/shared/hotel.
 import { api } from '../api.ts';
 import { deDate } from '../hotel/common.tsx';
 import { Button, Field, LoadState, useLoad, useSubmit } from '../ui.tsx';
+import { GuestLogo } from '../logo.tsx';
 
 /** Online-Meldeschein für den Gast (ohne Anmeldung, über den QR-Code der Reservierung). */
 export function GuestFormPage() {
@@ -22,7 +23,7 @@ export function GuestFormPage() {
   const send = (e: React.FormEvent) => void f.submit({ ...val, companions: val.companions!.trim() === '' ? NaN : Number(val.companions) }, e);
   return (
     <div className="guestform">
-      <header><b>{data.hotelName}</b><h1>Meldeschein <small>Registration form</small></h1>
+      <header><GuestLogo /><b>{data.hotelName}</b><h1>Meldeschein <small>Registration form</small></h1>
         <p className="muted">Reservierung {data.number} · {deDate(data.from)} – {deDate(data.to)}</p></header>
       {done || data.submitted ? (
         <p className="notice">{done ? 'Vielen Dank – Ihre Angaben sind angekommen. Thank you, your details have been received.' : 'Der Meldeschein wurde bereits ausgefüllt. Für Änderungen wenden Sie sich bitte an die Rezeption. This form has already been completed.'}</p>

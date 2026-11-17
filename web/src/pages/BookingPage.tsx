@@ -3,6 +3,7 @@ import { STATUS_LABEL, formatMoney, publicArrivalInput, publicCredInput, type Pu
 import { api } from '../api.ts';
 import { deDate } from '../hotel/common.tsx';
 import { Badge, Button, Field, LoadState, useLoad, useSubmit } from '../ui.tsx';
+import { GuestLogo } from '../logo.tsx';
 
 /** Seite für den Gast (ohne Anmeldung, über seinen persönlichen Link): Reservierung ansehen, Ankunftszeit mitteilen, stornieren. */
 const CRED = 'pms.buchung.';
@@ -38,7 +39,7 @@ export function BookingPage() {
   if (!gate.data) return <div className="guestform"><LoadState error={gate.error} loading /></div>;
   if (!b) return (
     <div className="guestform">
-      <header><b>{gate.data.hotelName}</b><h1>Ihre Reservierung</h1><p className="muted">Bitte bestätigen Sie kurz, dass Sie es sind.</p></header>
+      <header><GuestLogo /><b>{gate.data.hotelName}</b><h1>Ihre Reservierung</h1><p className="muted">Bitte bestätigen Sie kurz, dass Sie es sind.</p></header>
       {cred ? <LoadState error={null} loading /> : (
         <form className="card" onSubmit={(e) => void enter.submit(login, e)} noValidate>
           <div className="formgrid">
@@ -55,7 +56,7 @@ export function BookingPage() {
   const persons = (r: PublicBooking['rooms'][number]) => `${r.adults} ${r.adults === 1 ? 'Erwachsener' : 'Erwachsene'}${r.children ? `, ${r.children} ${r.children === 1 ? 'Kind' : 'Kinder'}` : ''}`;
   return (
     <div className="guestform">
-      <header><b>{b.hotelName}</b><h1>Ihre Reservierung</h1>
+      <header><GuestLogo /><b>{b.hotelName}</b><h1>Ihre Reservierung</h1>
         <p className="muted">Nr. {b.number} · {b.guestName}</p>{b.welcome && <p>{b.welcome}</p>}</header>
       {b.state === 'cancelled' && <p className="notice warn"><b>Diese Reservierung ist storniert.</b> Wenn das ein Versehen war, rufen Sie uns bitte an{b.hotelPhone && ` (${b.hotelPhone})`}.</p>}
       <section className="card">

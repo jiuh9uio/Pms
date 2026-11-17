@@ -5,6 +5,7 @@ import { formatMoney } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
 import { deDate } from '../hotel/common.tsx';
 import { Button, LoadState, fmtDateTime, useLoad, useToast } from '../ui.tsx';
+import { PrintLogo } from '../logo.tsx';
 
 /** Zettel für die Buchhaltung (A4, halbe Seite reicht): Zahlungen, Rechnungen mit Steuer, Summen. Interner Vermerk. */
 export function AccountingSlipPrint() {
@@ -32,7 +33,7 @@ export function AccountingSlipPrint() {
         <span className="muted">Interner Zettel für die Buchhaltung – kein Kassenbeleg und keine Rechnung.</span>
       </div>
       <article className="invoice acctslip">
-        <header><b>{s.hotelName}</b><span>Zahlung – für die Buchhaltung</span></header>
+        <header><PrintLogo className="doclogo" /><b>{s.hotelName}</b><span>Zahlung – für die Buchhaltung</span></header>
         <p className="muted small">Interner Zettel, kein Kassenbeleg · erstellt {fmtDateTime(s.createdAt)} von {s.createdBy}</p>
         <table className="kv"><tbody>
           <tr><th>Reservierung</th><td>{s.booking.number}</td><th>Aufenthalt</th><td>{deDate(s.booking.from)} – {deDate(s.booking.to)}</td></tr>

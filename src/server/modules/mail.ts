@@ -74,7 +74,7 @@ export async function saveMailSettings(db: Db, actor: Actor, v: { enabled: boole
 }
 
 // ---------- Versand ----------
-export interface Mail { to: string; subject: string; text: string; /** Message-ID der Nachricht, auf die geantwortet wird */ inReplyTo?: string; attachments?: { filename: string; content: Buffer; contentType: string }[] }
+export interface Mail { to: string; subject: string; text: string; /** HTML-Fassung (z. B. mit Logo) */ html?: string; /** Message-ID der Nachricht, auf die geantwortet wird */ inReplyTo?: string; attachments?: { filename: string; content: Buffer; contentType: string; cid?: string }[] }
 type Sender = (config: { host: string; port: number; user: string; pass: string }, mail: Mail & { from: { name: string; address: string } }) => Promise<void>;
 
 let sender: Sender = async (c, mail) => {
@@ -101,8 +101,19 @@ export async function sendMail(db: Db, actor: Actor, mail: Mail, einvoiceId: str
   if (!s.enabled || !s.host || !s.user || !s.passEnc)
     throw new AppError(409, 'mail_not_configured', 'Der E-Mail-Versand ist noch nicht eingerichtet (Verwaltung → Einstellungen → E-Mail-Versand)');
   const names = (mail.attachments ?? []).map((a) => a.filename).join(', ');
+  // Logo in E-Mails (Einstellungen → Haus → Logo): zusätzlich eine HTML-Fassung mit dem Logo oben, der Text bleibt gleich
+  let out: Mail = mail;
   try {
-    await sender({ host: s.host, port: s.port, user: s.user, pass: decrypt(s.passEnc) }, { ...mail, from: { name: s.fromName || s.user, address: s.user } });
+    const { getLogoUsage, mailHtml } = await import('./logo.js');
+    if (!mail.html && (await getLogoUsage(db)).emails) {
+      const { getLogo } = await import('./billing.js');
+      const { getHotel } = await import('./settings.js');
+      const logo = await getLogo(db);
+      if (logo) out = { ...mail, html: mailHtml(mail.text, (await getHotel(db)).name), attachments: [...(mail.attachments ?? []), { filename: logo.mime === 'image/png' ? 'logo.png' : 'logo.jpg', content: logo.data, contentType: logo.mime, cid: 'logo' }] };
+    }
+  } catch { out = mail; /* ohne Logo senden */ }
+  try {
+    await sender({ host: s.host, port: s.port, user: s.user, pass: decrypt(s.passEnc) }, { ...out, from: { name: s.fromName || s.user, address: s.user } });
     await db.insert(mailLog).values({ toAddr: mail.to, subject: mail.subject, attachments: names, status: 'sent', userName: actor.userName, einvoiceId });
   } catch (e) {
     if (e instanceof AppError) throw e;

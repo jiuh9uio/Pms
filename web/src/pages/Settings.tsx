@@ -24,6 +24,8 @@ import { TseCard } from './TseCard.tsx';
 import { WebRequestCard } from './WebRequestCard.tsx';
 import { Changelog, UpdateCard } from './UpdateCard.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
+import { forgetLogoInfo } from '../logo.tsx';
+import type { LogoUsage } from '../../../src/shared/schemas.js';
 
 export const SETTINGS_TABS = [
   ['haus', 'Haus'], ['email', 'E-Mail'], ['gaesteseite', 'Gästeseite'], ['drucker', 'Drucker'], ['ecgeraet', 'EC-Gerät'], ['tse', 'TSE'], ['steuern', 'Steuern & Nummern'], ['algorithmen', 'Algorithmen'], ['mitteilungen', 'Mitteilungen'], ['netz', 'Hausnetz'], ['sicherheit', 'Sicherheit'], ['sicherung', 'Datensicherung'], ['update', 'Programm-Update'], ['loeschen', 'Daten löschen'],
@@ -229,35 +231,51 @@ function NetworkCard() {
   );
 }
 
-/** Logo des Hauses: erscheint auf Rechnungen (oben rechts) und im Startmenü. */
+/** Logo des Hauses: Rechnungen, Angebote, Startmenü – und wahlweise Ausdrucke, Gästeseiten und E-Mails. */
 function LogoCard() {
   const toast = useToast();
   const [rev, setRev] = useState(0);
   const [has, setHas] = useState<boolean | null>(null);
-  useEffect(() => { api<{ present: boolean }>('GET', '/settings/logo-info').then((r) => setHas(r.present)).catch(() => setHas(false)); }, [rev]);
+  const [use, setUse] = useState<LogoUsage | null>(null);
+  useEffect(() => { api<LogoUsage & { present: boolean }>('GET', '/settings/logo-info').then((r) => { setHas(r.present); setUse({ printouts: r.printouts, guestPages: r.guestPages, emails: r.emails }); }).catch(() => setHas(false)); }, [rev]);
+  const toggle = async (k: keyof LogoUsage, on: boolean) => {
+    if (!use) return;
+    const next = { ...use, [k]: on };
+    try { await api('PUT', '/settings/logo-usage', next); setUse(next); forgetLogoInfo(); toast(on ? 'Logo wird dort gezeigt' : 'Logo wird dort nicht mehr gezeigt'); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+  };
   const upload = async (file: File | undefined) => {
     if (!file) return;
     if (!['image/png', 'image/jpeg'].includes(file.type)) { toast('Bitte ein PNG- oder JPEG-Bild wählen', 'error'); return; }
     if (file.size > 400 * 1024) { toast('Das Logo ist zu groß (höchstens 400 kB) – bitte verkleinern', 'error'); return; }
     const bytes = new Uint8Array(await file.arrayBuffer());
     let bin = ''; for (const b of bytes) bin += String.fromCharCode(b);
-    try { await api('PUT', '/settings/logo', { mime: file.type, dataBase64: btoa(bin) }); toast('Logo gespeichert'); setRev(rev + 1); }
+    try { await api('PUT', '/settings/logo', { mime: file.type, dataBase64: btoa(bin) }); toast('Logo gespeichert'); forgetLogoInfo(); setRev(rev + 1); }
     catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
   };
   const remove = async () => {
     if (!window.confirm('Logo entfernen?')) return;
-    try { await api('POST', '/settings/logo/remove', {}); toast('Logo entfernt'); setRev(rev + 1); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+    try { await api('POST', '/settings/logo/remove', {}); toast('Logo entfernt'); forgetLogoInfo(); setRev(rev + 1); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
   };
   return (
     <section className="card">
       <h2>Logo</h2>
-      <p className="muted">Erscheint oben rechts auf neuen Rechnungen und im Startmenü. Bereits ausgestellte Rechnungen behalten ihr Aussehen.</p>
+      <p className="muted">Erscheint auf neuen Rechnungen und Angeboten (Lage und Größe: Rechnungslayout bzw. Angebote → Gestaltung) und im Startmenü. Bereits ausgestellte Rechnungen und versendete Angebote behalten ihr Aussehen.</p>
       {has && <p><img className="logopreview" src={`/api/v1/settings/logo?v=${rev}`} alt="Aktuelles Logo" /></p>}
       <div className="formactions">
         <label className="btn">{has ? 'Anderes Logo wählen' : 'Logo hochladen'}<input type="file" accept="image/png,image/jpeg" hidden onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = ''; }} /></label>
         {has && <Button variant="danger" onClick={() => void remove()}>Entfernen</Button>}
       </div>
       <p className="muted small">PNG oder JPEG, höchstens 400 kB. Am besten quer und mit transparentem oder weißem Hintergrund.</p>
+      {use && <>
+        <h3>Logo außerdem zeigen auf</h3>
+        <div className="checkgrid">
+          <label className="check"><input type="checkbox" checked={use.printouts} onChange={(e) => void toggle('printouts', e.target.checked)} /><span>Ausdrucken<small>Meldeschein, Tagesabschluss, Frühstücks-, Reinigungs- und Tischliste, Auswertungen, Temperaturprotokoll, Buchhaltungszettel</small></span></label>
+          <label className="check"><input type="checkbox" checked={use.guestPages} onChange={(e) => void toggle('guestPages', e.target.checked)} /><span>Seiten für Gäste<small>Gäste-Link zur Reservierung, Online-Meldeschein, Angebot zum Annehmen, Anfrageformular</small></span></label>
+          <label className="check"><input type="checkbox" checked={use.emails} onChange={(e) => void toggle('emails', e.target.checked)} /><span>E-Mails<small>Bestätigungen, Angebote, Rechnungen usw. erhalten oben Ihr Logo (zusätzlich zum unveränderten Text). Bitte einmal eine Test-E-Mail an sich selbst senden.</small></span></label>
+        </div>
+        <p className="muted small">Der Bondrucker druckt kein Logo aus dem Programm. Viele Bondrucker können ein Logo selbst speichern und auf jeden Bon setzen – das richtet man mit dem Programm des Druckerherstellers ein.</p>
+      </>}
     </section>
   );
 }

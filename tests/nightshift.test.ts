@@ -266,3 +266,33 @@ describe('Angebotslayout', () => {
     expect((await call('PUT', '/settings/offer-layout', admin, { ...d, accentHex: 'rot' })).statusCode).toBe(400);
   });
 });
+
+describe('Logo überall', () => {
+  it('Einstellung, öffentliches Logo nur wenn eingeschaltet, E-Mail mit Logo als HTML-Fassung', async () => {
+    const { setMailSender } = await import('../src/server/modules/mail.js') as unknown as { setMailSender: (s: unknown) => void };
+    // Logo hochladen (1×1 PNG)
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+    await ok('PUT', '/settings/logo', admin, { mime: 'image/png', dataBase64: png });
+    expect(await ok('GET', '/settings/logo-info', admin)).toMatchObject({ present: true, printouts: true, guestPages: true, emails: false });
+    expect((await app.inject({ method: 'GET', url: '/api/v1/public/logo' })).statusCode).toBe(200);
+    await ok('PUT', '/settings/logo-usage', admin, { printouts: true, guestPages: false, emails: true });
+    expect((await app.inject({ method: 'GET', url: '/api/v1/public/logo' })).statusCode).toBe(404);
+    const { mailHtml } = await import('../src/server/modules/logo.js');
+    const html = mailHtml('Guten Tag <Test>,\n\nLink: https://example.org/x\nZeile 2', 'Haus');
+    expect(html).toContain('cid:logo');
+    expect(html).toContain('&lt;Test&gt;');
+    expect(html).toContain('<a href="https://example.org/x"');
+    // echter Versandweg (nachgebildet): HTML-Fassung und Logo als eingebettetes Bild
+    const sent: { html?: string; text: string; attachments?: { cid?: string }[] }[] = [];
+    setMailSender(async (_c: unknown, m: { html?: string; text: string; attachments?: { cid?: string }[] }) => { sent.push(m); });
+    await ok('PUT', '/settings/mail', admin, { enabled: true, host: 'mail.example.org', port: 587, user: 'haus@example.org', fromName: 'Haus', password: 'nur-test' });
+    const { sendMail } = await import('../src/server/modules/mail.js');
+    await sendMail(db as never, { userId: null, userName: 'Test', ip: null }, { to: 'gast@example.org', subject: 'Test', text: 'Hallo' });
+    expect(sent[0]!.text).toBe('Hallo');
+    expect(sent[0]!.html).toContain('cid:logo');
+    expect(sent[0]!.attachments?.some((x) => x.cid === 'logo')).toBe(true);
+    await ok('PUT', '/settings/logo-usage', admin, { printouts: true, guestPages: true, emails: false });
+    await sendMail(db as never, { userId: null, userName: 'Test', ip: null }, { to: 'gast@example.org', subject: 'Test', text: 'Hallo' });
+    expect(sent[1]!.html).toBeUndefined();
+  });
+});
