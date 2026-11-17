@@ -83,5 +83,5 @@ export function registerControlRoutes(api: FastifyInstance, { db, requireUser, r
 
   api.get('/hygiene/open', user, () => controls.openToday(db));
   api.post('/hygiene/areas/:id/confirm', user, (req) => controls.confirmArea(db, actor(req), idOf(req)));
-  api.put('/hygiene/readings', user, (req) => { const v = C.hygieneReadingsInput.parse(req.body); return controls.saveReadings(db, actor(req), v.entries, v.onlyNew); });
+  api.put('/hygiene/readings', user, (req) => { const v = C.hygieneReadingsInput.parse(req.body); return controls.saveReadings(db, actor(req), v.entries, v.onlyNew, req.user!.role === 'admin'); });
 }

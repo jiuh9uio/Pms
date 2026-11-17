@@ -95,8 +95,16 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
   });
 
   // ---------- Zugriffsschutz ----------
+  // Browser meldet, wie lange die letzte Eingabe her ist („none“ = noch keine) – Hintergrund-Abfragen verlängern die Anmeldung nicht
+  const inputAge = (req: FastifyRequest): number | null | undefined => {
+    const h = req.headers['x-input-age'];
+    if (typeof h !== 'string') return undefined;
+    if (h === 'none') return null;
+    const n = Number(h);
+    return Number.isFinite(n) && n >= 0 ? n : undefined;
+  };
   const requireUser = async (req: FastifyRequest) => {
-    const s = await auth.authenticate(db, req.cookies[COOKIE]);
+    const s = await auth.authenticate(db, req.cookies[COOKIE], inputAge(req));
     if (!s) throw new AppError(401, 'unauthenticated', 'Bitte anmelden');
     req.user = s.user;
     req.sessionId = s.sessionId;
@@ -174,7 +182,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
 
     // Online-Buchungsanfrage: ohne Anmeldung, nur wenn eingeschaltet; legt eine Nachricht im Posteingang an
     // Gästeseite: öffentliche Angaben, Verfügbarkeit, Fotos. Ein angemeldeter Administrator sieht sie als Vorschau auch vor dem Freischalten.
-    const isAdminPreview = async (req: FastifyRequest) => (await auth.authenticate(db, req.cookies[COOKIE]))?.user.role === 'admin';
+    const isAdminPreview = async (req: FastifyRequest) => (await auth.authenticate(db, req.cookies[COOKIE], null))?.user.role === 'admin';
     api.get('/public/site', { preHandler: publicLimit }, async (req) => site.sitePublic(db, await isAdminPreview(req)));
     api.get('/public/site/availability', { preHandler: publicLimit }, async (req) => site.siteAvailability(db, SI.siteAvailabilityQuery.parse(req.query), await isAdminPreview(req)));
     api.get('/public/site/photo/:id', { preHandler: mediaLimit }, async (req, reply) => {
@@ -213,7 +221,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
 
     // ---------- Anmeldung ----------
     api.get('/auth/state', async (req) => {
-      const s = await auth.authenticate(db, req.cookies[COOKIE]);
+      const s = await auth.authenticate(db, req.cookies[COOKIE], inputAge(req));
       if (s) return { needsSetup: false, user: usersMod.toUserDto(s.user), guestHome: false };
       const g = await site.getSite(db);
       return { needsSetup: await auth.needsSetup(db), user: null, guestHome: g.enabled && g.homepage };
@@ -225,9 +233,14 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
       const ip = req.ip ?? '';
       if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') return;
       const now = Date.now();
-      if (tries.size > 5000) tries.clear();
-      const t = tries.get(ip);
-      if (!t || t.reset < now) { tries.set(ip, { n: 1, reset: now + 10 * 60_000 }); return; }
+      const key = clientKey(ip); // IPv6 je /64-Netz – ein Adresswechsel setzt die Bremse nicht zurück
+      // bei vielen Einträgen nur abgelaufene bzw. die ältesten entfernen, nicht alle Zähler
+      if (tries.size > 5000) {
+        for (const [k, v] of tries) if (v.reset < now) tries.delete(k);
+        for (const k of tries.keys()) { if (tries.size <= 4000) break; tries.delete(k); }
+      }
+      const t = tries.get(key);
+      if (!t || t.reset < now) { tries.delete(key); tries.set(key, { n: 1, reset: now + 10 * 60_000 }); return; }
       if (++t.n > 20) throw new AppError(429, 'too_many', 'Zu viele Anmeldeversuche von diesem Gerät. Bitte in einigen Minuten erneut versuchen.');
     };
     api.post('/auth/setup', { preHandler: loginLimit }, async (req, reply) => {

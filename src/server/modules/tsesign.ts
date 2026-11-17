@@ -7,6 +7,7 @@ import { settings, tseRecords } from '../db/schema.js';
 import { AppError } from '../lib/errors.js';
 import { tseSession, type TseReply } from '../lib/epsontse.js';
 import { record, type Actor } from './audit.js';
+import { STORNO_IN, STORNO_OUT } from './billing.js';
 import { decrypt, encrypt } from './mail.js';
 import { getTse } from './tse.js';
 
@@ -50,7 +51,10 @@ const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : n
 type Raw = Record<string, unknown>;
 interface Outcome { ok: boolean; authFailed: boolean; error: string; serialHex: string; publicKey: string; algorithm: string; start?: TseReply; finish?: TseReply }
 
-async function transact(host: string, port: number, clientId: string, pin: string, key: string, processData: string): Promise<Outcome> {
+/**
+ * Neuer Vorgang (Start + Abschluss) – oder mit openTx nur den Abschluss eines früher gestarteten, nicht abgeschlossenen Vorgangs nachholen.
+ */
+async function transact(host: string, port: number, clientId: string, pin: string, key: string, processData: string, openTx: number | null = null): Promise<Outcome> {
   const vendor = (p: TseReply[]) => ({ vendor: 'TSE1', altVendors: [str(p[0]?.output.vendorType), 'TSE', ''] });
   const by = (p: TseReply[], fn: string) => p.find((r) => r.fn === fn);
   const fine = (p: TseReply[]) => p.every((r) => r.result === 'EXECUTION_OK');
@@ -68,10 +72,11 @@ async function transact(host: string, port: number, clientId: string, pin: strin
         return { fn: 'AuthenticateUserForTimeAdmin', ...vendor(p), input: { clientId, pin, hash: createHash('sha256').update(challenge + key, 'utf8').digest('base64') } };
       },
       (p) => (fine(p) && by(p, 'AuthenticateUserForTimeAdmin') ? { fn: 'UpdateTime', ...vendor(p), input: { userId: clientId, newDateTime: new Date().toISOString().slice(0, 19) + 'Z', useTimeSync: false } } : null),
-      (p) => (fine(p) && by(p, 'UpdateTime') ? { fn: 'StartTransaction', ...vendor(p), input: { clientId, processData: '', processType: '', additionalData: '' } } : null),
+      (p) => (fine(p) && by(p, 'UpdateTime') && openTx == null ? { fn: 'StartTransaction', ...vendor(p), input: { clientId, processData: '', processType: '', additionalData: '' } } : null),
       (p) => {
         const start = by(p, 'StartTransaction');
-        return fine(p) && start ? { fn: 'FinishTransaction', ...vendor(p), input: { clientId, transactionNumber: start.output.transactionNumber, processData: Buffer.from(processData, 'utf8').toString('base64'), processType: 'Kassenbeleg-V1', additionalData: '' } } : null;
+        const txNo = openTx ?? start?.output.transactionNumber;
+        return fine(p) && by(p, 'UpdateTime') && (start || openTx != null) ? { fn: 'FinishTransaction', ...vendor(p), input: { clientId, transactionNumber: txNo, processData: Buffer.from(processData, 'utf8').toString('base64'), processType: 'Kassenbeleg-V1', additionalData: '' } } : null;
       },
       (p) => (by(p, 'AuthenticateUserForTimeAdmin')?.result === 'EXECUTION_OK' ? { fn: 'LogOutForTimeAdmin', ...vendor(p), input: { clientId } } : null),
     ]);
@@ -89,7 +94,7 @@ async function transact(host: string, port: number, clientId: string, pin: strin
     out.error = `${bad.fn}: ${[bad.result, bad.error?.fact].filter(Boolean).join(' – ')}`;
     return out;
   }
-  if (out.start?.result !== 'EXECUTION_OK' || out.finish?.result !== 'EXECUTION_OK') { out.error = 'Die TSE hat den Vorgang nicht ausgeführt'; return out; }
+  if ((openTx == null && out.start?.result !== 'EXECUTION_OK') || out.finish?.result !== 'EXECUTION_OK') { out.error = 'Die TSE hat den Vorgang nicht ausgeführt'; return out; }
   out.ok = true;
   return out;
 }
@@ -105,9 +110,13 @@ export function signPending(db: Db): Promise<void> {
 async function work(db: Db) {
   let s = await load(db);
   if (!s.enabled || !s.since) return;
+  await finishOpen(db);
+  s = await load(db);
   const rows = Array.from(await db.execute(sql`
     select p.id, p.booking_id, p.invoice_id, p.amount_cents, p.method, p.recorded_by, p.reverses_id, p.created_at from payments p
     where p.created_at >= ${s.since}::timestamptz and not exists (select 1 from tse_records t where t.payment_id = p.id)
+      -- interne Umbuchung beim Storno (kein Geldfluss, keine Kasseneinnahme) – nicht als Kassenbeleg signieren
+      and not (p.note like ${STORNO_OUT + '%'} or p.note like ${STORNO_IN + '%'})
       ${s.methods === 'cash' ? sql`and p.method = 'Bar'` : sql``} order by p.created_at, p.id`)) as Raw[];
   if (!rows.length) return;
   // eine Zahlung, die beim Buchen auf mehrere Rechnungen verteilt wurde, ist ein Vorgang
@@ -145,6 +154,33 @@ async function work(db: Db) {
       startTime: str(o.start?.output.logTime), finishTime: str(o.finish?.output.logTime), signature: str(o.finish?.output.signature),
       processType: 'Kassenbeleg-V1', processData: data, publicKey: o.publicKey, algorithm: o.algorithm, error: o.error.slice(0, 400),
     }))).onConflictDoNothing();
+  }
+}
+
+/**
+ * Gestartete, aber nicht abgeschlossene TSE-Vorgänge (z. B. Verbindung beim Abschluss abgebrochen) nachträglich abschließen,
+ * damit auf der TSE keine offenen Transaktionen liegen bleiben. Höchstens 20 je Lauf; Versuche nur bis 7 Tage nach dem Vorgang.
+ */
+async function finishOpen(db: Db) {
+  const s = await load(db);
+  const t = await getTse(db);
+  if (s.pausedReason || !t.enabled) return;
+  const open = Array.from(await db.execute(sql`
+    select transaction_number, min(process_data) as process_data, min(client_id) as client_id from tse_records
+    where status = 'failed' and transaction_number is not null and signature = '' and finish_time = '' and created_at > now() - interval '7 days'
+    group by transaction_number order by transaction_number limit 20`)) as Raw[];
+  for (const r of open) {
+    const txNo = r.transaction_number as number;
+    const o = await transact(t.host, t.port, (r.client_id as string) || s.clientId, decrypt(s.pinEnc), s.keyEnc ? decrypt(s.keyEnc) : 'EPSONKEY', r.process_data as string, txNo);
+    if (!o.ok) {
+      if (o.authFailed) return;
+      continue;
+    }
+    await db.execute(sql`update tse_records set status = 'signed', signature_counter = ${num(o.finish?.output.signatureCounter)}, finish_time = ${str(o.finish?.output.logTime)},
+      signature = ${str(o.finish?.output.signature)}, serial_hex = case when serial_hex = '' then ${o.serialHex} else serial_hex end,
+      public_key = case when public_key = '' then ${o.publicKey} else public_key end, algorithm = case when algorithm = '' then ${o.algorithm} else algorithm end,
+      error = ${'nachträglich abgeschlossen'}
+      where status = 'failed' and transaction_number = ${txNo} and signature = '' and finish_time = ''`);
   }
 }
 

@@ -85,7 +85,8 @@ export function webKind(subject: string): MailKind | null {
  */
 export async function reclassify(db: Db, actor: Actor) {
   const rules = await getMailRules(db);
-  const open = sql`${inboxMails.linkKind} is null and (${inboxMails.status} = 'new' or (${inboxMails.status} = 'ignored' and ${inboxMails.handledBy} = ${BY_RULE}))`;
+  // von Hand eingeordnete oder wieder hervorgeholte E-Mails bleiben, wie sie sind
+  const open = sql`${inboxMails.linkKind} is null and coalesce(${inboxMails.extract}->>'manual', '') <> 'true' and (${inboxMails.status} = 'new' or (${inboxMails.status} = 'ignored' and ${inboxMails.handledBy} = ${BY_RULE}))`;
   const rows = await db.select().from(inboxMails).where(sql`${inboxMails.uidValidity} <> 'web' and ${open}`);
   let changed = 0;
   for (const w of await db.select().from(inboxMails).where(sql`${inboxMails.uidValidity} = 'web' and ${inboxMails.kind} = 'other' and ${open}`)) {
@@ -243,6 +244,8 @@ export async function updateInboxMail(db: Db, actor: Actor, id: string, v: { sta
   const set: Partial<Row> = {};
   if (v.status) { set.status = v.status; set.handledBy = v.status === 'new' ? '' : actor.userName; }
   if (v.kind) set.kind = v.kind;
+  // Merker „von Hand eingeordnet“: „Neu einordnen“ nach geänderten Regeln überschreibt diese E-Mail dann nicht
+  if ((v.kind && v.kind !== before.kind) || (v.status === 'new' && before.status !== 'new')) set.extract = { ...(before.extract as MailExtract), manual: true } as MailExtract;
   if (v.linkKind !== undefined) { set.linkKind = v.linkKind; set.linkId = v.linkKind ? v.linkId ?? null : null; }
   const [r] = await db.update(inboxMails).set(set).where(eq(inboxMails.id, id)).returning();
   await record(db, actor, { action: 'update', entity: 'inbox', entityId: id, before: { status: before.status, kind: before.kind }, after: { status: r!.status, kind: r!.kind, subject: r!.subject.slice(0, 80) } });

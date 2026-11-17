@@ -3,6 +3,25 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.80.0
+
+Weitere Fehlerbehebungen aus der Prüfung (Teil B, nach Freigabe – Einzelheiten: docs/pruefbericht-nachtschicht-2026-11-17.md):
+
+- **Export für den Steuerberater:** enthält jetzt alle Rechnungen des Zeitraums (vorher höchstens 500).
+- **Datenübernahme (Umzugspaket):** nach dem Start des Echtbetriebs gesperrt, sobald Rechnungen vorhanden sind; die Prüfung „hier stehen schon Daten“ berücksichtigt alle Bereiche.
+- **Offener Betrag:** Leistungen stornierter Zimmer zählen nicht mehr mit (wie auf der Rechnung).
+- **Abmelden nach Inaktivität** gilt jetzt auch, wenn der Browser geschlossen und wieder geöffnet wird; Hintergrund-Aktualisierungen verlängern die Anmeldung nicht.
+- **Meldescheine:** Die Löschung nach einem Jahr bereinigt auch jüngere Protokolleinträge, erfasst Gäste ohne Check-in (z. B. storniert) und alte, nie abgeschlossene Reservierungen. Beim Zusammenführen von Gästen werden die Protokolleinträge des entfernten Gastes anonymisiert.
+- **Zahlungen:** Gegenbuchung einer Zahlung auf einer stornierten Rechnung geht gegen die übertragene Anzahlung. Nach einem Storno übertragene Anzahlungen werden mit offenen Rechnungen der Reservierung verrechnet. „Anzahlung buchen“ schlägt den tatsächlich offenen Betrag vor. Das Setzen der nächsten Rechnungsnummer kann eine gleichzeitige Ausstellung nicht mehr blockieren.
+- **E-Rechnung:** Netto und Steuer je Satz wie auf der PDF-Rechnung; der Zahlungsstand entspricht dem Stand bei Ausstellung (wie im eingebetteten PDF).
+- **Mengen auf Rechnungen** werden auf 2 Nachkommastellen gerundet, damit Summe und gedruckte Menge zusammenpassen.
+- **TSE:** Abgebrochene Vorgänge werden beim nächsten Lauf abgeschlossen (nur mit nachgebildeter TSE getestet). Interne Umbuchungen beim Storno werden nicht mehr als Kassenbeleg signiert.
+- **Anmeldung:** Die Bremse gegen massenhaftes Passwort-Ausprobieren lässt sich nicht mehr mit wechselnden IPv6-Adressen umgehen.
+- **Temperaturkontrolle (HACCP):** Jeder Messwert speichert den Sollbereich, der beim Eintragen galt. Mitarbeiter tragen nur für heute und gestern ein; ältere Tage ändert der Administrator mit Begründung. Eine vermerkte Maßnahme lässt sich nicht entfernen.
+- **Posteingang:** Von Hand eingeordnete E-Mails werden von „Neu einordnen“ nicht mehr überschrieben.
+- **Frühstück:** passt sich bei Verlängerung oder geänderter Personenzahl automatisch an (sofern nicht von Hand geändert und noch nicht berechnet).
+- **Storno über den Gäste-Link:** bei mehreren Zimmern jetzt alles oder nichts.
+
 ## 1.79.1
 
 Fehlerbehebungen aus der nächtlichen Prüfung (Einzelheiten: docs/pruefbericht-nachtschicht-2026-11-17.md):

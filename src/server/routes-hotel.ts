@@ -211,6 +211,8 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   });
   // Anzahlung anfordern
   api.get('/bookings/:id/deposits', user, (req) => deposits.listFor(db, 'booking', idOf(req)));
+  // offener Teil der Anzahlungen (genau der Betrag, den auch Mitarbeiter buchen dürfen)
+  api.get('/bookings/:id/deposits/open', user, async (req) => ({ cents: await deposits.openBookingDeposit(db, idOf(req)) }));
   api.get('/bookings/:id/deposits/draft', user, (req) => { const q = depositDraftQuery.parse(req.query); return deposits.draft(db, 'booking', idOf(req), q.amountCents, q.dueDate); });
   api.post('/bookings/:id/deposits', user, (req) => deposits.create(db, actor(req), 'booking', idOf(req), depositCreateInput.parse(req.body)));
   api.post('/deposits/:id/cancel', user, (req) => deposits.cancel(db, actor(req), 'booking', idOf(req)));

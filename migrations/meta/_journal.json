@@ -267,6 +267,13 @@
       "when": 1794866249587,
       "tag": "0037_angebote",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1794884743731,
+      "tag": "0038_sollbereich_je_messwert",
+      "breakpoints": true
     }
   ]
 }

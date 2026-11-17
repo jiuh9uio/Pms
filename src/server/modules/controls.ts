@@ -178,7 +178,7 @@ export async function deleteCleaningTask(db: Db, actor: Actor, id: string) {
 
 export async function listReadings(db: Exec, from: string, to: string): Promise<HygieneReadingDto[]> {
   const rows = await db.select().from(hygieneReadings).where(and(gte(hygieneReadings.date, from), lte(hygieneReadings.date, to))).orderBy(asc(hygieneReadings.date));
-  return rows.map((r) => ({ pointId: r.pointId, date: r.date, valueC: r.valueC, confirmed: r.confirmed, note: r.note, userName: r.userName, enteredAt: r.enteredAt.toISOString() }));
+  return rows.map((r) => ({ pointId: r.pointId, date: r.date, valueC: r.valueC, confirmed: r.confirmed, note: r.note, userName: r.userName, enteredAt: r.enteredAt.toISOString(), minC: r.minC, maxC: r.maxC, rangeSaved: r.rangeSaved }));
 }
 
 /** Bereiche mit Messstellen, für die heute noch nichts eingetragen ist. */
@@ -204,7 +204,7 @@ export async function confirmArea(db: Db, actor: Actor, areaId: string) {
     const done = new Set((await tx.select({ id: hygieneReadings.pointId }).from(hygieneReadings).where(eq(hygieneReadings.date, today))).map((r) => r.id));
     const open = points.filter((p) => !done.has(p.id));
     if (open.length) {
-      await tx.insert(hygieneReadings).values(open.map((p) => ({ pointId: p.id, date: today, valueC: null, confirmed: true, userName: actor.userName })));
+      await tx.insert(hygieneReadings).values(open.map((p) => ({ pointId: p.id, date: today, valueC: null, confirmed: true, userName: actor.userName, minC: p.minC, maxC: p.maxC, rangeSaved: true })));
       await record(tx, actor, { action: 'confirm', entity: 'hygiene_reading', entityId: areaId, after: { area: area.name, date: today, points: open.map((p) => p.name).join(', ') } });
     }
     return { confirmed: open.length };
@@ -215,17 +215,30 @@ export async function confirmArea(db: Db, actor: Actor, areaId: string) {
  * Messwerte eintragen. Regeln: kein Datum in der Zukunft; liegt ein Wert außerhalb des Sollbereichs, muss die
  * ergriffene Maßnahme vermerkt sein. Wer wann eingetragen hat, wird gespeichert; Korrekturen stehen im Protokoll.
  */
-export async function saveReadings(db: Db, actor: Actor, entries: { pointId: string; date: string; valueC: number; note: string }[], onlyNew = false) {
+/**
+ * Korrekturregeln: Mitarbeiter tragen nur für heute und gestern ein bzw. korrigieren nur diese Tage; ältere Tage nur der
+ * Administrator – eine Änderung eines vorhandenen Werts dort nur mit Begründung im Bemerkungsfeld. Die Maßnahme zu einem
+ * Wert außerhalb des Sollbereichs lässt sich nicht nachträglich entfernen.
+ */
+export async function saveReadings(db: Db, actor: Actor, entries: { pointId: string; date: string; valueC: number; note: string }[], onlyNew = false, isAdmin = true) {
   const today = todayBerlin();
+  const yesterday = addDays(today, -1);
   return db.transaction(async (tx) => {
     const points = new Map((await tx.select().from(hygienePoints)).map((p) => [p.id, p]));
     const fields: Record<string, string> = {};
-    entries.forEach((e, i) => {
+    for (const [i, e] of entries.entries()) {
       const p = points.get(e.pointId);
-      if (!p) fields[`entries.${i}.pointId`] = 'Messstelle nicht gefunden';
-      else if (e.date > today) fields[`entries.${i}.date`] = 'Das Datum liegt in der Zukunft';
-      else if (outOfRange(e.valueC, p) && !e.note) fields[`entries.${i}.note`] = `${p.name}: Wert außerhalb des Sollbereichs – bitte die ergriffene Maßnahme eintragen`;
-    });
+      if (!p) { fields[`entries.${i}.pointId`] = 'Messstelle nicht gefunden'; continue; }
+      if (e.date > today) { fields[`entries.${i}.date`] = 'Das Datum liegt in der Zukunft'; continue; }
+      if (!isAdmin && e.date < yesterday) { fields[`entries.${i}.date`] = 'Eintragen und Korrigieren geht für heute und gestern. Ältere Tage ändert nur der Administrator.'; continue; }
+      const [before] = await tx.select().from(hygieneReadings).where(and(eq(hygieneReadings.pointId, e.pointId), eq(hygieneReadings.date, e.date)));
+      const range = before?.rangeSaved ? { minC: before.minC, maxC: before.maxC } : p;
+      if (outOfRange(e.valueC, range) && !e.note) fields[`entries.${i}.note`] = `${p.name}: Wert außerhalb des Sollbereichs – bitte die ergriffene Maßnahme eintragen`;
+      else if (before && !onlyNew && before.valueC != null && outOfRange(before.valueC, range) && before.note && !e.note.includes(before.note))
+        fields[`entries.${i}.note`] = `${p.name}: Zum bisherigen Wert außerhalb des Sollbereichs ist eine Maßnahme vermerkt („${before.note}“) – sie darf nicht entfernt werden.`;
+      else if (before && !onlyNew && e.date < yesterday && (before.valueC !== e.valueC || before.confirmed) && e.note.trim() === before.note.trim())
+        fields[`entries.${i}.note`] = `${p.name}: Für die Korrektur eines älteren Tages bitte eine Begründung in die Bemerkung schreiben.`;
+    }
     if (Object.keys(fields).length) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', fields);
     let kept = 0;
     for (const e of entries) {
@@ -234,11 +247,12 @@ export async function saveReadings(db: Db, actor: Actor, entries: { pointId: str
       if (before && before.valueC === e.valueC && before.note === e.note && !before.confirmed) continue;
       const p = points.get(e.pointId)!;
       if (before) {
+        // Sollbereich bleibt der vom ursprünglichen Eintrag (ältere Einträge ohne gespeicherten Bereich: unverändert ohne)
         await tx.update(hygieneReadings).set({ valueC: e.valueC, confirmed: false, note: e.note, userName: actor.userName, enteredAt: new Date() })
           .where(and(eq(hygieneReadings.pointId, e.pointId), eq(hygieneReadings.date, e.date)));
         await record(tx, actor, { action: 'correct', entity: 'hygiene_reading', entityId: e.pointId, before: { point: p.name, date: e.date, valueC: before.confirmed ? 'im Soll bestätigt' : before.valueC, note: before.note, enteredBy: before.userName }, after: { point: p.name, date: e.date, valueC: e.valueC, note: e.note } });
       } else {
-        await tx.insert(hygieneReadings).values({ ...e, userName: actor.userName });
+        await tx.insert(hygieneReadings).values({ ...e, userName: actor.userName, minC: p.minC, maxC: p.maxC, rangeSaved: true });
         await record(tx, actor, { action: 'create', entity: 'hygiene_reading', entityId: e.pointId, after: { point: p.name, date: e.date, valueC: e.valueC, note: e.note } });
       }
     }

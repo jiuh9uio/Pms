@@ -92,24 +92,31 @@ export async function purgeExpiredRegistrations(db: Db, now = new Date()): Promi
   if (!cfg.enabled) return { guests: 0 };
   const today = now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
   const limit = addYears(today, -1);
+  const idData = (col: 'before' | 'after') => sql.raw(`(coalesce(l.${col}->>'birthdate', '') <> '' or coalesce(l.${col}->>'idNumber', '') <> '' or coalesce(l.${col}->>'nationality', '') <> '')`);
+  // Gäste mit Meldeschein-Angaben im Profil oder noch im Änderungsprotokoll,
+  //  - ohne laufende oder künftige Reservierung (alte, nie abgeschlossene Reservierungen zählen nicht),
+  //  - ohne Anreise (auch stornierte) innerhalb des letzten Jahres,
+  //  - Gäste ganz ohne Reservierung: seit mehr als einem Jahr angelegt.
   const ids = (await db.execute(sql`
     select g.id from guests g
-    where (g.birthdate is not null or g.nationality <> '' or g.id_number <> '')
-      and exists (select 1 from bookings b join booking_rooms br on br.booking_id = b.id where b.guest_id = g.id and br.checked_in_at is not null)
-      and not exists (select 1 from bookings b join booking_rooms br on br.booking_id = b.id where b.guest_id = g.id and br.status in ('tentative', 'confirmed', 'checked_in'))
+    where ((g.birthdate is not null or g.nationality <> '' or g.id_number <> '')
+        or exists (select 1 from audit_log l where l.entity = 'guest' and l.entity_id = g.id::text and (${idData('before')} or ${idData('after')})))
+      and (g.created_at < ${limit}::date or exists (select 1 from bookings b where b.guest_id = g.id))
       and not exists (select 1 from bookings b join booking_rooms br on br.booking_id = b.id join room_allocations a on a.id = br.allocation_id
-        where b.guest_id = g.id and br.checked_in_at is not null and lower(a.period) >= ${limit}::date)
+        where b.guest_id = g.id and br.status in ('tentative', 'confirmed', 'checked_in') and upper(a.period) >= ${today}::date)
+      and not exists (select 1 from bookings b join booking_rooms br on br.booking_id = b.id join room_allocations a on a.id = br.allocation_id
+        where b.guest_id = g.id and lower(a.period) >= ${limit}::date)
     limit 500`) as unknown as { id: string }[]).map((r) => r.id);
   if (ids.length) {
     await db.transaction(async (tx) => {
       for (const id of ids) {
         await tx.execute(sql`update guests set birthdate = null, nationality = '', id_number = '', version = version + 1, updated_at = now() where id = ${id}`);
-        // nur Protokolleinträge mit Meldeschein-Angaben, die älter als ein Jahr sind
+        // alle Protokolleinträge dieses Gastes mit Meldeschein-Angaben (auch jüngere Änderungen, z. B. der E-Mail-Adresse)
         await tx.execute(sql`select set_config('pms.audit_scrub', ${id}, true)`);
         await tx.execute(sql`update audit_log set
             before = case when before is null then null else '{"anonymisiert": true}'::jsonb end,
             after = case when after is null then null else '{"anonymisiert": true}'::jsonb end
-          where entity = 'guest' and entity_id = ${id} and at < ${limit}::date
+          where entity = 'guest' and entity_id = ${id}
             and (coalesce(before->>'birthdate', '') <> '' or coalesce(after->>'birthdate', '') <> '' or coalesce(before->>'idNumber', '') <> '' or coalesce(after->>'idNumber', '') <> ''
               or coalesce(before->>'nationality', '') <> '' or coalesce(after->>'nationality', '') <> '')`);
         await tx.execute(sql`select set_config('pms.audit_scrub', '', true)`);

@@ -276,6 +276,12 @@ describe('TSE (Epson) prüfen', () => {
     expect((await db.execute(sql`select count(*)::int as n from tse_records`))[0]!.n).toBe(1);
     expect((await call('GET', '/tse/records', admin)).json()[0]).toMatchObject({ status: 'signed', amountCents: 8000, method: 'Bar' });
 
+    // gestartet, aber Abschluss abgebrochen: wird beim nächsten Lauf nachträglich abgeschlossen (keine offene Transaktion auf der TSE)
+    const open = await pay(700);
+    await db.execute(sql`insert into tse_records (payment_id, status, client_id, transaction_number, process_type, process_data, error) values (${open}, 'failed', 'KASSE1', ${txn}, 'Kassenbeleg-V1', 'Beleg^0.00_7.00_0.00_0.00_0.00^7.00:Bar', 'FinishTransaction: Verbindung abgebrochen')`);
+    await signPending(db);
+    expect(await rec(open)).toMatchObject({ status: 'signed', signature: 'RklOSVNI', error: 'nachträglich abgeschlossen' });
+
     // TSE nicht erreichbar: Zahlung bleibt, Ausfall wird vermerkt, keine Pause
     mode = 'no-stick';
     const c = await pay(1000);

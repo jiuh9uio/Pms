@@ -2,7 +2,7 @@ import { and, eq, sql, type SQL } from 'drizzle-orm';
 import {
   TRANSITIONS, addDays, diffDays, eachNight, isActiveStatus, longStayDiscount, perFactor, personAdjust, todayBerlin,
   type BookingDto, type BookingListRow, type BookingRoomDto, type CalendarDto, type CalendarEntry, type ChargeDto, type DashboardDto,
-  type GuestInput, type RoomStatus, type TaskDto,
+  type GuestInput, type RoomStatus, type ServicePer, type TaskDto,
 } from '../../shared/hotel.js';
 import type { Db, Exec, Tx } from '../db/client.js';
 import { bookingRoomNights, bookingRooms, bookings, charges, companies, companyRates, guests, numberSequences, roomAllocations, roomCategories, rooms, services, taxRates } from '../db/schema.js';
@@ -74,7 +74,9 @@ export async function getBooking(db: Exec, id: string): Promise<BookingDto> {
     totalCents: Math.round(c.quantity * c.unitPriceCents),
   }));
   const lodgingCents = roomDtos.filter((r) => isActiveStatus(r.status)).reduce((s, r) => s + r.lodgingCents, 0);
-  const chargesCents = chargeDtos.reduce((s, c) => s + c.totalCents, 0);
+  // wie bei der Rechnung: Leistungen stornierter / nicht angereister Zimmer zählen nicht zum Betrag der Reservierung
+  const inactive = new Set(roomDtos.filter((r) => !isActiveStatus(r.status)).map((r) => r.id));
+  const chargesCents = chargeDtos.filter((c) => !c.bookingRoomId || !inactive.has(c.bookingRoomId)).reduce((s, c) => s + c.totalCents, 0);
   // nur Aufenthalte vor dieser Reservierung (nicht spätere, wenn man eine alte Reservierung öffnet)
   const firstFrom = roomDtos.map((r) => r.from).sort()[0] ?? todayBerlin();
   const [earlier] = await db.execute(sql`
@@ -287,12 +289,27 @@ export async function updateBookingRoom(db: Db, actor: Actor, id: string, v: {
 
     const { adults, children } = persons;
     await tx.update(bookingRooms).set({ adults, children, priceManual: manual, version: br.version + 1, updatedAt: new Date() }).where(eq(bookingRooms.id, id));
+    // Frühstück und andere Leistungen „pro Nacht / pro Person“ dieses Zimmers an neue Nächte bzw. Personen anpassen –
+    // nur wenn die Menge noch der berechneten entspricht (nicht von Hand geändert) und die Leistung noch auf keiner Rechnung steht
+    const adjusted: { name: string; from: number; to: number }[] = [];
+    const nOld = old.length, nNew = dates.length, pOld = br.adults + br.children, pNew = adults + children;
+    if (nOld !== nNew || pOld !== pNew) {
+      const list = await tx.execute(sql`select c.id, c.name, c.quantity, s.per from charges c join services s on s.id = c.service_id
+        where c.booking_room_id = ${id} and s.per in ('night', 'person', 'person_night')
+          and not exists (select 1 from invoice_lines l join invoices i on i.id = l.invoice_id where l.source_kind = 'charge' and l.source_id = c.id and i.status <> 'cancelled')`) as unknown as { id: string; name: string; quantity: string | number; per: ServicePer }[];
+      for (const c of list) {
+        const was = perFactor(c.per, nOld, pOld), now = perFactor(c.per, nNew, pNew);
+        if (Number(c.quantity) !== was || was === now) continue;
+        await tx.update(charges).set({ quantity: now, updatedAt: new Date() }).where(eq(charges.id, c.id));
+        adjusted.push({ name: c.name, from: was, to: now });
+      }
+    }
     const [oldRoom] = await tx.select({ number: rooms.number }).from(rooms).where(eq(rooms.id, alloc.roomId));
     const sum = (list: { priceCents: number }[]) => list.reduce((s, n) => s + n.priceCents, 0);
     await record(tx, actor, {
       action: 'room_update', entity: 'booking', entityId: br.bookingId,
       before: { room: oldRoom!.number, from: alloc.from, to: alloc.to, adults: br.adults, children: br.children, lodgingCents: sum(old) },
-      after: { room: room.number, from: next.from, to: next.to, adults, children, lodgingCents: sum(nightly) },
+      after: { room: room.number, from: next.from, to: next.to, adults, children, lodgingCents: sum(nightly), ...(adjusted.length ? { charges: adjusted } : {}) },
     });
     return { bookingId: br.bookingId };
   });

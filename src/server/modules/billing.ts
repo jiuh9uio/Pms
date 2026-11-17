@@ -48,7 +48,7 @@ function toRow(x: Raw): InvoiceListRow {
   };
 }
 
-export async function listInvoices(db: Exec, f: { status?: string; q?: string; from?: string; to?: string; bookingId?: string; serviceFrom?: string; serviceTo?: string; method?: string }) {
+export async function listInvoices(db: Exec, f: { status?: string; q?: string; from?: string; to?: string; bookingId?: string; serviceFrom?: string; serviceTo?: string; method?: string; all?: boolean }) {
   const c: SQL[] = [sql`true`];
   if (f.status === 'open' || f.status === 'paid') c.push(sql`i.status = 'issued' and i.kind = 'invoice'`);
   else if (f.status === 'archive') c.push(sql`i.status <> 'draft'`);
@@ -64,7 +64,7 @@ export async function listInvoices(db: Exec, f: { status?: string; q?: string; f
     const like = '%' + f.q.replace(/[%_\\]/g, '') + '%';
     c.push(sql`(i.number ilike ${like} or i.recipient_name ilike ${like} or i.recipient_company ilike ${like} or b.number ilike ${like})`);
   }
-  const rows = await db.execute(sql`${LIST} where ${sql.join(c, sql` and `)} order by coalesce(i.issued_at, i.created_at) desc limit ${f.status === 'open' || f.status === 'paid' ? 5000 : 500}`);
+  const rows = await db.execute(sql`${LIST} where ${sql.join(c, sql` and `)} order by coalesce(i.issued_at, i.created_at) desc ${f.all ? sql`` : sql`limit ${f.status === 'open' || f.status === 'paid' ? 5000 : 500}`}`);
   const list = await applyCredits(db, Array.from(rows).map((r) => toRow(r as Raw)));
   if (f.status === 'open') return list.filter((r) => r.openCents !== 0).slice(0, 500);
   if (f.status === 'paid') return list.filter((r) => r.openCents === 0).slice(0, 500);
@@ -83,10 +83,14 @@ async function applyCredits(db: Exec, rows: InvoiceListRow[]) {
     select i.id, i.booking_id, i.gross_cents, i.issued_at, coalesce((select sum(p.amount_cents) from payments p where p.invoice_id = i.id), 0)::int as paid
     from invoices i where i.status = 'issued' and i.kind = 'invoice' and i.booking_id in (${sql.join(bookingIds.map((b) => sql`${b}`), sql`, `)})
     order by i.issued_at, i.id`)) as { id: string; booking_id: string; gross_cents: number; paid: number }[];
+  // Anzahlungen der Reservierung, die (noch) keiner Rechnung zugeordnet sind – z. B. nach einem Storno übertragene Beträge
+  const loose = new Map((Array.from(await db.execute(sql`
+    select booking_id, sum(amount_cents)::int as s from payments where invoice_id is null and booking_id in (${sql.join(bookingIds.map((b) => sql`${b}`), sql`, `)})
+    group by booking_id`)) as { booking_id: string; s: number }[]).map((r) => [r.booking_id, Math.max(0, r.s)]));
   const credit = new Map<string, number>();
   for (const b of bookingIds) {
     const inv = all.filter((x) => x.booking_id === b);
-    let pool = inv.reduce((s, x) => s + Math.max(0, x.paid - x.gross_cents), 0);
+    let pool = inv.reduce((s, x) => s + Math.max(0, x.paid - x.gross_cents), 0) + (loose.get(b) ?? 0);
     if (pool <= 0) continue;
     // Überschüsse an offene Rechnungen geben …
     for (const x of inv) {
@@ -95,7 +99,7 @@ async function applyCredits(db: Exec, rows: InvoiceListRow[]) {
       const take = Math.min(open, pool);
       credit.set(x.id, take); pool -= take;
     }
-    // … und bei den überzahlten Rechnungen abziehen (älteste zuerst)
+    // … und bei den überzahlten Rechnungen abziehen (älteste zuerst); was darüber hinaus gegeben wurde, stammt aus der Anzahlung
     let given = inv.reduce((s, x) => s + (credit.get(x.id) ?? 0), 0);
     for (const x of inv) {
       const surplus = x.paid - x.gross_cents;
@@ -366,6 +370,10 @@ export async function issueInvoice(db: Db, actor: Actor, id: string, version: nu
   });
 }
 
+/** Kennzeichnung der internen Umbuchung beim Storno (wird nicht in der TSE signiert) */
+export const STORNO_OUT = 'Übertrag wegen Storno ';
+export const STORNO_IN = 'Übertrag von stornierter Rechnung ';
+
 /** Storniert eine ausgestellte Rechnung durch einen Stornobeleg mit eigener Nummer und negativen Positionen. */
 export async function cancelInvoice(db: Db, actor: Actor, id: string, reason: string) {
   return db.transaction(async (tx) => {
@@ -399,8 +407,8 @@ export async function cancelInvoice(db: Db, actor: Actor, id: string, reason: st
       for (const r of Array.from(byMethod)) {
         const { method, s } = r as { method: string; s: number };
         await tx.insert(payments).values([
-          { invoiceId: id, bookingId: inv.bookingId, amountCents: -s, method, date: today, note: `Übertrag wegen Storno ${number}`, recordedBy: actor.userName },
-          { bookingId: inv.bookingId, amountCents: s, method, date: today, note: `Übertrag von stornierter Rechnung ${inv.number}`, recordedBy: actor.userName },
+          { invoiceId: id, bookingId: inv.bookingId, amountCents: -s, method, date: today, note: `${STORNO_OUT}${number}`, recordedBy: actor.userName },
+          { bookingId: inv.bookingId, amountCents: s, method, date: today, note: `${STORNO_IN}${inv.number}`, recordedBy: actor.userName },
         ]);
       }
     }
@@ -504,17 +512,27 @@ export async function reversePayment(db: Db, actor: Actor, id: string, note: str
     if (p.reversesId) throw conflict('Eine Gegenbuchung kann nicht erneut gegengebucht werden');
     const [done] = await tx.select({ id: payments.id }).from(payments).where(eq(payments.reversesId, id));
     if (done) throw conflict('Diese Zahlung wurde bereits gegengebucht');
+    // Zahlung auf einer inzwischen stornierten Rechnung: Der Betrag wurde beim Storno als Anzahlung auf die Reservierung
+    // übertragen – die Gegenbuchung gehört deshalb dorthin (sonst bliebe die Anzahlung bestehen, obwohl das Geld zurückging)
+    let invoiceId = p.invoiceId;
+    if (invoiceId) {
+      const [inv] = await tx.select({ status: invoices.status }).from(invoices).where(eq(invoices.id, invoiceId));
+      if (inv?.status === 'cancelled') {
+        if (!p.bookingId) throw conflict('Die Rechnung ist storniert und gehört zu keiner Reservierung – bitte die Erstattung als neue Zahlung buchen.');
+        invoiceId = null;
+      }
+    }
     const [r] = await tx.insert(payments).values({
-      bookingId: p.bookingId, invoiceId: p.invoiceId, amountCents: -p.amountCents, method: p.method, date: todayBerlin(), payer: p.payer, note, reversesId: id, recordedBy: actor.userName,
+      bookingId: p.bookingId, invoiceId, amountCents: -p.amountCents, method: p.method, date: todayBerlin(), payer: p.payer, note, reversesId: id, recordedBy: actor.userName,
     }).returning();
     await record(tx, actor, { action: 'reverse', entity: 'payment', entityId: id, after: { amountCents: -p.amountCents, note } });
-    return { id: r!.id, bookingId: p.bookingId, invoiceId: p.invoiceId };
+    return { id: r!.id, bookingId: p.bookingId, invoiceId };
   });
 }
 
 // ---------- Export für die Buchhaltung ----------
 export async function exportCsv(db: Exec, from: string, to: string) {
-  const rows = (await listInvoices(db, { from, to })).filter((i) => i.status !== 'draft').reverse();
+  const rows = (await listInvoices(db, { from, to, all: true })).filter((i) => i.status !== 'draft').reverse();
   const ids = rows.map((r) => r.id);
   const lines = ids.length ? await db.select().from(invoiceLines).where(sql`${invoiceLines.invoiceId} in ${ids}`) : [];
   const rates = [...new Set(lines.map((l) => l.taxRatePercent))].sort((a, b) => a - b);
@@ -620,11 +638,12 @@ export async function invoiceNumberState(db: Exec, year: number): Promise<Invoic
 export async function setInvoiceNumber(db: Db, actor: Actor, v: { year: number; next: number }) {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(4713)`);
-    const [seq] = await tx.select().from(numberSequences).where(and(eq(numberSequences.key, 'invoice'), eq(numberSequences.year, v.year)));
+    // Zeile sperren (wie beim Ausstellen) – eine gleichzeitige Ausstellung wartet bzw. wird abgewartet, nichts wird zurückgesetzt
+    const [seq] = await tx.select().from(numberSequences).where(and(eq(numberSequences.key, 'invoice'), eq(numberSequences.year, v.year))).for('update');
     const last = seq?.last ?? 0;
     if (v.next <= last) throw conflict(`Die Nummer ${last} ist in ${v.year} schon vergeben oder übersprungen – die nächste Nummer muss mindestens ${last + 1} sein.`, 'number_taken');
     await tx.insert(numberSequences).values({ key: 'invoice', year: v.year, last: v.next - 1 })
-      .onConflictDoUpdate({ target: [numberSequences.key, numberSequences.year], set: { last: v.next - 1 } });
+      .onConflictDoUpdate({ target: [numberSequences.key, numberSequences.year], set: { last: sql`greatest(${numberSequences.last}, ${v.next - 1})` } });
     await record(tx, actor, { action: 'update', entity: 'settings', entityId: 'invoice_number', before: { year: v.year, next: last + 1 }, after: v });
     return invoiceNumberState(tx, v.year);
   });
@@ -647,7 +666,7 @@ export async function saveAccounting(db: Db, actor: Actor, v: AccountingSettings
  */
 export async function exportBookingList(db: Exec, from: string, to: string) {
   const a = await getAccounting(db);
-  const inv = (await listInvoices(db, { from, to })).filter((i) => i.status !== 'draft').reverse();
+  const inv = (await listInvoices(db, { from, to, all: true })).filter((i) => i.status !== 'draft').reverse();
   const ids = inv.map((r) => r.id);
   const lines = ids.length ? await db.select().from(invoiceLines).where(sql`${invoiceLines.invoiceId} in ${ids}`) : [];
   const pays = await paymentsWhere(db, sql`p.date >= ${from}::date and p.date <= ${to}::date`);

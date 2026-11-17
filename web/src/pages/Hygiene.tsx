@@ -102,7 +102,8 @@ export function Hygiene() {
     if (!r) return <span className="muted">–</span>;
     const who = `von ${r.userName} um ${new Date(r.enteredAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`;
     if (r.valueC == null) return <span className="temp ok" title={`Im Sollbereich bestätigt ${who}`}>✓</span>;
-    const bad = outOfRange(r.valueC, p);
+    // Bewertung nach dem Sollbereich, der beim Eintragen galt (ältere Einträge: Sollbereich der Messstelle)
+    const bad = outOfRange(r.valueC, r.rangeSaved ? { minC: r.minC, maxC: r.maxC } : p);
     const title = [`${num(r.valueC)} °C`, r.note, `eingetragen von ${r.userName}`, late(r) ? `nachgetragen am ${deDate(new Date(r.enteredAt).toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' }))}` : ''].filter(Boolean).join(' · ');
     return <span className={bad ? 'temp bad' : 'temp'} title={title}>{num(r.valueC)}{late(r) && <sup aria-label="nachgetragen">n</sup>}{r.note && <sup aria-label="mit Bemerkung">*</sup>}</span>;
   };
@@ -145,7 +146,7 @@ export function Hygiene() {
                   <thead><tr>
                     <th>Messstelle</th>
                     {days.slice(0, 6).map((d) => <th key={d} className="num hide-sm">{WD[weekdayOf(d)]} {deShort(d)}</th>)}
-                    <th className="entrycol"><label>Wert in °C am <input type="date" value={date} max={today} onChange={(e) => e.target.value && e.target.value <= today && leave() && setDate(e.target.value)} /></label></th>
+                    <th className="entrycol"><label>Wert in °C am <input type="date" value={date} max={today} min={isAdmin ? undefined : addDays(today, -1)} title={isAdmin ? undefined : 'Mitarbeiter tragen für heute und gestern ein; ältere Tage ändert der Administrator (mit Begründung)'} onChange={(e) => e.target.value && e.target.value <= today && (isAdmin || e.target.value >= addDays(today, -1)) && leave() && setDate(e.target.value)} /></label></th>
                     <th>Bemerkung / Maßnahme</th>
                   </tr></thead>
                   <tbody>

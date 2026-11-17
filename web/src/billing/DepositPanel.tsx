@@ -21,6 +21,8 @@ export function DepositPanel({ kind, refId, base, suggestCents, latestDue, onPay
   const { rev, bump } = useData();
   const toast = useToast();
   const { data } = useLoad(() => api<DepositDto[]>('GET', `${base}/deposits`), [base, rev]);
+  // Hotel: offenen Betrag vom Server (Anforderungen abzüglich aller Zahlungen der Reservierung, auch Teilzahlungen)
+  const open = useLoad(() => (kind === 'booking' ? api<{ cents: number }>('GET', `${base}/deposits/open`) : Promise.resolve({ cents: 0 })), [base, rev, kind]).data;
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const act = async (d: DepositDto, what: 'paid' | 'cancel') => {
@@ -35,7 +37,7 @@ export function DepositPanel({ kind, refId, base, suggestCents, latestDue, onPay
     setBusy(null);
   };
   const live = (data ?? []).filter((d) => d.state !== 'cancelled');
-  const openCents = (data ?? []).filter((d) => d.state === 'open' || d.state === 'overdue').reduce((s, d) => s + d.amountCents, 0);
+  const openCents = kind === 'booking' ? (open?.cents ?? 0) : (data ?? []).filter((d) => d.state === 'open' || d.state === 'overdue').reduce((s, d) => s + d.amountCents, 0);
   return (
     <div className="deposits">
       <div className="btnrow">

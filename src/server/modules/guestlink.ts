@@ -165,14 +165,17 @@ export async function cancelByGuest(db: Db, token: string, cred: PublicCred & { 
   if (!b.canCancel) throw conflict(b.cancelHint || 'Diese Reservierung lässt sich hier nicht stornieren.', 'cancel_not_possible');
   if (cred.feeCents !== undefined && cred.feeCents !== b.terms.feeCents)
     throw conflict('Die Stornobedingungen haben sich inzwischen geändert (z. B. ist die kostenfreie Frist abgelaufen). Bitte die Seite neu laden und die aktuellen Bedingungen prüfen.', 'terms_changed');
-  const full = await getBooking(db, id);
-  for (const r of full.rooms.filter((x) => x.status === 'tentative' || x.status === 'confirmed'))
-    await setRoomStatus(db, { ...GUEST, ip }, r.id, { status: 'cancelled', version: r.version });
   const fee = b.terms.feeCents > 0 ? `Ausfallgebühr laut Bedingungen: ${(b.terms.feeCents / 100).toFixed(2).replace('.', ',')} € (${b.terms.feePercent} % des Zimmerpreises) – bitte prüfen und berechnen.` : 'Kostenfrei innerhalb der Frist.';
   const line = `Online storniert am ${de(todayBerlin())} über den Gäste-Link. ${fee}`;
-  await db.update(bookings).set({ notes: [full.notes, line].filter(Boolean).join('\n').slice(0, 2000), version: sql`${bookings.version} + 1`, updatedAt: new Date() }).where(eq(bookings.id, id));
-  await record(db, { ...GUEST, ip }, { action: 'guest_cancel', entity: 'booking', entityId: id, after: { free: b.terms.free, feeCents: b.terms.feeCents } });
-  await tellTeam(db, `Storno durch den Gast: Reservierung ${b.number} (${b.guestName}, ${de(b.from)} bis ${de(b.to)}). ${fee}`);
+  // alles oder nichts: alle Zimmer, Vermerk, Protokoll und Meldung ans Personal in einem Schritt
+  await db.transaction(async (tx) => {
+    const full = await getBooking(tx, id);
+    for (const r of full.rooms.filter((x) => x.status === 'tentative' || x.status === 'confirmed'))
+      await setRoomStatus(tx as unknown as Db, { ...GUEST, ip }, r.id, { status: 'cancelled', version: r.version });
+    await tx.update(bookings).set({ notes: [full.notes, line].filter(Boolean).join('\n').slice(0, 2000), version: sql`${bookings.version} + 1`, updatedAt: new Date() }).where(eq(bookings.id, id));
+    await record(tx, { ...GUEST, ip }, { action: 'guest_cancel', entity: 'booking', entityId: id, after: { free: b.terms.free, feeCents: b.terms.feeCents } });
+    await tellTeam(tx, `Storno durch den Gast: Reservierung ${b.number} (${b.guestName}, ${de(b.from)} bis ${de(b.to)}). ${fee}`);
+  });
   return view(db, id);
 }
 

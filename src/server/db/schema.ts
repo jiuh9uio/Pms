@@ -337,6 +337,11 @@ export const hygieneReadings = pgTable('hygiene_readings', {
   note: text('note').notNull().default(''),
   userName: text('user_name').notNull(),
   enteredAt: ts('entered_at').notNull().defaultNow(),
+  /** Sollbereich, der beim Eintragen galt (spätere Änderungen an der Messstelle ändern die Bewertung alter Werte nicht) */
+  minC: numeric('min_c', { precision: 5, scale: 1, mode: 'number' }),
+  maxC: numeric('max_c', { precision: 5, scale: 1, mode: 'number' }),
+  /** false = Eintrag aus der Zeit vor dieser Speicherung (dann gilt der Sollbereich der Messstelle) */
+  rangeSaved: boolean('range_saved').notNull().default(false),
 }, (t) => [primaryKey({ columns: [t.pointId, t.date] })]);
 
 // ---------- Reinigungsprotokoll ----------

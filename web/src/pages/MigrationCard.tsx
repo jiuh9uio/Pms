@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button, Field, useToast } from '../ui.tsx';
 
-interface Summary { version: string; createdAt: string; tables: number; rows: number; guests: number; bookings: number; invoices: number; users: number; target: { bookings: number; invoices: number; guests: number } }
+interface Summary { version: string; createdAt: string; tables: number; rows: number; guests: number; bookings: number; invoices: number; users: number; target: { bookings: number; invoices: number; guests: number; total: number } }
 
 const errText = async (res: Response) => { const j = await res.json().catch(() => null); return j?.error?.message ?? `Fehler ${res.status}`; };
 
@@ -99,15 +99,15 @@ export function MigrationCard() {
               <li>{sum.guests} Gäste · {sum.bookings} Buchungen · {sum.invoices} Rechnungen · {sum.users} Benutzerkonten</li>
               <li>insgesamt {sum.rows} Einträge in {sum.tables} Tabellen</li>
             </ul>
-            {(sum.target.bookings > 0 || sum.target.invoices > 0) && (
+            {(sum.target.total > 0) && (
               <label className="check"><input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} />
-                <span><b>Auf diesem Rechner stehen schon {sum.target.bookings} Buchungen und {sum.target.invoices} Rechnungen.</b> Ja, sie sollen durch das Paket ersetzt werden.<small>Vorher wird automatisch eine Datensicherung geschrieben (Windows-Version).</small></span></label>
+                <span><b>Auf diesem Rechner stehen schon Daten ({sum.target.bookings} Buchungen, {sum.target.invoices} Rechnungen, insgesamt {sum.target.total} Einträge).</b> Ja, sie sollen durch das Paket ersetzt werden.<small>Vorher wird automatisch eine Datensicherung geschrieben – nur in der Windows-Version; auf der Server-Version bitte vorher selbst sichern. Nach dem Start des Echtbetriebs ist das Einspielen gesperrt, sobald Rechnungen vorhanden sind.</small></span></label>
             )}
             <div className="formgrid">
               <Field label="Ihr Passwort (Anmeldung auf diesem Rechner)"><input type="password" autoComplete="current-password" value={adminPw} onChange={(e) => setAdminPw(e.target.value)} /></Field>
               <Field label="Zum Bestätigen das Wort UMZUG eintippen"><input value={confirm} onChange={(e) => setConfirm(e.target.value)} /></Field>
             </div>
-            <div className="formactions"><Button variant="danger" busy={busyImp} disabled={confirm.trim() !== 'UMZUG' || !adminPw || ((sum.target.bookings > 0 || sum.target.invoices > 0) && !overwrite)} onClick={() => void doImport()}>Alle Daten ersetzen und Paket einspielen</Button></div>
+            <div className="formactions"><Button variant="danger" busy={busyImp} disabled={confirm.trim() !== 'UMZUG' || !adminPw || ((sum.target.total > 0) && !overwrite)} onClick={() => void doImport()}>Alle Daten ersetzen und Paket einspielen</Button></div>
           </div>
         )}
       </>}

@@ -48,7 +48,20 @@ Sicherungspunkt vor den Änderungen: Version 1.79.0 (Commit `aba82b1`).
 
 ---
 
-## B. Gefunden, aber NICHT geändert – braucht Ihre Freigabe
+## B. Nach Freigabe behoben in 1.80.0 (17.11.2026)
+
+Alle Punkte B1–B22 wurden nach Ihrer Freigabe umgesetzt und mit automatischen Tests (erfundene Daten) geprüft.
+Entscheidungen, die ich dabei getroffen habe:
+- **B12:** Nach dem Start des Echtbetriebs ist das Einspielen eines Umzugspakets gesperrt, sobald Rechnungen vorhanden sind. „Ziel nicht leer“ zählt jetzt alle Daten (ohne die Grunddaten einer neuen Installation).
+- **B16:** Der Browser meldet bei jeder Anfrage, wie lange die letzte Eingabe her ist; automatische Hintergrund-Abfragen verlängern die Anmeldung nicht mehr.
+- **B18:** Neue Spalten in der Datenbank (Sollbereich je Messwert). Ältere Werte haben keinen gespeicherten Sollbereich – für sie gilt weiter der der Messstelle (ich habe bewusst keinen heutigen Bereich rückwirkend eingetragen).
+- **B19:** Mitarbeiter tragen nur für heute und gestern ein bzw. korrigieren nur diese Tage. Ältere Tage nur der Administrator; Änderungen dort nur mit Begründung im Bemerkungsfeld. Eine vermerkte Maßnahme zu einem Wert außerhalb des Sollbereichs lässt sich nicht entfernen.
+- **B21:** Frühstück und Leistungen „pro Nacht/Person“ werden automatisch angepasst – aber nur, wenn die Menge nicht von Hand geändert wurde und die Leistung noch auf keiner Rechnung steht.
+- **B8:** Das Nachholen abgebrochener TSE-Vorgänge ist nur mit einer nachgebildeten TSE getestet – **nicht mit Ihrer echten TSE**.
+
+Die ursprüngliche Liste folgt unverändert zur Nachverfolgung.
+
+## B (ursprüngliche Liste). Gefunden, zunächst NICHT geändert – brauchte Ihre Freigabe
 
 Diese Punkte betreffen Rechnungen, Zahlungen, Löschlogik, Anmeldung oder die Datenbankstruktur.
 Dafür haben Sie sich die Freigabe vorbehalten.

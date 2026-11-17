@@ -353,7 +353,7 @@ function RoomForm({ booking, room, onClose }: { booking: BookingDto; room: Booki
         <Field label="Kinder" error={f.errors.children}><input type="number" min={0} value={v.children} onChange={(e) => setV({ ...v, children: e.target.value })} /></Field>
         {room ? (
           <Field label="Preis" wide error={f.errors.pricePerNightCents}
-            hint={v.priceMode === 'keep' ? 'Bereits gebuchte Nächte behalten ihren Preis; nur neue Nächte werden berechnet. Ausnahme: Ändert die neue Personenzahl den Zu-/Abschlag oder wird die Grenze für den Nachlass bei längerem Aufenthalt über- bzw. unterschritten, werden alle Nächte nach den heutigen Preisregeln neu berechnet.' : v.priceMode === 'auto' ? 'Alle Nächte werden nach den heutigen Preisregeln neu berechnet.' : undefined}>
+            hint={v.priceMode === 'keep' ? 'Bereits gebuchte Nächte behalten ihren Preis; nur neue Nächte werden berechnet. Ausnahme: Ändert die neue Personenzahl den Zu-/Abschlag oder wird die Grenze für den Nachlass bei längerem Aufenthalt über- bzw. unterschritten, werden alle Nächte nach den heutigen Preisregeln neu berechnet. Frühstück und Leistungen pro Nacht/Person passen sich an (sofern noch nicht berechnet und nicht von Hand geändert).' : v.priceMode === 'auto' ? 'Alle Nächte werden nach den heutigen Preisregeln neu berechnet.' : undefined}>
             <div className="inlinefields">
               <select value={v.priceMode} onChange={(e) => setV({ ...v, priceMode: e.target.value as typeof v.priceMode })}>
                 <option value="keep">Gebuchte Preise behalten</option><option value="auto">Neu berechnen</option><option value="manual">Sonderpreis je Nacht</option>

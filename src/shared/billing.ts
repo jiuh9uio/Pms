@@ -19,7 +19,8 @@ export const invoiceUpdateInput = recipientInput.extend({
   .refine((v) => !!(v.recipientCompany || v.recipientName), { message: 'Bitte Firma oder Namen angeben', path: ['recipientName'] });
 export const invoiceLineInput = z.object({
   description: required(160), detail: text(200),
-  quantity: z.number('Bitte eine Zahl eingeben').positive('Größer als 0').max(10_000),
+  // auf 2 Nachkommastellen, wie gespeichert – sonst passt die Zeilensumme nicht zur gedruckten Menge (und zur E-Rechnung)
+  quantity: z.number('Bitte eine Zahl eingeben').positive('Größer als 0').max(10_000).transform((q) => Math.round(q * 100) / 100).refine((q) => q > 0, 'Größer als 0'),
   unitPriceCents: z.number('Bitte einen Betrag eingeben').int().min(-10_000_000).max(10_000_000),
   taxRatePercent: z.number('Bitte wählen').min(0).max(100),
 });

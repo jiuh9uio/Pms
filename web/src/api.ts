@@ -6,12 +6,18 @@ export class ApiFailure extends Error {
   }
 }
 
+/** Zeitpunkt der letzten Eingabe (Tippen, Klicken, Scrollen) – der Server verlängert die Anmeldung nur bei echter Aktivität */
+let lastInput = 0;
+if (typeof window !== 'undefined')
+  for (const e of ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const) window.addEventListener(e, () => { lastInput = Date.now(); }, { passive: true, capture: true });
+const inputAge = () => (lastInput ? String(Date.now() - lastInput) : 'none');
+
 export async function api<T>(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> {
   let res: Response;
   try {
     res = await fetch('/api/v1' + path, {
       method, credentials: 'same-origin',
-      headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+      headers: body === undefined ? { 'X-Input-Age': inputAge() } : { 'Content-Type': 'application/json', 'X-Input-Age': inputAge() },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {

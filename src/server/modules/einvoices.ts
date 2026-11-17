@@ -54,6 +54,10 @@ export async function buildFromInvoice(db: Exec, invoiceId: string) {
   const i = inv.issuer;
   const buyerCountry = countryCode(inv.recipientCountry);
   if (!buyerCountry) throw new AppError(409, 'country', `Das Land des Empfängers („${inv.recipientCountry}“) ist nicht bekannt – bitte in der E-Rechnung als hochgeladene PDF mit Länderauswahl erstellen`);
+  // Zahlungsstand wie auf dem archivierten PDF (Stand bei Ausstellung) – später eingegangene Zahlungen ändern die eingebettete Datei nicht
+  const [atIssue] = await db.execute(sql`select coalesce(sum(p.amount_cents), 0)::int as paid from payments p join invoices i on i.id = p.invoice_id
+    where p.invoice_id = ${invoiceId} and p.created_at <= i.issued_at + interval '5 seconds'`) as unknown as { paid: number }[];
+  const paidAtIssue = Math.max(0, Math.min(atIssue?.paid ?? 0, inv.grossCents));
   const data: EInvoiceData = {
     number: inv.number, issueDate: inv.issueDate!, serviceFrom: inv.serviceFrom ?? inv.issueDate!, serviceTo: inv.serviceTo ?? inv.issueDate!, dueDate: inv.dueDate,
     seller: { name: i.name, street: i.street, zip: i.zip, city: i.city, country: countryCode(i.country) || 'DE', vatId: i.vatId, taxNumber: i.taxNumber, email: i.email, phone: i.phone, contactName: '' },
@@ -62,8 +66,8 @@ export async function buildFromInvoice(db: Exec, invoiceId: string) {
       vatId: inv.recipientVatId, email: '', reference: '',
     },
     lines: inv.lines.map((l) => ({ name: [l.description, l.detail].filter(Boolean).join(', '), quantity: l.quantity, unitGrossCents: l.unitPriceCents, taxRate: l.taxRatePercent })),
-    paidCents: Math.max(0, Math.min(inv.paidCents, inv.grossCents)), paymentMeans: i.iban ? '58' : '1', iban: i.iban, bic: i.bic,
-    paymentTerms: inv.openCents > 0 && inv.dueDate ? `Zahlbar bis ${de(inv.dueDate)} ohne Abzug unter Angabe der Rechnungsnummer.` : '', note: inv.notes,
+    paidCents: paidAtIssue, paymentMeans: i.iban ? '58' : '1', iban: i.iban, bic: i.bic,
+    paymentTerms: inv.grossCents - paidAtIssue > 0 && inv.dueDate ? `Zahlbar bis ${de(inv.dueDate)} ohne Abzug unter Angabe der Rechnungsnummer.` : '', note: inv.notes,
   };
   if (data.lines.some((l) => l.unitGrossCents < 0) || computeEInvoice(data).grossCents <= 0)
     throw conflict('Rechnungen mit Nachlass-Positionen oder ohne positiven Betrag werden als E-Rechnung noch nicht unterstützt');

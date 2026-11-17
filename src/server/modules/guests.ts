@@ -136,6 +136,14 @@ export async function mergeGuests(db: Db, actor: Actor, keepId: string, otherId:
     const moved = await tx.update(bookingsTable).set({ guestId: keepId }).where(eq(bookingsTable.guestId, otherId)).returning({ id: bookingsTable.id });
     await tx.update(guests).set({ ...fill, version: keep.version + 1, updatedAt: new Date() }).where(eq(guests.id, keepId));
     await tx.delete(guests).where(eq(guests.id, otherId));
+    // Protokolleinträge des entfernten Gastes enthalten u. U. Ausweisdaten; sie gehören zu keinem Gast mehr und würden
+    // sonst bei keiner Löschung erfasst – Inhalt anonymisieren (die Angaben stehen, soweit übernommen, beim verbleibenden Gast)
+    await tx.execute(sql`select set_config('pms.audit_scrub', ${otherId}, true)`);
+    await tx.update(auditLog).set({
+      before: sql`case when ${auditLog.before} is null then null else '{"anonymisiert": true}'::jsonb end`,
+      after: sql`case when ${auditLog.after} is null then null else '{"anonymisiert": true}'::jsonb end`,
+    }).where(and(eq(auditLog.entity, 'guest'), eq(auditLog.entityId, otherId)));
+    await tx.execute(sql`select set_config('pms.audit_scrub', '', true)`);
     await record(tx, actor, { action: 'merge', entity: 'guest', entityId: keepId, before: { removed: `${other.firstName} ${other.lastName}`.trim(), removedId: otherId }, after: { bookingsMoved: moved.length, filled: Object.keys(fill) } });
     return { ok: true, bookingsMoved: moved.length };
   });

@@ -61,7 +61,7 @@ const r2 = (n: number) => Math.round(n);
 
 /**
  * Rechnet Bruttopositionen in die Netto-Darstellung der EN 16931 um. Alle Beträge in Cent.
- * Regeln der Norm: Steuerbasis je Satz = Summe der Positions-Nettobeträge; Steuer = Basis × Satz (gerundet);
+ * Regeln der Norm: Steuerbasis je Satz = Summe der Positions-Nettobeträge (abgestimmt auf das Netto der PDF-Rechnung); Steuer = Basis × Satz (gerundet);
  * Gesamt = Basis + Steuer. Weicht das wegen der Brutto-Kalkulation um Cent vom Bruttobetrag der PDF-Rechnung ab,
  * gleicht der „Rundungsbetrag“ (BT-114) den Zahlbetrag an.
  */
@@ -72,6 +72,20 @@ export function computeEInvoice(d: Pick<EInvoiceData, 'lines' | 'paidCents'>) {
     return { id: i + 1, name: l.name, quantity: l.quantity, taxRate: l.taxRate, grossCents: gross, netCents: net, netUnit: net / 100 / l.quantity };
   });
   const rates = [...new Set(lines.map((l) => l.taxRate))].sort((a, b) => a - b);
+  // Netto je Steuersatz wie auf der PDF-Rechnung (aus der Bruttosumme des Satzes); die Positionsbeträge werden
+  // centgenau darauf abgestimmt, damit Steuerbasis und Summe der Positionen übereinstimmen.
+  for (const rate of rates) {
+    const own = lines.filter((l) => l.taxRate === rate);
+    const target = r2(own.reduce((s, l) => s + l.grossCents, 0) / (1 + rate / 100));
+    let diff = target - own.reduce((s, l) => s + l.netCents, 0);
+    const order = [...own].sort((a, b) => Math.abs(b.grossCents) - Math.abs(a.grossCents));
+    for (let k = 0; diff !== 0 && order.length; k++) {
+      const l = order[k % order.length]!;
+      const step = diff > 0 ? 1 : -1;
+      l.netCents += step; diff -= step;
+      l.netUnit = l.netCents / 100 / l.quantity;
+    }
+  }
   const taxes = rates.map((rate) => {
     const basis = lines.filter((l) => l.taxRate === rate).reduce((s, l) => s + l.netCents, 0);
     return { rate, basisCents: basis, taxCents: r2(basis * rate / 100) };

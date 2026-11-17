@@ -85,4 +85,30 @@ describe('Meldescheine automatisch löschen', () => {
     await purgeExpiredRegistrations(db);
     expect((await guestOf(old)).idNumber).toBe('AB123');
   });
+
+  it('bereinigt auch jüngere Protokolleinträge und erfasst Gäste ohne Check-in (z. B. storniert)', async () => {
+    // Aufenthalt vor 14 Monaten, E-Mail vor 3 Monaten geändert (Protokoll enthält die Ausweisdaten)
+    const old = await stay('Spaetaenderung', addDays(today, -420), 1);
+    await checkedOut(old);
+    const g = await guestOf(old);
+    await db.execute(sql`insert into audit_log (at, user_name, action, entity, entity_id, before, after) values (now() - interval '90 days', 'Test', 'update', 'guest', ${g.id}, ${JSON.stringify({ email: '', idNumber: 'AB123' })}::jsonb, ${JSON.stringify({ email: 'x@example.org', idNumber: 'AB123' })}::jsonb)`);
+    // Online-Meldeschein ausgefüllt, dann storniert (nie eingecheckt), Anreise vor 13 Monaten
+    const cancelled = await stay('Storniert', addDays(today, -395), 1, 1);
+    await db.execute(sql`update booking_rooms set status = 'cancelled' where booking_id = ${cancelled}`);
+    // vergessene, nie abgeschlossene Reservierung vor 2 Jahren
+    const forgotten = await stay('Vergessen', addDays(today, -730), 1, 1);
+    await purgeExpiredRegistrations(db);
+    for (const id of [old, cancelled, forgotten]) expect((await guestOf(id)).idNumber, id).toBe('');
+    const rows = await db.execute(sql`select before, after from audit_log where entity = 'guest' and entity_id = ${g.id} and at > now() - interval '100 days'`);
+    for (const r of rows) expect(JSON.stringify(r)).not.toMatch(/AB123/);
+  });
+
+  it('Zusammenführen: Protokolleinträge des entfernten Gastes werden anonymisiert', async () => {
+    const a = await ok('POST', '/guests', admin, { ...GUEST, lastName: 'Doppelt', idNumber: '' });
+    const b = await ok('POST', '/guests', admin, { ...GUEST, lastName: 'Doppelt', idNumber: 'ZZ999' });
+    await ok('POST', `/guests/${a.id}/merge`, admin, { otherId: b.id });
+    const rows = await db.execute(sql`select before, after from audit_log where entity = 'guest' and entity_id = ${b.id}`);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const r of rows) expect(JSON.stringify(r)).not.toMatch(/ZZ999/);
+  });
 });

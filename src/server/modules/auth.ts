@@ -91,7 +91,21 @@ export async function login(db: Db, input: { username: string; password: string;
 }
 
 /** Prüft das Sitzungs-Cookie und verlängert die Sitzung bei Aktivität. */
-export async function authenticate(db: Db, token: string | undefined) {
+/** Einstellung „Abmelden nach … Minuten“ – kurz zwischengespeichert, damit nicht jede Anfrage die Einstellungen liest */
+let idleCache: { minutes: number; at: number } | null = null;
+async function idleMinutes(db: Db) {
+  if (idleCache && Date.now() - idleCache.at < 30_000) return idleCache.minutes;
+  const minutes = (await getSecurity(db)).idleMinutes || 0;
+  idleCache = { minutes, at: Date.now() };
+  return minutes;
+}
+export const forgetIdleCache = () => { idleCache = null; };
+
+/**
+ * inputAgeMs: wie lange die letzte Eingabe (Tippen/Klicken) im Browser her ist – undefined = unbekannt (zählt als Aktivität),
+ * null = keine Eingabe (z. B. automatische Aktualisierung im Hintergrund; verlängert die Anmeldung nicht).
+ */
+export async function authenticate(db: Db, token: string | undefined, inputAgeMs?: number | null) {
   if (!token) return null;
   const [row] = await db
     .select({ session: sessions, user: users })
@@ -99,13 +113,19 @@ export async function authenticate(db: Db, token: string | undefined) {
     .where(eq(sessions.tokenHash, hashToken(token)));
   if (!row) return null;
   const now = Date.now();
-  if (row.session.expiresAt.getTime() < now || !row.user.active) {
+  // „Abmelden nach … Minuten ohne Eingabe“ auch hier prüfen – nicht nur im Browser (z. B. Browser geschlossen und wieder geöffnet)
+  const idle = await idleMinutes(db);
+  const idleOut = idle > 0 && now - row.session.lastSeenAt.getTime() > idle * 60_000;
+  if (row.session.expiresAt.getTime() < now || !row.user.active || idleOut) {
     await db.delete(sessions).where(eq(sessions.id, row.session.id));
     return null;
   }
-  if (now - row.session.lastSeenAt.getTime() > TOUCH_MS) {
-    const expiresAt = new Date(Math.min(now + IDLE_MS, row.session.createdAt.getTime() + MAX_MS));
-    await db.update(sessions).set({ lastSeenAt: new Date(now), expiresAt }).where(eq(sessions.id, row.session.id));
+  // letzte Aktivität: Zeitpunkt der letzten Eingabe, nicht jede Hintergrund-Abfrage
+  const activeAt = inputAgeMs === undefined ? now : inputAgeMs === null ? 0 : now - Math.max(0, inputAgeMs);
+  const touchMs = idle > 0 ? Math.min(TOUCH_MS, 60_000, (idle * 60_000) / 5) : TOUCH_MS;
+  if (activeAt - row.session.lastSeenAt.getTime() > touchMs) {
+    const expiresAt = new Date(Math.min(activeAt + IDLE_MS, row.session.createdAt.getTime() + MAX_MS));
+    await db.update(sessions).set({ lastSeenAt: new Date(activeAt), expiresAt }).where(eq(sessions.id, row.session.id));
   }
   return { user: row.user, sessionId: row.session.id };
 }
@@ -162,6 +182,7 @@ export async function getSecurity(db: Db): Promise<SecuritySettings> {
 }
 export async function saveSecurity(db: Db, actor: Actor, v: SecuritySettings) {
   await db.insert(settings).values({ key: 'security', value: v }).onConflictDoUpdate({ target: settings.key, set: { value: v, updatedAt: new Date() } });
+  forgetIdleCache();
   await record(db, actor, { action: 'update', entity: 'settings', entityId: 'security', after: v });
   return v;
 }

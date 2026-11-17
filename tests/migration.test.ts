@@ -107,6 +107,14 @@ describe('Umzugspaket', () => {
     expect((await db.execute(sql`select count(*)::int as n from guests where last_name = 'NachDemExport'`))[0]!.n).toBe(0);
     expect(getSecretKey().toString('base64')).toBe(key);
     expect(readFileSync(join(process.env.PMS_DATA_DIR!, 'secret.key')).toString('base64')).toBe(key);
+    // Echtbetrieb gestartet und Rechnungen vorhanden: Einspielen gesperrt (auch mit Bestätigung)
+    await db.execute(sql`insert into settings (key, value) values ('go_live', '{"at":"2026-01-01T00:00:00Z","by":"Test"}'::jsonb) on conflict (key) do update set value = excluded.value`);
+    const [inv] = await db.execute(sql`select count(*)::int as n from invoices`);
+    expect(inv!.n).toBeGreaterThan(0);
+    const locked = await bin('import', admin, pkg, { ...H, 'x-admin-password': encodeURIComponent('sehr-geheim-123'), 'x-overwrite': 'yes' });
+    expect(locked.statusCode).toBe(409);
+    expect(locked.json().error.code).toBe('go_live');
+    await db.execute(sql`delete from settings where key = 'go_live'`);
     await expect(db.execute(sql`delete from invoices`)).rejects.toThrow();
     await expect(db.execute(sql`update audit_log set action = 'x'`)).rejects.toThrow();
     // Anmeldung mit den Zugangsdaten aus dem Paket funktioniert, fortlaufende Nummern laufen weiter

@@ -9,6 +9,7 @@ import { getBackupStatus, runBackup } from '../backup.js';
 import { users } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { verifyPassword } from '../lib/password.js';
+import { getGoLive } from './purge.js';
 
 /**
  * Umzug auf einen anderen Rechner oder Server: alle Daten der Datenbank plus der Schlüssel der Installation (E-Mail-Passwort,
@@ -88,7 +89,16 @@ export function readPackage(file: Buffer, password: string): Payload {
 /** Was auf DIESER Installation schon steht (würde beim Einspielen ersetzt) */
 export async function targetCounts(db: Exec) {
   const [r] = await db.execute(sql`select (select count(*) from bookings)::int as bookings, (select count(*) from invoices)::int as invoices, (select count(*) from guests)::int as guests`) as unknown as { bookings: number; invoices: number; guests: number }[];
-  return r!;
+  // alle Daten zählen (auch z. B. Temperaturwerte, Tischreservierungen, Angebote) – ohne Einstellungen, Benutzer, Anmeldungen,
+  // Protokoll und die Grunddaten, die jede neue Installation von selbst mitbringt (Steuersätze, Muster-Kontrollen, Mustervorlagen)
+  const skip = new Set(['settings', 'users', 'sessions', '__drizzle_migrations', 'audit_log', 'tax_rates', 'hygiene_areas', 'inspection_types', 'inspection_items', 'offer_templates']);
+  const names = (await tables(db)).filter((t) => !skip.has(t));
+  let other = 0;
+  if (names.length) {
+    const [c] = await db.execute(sql.raw(`select (${names.map((t) => `(select count(*) from ${q(t)})`).join(' + ')})::int as n`)) as unknown as { n: number }[];
+    other = c?.n ?? 0;
+  }
+  return { ...r!, total: other };
 }
 
 export interface ImportSummary { version: string; createdAt: string; tables: number; rows: number; guests: number; bookings: number; invoices: number; users: number }
@@ -109,8 +119,11 @@ export async function importPackage(db: Db, actor: Actor, file: Buffer, password
   const p = readPackage(file, password);
   // Stehen hier schon Buchungen oder Rechnungen, nur nach ausdrücklicher Bestätigung ersetzen
   const t = await targetCounts(db);
-  if ((t.bookings > 0 || t.invoices > 0) && !o.overwrite)
-    throw new AppError(409, 'target_not_empty', `Auf diesem Rechner stehen schon ${t.bookings} Buchungen und ${t.invoices} Rechnungen. Sie würden durch das Paket ersetzt. Bitte ausdrücklich bestätigen.`);
+  // Nach dem Start des Echtbetriebs dürfen Rechnungen, Zahlungen und TSE-Daten nicht durch ein Paket ersetzt werden
+  if (t.invoices > 0 && (await getGoLive(db)).active)
+    throw new AppError(409, 'go_live', 'Auf diesem Rechner läuft der Echtbetrieb und es gibt bereits Rechnungen. Ein Umzugspaket kann hier nicht mehr eingespielt werden, weil dabei Rechnungen, Zahlungen und TSE-Daten ersetzt würden. Für einen Umzug das Paket auf einem neuen, leeren Rechner einspielen.');
+  if (t.total > 0 && !o.overwrite)
+    throw new AppError(409, 'target_not_empty', `Auf diesem Rechner stehen schon Daten (${t.bookings} Buchungen, ${t.invoices} Rechnungen, insgesamt ${t.total} Einträge). Sie würden durch das Paket ersetzt. Bitte ausdrücklich bestätigen.`);
   // vorher sichern (nur Windows-Version mit eingebauter Sicherung)
   if (getBackupStatus().supported) runBackup();
   const mine = await migrationCount(db);
