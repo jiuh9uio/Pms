@@ -27,6 +27,11 @@ export function registerOfferRoutes(api: FastifyInstance, { db, requireUser, req
   api.get('/offer-items', user, () => offers.listItems(db));
   api.post('/offer-items', admin, (req) => offers.saveItem(db, actor(req), null, O.offerItemInput.parse(req.body)));
   api.put('/offer-items/:id', admin, (req) => offers.saveItem(db, actor(req), idOf(req), O.offerItemInput.parse(req.body), versionOf(req)));
+  // Fragenkatalog: alle dürfen Fragen ergänzen, entfernen nur der Administrator
+  const qIn = z.object({ question: z.string().trim().min(2, 'Bitte eine Frage eintragen').max(200) });
+  api.get('/offer-questions', user, () => offers.questionBank(db));
+  api.post('/offer-questions', user, (req) => offers.addQuestion(db, actor(req), qIn.parse(req.body).question));
+  api.post('/offer-questions/remove', admin, (req) => offers.removeQuestion(db, actor(req), qIn.parse(req.body).question));
   api.get('/offer-templates', user, () => offers.listTemplates(db));
   api.post('/offer-templates', admin, (req) => offers.saveTemplate(db, actor(req), null, O.offerTemplateInput.parse(req.body)));
   api.put('/offer-templates/:id', admin, (req) => offers.saveTemplate(db, actor(req), idOf(req), O.offerTemplateInput.parse(req.body), versionOf(req)));

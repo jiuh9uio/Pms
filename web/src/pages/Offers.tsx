@@ -13,6 +13,7 @@ import { deDate } from '../hotel/common.tsx';
 import { MailDialog } from '../hotel/MailDialog.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useTabs, useToast } from '../ui.tsx';
 import { OfferLayoutCard } from './OfferLayoutCard.tsx';
+import { QuestionPicker } from './QuestionPicker.tsx';
 
 const TONE: Record<OfferState, 'neutral' | 'accent' | 'ok' | 'danger' | 'warn'> = { draft: 'neutral', sent: 'accent', accepted: 'ok', declined: 'danger', expired: 'warn', asked: 'accent', answered: 'warn' };
 const TABS = [['angebote', 'Angebote'], ['leistungen', 'Leistungen'], ['vorlagen', 'Vorlagen'], ['dokumente', 'AGB & Dokumente'], ['gestaltung', 'Gestaltung']] as const;
@@ -123,6 +124,7 @@ const qty = (s: string) => Number(s.replace(',', '.'));
 
 function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const { rev, bump, newBooking } = useData();
+  const isAdmin = useAuth().user.role === 'admin';
   const toast = useToast();
   const { data: o, error } = useLoad(() => api<OfferDto>('GET', `/offers/${id}`), [id, rev]);
   const items = useLoad(() => api<OfferItemDto[]>('GET', '/offer-items')).data ?? [];
@@ -132,12 +134,15 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [mail, setMail] = useState(false);
   const [accepting, setAccepting] = useState(false);
+  const [askAlso, setAskAlso] = useState(false);
   useEffect(() => { if (o) { setV({ ...o, lines: o.lines.map(toDraftLine), questionsText: o.questions.join('\n') }); setDirty(false); } }, [o]);
   if (!o || !v) return <Dialog title="Angebot" onClose={onClose}><LoadState error={error} loading /></Dialog>;
   const locked = o.status === 'accepted' || o.status === 'declined';
   // „nur Fragen“: ohne Leistungen, Preise, PDF und Annahme
   const q = v.mode === 'questions';
   const ch = (p: Partial<typeof v>) => { setV({ ...v, ...p }); setDirty(true); };
+  const qList = v.questionsText.split('\n').map((x) => x.trim()).filter(Boolean);
+  const setQ = (list: string[]) => ch({ questionsText: list.join('\n') });
   const setLine = (i: number, p: Partial<LineDraft>) => ch({ lines: v.lines.map((l, k) => (k === i ? { ...l, ...p } : l)) });
   const totalOf = (l: LineDraft) => { const q = qty(l.quantity), c = parseMoney(l.price); return Number.isFinite(q) && Number.isFinite(c) ? lineTotal(q, c) : 0; };
   const total = v.lines.reduce((s, l) => s + totalOf(l), 0);
@@ -208,7 +213,7 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
       {!locked && o.status === 'draft' && (
         <div className="segmented modeswitch" role="radiogroup" aria-label="Art">
           <button type="button" role="radio" aria-checked={q} className={q ? 'on' : ''} onClick={() => !q && ch({ mode: 'questions' })}>Nur Fragen stellen</button>
-          <button type="button" role="radio" aria-checked={!q} className={!q ? 'on' : ''} onClick={() => q && ch({ mode: 'offer' })}>Angebot mit Leistungen</button>
+          <button type="button" role="radio" aria-checked={!q} className={!q ? 'on' : ''} onClick={() => q && ch({ mode: 'offer', validUntil: v.validUntil ?? addDays(todayBerlin(), 14) })}>Angebot mit Leistungen</button>
         </div>
       )}
       {q && o.status === 'draft' && <p className="muted small">Der Kunde bekommt eine E-Mail mit Ihren Fragen und einem Link, über den er sie direkt beantworten kann (oder er antwortet per E-Mail). Leistungen und Preise kommen erst ins Angebot danach.</p>}
@@ -245,7 +250,7 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
         {!q && <Field label="Gültig bis"><input type="date" value={v.validUntil ?? ''} disabled={locked} onChange={(e) => ch({ validUntil: e.target.value || null })} /></Field>}
         {!q && <Field label="Anzahlung nach Annahme (%)"><input inputMode="numeric" value={String(v.depositPercent)} disabled={locked} onChange={(e) => ch({ depositPercent: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} /></Field>}
       </div>
-      {q && <Field label="Fragen an den Kunden (eine Frage je Zeile)" wide><textarea rows={8} value={v.questionsText} disabled={locked} onChange={(e) => ch({ questionsText: e.target.value })} placeholder={'Genaue Personenzahl\nGewünschte Uhrzeit\nBesondere Ernährungswünsche oder Allergien'} /></Field>}
+      {q && <><h3>Fragen an den Kunden</h3><QuestionPicker selected={qList} onChange={setQ} disabled={locked} isAdmin={isAdmin} /></>}
       {!q && <>
       <Field label="Einleitung" wide><textarea rows={3} value={v.intro} disabled={locked} onChange={(e) => ch({ intro: e.target.value })} /></Field>
       <h3>Leistungen</h3>
@@ -270,7 +275,10 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
         <Button onClick={() => ch({ lines: [...v.lines, { itemId: null, description: '', detail: '', unit: 'flat', quantity: '1', price: '', tax: '19' }] })}>+ Freie Zeile</Button>
         <Button onClick={recalc} title="Mengen aus Personen, Tagen und Nächten neu berechnen (pauschale Zeilen bleiben)">Mengen neu berechnen</Button>
       </div>}
-      <Field label="Fragenkatalog an den Kunden (eine Frage je Zeile)" wide><textarea rows={5} value={v.questionsText} disabled={locked} onChange={(e) => ch({ questionsText: e.target.value })} /></Field>
+      <label className="check askalso"><input type="checkbox" checked={askAlso || qList.length > 0} disabled={locked}
+        onChange={(e) => { if (e.target.checked) setAskAlso(true); else if (!qList.length || window.confirm('Die ausgewählten Fragen aus dem Angebot entfernen?')) { setAskAlso(false); setQ([]); } }} />
+        <span>Fragen mitstellen<small>Fragen aus dem Katalog anklicken – sie stehen im Angebot und in der E-Mail</small></span></label>
+      {(askAlso || qList.length > 0) && <QuestionPicker selected={qList} onChange={setQ} disabled={locked} isAdmin={isAdmin} />}
       </>}
       <Field label="Schlusstext" wide><textarea rows={2} value={v.closing} disabled={locked} onChange={(e) => ch({ closing: e.target.value })} /></Field>
       {!q && <Field label="Anlagen (werden mit der E-Mail versendet)" wide>

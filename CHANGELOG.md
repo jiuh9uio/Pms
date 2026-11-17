@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.87.0
+
+- **Fragenkatalog zum Anklicken** (Angebote): Bei „Nur Fragen stellen“ erscheinen alle gesammelten Fragen als Kästchen – einfach anklicken. Eigene Fragen tippen Sie dazu und können sie „für später im Katalog merken“. Der Katalog startet mit den Fragen der Vorlagen; entfernen kann ihn der Administrator (× an der Frage).
+- **Angebot mit Leistungen:** Statt des großen Fragenfelds gibt es das Häkchen **„Fragen mitstellen“** – nur dann klappt derselbe Katalog zum Anklicken auf.
+- Beim Umschalten von „Nur Fragen“ auf „Angebot mit Leistungen“ wird „Gültig bis“ auf 14 Tage gesetzt.
+
 ## 1.86.0
 
 - **Restaurant: „Aufs Zimmer“** – Verzehr eines Hotelgastes auf seine Zimmerrechnung schreiben: Zimmer antippen (nur eingecheckte Gäste), Betrag und Steuersatz eintragen. Erscheint in der Reservierung unter „Frühstück und Leistungen“ und kommt mit auf die Zimmerrechnung. Speisen und Getränke mit unterschiedlichem Steuersatz als zwei Einträge buchen.

@@ -246,3 +246,18 @@ describe('Angebote: erst nur Fragen stellen', () => {
     expect((await call('GET', `/public/offer/${token}`, {})).statusCode).toBe(404);
   });
 });
+
+describe('Fragenkatalog zum Anklicken', () => {
+  it('wird aus den Vorlagen zusammengestellt; alle dürfen ergänzen, nur der Administrator entfernt', async () => {
+    const bank = await ok('GET', '/offer-questions', user);
+    expect(bank.length).toBeGreaterThan(5);
+    expect(bank).toContain('Genaue Teilnehmerzahl');
+    const after = await ok('POST', '/offer-questions', user, { question: 'Wird ein Sektempfang gewünscht?' });
+    expect(after).toContain('Wird ein Sektempfang gewünscht?');
+    // doppelt (auch in anderer Schreibweise) wird nicht noch einmal aufgenommen
+    expect((await ok('POST', '/offer-questions', user, { question: 'wird ein sektempfang gewünscht?' })).length).toBe(after.length);
+    expect((await call('POST', '/offer-questions/remove', user, { question: 'Wird ein Sektempfang gewünscht?' })).statusCode).toBe(403);
+    const removed = await ok('POST', '/offer-questions/remove', admin, { question: 'Wird ein Sektempfang gewünscht?' });
+    expect(removed).not.toContain('Wird ein Sektempfang gewünscht?');
+  });
+});

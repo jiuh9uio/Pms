@@ -486,3 +486,36 @@ export async function publicAnswer(db: Db, token: string, v: { name: string; ans
     return { ok: true };
   });
 }
+
+// ---------- Fragenkatalog (Fragen zum Anklicken) ----------
+const BANK = 'offer_question_bank';
+/** Gesammelte Fragen; beim ersten Aufruf aus den Fragen der Vorlagen zusammengestellt */
+export async function questionBank(db: Db): Promise<string[]> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, BANK));
+  if (Array.isArray(row?.value)) return row.value as string[];
+  await ensureDefaults(db);
+  const seen = new Set<string>();
+  for (const t of await db.select({ q: offerTemplates.questions }).from(offerTemplates).orderBy(asc(offerTemplates.sort)))
+    for (const q of (t.q as string[]) ?? []) if (q.trim()) seen.add(q.trim());
+  const list = [...seen].slice(0, 200);
+  await db.insert(settings).values({ key: BANK, value: list }).onConflictDoNothing();
+  return list;
+}
+async function saveBank(db: Db, list: string[]) {
+  await db.insert(settings).values({ key: BANK, value: list }).onConflictDoUpdate({ target: settings.key, set: { value: list, updatedAt: new Date() } });
+}
+export async function addQuestion(db: Db, actor: Actor, q: string) {
+  const list = await questionBank(db);
+  if (list.some((x) => x.toLowerCase() === q.toLowerCase())) return list;
+  if (list.length >= 200) throw conflict('Der Fragenkatalog ist voll (200 Fragen). Bitte zuerst nicht mehr benötigte Fragen entfernen.');
+  const next = [...list, q];
+  await saveBank(db, next);
+  await record(db, actor, { action: 'question_add', entity: 'offer', after: { question: q } });
+  return next;
+}
+export async function removeQuestion(db: Db, actor: Actor, q: string) {
+  const next = (await questionBank(db)).filter((x) => x !== q);
+  await saveBank(db, next);
+  await record(db, actor, { action: 'question_remove', entity: 'offer', before: { question: q } });
+  return next;
+}

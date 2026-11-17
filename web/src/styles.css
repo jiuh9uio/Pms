@@ -1016,3 +1016,14 @@ a.linkcard.attention b { color: var(--warn); }
 .qg-item ol { margin: 0; padding-left: 20px; } .qg-item li { margin: 2px 0; }
 @media (max-width: 760px) { .qg-grid { grid-template-columns: minmax(0, 1fr); } }
 @media print { .quickguide .qg-grid { gap: 8px 18px; font-size: 11px; } .quickguide .qg-item { break-inside: avoid; } .qg-num { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+
+/* Fragenkatalog zum Anklicken */
+.qpick { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: var(--surface-2); margin-bottom: 12px; }
+.qpick-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+.qpick-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px; }
+.qchip { position: relative; display: flex; align-items: flex-start; gap: 8px; padding: 8px 28px 8px 10px; border: 1.5px solid var(--line-strong); border-radius: 10px; background: var(--surface); cursor: pointer; line-height: 1.35; transition: border-color .15s, background .15s; }
+.qchip input { margin-top: 2px; flex: none; }
+.qchip.on { border-color: var(--accent); background: var(--accent-soft); }
+.qchip-x { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border: 0; border-radius: 50%; background: transparent; color: var(--ink-3); cursor: pointer; font-size: 15px; line-height: 1; opacity: 0; transition: opacity .15s, background .15s; }
+.qchip:hover .qchip-x, .qchip-x:focus-visible { opacity: 1; } .qchip-x:hover { background: var(--danger-soft); color: var(--danger); }
+.qpick-add { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; } .qpick-add input:not([type='checkbox']) { flex: 1 1 260px; min-width: 0; }
