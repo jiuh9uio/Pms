@@ -3,6 +3,19 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.81.0
+
+- **Neues Erscheinungsbild der Symbole:** Alle Symbole in Menü, Seitenleiste und Startseite sind jetzt einheitliche, eigens gezeichnete Linien-Symbole (vorher gemischte Schriftzeichen und bunte Emojis).
+- **Meldungen** („Gespeichert“ usw.) zeigen einen Haken, der sich kurz zeichnet, und eine feine Linie, wie lange die Meldung noch steht. Wer in Windows „Animationen reduzieren“ eingestellt hat, sieht sie ohne Bewegung.
+- **Rechnungslayout – neue Möglichkeiten** (Einstellungen → Betrieb → Haus → Rechnungslayout):
+  - **Eigene Farbe** über das Plus-Feld neben den Farben (zu helle Farben werden für die Lesbarkeit automatisch etwas abgedunkelt).
+  - **Logo-Größe** klein, mittel oder groß.
+  - **Zahlungs-QR-Code (GiroCode)** bei offenem Betrag: Gäste scannen ihn mit der Banking-App; Empfänger, IBAN, Betrag und Rechnungsnummer sind ausgefüllt. Noch nicht mit einer echten Banking-App getestet – bitte einmal mit der Vorschau ausprobieren.
+  - **Falz- und Lochmarken** am linken Rand.
+  - **Vorgedrucktes Briefpapier:** Kopf und Fuß werden nicht gedruckt, der Platz bleibt frei.
+  - **Absenderzeile** über der Anschrift ein- oder ausschalten.
+  - Gilt für Rechnungen, die ab jetzt ausgestellt werden; bereits ausgestellte bleiben unverändert im Archiv. Angebote übernehmen die eigene Farbe ebenfalls.
+
 ## 1.80.0
 
 Weitere Fehlerbehebungen aus der Prüfung (Teil B, nach Freigabe – Einzelheiten: docs/pruefbericht-nachtschicht-2026-11-17.md):

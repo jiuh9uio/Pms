@@ -9,6 +9,7 @@ import { Search } from '../Search.tsx';
 import { useLoad } from '../ui.tsx';
 import { backupWarning, type BackupStatus } from './BackupCard.tsx';
 import type { UpdateStatus } from './UpdateCard.tsx';
+import { Icon } from '../icons.tsx';
 
 interface Tile { to: string; title: string; text: string; icon: string; admin?: boolean; /** nötige Freigabe; mehrere = eine davon genügt */ module?: Module | Module[]; /** Ziel, wenn die erste Freigabe fehlt */ alt?: string; group: 'tag' | 'buero' | 'haus' }
 const GROUPS: [Tile['group'], string][] = [['tag', 'Tagesgeschäft'], ['buero', 'Büro'], ['haus', 'Haus & Technik']];
@@ -77,7 +78,7 @@ export function Launcher() {
             <nav className="tiles" aria-label={label}>
               {list.map((t) => (
                 <Link key={t.to} to={t.to} className="tile">
-                  <span className="tile-icon" aria-hidden>{t.icon}</span>
+                  <span className="tile-icon" aria-hidden><Icon g={t.icon} /></span>
                   <span className="tile-body">
                     <span className="tile-title">{t.title}{t.to === '/email' && notices?.mailCount && mailNew && mailNew.newCount > 0 && <span className="tile-count" aria-label={`${mailNew.newCount} offen`}>{mailNew.newCount}</span>}{t.to === '/team' && notices?.teamCount && teamNew && teamNew.unread > 0 && <span className="tile-count" aria-label={`${teamNew.unread} ungelesen`}>{teamNew.unread}</span>}</span>
                     <span className="tile-text">{t.text}</span>

@@ -2,13 +2,11 @@ import fontkit from '@pdf-lib/fontkit';
 import { PDFDocument, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
 import { UNIT_LABEL, type OfferDto } from '../../shared/offers.js';
 import type { HotelSettings } from '../../shared/schemas.js';
-import type { InvoiceLayout, Logo } from './invoicepdf.js';
+import { accentRgb, type InvoiceLayout, type Logo } from './invoicepdf.js';
 import { asset } from './pdf.js';
 
 /** Angebot als PDF (A4) im Stil der Rechnungen: Logo, Farben und Schrift aus dem Rechnungslayout. */
-const ACC: Record<InvoiceLayout['accent'], [number, number, number]> = {
-  black: [0.1, 0.1, 0.1], blue: [0.11, 0.27, 0.48], green: [0.13, 0.36, 0.25], red: [0.5, 0.12, 0.16], gold: [0.55, 0.42, 0.16], petrol: [0.07, 0.38, 0.42],
-};
+
 const money = (c: number) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(c / 100);
 const de = (s: string | null) => (s ? `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)}` : '');
 const num = (n: number) => n.toLocaleString('de-DE', { maximumFractionDigits: 2 });
@@ -23,7 +21,7 @@ export async function renderOffer(o: OfferDto, h: HotelSettings, logo: Logo | nu
   if (logo) { try { image = logo.mime === 'image/png' ? await doc.embedPng(logo.data) : await doc.embedJpg(logo.data); } catch { image = null; } }
   doc.setTitle(`Angebot ${o.number}`); doc.setAuthor(h.name);
   const W = 595.28, H = 841.89, L = 62, R = W - 54, bottom = 70;
-  const black = rgb(0.1, 0.1, 0.1), grey = rgb(0.4, 0.4, 0.4), hair = rgb(0.82, 0.82, 0.82), band = rgb(0.95, 0.95, 0.95), acc = rgb(...(ACC[layout.accent] ?? ACC.black));
+  const black = rgb(0.1, 0.1, 0.1), grey = rgb(0.4, 0.4, 0.4), hair = rgb(0.82, 0.82, 0.82), band = rgb(0.95, 0.95, 0.95), acc = rgb(...accentRgb(layout));
   let page: PDFPage = doc.addPage([W, H]);
   let y = H - 62;
   const put = (s: string, x: number, yy: number, o2: { size?: number; font?: PDFFont; color?: typeof black; right?: boolean } = {}) => {

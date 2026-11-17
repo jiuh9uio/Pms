@@ -233,3 +233,22 @@ describe('Frühstück passt sich an Nächte und Personen an', () => {
     expect(d.charges[0].quantity).toBe(15);
   });
 });
+
+describe('Rechnungslayout: Zahlungs-QR-Code und eigene Farbe', () => {
+  it('GiroCode-Inhalt nach EPC-Aufbau; ohne gültige IBAN oder Betrag kein Code', async () => {
+    const { epcPayload, accentRgb } = await import('../src/server/einvoice/invoicepdf.js');
+    expect(epcPayload({ name: 'Musterhaus am See', iban: 'DE02 1203 0000 0000 2020 51', bic: 'BYLADEM1001', cents: 38400, text: 'Rechnung RE-2026-0001' }))
+      .toBe(['BCD', '002', '1', 'SCT', 'BYLADEM1001', 'Musterhaus am See', 'DE02120300000000202051', 'EUR384.00', '', '', 'Rechnung RE-2026-0001'].join('\n'));
+    expect(epcPayload({ name: 'X', iban: '', bic: '', cents: 100, text: '' })).toBeNull();
+    expect(epcPayload({ name: 'X', iban: 'DE02120300000000202051', bic: '', cents: 0, text: '' })).toBeNull();
+    // sehr helle eigene Farbe wird abgedunkelt (lesbar)
+    const [r, g, b] = accentRgb({ accent: 'custom', accentHex: '#ffffff' });
+    expect(0.2126 * r + 0.7152 * g + 0.0722 * b).toBeLessThanOrEqual(0.551);
+  });
+  it('Vorschau mit allen neuen Optionen erzeugt ein PDF', async () => {
+    const q = new URLSearchParams({ style: 'modern', accent: 'custom', accentHex: '#7a3b8f', logoSize: 'large', foldMarks: 'true', qrCode: 'true', letterhead: 'true', senderLine: 'false' });
+    const res = await app.inject({ method: 'GET', url: `/api/v1/settings/invoice-layout/preview?${q}`, cookies: admin });
+    expect(res.statusCode).toBe(200);
+    expect(res.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+  });
+});

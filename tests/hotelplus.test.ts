@@ -384,7 +384,7 @@ describe('Hotel: Optionsfrist, Vorschau, Statistik, doppelte Gäste', () => {
   });
 
   it('speichert das Rechnungslayout und liefert eine Muster-Rechnung als Vorschau', async () => {
-    expect(await ok('GET', '/settings/invoice-layout', admin)).toEqual({ spacing: 'normal', fontSize: 'normal', intro: '', closing: '', style: 'classic', accent: 'black', font: 'sans', logoPos: 'right', table: 'lines' });
+    expect(await ok('GET', '/settings/invoice-layout', admin)).toEqual({ spacing: 'normal', fontSize: 'normal', intro: '', closing: '', style: 'classic', accent: 'black', font: 'sans', logoPos: 'right', table: 'lines', accentHex: '#1c457a', logoSize: 'normal', foldMarks: false, qrCode: false, letterhead: false, senderLine: true });
     expect((await call('PUT', '/settings/invoice-layout', user, { spacing: 'wide' })).statusCode).toBe(403);
     expect((await call('PUT', '/settings/invoice-layout', admin, { spacing: 'riesig' })).statusCode).toBe(400);
     expect((await call('PUT', '/settings/invoice-layout', admin, { accent: 'pink' })).statusCode).toBe(400);

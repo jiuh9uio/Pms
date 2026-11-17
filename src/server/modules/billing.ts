@@ -598,7 +598,7 @@ export async function layoutPreview(db: Exec, v: InvoiceLayout): Promise<Buffer>
   const h = await getHotel(db);
   const issuer: IssuerDto = { name: h.name, street: h.street, zip: h.zip, city: h.city, country: h.country, phone: h.phone, email: h.email, website: h.website,
     taxNumber: h.taxNumber, vatId: h.vatId, bankName: h.bankName, iban: h.iban, bic: h.bic, footer: h.invoiceFooter };
-  return Buffer.from(await renderInvoice(sampleInvoice(issuer, todayBerlin()), issuer, await getLogo(db), v));
+  return Buffer.from(await renderInvoice(sampleInvoice(issuer, todayBerlin(), v.qrCode), issuer, await getLogo(db), v));
 }
 
 /**

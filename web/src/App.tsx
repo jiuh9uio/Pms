@@ -39,6 +39,7 @@ import { Settings } from './pages/Settings.tsx';
 import { Users } from './pages/Users.tsx';
 import { Search } from './Search.tsx';
 import { ToastProvider } from './ui.tsx';
+import { Icon } from './icons.tsx';
 
 interface AuthState { needsSetup: boolean; user: UserDto | null; guestHome?: boolean }
 const AuthCtx = createContext<{ user: UserDto; refresh: () => Promise<void> }>(null!);
@@ -185,18 +186,18 @@ function Shell({ user }: { user: UserDto }) {
         <div className="brand"><span className="mark">S</span><span>Schützenhaus<small>{module ? MODULE_TITLE[module] : 'PMS'}</small></span>
           <span className="histnav noprint"><button type="button" className="iconbtn" onClick={() => go(-1)} aria-label="Zurück" title="Zurück">‹</button><button type="button" className="iconbtn" onClick={() => go(1)} aria-label="Vor" title="Vor">›</button></span></div>
         <nav aria-label="Hauptnavigation">
-          <NavLink to="/" end className="menu"><span className="ico" aria-hidden>☰</span><span className="full">Menü</span><span className="short">Menü</span></NavLink>
+          <NavLink to="/" end className="menu"><span className="ico" aria-hidden><Icon g="☰" /></span><span className="full">Menü</span><span className="short">Menü</span></NavLink>
           <Search variant="nav" />
-          {home && <Link to={home.to} className="backlink"><span className="ico" aria-hidden>←</span><span className="full">Zurück zu {home.label}</span><span className="short">{home.label}</span></Link>}
+          {home && <Link to={home.to} className="backlink"><span className="ico" aria-hidden><Icon g="←" /></span><span className="full">Zurück zu {home.label}</span><span className="short">{home.label}</span></Link>}
           {nav.map((n, i) => (
             <Fragment key={`${n.to}?${n.tab ?? ''}`}>
               {n.group && n.group !== nav[i - 1]?.group && <span className="navgroup" aria-hidden>{n.group}</span>}
               <Link to={n.tab ? `${n.to}?ansicht=${n.tab}` : n.to} aria-current={active(n) ? 'page' : undefined} className={[active(n) ? 'active' : '', n.more ? 'more' : '', n.jump ? 'jump' : ''].filter(Boolean).join(' ') || undefined}>
-                <span className="ico" aria-hidden>{n.icon}</span><span className="full">{n.label}</span><span className="short">{n.short ?? n.label}</span>{n.jump && <span className="jumpmark" aria-hidden>›</span>}
+                <span className="ico" aria-hidden><Icon g={n.icon} /></span><span className="full">{n.label}</span><span className="short">{n.short ?? n.label}</span>{n.jump && <span className="jumpmark" aria-hidden>›</span>}
               </Link>
             </Fragment>
           ))}
-          {<NavLink to="/konto" className="konto"><span className="ico" aria-hidden>◐</span><span className="full">Mein Konto</span><span className="short">Konto</span></NavLink>}
+          {<NavLink to="/konto" className="konto"><span className="ico" aria-hidden><Icon g="◐" /></span><span className="full">Mein Konto</span><span className="short">Konto</span></NavLink>}
         </nav>
         <div className="whoami"><b>{user.name}</b><span>{ROLE_LABEL[user.role]}</span><button type="button" className="linkbtn" onClick={() => void logout()}>Abmelden</button></div>
       </aside>

@@ -22,7 +22,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastCtx.Provider value={push}>
       {children}
       <div className="toasts" role="status" aria-live="polite">
-        {toasts.map((t) => <div key={t.id} className={`toast ${t.kind}`}>{t.text}</div>)}
+        {toasts.map((t) => (
+          <div key={t.id} className={`toast ${t.kind}`}>
+            <svg className="toast-mark" viewBox="0 0 24 24" aria-hidden focusable="false">
+              <circle cx="12" cy="12" r="10" />
+              {t.kind === 'ok' ? <path className="tick" d="M7.5 12.5l3 3 6-6.5" /> : <path d="M12 7v6 M12 16.5h.01" />}
+            </svg>
+            <span>{t.text}</span>
+            <i className="toast-time" style={{ animationDuration: t.kind === 'error' ? '7s' : '3.5s' }} />
+          </div>
+        ))}
       </div>
     </ToastCtx.Provider>
   );

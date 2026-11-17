@@ -5,6 +5,7 @@ import { api } from './api.ts';
 import { useAuth } from './App.tsx';
 import { useData } from './data.tsx';
 import { Dialog } from './ui.tsx';
+import { Icon } from './icons.tsx';
 
 interface Page { to: string; title: string; area: string; words: string; module?: Module; admin?: boolean }
 /** Seiten und Reiter des Programms mit Stichwörtern, unter denen man sie sucht. */
@@ -71,8 +72,8 @@ export function Search({ variant }: { variant: 'nav' | 'big' }) {
   return (
     <>
       {variant === 'big'
-        ? <button type="button" className="searchbig" onClick={() => setOpen(true)}><span aria-hidden>⌕</span> Suchen: Gast, Reservierung, Rechnung, Einstellung … <kbd>Strg K</kbd></button>
-        : <button type="button" className="navsearch" onClick={() => setOpen(true)}><span className="ico" aria-hidden>⌕</span><span className="full">Suche</span><span className="short">Suche</span></button>}
+        ? <button type="button" className="searchbig" onClick={() => setOpen(true)}><span aria-hidden className="searchico"><Icon g="⌕" /></span> Suchen: Gast, Reservierung, Rechnung, Einstellung … <kbd>Strg K</kbd></button>
+        : <button type="button" className="navsearch" onClick={() => setOpen(true)}><span className="ico" aria-hidden><Icon g="⌕" /></span><span className="full">Suche</span><span className="short">Suche</span></button>}
       {open && <SearchDialog onClose={() => setOpen(false)} />}
     </>
   );

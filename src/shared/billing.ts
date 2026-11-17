@@ -89,6 +89,8 @@ export const terminalPayInput = z.object({
 export interface TerminalLogDto { id: string; at: string; amountCents: number; outcome: 'approved' | 'unrecorded' | 'declined' | 'unknown'; message: string; trace: string; receiptNo: string; cardName: string; userName: string }
 
 // ---------- Rechnungslayout ----------
+/** Ja/Nein – auch aus der Vorschau-Adresse („true“/„false“) */
+const flag = (d: boolean) => z.union([z.boolean(), z.enum(['true', 'false']).transform((v) => v === 'true')]).default(d);
 export const invoiceLayoutInput = z.object({
   spacing: z.enum(['compact', 'normal', 'wide']).default('normal'),
   fontSize: z.enum(['small', 'normal', 'large']).default('normal'),
@@ -97,10 +99,21 @@ export const invoiceLayoutInput = z.object({
   /** Schlusssatz unter den Summen */
   closing: z.string().trim().max(300).default(''),
   style: z.enum(['classic', 'modern', 'elegant']).default('classic'),
-  accent: z.enum(['black', 'blue', 'green', 'red', 'gold', 'petrol']).default('black'),
+  accent: z.enum(['black', 'blue', 'green', 'red', 'gold', 'petrol', 'custom']).default('black'),
   font: z.enum(['sans', 'serif']).default('sans'),
   logoPos: z.enum(['right', 'left', 'center']).default('right'),
   table: z.enum(['lines', 'stripes', 'plain']).default('lines'),
+  /** eigene Farbe (#rrggbb), wenn accent = 'custom' */
+  accentHex: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Farbe als #RRGGBB').default('#1c457a'),
+  logoSize: z.enum(['small', 'normal', 'large']).default('normal'),
+  /** Falz- und Lochmarken am linken Rand (für gefaltete Briefe) */
+  foldMarks: flag(false),
+  /** Zahlungs-QR-Code (GiroCode) bei offenem Betrag – Banking-Apps übernehmen Empfänger, IBAN, Betrag und Verwendungszweck */
+  qrCode: flag(false),
+  /** vorgedrucktes Briefpapier: Kopf (Name, Logo) und Fuß (Anschrift, Bank) nicht drucken, Platz bleibt frei */
+  letterhead: flag(false),
+  /** kleine Absenderzeile über der Anschrift (für Fensterumschläge) */
+  senderLine: flag(true),
 });
 export type InvoiceLayoutDto = z.infer<typeof invoiceLayoutInput>;
 
