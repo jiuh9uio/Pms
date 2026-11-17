@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.85.0
+
+- **Als App auf dem Handy:** Das Programm lässt sich auf iPhone, iPad und Android-Handys auf den Home-Bildschirm legen und öffnet sich dann ohne Browserleiste wie eine App (eigenes Symbol „Schützenhaus“, passende Farben für hell und dunkel, Ränder für Notch und Home-Leiste, kein Hineinzoomen beim Tippen in Textfelder). Auf Android zeigt langes Drücken auf das Symbol Abkürzungen zu Belegungsplan, Reservierungen, Tischen und Übergabebuch.
+- Anleitung unter **„Als Programm öffnen“** (Abschnitt „Auf dem iPhone oder iPad“).
+- Das Handy muss das Programm erreichen: im WLAN des Hauses oder – mit dem geplanten Server – von überall. Auf einem echten iPhone noch nicht ausprobiert.
+
 ## 1.84.0
 
 - **Angebote: erst nur Fragen stellen.** Beim Anlegen wählen Sie „Erst Fragen stellen“ oder „Direkt ein Angebot“ (im Entwurf lässt sich das noch umschalten).

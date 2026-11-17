@@ -995,3 +995,10 @@ a.linkcard.attention b { color: var(--warn); }
 .answers dl { margin: 0; display: grid; gap: 10px; } .answers dt { font-weight: 600; } .answers dd { margin: 2px 0 0; white-space: pre-wrap; }
 @media (max-width: 640px) { .modepick { grid-template-columns: 1fr; } }
 .guestform .answers { margin: 12px 0 0; display: grid; gap: 10px; } .guestform .answers dt { font-weight: 600; } .guestform .answers dd { margin: 2px 0 0; white-space: pre-wrap; }
+
+/* Als App vom Home-Bildschirm (iPhone/Android): Ränder für Notch und Home-Leiste, kein Gummiband-Scrollen am Rand, Textfelder ohne Zoom */
+@media (display-mode: standalone) {
+  body { overscroll-behavior-y: none; }
+  .content { padding-top: max(18px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+}
+@media (max-width: 760px) { textarea { font-size: 16px; } button, a, .btn { -webkit-tap-highlight-color: transparent; } }

@@ -22,6 +22,18 @@ export function AsProgram() {
         <p>In Microsoft Edge geht es auch von Hand: oben rechts auf „…“ → „Apps“ → „Diese Website als App installieren“. Edge bietet danach selbst an, das Programm an Taskleiste und Startmenü anzuheften. In Google Chrome: „⋮“ → „Streamen, speichern und teilen“ → „Seite als App installieren“.</p>
         <p className="muted small">Die Bezeichnungen der Menüpunkte können je nach Browser-Version etwas anders lauten. Auf einem Windows-PC habe ich beides nicht selbst ausprobieren können; das Anlegen des Symbols über die Datei wird beim Bau der Windows-Version automatisch geprüft.</p>
       </section>
+      <section className="card">
+        <h2>Auf dem iPhone oder iPad</h2>
+        <ol>
+          <li>Diese Seite in <b>Safari</b> öffnen (Adresse <code>{here}</code>).</li>
+          <li>Unten auf das Teilen-Symbol tippen (Quadrat mit Pfeil nach oben).</li>
+          <li><b>„Zum Home-Bildschirm“</b> wählen und mit „Hinzufügen“ bestätigen.</li>
+        </ol>
+        <p>Danach öffnet das Symbol „Schützenhaus“ das Programm ohne Browserleiste – wie eine App. Updates kommen automatisch mit.</p>
+        <h2>Auf einem Android-Handy</h2>
+        <p>In Chrome oben rechts auf „⋮“ → <b>„Zum Startbildschirm hinzufügen“</b> bzw. „App installieren“. Langes Drücken auf das Symbol zeigt Abkürzungen zu Belegungsplan, Reservierungen, Tischen und Übergabebuch.</p>
+        <p className="muted small">Das Handy muss das Programm erreichen: im WLAN des Hauses, oder von überall, wenn das Programm auf einem Server im Internet läuft. Die Menüpunkte können je nach System-Version etwas anders heißen; auf einem echten iPhone habe ich das nicht ausprobieren können.</p>
+      </section>
     </>
   );
 }
