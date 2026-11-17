@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.84.0
+
+- **Angebote: erst nur Fragen stellen.** Beim Anlegen wählen Sie „Erst Fragen stellen“ oder „Direkt ein Angebot“ (im Entwurf lässt sich das noch umschalten).
+  - **Nur Fragen:** ohne Leistungen, Preise und PDF. Der Kunde bekommt eine E-Mail mit Ihren Fragen und einem Link, über den er sie direkt beantworten kann – oder er antwortet per E-Mail (dann landet die Antwort wie gewohnt im Posteingang).
+  - Online-Antworten erscheinen im Vorgang („beantwortet“) und als Aufgabe im Übergabebuch.
+  - Mit **„Angebot erstellen“** wird daraus das Angebot mit Leistungen (die Leistungen der Vorlage stehen schon bereit, die Antworten bleiben sichtbar).
+- **Angenommen/Abgelehnt erst nach dem Versand:** Im Entwurf gibt es diese Knöpfe nicht mehr – der Kunde kann ja noch nichts annehmen. Nach dem Versand sind sie da (bei reinen Fragen: „Kein Interesse“).
+
 ## 1.83.0
 
 - **Logo überall** (Einstellungen → Betrieb → Haus → Logo → „Logo außerdem zeigen auf“):

@@ -14,7 +14,7 @@ import { MailDialog } from '../hotel/MailDialog.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useTabs, useToast } from '../ui.tsx';
 import { OfferLayoutCard } from './OfferLayoutCard.tsx';
 
-const TONE: Record<OfferState, 'neutral' | 'accent' | 'ok' | 'danger' | 'warn'> = { draft: 'neutral', sent: 'accent', accepted: 'ok', declined: 'danger', expired: 'warn' };
+const TONE: Record<OfferState, 'neutral' | 'accent' | 'ok' | 'danger' | 'warn'> = { draft: 'neutral', sent: 'accent', accepted: 'ok', declined: 'danger', expired: 'warn', asked: 'accent', answered: 'warn' };
 const TABS = [['angebote', 'Angebote'], ['leistungen', 'Leistungen'], ['vorlagen', 'Vorlagen'], ['dokumente', 'AGB & Dokumente'], ['gestaltung', 'Gestaltung']] as const;
 
 /** Angebote für Tagungen, Feiern und Gruppen: aus Vorlagen zusammenstellen, als PDF mit AGB versenden, Annahme festhalten. */
@@ -63,8 +63,8 @@ function OfferList() {
               <td>{o.customer}<br /><small className="muted">{o.email}</small></td>
               <td className="nowrap">{o.eventDate ? deDate(o.eventDate) : '–'}{o.eventEnd && o.eventEnd !== o.eventDate ? ` – ${deDate(o.eventEnd)}` : ''}</td>
               <td className="num">{o.persons}</td>
-              <td className="num">{formatMoney(o.totalCents)}</td>
-              <td><Badge tone={TONE[o.state]}>{OFFER_STATE_LABEL[o.state]}</Badge>{o.state === 'expired' && <><br /><small className="muted">nachfassen</small></>}
+              <td className="num">{o.mode === 'questions' ? <small className="muted">nur Fragen</small> : formatMoney(o.totalCents)}</td>
+              <td><Badge tone={TONE[o.state]}>{OFFER_STATE_LABEL[o.state]}</Badge>{o.state === 'expired' && <><br /><small className="muted">nachfassen</small></>}{o.state === 'answered' && <><br /><small className="muted">Angebot erstellen</small></>}
                 {o.state === 'sent' && o.validUntil && <><br /><small className="muted">gültig bis {deDate(o.validUntil)}</small></>}</td>
             </tr>
           ))}</tbody>
@@ -79,21 +79,28 @@ function OfferList() {
 function NewOfferDialog({ prefill, onClose, onCreated }: { prefill: { customerName: string; email: string; phone: string; eventDate: string; persons: string }; onClose: () => void; onCreated: (id: string) => void }) {
   const { bump } = useData();
   const tpls = useLoad(() => api<OfferTemplateDto[]>('GET', '/offer-templates')).data;
+  const [mode, setMode] = useState<'offer' | 'questions'>('offer');
   const [v, setV] = useState({ templateId: '', customerCompany: '', customerName: prefill.customerName, email: prefill.email, phone: prefill.phone, eventDate: /^\d{4}-\d{2}-\d{2}$/.test(prefill.eventDate) ? prefill.eventDate : '', eventEnd: '', persons: prefill.persons || '10' });
   const [busy, setBusy] = useState(false);
   const [fail, setFail] = useState<string | null>(null);
   const create = async () => {
     setBusy(true); setFail(null);
     try {
-      const r = await api<{ id: string }>('POST', '/offers', { ...v, templateId: v.templateId || null, eventDate: v.eventDate || null, eventEnd: v.eventEnd || null, persons: Number(v.persons) || 0, area: 'both' });
+      const r = await api<{ id: string }>('POST', '/offers', { ...v, mode, templateId: v.templateId || null, eventDate: v.eventDate || null, eventEnd: v.eventEnd || null, persons: Number(v.persons) || 0, area: 'both' });
       bump(); onCreated(r.id);
     } catch (e) { const err = e as { message?: string; fields?: Record<string, string> }; setFail(Object.values(err.fields ?? {}).join(' · ') || err.message || 'Fehler'); }
     setBusy(false);
   };
   const set = (k: keyof typeof v, x: string) => setV({ ...v, [k]: x });
   return (
-    <Dialog title="Neues Angebot" onClose={onClose} size="lg" footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={busy} onClick={() => void create()}>Angebot anlegen</Button></>}>
-      <Field label="Vorlage"><select value={v.templateId} onChange={(e) => set('templateId', e.target.value)}>
+    <Dialog title={mode === 'questions' ? 'Neue Rückfrage an den Kunden' : 'Neues Angebot'} onClose={onClose} size="lg" footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={busy} onClick={() => void create()}>{mode === 'questions' ? 'Fragen vorbereiten' : 'Angebot anlegen'}</Button></>}>
+      <div className="modepick" role="radiogroup" aria-label="Was möchten Sie senden?">
+        <button type="button" role="radio" aria-checked={mode === 'questions'} className={mode === 'questions' ? 'on' : ''} onClick={() => setMode('questions')}>
+          <b>Erst Fragen stellen</b><small>Fragenkatalog ohne Leistungen und Preise – der Kunde antwortet online oder per E-Mail; danach machen Sie daraus das Angebot.</small></button>
+        <button type="button" role="radio" aria-checked={mode === 'offer'} className={mode === 'offer' ? 'on' : ''} onClick={() => setMode('offer')}>
+          <b>Direkt ein Angebot</b><small>Leistungen mit Preisen als PDF, mit AGB und Annahme über den Link.</small></button>
+      </div>
+      <Field label="Vorlage" hint={mode === 'questions' ? 'übernimmt den Fragenkatalog; Leistungen stehen schon bereit, wenn Sie später das Angebot erstellen' : undefined}><select value={v.templateId} onChange={(e) => set('templateId', e.target.value)}>
         <option value="">ohne Vorlage (leer)</option>{(tpls ?? []).filter((t) => t.active).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
       <div className="formgrid">
         <Field label="Firma"><input value={v.customerCompany} onChange={(e) => set('customerCompany', e.target.value)} /></Field>
@@ -105,7 +112,7 @@ function NewOfferDialog({ prefill, onClose, onCreated }: { prefill: { customerNa
         <Field label="Personen"><input inputMode="numeric" value={v.persons} onChange={(e) => set('persons', e.target.value)} /></Field>
       </div>
       {fail && <p className="notice danger" role="alert">{fail}</p>}
-      <p className="muted small">Die Leistungen der Vorlage werden mit passender Menge übernommen (z. B. pro Person und Tag = Personen × Tage) und lassen sich danach anpassen.</p>
+      <p className="muted small">{mode === 'questions' ? 'Die Fragen lassen sich danach noch anpassen. ' : ''}Die Leistungen der Vorlage werden mit passender Menge übernommen (z. B. pro Person und Tag = Personen × Tage) und lassen sich danach anpassen.</p>
     </Dialog>
   );
 }
@@ -128,6 +135,8 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
   useEffect(() => { if (o) { setV({ ...o, lines: o.lines.map(toDraftLine), questionsText: o.questions.join('\n') }); setDirty(false); } }, [o]);
   if (!o || !v) return <Dialog title="Angebot" onClose={onClose}><LoadState error={error} loading /></Dialog>;
   const locked = o.status === 'accepted' || o.status === 'declined';
+  // „nur Fragen“: ohne Leistungen, Preise, PDF und Annahme
+  const q = v.mode === 'questions';
   const ch = (p: Partial<typeof v>) => { setV({ ...v, ...p }); setDirty(true); };
   const setLine = (i: number, p: Partial<LineDraft>) => ch({ lines: v.lines.map((l, k) => (k === i ? { ...l, ...p } : l)) });
   const totalOf = (l: LineDraft) => { const q = qty(l.quantity), c = parseMoney(l.price); return Number.isFinite(q) && Number.isFinite(c) ? lineTotal(q, c) : 0; };
@@ -142,7 +151,7 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
     setBusy('save');
     try {
       const r = await api<{ backToDraft: boolean }>('PUT', `/offers/${id}`, {
-        area: v.area, customerCompany: v.customerCompany, customerName: v.customerName, email: v.email, phone: v.phone, street: v.street, zip: v.zip, city: v.city,
+        area: v.area, mode: v.mode, customerCompany: v.customerCompany, customerName: v.customerName, email: v.email, phone: v.phone, street: v.street, zip: v.zip, city: v.city,
         eventDate: v.eventDate || null, eventEnd: v.eventEnd || null, persons: v.persons, title: v.title, intro: v.intro, closing: v.closing,
         questions: v.questionsText.split('\n').map((x) => x.trim()).filter(Boolean), validUntil: v.validUntil || null, depositPercent: v.depositPercent, documentIds: v.documentIds, notes: v.notes,
         lines: v.lines.map((l) => ({ itemId: l.itemId, description: l.description, detail: l.detail, unit: l.unit, quantity: qty(l.quantity), unitPriceCents: parseMoney(l.price), taxRatePercent: Number(l.tax.replace(',', '.')) })),
@@ -153,9 +162,14 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
     } catch (e) { const err = e as { message?: string; fields?: Record<string, string> }; toast(Object.values(err.fields ?? {}).join(' · ') || err.message || 'Fehler', 'error'); setBusy(null); return false; }
   };
   const decline = async () => {
-    if (!window.confirm(`Angebot ${o.number} als abgelehnt markieren?${dirty ? ' Ihre Änderungen werden vorher gespeichert.' : ''}`)) return;
+    if (!window.confirm(`${q ? `Rückfrage ${o.number}: Der Kunde hat kein Interesse – so vermerken?` : `Angebot ${o.number} als abgelehnt markieren?`}${dirty ? ' Ihre Änderungen werden vorher gespeichert.' : ''}`)) return;
     if (dirty && !(await save(true))) return;
     try { await api('POST', `/offers/${id}/decline`); toast('Als abgelehnt markiert'); bump(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+  };
+  const makeOffer = async () => {
+    if (dirty && !(await save(true))) return;
+    if (!window.confirm('Jetzt aus den Fragen ein Angebot mit Leistungen machen? Die Antworten bleiben sichtbar; der bisherige Link zum Beantworten gilt dann nicht mehr.')) return;
+    try { await api('POST', `/offers/${id}/to-offer`); toast('Jetzt Leistungen eintragen und das Angebot senden'); bump(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
   };
   const openPdf = async () => { if (dirty && !(await save(true))) return; window.open(`/api/v1/offers/${id}/pdf`, '_blank', 'noopener'); };
   const startMail = async () => { if (dirty && !(await save(true))) return; setMail(true); };
@@ -180,18 +194,35 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const f = (k: 'customerCompany' | 'customerName' | 'email' | 'phone' | 'street' | 'zip' | 'city' | 'title', label: string, type = 'text') =>
     <Field label={label}><input type={type} value={v[k]} disabled={locked} onChange={(e) => ch({ [k]: e.target.value } as Partial<typeof v>)} /></Field>;
   return (
-    <Dialog title={<>Angebot {o.number} <Badge tone={TONE[o.state]}>{OFFER_STATE_LABEL[o.state]}</Badge></>} onClose={() => { if (!dirty || window.confirm('Ungespeicherte Änderungen verwerfen?')) onClose(); }} size="xl"
+    <Dialog title={<>{q ? 'Rückfrage' : 'Angebot'} {o.number} <Badge tone={TONE[o.state]}>{OFFER_STATE_LABEL[o.state]}</Badge></>} onClose={() => { if (!dirty || window.confirm('Ungespeicherte Änderungen verwerfen?')) onClose(); }} size="xl"
       footer={<>
-        <span className="left total">Gesamt <b>{formatMoney(total)}</b></span>
-        <Button onClick={() => void openPdf()}>PDF ansehen</Button>
+        {!q && <span className="left total">Gesamt <b>{formatMoney(total)}</b></span>}
+        {!q && <Button onClick={() => void openPdf()}>PDF ansehen</Button>}
         {(!locked || dirty) && <Button busy={busy === 'save'} disabled={!dirty} onClick={() => void save()}>{locked ? 'Notiz speichern' : 'Speichern'}</Button>}
-        {!locked && <Button onClick={() => void startMail()}>{o.status === 'sent' ? 'Erneut senden' : 'Per E-Mail senden'}</Button>}
-        {!locked && <Button variant="primary" busy={busy === 'save'} onClick={() => void startAccept()}>Angenommen …</Button>}
-        {!locked && <Button variant="danger" onClick={() => void decline()}>Abgelehnt</Button>}
+        {!locked && !(q && o.answers) && <Button variant={q && o.status === 'draft' ? 'primary' : undefined} onClick={() => void startMail()}>{o.status === 'sent' ? 'Erneut senden' : q ? 'Fragen per E-Mail senden' : 'Per E-Mail senden'}</Button>}
+        {/* Annehmen/Ablehnen erst, wenn der Kunde etwas bekommen hat */}
+        {!locked && !q && o.status === 'sent' && <Button variant="primary" busy={busy === 'save'} onClick={() => void startAccept()}>Angenommen …</Button>}
+        {!locked && q && o.status === 'sent' && <Button variant="primary" onClick={() => void makeOffer()}>Angebot erstellen</Button>}
+        {!locked && o.status === 'sent' && <Button variant="danger" onClick={() => void decline()}>{q ? 'Kein Interesse' : 'Abgelehnt'}</Button>}
       </>}>
+      {!locked && o.status === 'draft' && (
+        <div className="segmented modeswitch" role="radiogroup" aria-label="Art">
+          <button type="button" role="radio" aria-checked={q} className={q ? 'on' : ''} onClick={() => !q && ch({ mode: 'questions' })}>Nur Fragen stellen</button>
+          <button type="button" role="radio" aria-checked={!q} className={!q ? 'on' : ''} onClick={() => q && ch({ mode: 'offer' })}>Angebot mit Leistungen</button>
+        </div>
+      )}
+      {q && o.status === 'draft' && <p className="muted small">Der Kunde bekommt eine E-Mail mit Ihren Fragen und einem Link, über den er sie direkt beantworten kann (oder er antwortet per E-Mail). Leistungen und Preise kommen erst ins Angebot danach.</p>}
+      {o.answers && (
+        <section className="card answers">
+          <h3 className="first">Antworten von {o.answers.name} <small className="muted">– online am {new Date(o.answers.at).toLocaleString('de-DE')}</small></h3>
+          <dl>{o.answers.items.map((x, i) => <div key={i}><dt>{x.q}</dt><dd>{x.a || <span className="muted">– keine Angabe –</span>}</dd></div>)}</dl>
+        </section>
+      )}
       {o.status === 'accepted' && <p className="notice small">Angenommen am {new Date(o.acceptedAt!).toLocaleString('de-DE')} von <b>{o.acceptedBy}</b> ({({ online: 'online über den Link', email: 'per E-Mail', telefon: 'telefonisch', persoenlich: 'persönlich', schriftlich: 'schriftlich' } as Record<string, string>)[o.acceptedMethod] ?? o.acceptedMethod}). Prüfwert der angenommenen Fassung: <code className="wrapcode">{o.acceptedHash.slice(0, 16)}…</code></p>}
       {expired && <p className="notice warn small">„Gültig bis“ ({new Date(`${v.validUntil}T12:00:00`).toLocaleDateString('de-DE')}) liegt in der Vergangenheit. Zum Versenden bitte ein neues Datum eintragen und speichern{o.status === 'sent' ? ' – online annehmen kann der Kunde es so nicht mehr' : ''}.</p>}
-      {o.status === 'sent' && <p className="notice small">Versendet am {new Date(o.sentAt!).toLocaleString('de-DE')} an {o.sentTo}. Änderungen am Inhalt machen es wieder zum Entwurf; der bisherige Link zur Annahme gilt dann nicht mehr. Die interne Notiz lässt sich ohne Folgen ändern.</p>}
+      {o.status === 'sent' && (q
+        ? <p className="notice small">Fragen gesendet am {new Date(o.sentAt!).toLocaleString('de-DE')} an {o.sentTo}. {o.answers ? 'Die Antworten sind da – mit „Angebot erstellen“ geht es weiter.' : 'Sobald der Kunde online antwortet, steht es hier und im Übergabebuch. Antwortet er per E-Mail, kommt die Antwort in den Posteingang.'}</p>
+        : <p className="notice small">Versendet am {new Date(o.sentAt!).toLocaleString('de-DE')} an {o.sentTo}. Änderungen am Inhalt machen es wieder zum Entwurf; der bisherige Link zur Annahme gilt dann nicht mehr. Die interne Notiz lässt sich ohne Folgen ändern.</p>)}
       {o.status === 'accepted' && (
         <section className="card">
           <h3 className="first">Nach der Annahme</h3>
@@ -211,9 +242,11 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
         <Field label="bis"><input type="date" value={v.eventEnd ?? ''} disabled={locked} onChange={(e) => ch({ eventEnd: e.target.value || null })} /></Field>
         <Field label="Personen"><input inputMode="numeric" value={String(v.persons)} disabled={locked} onChange={(e) => ch({ persons: Number(e.target.value) || 0 })} /></Field>
         {f('title', 'Titel (z. B. Tagung Muster GmbH)')}
-        <Field label="Gültig bis"><input type="date" value={v.validUntil ?? ''} disabled={locked} onChange={(e) => ch({ validUntil: e.target.value || null })} /></Field>
-        <Field label="Anzahlung nach Annahme (%)"><input inputMode="numeric" value={String(v.depositPercent)} disabled={locked} onChange={(e) => ch({ depositPercent: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} /></Field>
+        {!q && <Field label="Gültig bis"><input type="date" value={v.validUntil ?? ''} disabled={locked} onChange={(e) => ch({ validUntil: e.target.value || null })} /></Field>}
+        {!q && <Field label="Anzahlung nach Annahme (%)"><input inputMode="numeric" value={String(v.depositPercent)} disabled={locked} onChange={(e) => ch({ depositPercent: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} /></Field>}
       </div>
+      {q && <Field label="Fragen an den Kunden (eine Frage je Zeile)" wide><textarea rows={8} value={v.questionsText} disabled={locked} onChange={(e) => ch({ questionsText: e.target.value })} placeholder={'Genaue Personenzahl\nGewünschte Uhrzeit\nBesondere Ernährungswünsche oder Allergien'} /></Field>}
+      {!q && <>
       <Field label="Einleitung" wide><textarea rows={3} value={v.intro} disabled={locked} onChange={(e) => ch({ intro: e.target.value })} /></Field>
       <h3>Leistungen</h3>
       <div className="tablewrap"><table className="lines offerlines">
@@ -238,15 +271,16 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
         <Button onClick={recalc} title="Mengen aus Personen, Tagen und Nächten neu berechnen (pauschale Zeilen bleiben)">Mengen neu berechnen</Button>
       </div>}
       <Field label="Fragenkatalog an den Kunden (eine Frage je Zeile)" wide><textarea rows={5} value={v.questionsText} disabled={locked} onChange={(e) => ch({ questionsText: e.target.value })} /></Field>
+      </>}
       <Field label="Schlusstext" wide><textarea rows={2} value={v.closing} disabled={locked} onChange={(e) => ch({ closing: e.target.value })} /></Field>
-      <Field label="Anlagen (werden mit der E-Mail versendet)" wide>
+      {!q && <Field label="Anlagen (werden mit der E-Mail versendet)" wide>
         <div className="radiolist">{docs.filter((d) => d.active || v.documentIds.includes(d.id)).map((d) => (
           <label key={d.id} className="check"><input type="checkbox" disabled={locked} checked={v.documentIds.includes(d.id)} onChange={(e) => ch({ documentIds: e.target.checked ? [...v.documentIds, d.id] : v.documentIds.filter((x) => x !== d.id) })} /><span>{d.name} <small className="muted">({d.fileName})</small></span></label>
         ))}{docs.length === 0 && <span className="muted small">Noch keine AGB hochgeladen (Angebote → AGB & Dokumente, Administrator).</span>}</div>
-      </Field>
+      </Field>}
       <Field label="Interne Notiz (erscheint nicht im Angebot)" wide><textarea rows={2} value={v.notes} onChange={(e) => ch({ notes: e.target.value })} /></Field>
-      {mail && <MailDialog path={`/offers/${id}/mail`} title={`Angebot ${o.number} senden`} sendLabel="Senden" onClose={() => setMail(false)} onSent={bump}
-        intro={<p className="muted small">Angehängt werden das Angebot als PDF und die gewählten Anlagen. Danach gilt das Angebot als versendet.</p>} />}
+      {mail && <MailDialog path={`/offers/${id}/mail`} title={q ? `Fragen zu ${o.number} senden` : `Angebot ${o.number} senden`} sendLabel="Senden" onClose={() => setMail(false)} onSent={bump}
+        intro={<p className="muted small">{q ? 'Die E-Mail enthält Ihre Fragen und einen Link zum Beantworten – ohne Anhang.' : 'Angehängt werden das Angebot als PDF und die gewählten Anlagen. Danach gilt das Angebot als versendet.'}</p>} />}
       {accepting && <AcceptDialog offer={o} onClose={() => setAccepting(false)} />}
     </Dialog>
   );

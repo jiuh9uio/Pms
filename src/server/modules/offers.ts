@@ -3,7 +3,7 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { taxBreakdown } from '../../shared/billing.js';
 import { formatMoney, todayBerlin } from '../../shared/hotel.js';
 import {
-  OFFER_LAYOUT_DEFAULT, lineTotal, offerLayoutInput, quantityFor, type OfferLayout, type OfferCreateInputT, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferItemInput, type OfferLineInput, type OfferListRow,
+  OFFER_LAYOUT_DEFAULT, type OfferAnswers, lineTotal, offerLayoutInput, quantityFor, type OfferLayout, type OfferCreateInputT, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferItemInput, type OfferLineInput, type OfferListRow,
   type OfferState, type OfferTemplateDto, type OfferTemplateInput, type OfferUpdateInput, type PublicOffer,
 } from '../../shared/offers.js';
 import type { Db, Exec } from '../db/client.js';
@@ -26,7 +26,9 @@ type Row = typeof offers.$inferSelect;
 const de = (s: string | null) => (s ? `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)}` : '');
 const addDays = (d: string, n: number) => { const t = new Date(`${d}T12:00:00Z`); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
 const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
-const stateOf = (r: { status: Row['status']; validUntil: string | null }): OfferState => (r.status === 'sent' && r.validUntil && r.validUntil < todayBerlin() ? 'expired' : r.status);
+const stateOf = (r: { status: Row['status']; validUntil: string | null; mode?: string; answers?: unknown }): OfferState =>
+  r.mode === 'questions' && r.status === 'sent' ? (r.answers ? 'answered' : 'asked')
+  : r.status === 'sent' && r.validUntil && r.validUntil < todayBerlin() ? 'expired' : r.status;
 
 // ---------- Katalog ----------
 const itemDto = (r: typeof offerItems.$inferSelect): OfferItemDto => ({ id: r.id, name: r.name, description: r.description, unit: r.unit, priceCents: r.priceCents, taxRatePercent: Number(r.taxRatePercent), area: r.area, sort: r.sort, active: r.active, version: r.version });
@@ -130,20 +132,22 @@ const customerOf = (r: { customerCompany: string; customerName: string }) => [r.
 export async function listOffers(db: Exec, f: { state?: string; q?: string }): Promise<OfferListRow[]> {
   const like = f.q ? `%${f.q.replace(/[%_\\]/g, '')}%` : null;
   const today = todayBerlin();
-  const expired = sql`(o.status = 'sent' and o.valid_until is not null and o.valid_until < ${today})`;
+  const expired = sql`(o.status = 'sent' and o.mode = 'offer' and o.valid_until is not null and o.valid_until < ${today})`;
   const byState = !f.state || f.state === 'all' ? sql``
     : f.state === 'open' ? sql`and o.status in ('draft', 'sent')`
     : f.state === 'expired' ? sql`and ${expired}`
-    : f.state === 'sent' ? sql`and o.status = 'sent' and not ${expired}`
+    : f.state === 'sent' ? sql`and o.status = 'sent' and o.mode = 'offer' and not ${expired}`
+    : f.state === 'asked' ? sql`and o.status = 'sent' and o.mode = 'questions' and o.answers is null`
+    : f.state === 'answered' ? sql`and o.status = 'sent' and o.mode = 'questions' and o.answers is not null`
     : f.state === 'draft' || f.state === 'accepted' || f.state === 'declined' ? sql`and o.status = ${f.state}` : sql``;
   const rows = await db.execute(sql`
     select o.*, coalesce((select sum(l.total_cents) from offer_lines l where l.offer_id = o.id), 0)::int as total
     from offers o where true ${like ? sql`and (o.number ilike ${like} or o.customer_name ilike ${like} or o.customer_company ilike ${like} or o.title ilike ${like})` : sql``} ${byState}
     order by o.created_at desc limit 300`) as unknown as Record<string, unknown>[];
   const list = rows.map((x): OfferListRow => {
-    const r = { status: x.status as Row['status'], validUntil: (x.valid_until as string | null) ?? null };
+    const r = { status: x.status as Row['status'], validUntil: (x.valid_until as string | null) ?? null, mode: x.mode as OfferListRow['mode'], answers: x.answers };
     return {
-      id: String(x.id), number: String(x.number), status: r.status, state: stateOf(r), area: x.area as OfferListRow['area'], title: String(x.title), customer: customerOf({ customerCompany: String(x.customer_company), customerName: String(x.customer_name) }),
+      id: String(x.id), number: String(x.number), status: r.status, state: stateOf(r), mode: r.mode, area: x.area as OfferListRow['area'], title: String(x.title), customer: customerOf({ customerCompany: String(x.customer_company), customerName: String(x.customer_name) }),
       email: String(x.email), eventDate: (x.event_date as string | null) ?? null, eventEnd: (x.event_end as string | null) ?? null, persons: Number(x.persons), totalCents: Number(x.total),
       validUntil: r.validUntil, sentAt: x.sent_at ? new Date(x.sent_at as string).toISOString() : null, acceptedAt: x.accepted_at ? new Date(x.accepted_at as string).toISOString() : null,
       bookingId: (x.booking_id as string | null) ?? null, tableReservationId: (x.table_reservation_id as string | null) ?? null, createdAt: new Date(x.created_at as string).toISOString(),
@@ -165,7 +169,7 @@ export async function getOffer(db: Exec, id: string): Promise<OfferDto> {
     templateId: r.templateId, customerCompany: r.customerCompany, customerName: r.customerName, phone: r.phone, street: r.street, zip: r.zip, city: r.city,
     intro: r.intro, closing: r.closing, questions: r.questions as string[], depositPercent: r.depositPercent, documentIds: r.documentIds as string[], notes: r.notes,
     sentTo: r.sentTo, acceptedBy: r.acceptedBy, acceptedMethod: r.acceptedMethod, acceptedHash: r.acceptedHash, sentHash: r.sentHash, declinedAt: r.declinedAt?.toISOString() ?? null,
-    lines, taxes: taxBreakdown(lines), version: r.version,
+    lines, taxes: taxBreakdown(lines), version: r.version, mode: r.mode, answers: (r.answers as OfferAnswers | null) ?? null,
   };
 }
 
@@ -182,7 +186,9 @@ export async function createOffer(db: Db, actor: Actor, v: OfferCreateInputT) {
     const [o] = await tx.insert(offers).values({
       number, area: tpl?.area ?? v.area, templateId: tpl?.id ?? null, customerCompany: v.customerCompany, customerName: v.customerName, email: v.email, phone: v.phone,
       street: v.street, zip: v.zip, city: v.city, eventDate: v.eventDate, eventEnd: v.eventEnd, persons: v.persons,
-      title: tpl?.title ?? '', intro: tpl?.intro ?? '', closing: tpl?.closing ?? '', questions: tpl?.questions ?? [], validUntil: addDays(today, tpl?.validDays ?? 14),
+      title: tpl?.title ?? '', intro: tpl?.intro ?? '', closing: tpl?.closing ?? '', questions: tpl?.questions ?? [], mode: v.mode,
+      // bei „nur Fragen“ gibt es noch keine Gültigkeit – sie wird beim Umwandeln in ein Angebot gesetzt
+      validUntil: v.mode === 'questions' ? null : addDays(today, tpl?.validDays ?? 14),
       depositPercent: tpl?.depositPercent ?? 0, documentIds: tplDocs.filter((d) => activeDocs.includes(d)), createdBy: actor.userName,
     }).returning();
     // Leistungen der Vorlage mit vorgeschlagener Menge (aus Personen, Tagen, Nächten)
@@ -207,11 +213,11 @@ export async function updateOffer(db: Db, actor: Actor, id: string, v: OfferUpda
     const oldLines = await tx.select().from(offerLines).where(eq(offerLines.offerId, id)).orderBy(asc(offerLines.pos));
     // Was der Kunde sieht (PDF, Link-Seite, E-Mail-Adresse) – die interne Notiz gehört nicht dazu
     const seen = (o: Omit<OfferUpdateInput, 'lines' | 'version'>, ls: OfferLineInput[]) => JSON.stringify([
-      o.area, o.customerCompany, o.customerName, o.email, o.phone, o.street, o.zip, o.city, o.eventDate ?? null, o.eventEnd ?? null, o.persons, o.title, o.intro, o.closing,
+      o.mode, o.area, o.customerCompany, o.customerName, o.email, o.phone, o.street, o.zip, o.city, o.eventDate ?? null, o.eventEnd ?? null, o.persons, o.title, o.intro, o.closing,
       o.questions, o.validUntil ?? null, o.depositPercent, [...o.documentIds].sort(),
       ls.map((l) => [l.description, l.detail, l.unit, Number(l.quantity), l.unitPriceCents, Number(l.taxRatePercent)]),
     ]);
-    const before = { area: b.area, customerCompany: b.customerCompany, customerName: b.customerName, email: b.email, phone: b.phone, street: b.street, zip: b.zip, city: b.city,
+    const before = { mode: b.mode, area: b.area, customerCompany: b.customerCompany, customerName: b.customerName, email: b.email, phone: b.phone, street: b.street, zip: b.zip, city: b.city,
       eventDate: b.eventDate, eventEnd: b.eventEnd, persons: b.persons, title: b.title, intro: b.intro, closing: b.closing, questions: b.questions as string[], validUntil: b.validUntil,
       depositPercent: b.depositPercent, documentIds: b.documentIds as string[], notes: b.notes };
     const visibleChange = seen(before, oldLines.map((l) => ({ ...l, unit: l.unit as OfferLineInput["unit"], taxRatePercent: Number(l.taxRatePercent) }))) !== seen(rest, lines);
@@ -281,6 +287,8 @@ async function render(db: Exec, o: OfferDto) {
 }
 /** PDF: versendete/angenommene Fassung unverändert, sonst aktuelle Vorschau */
 export async function offerPdf(db: Exec, id: string) {
+  const [m] = await db.select({ mode: offers.mode }).from(offers).where(eq(offers.id, id));
+  if (m?.mode === 'questions') throw conflict('Bei „Nur Fragen stellen“ gibt es kein PDF – die Fragen gehen als E-Mail mit Link zum Beantworten hinaus.');
   const [r] = await db.select({ pdf: offers.sentPdf, number: offers.number }).from(offers).where(eq(offers.id, id));
   if (!r) throw notFound('Angebot');
   return { fileName: `Angebot_${r.number}.pdf`, pdf: r.pdf ?? await render(db, await getOffer(db, id)) };
@@ -317,11 +325,21 @@ export async function offerLink(db: Exec, id: string, baseUrl: string) {
 export async function mailDraft(db: Exec, id: string, baseUrl: string) {
   const [o, h] = [await getOffer(db, id), await getHotel(db)];
   if (o.status === 'accepted' || o.status === 'declined') throw conflict('Das Angebot ist bereits abgeschlossen.');
+  const when = o.eventDate ? (o.eventEnd && o.eventEnd !== o.eventDate ? ` vom ${de(o.eventDate)} bis ${de(o.eventEnd)}` : ` am ${de(o.eventDate)}`) : '';
+  const hello = o.customerName ? `Guten Tag ${o.customerName},` : 'Guten Tag,';
+  if (o.mode === 'questions') {
+    if (!o.questions.length) throw conflict('Bitte zuerst mindestens eine Frage eintragen.');
+    const link = await offerLink(db, id, baseUrl);
+    const text = [hello, '', `vielen Dank für Ihre Anfrage${o.title ? ` (${o.title})` : ''}${when}. Damit wir Ihnen ein passendes Angebot erstellen können, beantworten Sie uns bitte noch folgende Fragen:`, '',
+      ...o.questions.map((q) => `- ${q}`),
+      ...(link.publicUrl ? ['', `Sie können die Fragen bequem hier beantworten: ${link.url}`, 'Oder antworten Sie einfach auf diese E-Mail.'] : ['', 'Antworten Sie uns einfach auf diese E-Mail.']),
+      ...(o.closing ? ['', o.closing] : []),
+      '', signature(h)].join('\n');
+    return { to: o.email, subject: `Ihre Anfrage${o.title ? ` – ${o.title}` : ''} – ${h.name}`, text, attachment: '', ready: await ready(db) };
+  }
   if (!o.lines.length) throw conflict('Das Angebot hat noch keine Positionen.');
   if (o.validUntil && o.validUntil < todayBerlin()) throw conflict(expiredMsg(o.validUntil));
   const link = await offerLink(db, id, baseUrl);
-  const when = o.eventDate ? (o.eventEnd && o.eventEnd !== o.eventDate ? ` vom ${de(o.eventDate)} bis ${de(o.eventEnd)}` : ` am ${de(o.eventDate)}`) : '';
-  const hello = o.customerName ? `Guten Tag ${o.customerName},` : 'Guten Tag,';
   const docs = o.documentIds.length ? (await db.select({ name: offerDocuments.name }).from(offerDocuments).where(sql`${offerDocuments.id} in ${o.documentIds}`)).map((d) => d.name) : [];
   const text = [hello, '', `vielen Dank für Ihre Anfrage. Anbei erhalten Sie unser Angebot ${o.number}${o.title ? ` (${o.title})` : ''}${when} für ${o.persons} ${o.persons === 1 ? 'Person' : 'Personen'}.`, '',
     `Gesamtbetrag: ${formatMoney(o.totalCents)} (inkl. Umsatzsteuer)`, ...(o.validUntil ? [`Das Angebot gilt bis zum ${de(o.validUntil)}.`] : []),
@@ -336,6 +354,16 @@ const expiredMsg = (d: string) => `Das Angebot war nur bis zum ${de(d)} gültig.
 export async function sendOffer(db: Db, actor: Actor, id: string, v: { to: string; subject: string; text: string }) {
   const o = await getOffer(db, id);
   if (o.status === 'accepted' || o.status === 'declined') throw conflict('Das Angebot ist bereits abgeschlossen.');
+  if (o.mode === 'questions') {
+    // nur Fragen: E-Mail ohne PDF; der Link führt zum Beantworten
+    if (!o.questions.length) throw conflict('Bitte zuerst mindestens eine Frage eintragen.');
+    await sendMail(db, actor, { to: v.to, subject: v.subject, text: v.text });
+    const done = await db.update(offers).set({ status: 'sent', sentAt: new Date(), sentTo: v.to, updatedAt: new Date(), version: o.version + 1 })
+      .where(and(eq(offers.id, id), eq(offers.version, o.version), sql`${offers.status} in ('draft', 'sent')`)).returning({ id: offers.id });
+    await record(db, actor, { action: 'send_questions', entity: 'offer', entityId: id, after: { to: v.to, number: o.number, questions: o.questions.length, applied: done.length > 0 } });
+    if (!done.length) throw conflict('Die E-Mail wurde gesendet, aber der Vorgang wurde währenddessen geändert. Bitte den aktuellen Stand prüfen.');
+    return { ok: true };
+  }
   if (!o.lines.length) throw conflict('Das Angebot hat noch keine Positionen.');
   if (o.validUntil && o.validUntil < todayBerlin()) throw conflict(expiredMsg(o.validUntil));
   // erneuter Versand ohne Änderung: dieselbe Fassung; sonst neu erzeugen
@@ -360,9 +388,11 @@ export async function acceptOffer(db: Db, actor: Actor, id: string, v: { method:
     const [b] = await tx.select().from(offers).where(eq(offers.id, id)).for('update');
     if (!b) throw notFound('Angebot');
     if (b.status === 'accepted' || b.status === 'declined') throw conflict('Das Angebot ist bereits abgeschlossen.');
+    // annehmen kann der Kunde erst, was er bekommen hat – ein Entwurf oder reine Fragen lassen sich nicht annehmen
+    if (b.mode === 'questions') throw conflict('Das sind erst Fragen an den Kunden – bitte zuerst daraus ein Angebot erstellen und senden.');
+    if (b.status !== 'sent') throw conflict('Das Angebot ist noch ein Entwurf – bitte zuerst an den Kunden senden.');
     const [line] = await tx.select({ id: offerLines.id }).from(offerLines).where(eq(offerLines.offerId, id)).limit(1);
     if (!line) throw conflict('Das Angebot hat noch keine Positionen.');
-    // Annahme ohne Versand (z. B. am Telefon besprochen): die aktuelle Fassung wird festgehalten
     let pdf = b.sentPdf;
     if (!pdf) pdf = await render(tx, await getOffer(tx, id));
     await tx.update(offers).set({ status: 'accepted', acceptedAt: new Date(), acceptedBy: v.name, acceptedMethod: v.method, acceptedHash: sha(pdf), sentPdf: pdf, sentHash: sha(pdf),
@@ -373,8 +403,8 @@ export async function acceptOffer(db: Db, actor: Actor, id: string, v: { method:
 }
 export async function declineOffer(db: Db, actor: Actor, id: string) {
   const [r] = await db.update(offers).set({ status: 'declined', declinedAt: new Date(), updatedAt: new Date(), version: sql`${offers.version} + 1` })
-    .where(and(eq(offers.id, id), sql`${offers.status} in ('draft', 'sent')`)).returning({ number: offers.number });
-  if (!r) throw conflict('Das Angebot ist bereits abgeschlossen.');
+    .where(and(eq(offers.id, id), sql`${offers.status} = 'sent'`)).returning({ number: offers.number });
+  if (!r) throw conflict('Ablehnen geht erst, wenn das Angebot versendet ist (und noch nicht abgeschlossen).');
   await record(db, actor, { action: 'decline', entity: 'offer', entityId: id, after: { number: r.number } });
   return { ok: true };
 }
@@ -387,13 +417,32 @@ export async function linkReservation(db: Db, actor: Actor, id: string, v: { boo
   return { ok: true };
 }
 
+/**
+ * Aus „nur Fragen“ ein Angebot mit Leistungen machen: derselbe Vorgang wird wieder Entwurf (Antworten bleiben sichtbar),
+ * bekommt eine Gültigkeit und einen neuen Link; der bisherige Frage-Link gilt nicht mehr.
+ */
+export async function toOffer(db: Db, actor: Actor, id: string) {
+  return db.transaction(async (tx) => {
+    const [b] = await tx.select().from(offers).where(eq(offers.id, id)).for('update');
+    if (!b) throw notFound('Angebot');
+    if (b.mode !== 'questions') throw conflict('Das ist bereits ein Angebot mit Leistungen.');
+    if (b.status === 'accepted' || b.status === 'declined') throw conflict('Der Vorgang ist bereits abgeschlossen.');
+    const tpl = b.templateId ? (await tx.select({ d: offerTemplates.validDays }).from(offerTemplates).where(eq(offerTemplates.id, b.templateId)))[0] : undefined;
+    const validUntil = b.validUntil && b.validUntil >= todayBerlin() ? b.validUntil : addDays(todayBerlin(), tpl?.d ?? 14);
+    await tx.update(offers).set({ mode: 'offer', status: 'draft', validUntil, sentPdf: null, sentHash: '', linkVersion: b.linkVersion + 1, version: b.version + 1, updatedAt: new Date() }).where(eq(offers.id, id));
+    await record(tx, actor, { action: 'to_offer', entity: 'offer', entityId: id, after: { number: b.number } });
+    return { ok: true };
+  });
+}
+
 // ---------- Öffentliche Seite (über den Link) ----------
 export async function publicOffer(db: Exec, token: string): Promise<PublicOffer> {
   const o = await getOffer(db, await idOfToken(db, token));
   const h = await getHotel(db);
   const docs = o.documentIds.length ? (await db.select({ id: offerDocuments.id, name: offerDocuments.name }).from(offerDocuments).where(sql`${offerDocuments.id} in ${o.documentIds}`)) : [];
   return { hotelName: h.name, hotelPhone: h.phone, number: o.number, title: o.title, customer: o.customer, eventDate: o.eventDate, eventEnd: o.eventEnd, persons: o.persons,
-    totalCents: o.totalCents, validUntil: o.validUntil, state: o.state, documents: docs, acceptedAt: o.acceptedAt, acceptedBy: o.acceptedBy, questions: o.questions };
+    totalCents: o.mode === 'questions' ? 0 : o.totalCents, validUntil: o.validUntil, state: o.state, documents: o.mode === 'questions' ? [] : docs, acceptedAt: o.acceptedAt, acceptedBy: o.acceptedBy, questions: o.questions,
+    mode: o.mode, answers: o.answers };
 }
 export async function publicPdf(db: Exec, token: string) { return offerPdf(db, await idOfToken(db, token)); }
 export async function publicDocument(db: Exec, token: string, docId: string) {
@@ -408,6 +457,7 @@ export async function publicAccept(db: Db, token: string, v: { name: string }, i
     const [b] = await tx.select().from(offers).where(eq(offers.id, id)).for('update');
     // inzwischen geändert (neue Fassung, neuer Link) → dieser Link gilt nicht mehr
     if (!b || b.linkVersion !== linkVersion) throw GONE();
+    if (b.mode === 'questions') throw conflict('Hier gibt es noch nichts anzunehmen – bitte beantworten Sie zuerst die Fragen.');
     if (b.status === 'accepted') throw conflict('Dieses Angebot wurde bereits angenommen. Vielen Dank!');
     if (b.status !== 'sent' || !b.sentPdf) throw conflict('Dieses Angebot kann nicht mehr online angenommen werden. Bitte wenden Sie sich an uns.');
     if (b.validUntil && b.validUntil < todayBerlin()) throw conflict(`Dieses Angebot war bis zum ${de(b.validUntil)} gültig. Bitte sprechen Sie uns an – wir erstellen Ihnen gern ein neues.`);
@@ -415,6 +465,24 @@ export async function publicAccept(db: Db, token: string, v: { name: string }, i
     await tx.update(offers).set({ status: 'accepted', acceptedAt: new Date(), acceptedBy: v.name, acceptedMethod: 'online', acceptedIp: ip, acceptedHash: b.sentHash, version: b.version + 1, updatedAt: new Date() }).where(eq(offers.id, id));
     await record(tx, actor, { action: 'accept', entity: 'offer', entityId: id, after: { number: b.number, method: 'online', name: v.name, hash: b.sentHash } });
     await tx.insert(teamNotes).values({ kind: 'task', text: `Angebot ${b.number} wurde online angenommen von ${v.name}${b.title ? ` (${b.title})` : ''} – Reservierung anlegen und ggf. Anzahlung anfordern`, place: '', createdBy: 'Kunde (Angebots-Link)', createdById: null });
+    return { ok: true };
+  });
+}
+
+/** Fragen online beantworten (nur bei „nur Fragen stellen“, einmal). Die Antworten erscheinen im Vorgang und als Aufgabe im Übergabebuch. */
+export async function publicAnswer(db: Db, token: string, v: { name: string; answers: string[] }, ip: string | null) {
+  const { id, v: linkVersion } = await idAndVersionOfToken(db, token);
+  return db.transaction(async (tx) => {
+    const [b] = await tx.select().from(offers).where(eq(offers.id, id)).for('update');
+    if (!b || b.linkVersion !== linkVersion) throw GONE();
+    if (b.mode !== 'questions' || b.status !== 'sent') throw conflict('Diese Fragen können hier nicht mehr beantwortet werden. Bitte wenden Sie sich an uns.');
+    if (b.answers) throw conflict('Ihre Antworten sind bereits bei uns eingegangen. Vielen Dank!');
+    const qs = b.questions as string[];
+    const answers: OfferAnswers = { at: new Date().toISOString(), name: v.name, items: qs.map((q, i) => ({ q, a: (v.answers[i] ?? '').slice(0, 1000) })) };
+    await tx.update(offers).set({ answers, version: b.version + 1, updatedAt: new Date() }).where(eq(offers.id, id));
+    const actor: Actor = { userId: null, userName: `Kunde online (${v.name})`, ip };
+    await record(tx, actor, { action: 'answer', entity: 'offer', entityId: id, after: { number: b.number, answered: answers.items.filter((x) => x.a).length } });
+    await tx.insert(teamNotes).values({ kind: 'task', text: `Antworten zu ${b.number} eingegangen von ${v.name}${b.title ? ` (${b.title})` : ''} – jetzt Angebot erstellen (Angebote → ${b.number} → „Angebot erstellen“)`, place: '', createdBy: 'Kunde (Angebots-Link)', createdById: null });
     return { ok: true };
   });
 }

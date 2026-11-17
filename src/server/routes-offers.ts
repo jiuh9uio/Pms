@@ -60,6 +60,7 @@ export function registerOfferRoutes(api: FastifyInstance, { db, requireUser, req
   api.get('/offers/:id/link', user, (req) => offers.offerLink(db, idOf(req), guestBaseUrl(req).url));
   api.post('/offers/:id/accept', user, (req) => offers.acceptOffer(db, actor(req), idOf(req), O.offerAcceptInput.parse(req.body)));
   api.post('/offers/:id/decline', user, (req) => offers.declineOffer(db, actor(req), idOf(req)));
+  api.post('/offers/:id/to-offer', user, (req) => offers.toOffer(db, actor(req), idOf(req)));
   api.post('/offers/:id/link-reservation', user, (req) => offers.linkReservation(db, actor(req), idOf(req), z.object({ bookingId: z.uuid().nullable().optional(), tableReservationId: z.uuid().nullable().optional() }).parse(req.body)));
   // Anzahlung zum angenommenen Angebot (Eingang von Hand vermerken)
   api.get('/offers/:id/deposits', user, (req) => deposits.listFor(db, 'offer', idOf(req)));
@@ -80,5 +81,6 @@ export function registerOfferRoutes(api: FastifyInstance, { db, requireUser, req
     const f = await offers.publicDocument(db, tokenOf(req), docId);
     return reply.header('Content-Type', 'application/pdf').header('Content-Disposition', `inline; filename="${f.fileName.replace(/"/g, '')}"`).send(f.data);
   });
+  api.post('/public/offer/:token/answer', { ...pub, bodyLimit: 48 * 1024 }, (req) => offers.publicAnswer(db, tokenOf(req), O.publicAnswersInput.parse(req.body), req.ip ?? null));
   api.post('/public/offer/:token/accept', { ...pub, bodyLimit: 2048 }, (req) => offers.publicAccept(db, tokenOf(req), O.publicOfferAcceptInput.parse(req.body), req.ip ?? null));
 }

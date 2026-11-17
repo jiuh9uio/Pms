@@ -10,9 +10,16 @@ export const OFFER_AREAS = ['hotel', 'restaurant', 'both'] as const;
 export type OfferArea = (typeof OFFER_AREAS)[number];
 export const AREA_LABEL: Record<OfferArea, string> = { hotel: 'Hotel', restaurant: 'Restaurant', both: 'Hotel & Restaurant' };
 export type OfferStatus = 'draft' | 'sent' | 'accepted' | 'declined';
-/** „abgelaufen“ ist kein gespeicherter Status: versendet und Gültigkeit überschritten */
-export type OfferState = OfferStatus | 'expired';
-export const OFFER_STATE_LABEL: Record<OfferState, string> = { draft: 'Entwurf', sent: 'versendet', accepted: 'angenommen', declined: 'abgelehnt', expired: 'abgelaufen' };
+export type OfferMode = 'offer' | 'questions';
+export const MODE_LABEL: Record<OfferMode, string> = { questions: 'Nur Fragen stellen', offer: 'Angebot mit Leistungen' };
+/** berechnete Zustände: „abgelaufen“ (versendet, Gültigkeit überschritten); bei „nur Fragen“: „Fragen gesendet“ / „beantwortet“ */
+export type OfferState = OfferStatus | 'expired' | 'asked' | 'answered';
+export const OFFER_STATE_LABEL: Record<OfferState, string> = { draft: 'Entwurf', sent: 'versendet', accepted: 'angenommen', declined: 'abgelehnt', expired: 'abgelaufen', asked: 'Fragen gesendet', answered: 'beantwortet' };
+export interface OfferAnswers { at: string; name: string; items: { q: string; a: string }[] }
+export const publicAnswersInput = z.object({
+  name: z.string().trim().min(2, 'Bitte Ihren Namen eintragen').max(120),
+  answers: z.array(z.string().trim().max(1000)).max(40),
+}).refine((v) => v.answers.some((a) => a.length > 0), { message: 'Bitte mindestens eine Frage beantworten', path: ['answers'] });
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Bitte ein Datum wählen');
 const text = (max: number) => z.string().trim().max(max).default('');
@@ -51,13 +58,13 @@ const customer = {
   phone: text(60), street: text(160), zip: text(12), city: text(80),
 };
 export const offerCreateInput = z.object({
-  templateId: z.uuid().nullable().default(null), area: z.enum(OFFER_AREAS).default('both'), ...customer,
+  templateId: z.uuid().nullable().default(null), area: z.enum(OFFER_AREAS).default('both'), mode: z.enum(['offer', 'questions']).default('offer'), ...customer,
   eventDate: isoDate.nullable().default(null), eventEnd: isoDate.nullable().default(null), persons: z.number('Bitte eine Zahl eingeben').int().min(1).max(5000),
 }).refine((v) => !!(v.customerName || v.customerCompany), { message: 'Bitte einen Namen oder eine Firma eintragen', path: ['customerName'] })
   .refine((v) => !v.eventEnd || !v.eventDate || v.eventEnd >= v.eventDate, { message: 'Das Ende liegt vor dem Beginn', path: ['eventEnd'] });
 export type OfferCreateInputT = z.infer<typeof offerCreateInput>;
 export const offerUpdateInput = z.object({
-  area: z.enum(OFFER_AREAS), ...customer,
+  area: z.enum(OFFER_AREAS), mode: z.enum(['offer', 'questions']).default('offer'), ...customer,
   eventDate: isoDate.nullable(), eventEnd: isoDate.nullable(), persons: z.number('Bitte eine Zahl eingeben').int().min(1).max(5000),
   title: text(160), intro: text(3000), closing: text(3000), questions: z.array(z.string().trim().min(1).max(200)).max(40),
   validUntil: isoDate.nullable(), depositPercent: z.number().int().min(0).max(100), documentIds: z.array(z.uuid()).max(10), notes: text(2000),
@@ -71,7 +78,7 @@ export const publicOfferAcceptInput = z.object({ name: z.string().trim().min(2, 
 
 export interface OfferLineDto extends OfferLineInput { id: string; pos: number; totalCents: number }
 export interface OfferListRow {
-  id: string; number: string; status: OfferStatus; state: OfferState; area: OfferArea; title: string; customer: string; email: string;
+  id: string; number: string; status: OfferStatus; state: OfferState; mode: OfferMode; area: OfferArea; title: string; customer: string; email: string;
   eventDate: string | null; eventEnd: string | null; persons: number; totalCents: number; validUntil: string | null; sentAt: string | null; acceptedAt: string | null;
   bookingId: string | null; tableReservationId: string | null; createdAt: string;
 }
@@ -80,11 +87,13 @@ export interface OfferDto extends OfferListRow {
   intro: string; closing: string; questions: string[]; depositPercent: number; documentIds: string[]; notes: string;
   sentTo: string; acceptedBy: string; acceptedMethod: string; acceptedHash: string; sentHash: string; declinedAt: string | null;
   lines: OfferLineDto[]; taxes: { rate: number; netCents: number; taxCents: number }[]; version: number;
+  answers: OfferAnswers | null;
 }
 /** Öffentliche Ansicht über den Link (ohne interne Notizen) */
 export interface PublicOffer {
   hotelName: string; hotelPhone: string; number: string; title: string; customer: string; eventDate: string | null; eventEnd: string | null; persons: number;
   totalCents: number; validUntil: string | null; state: OfferState; documents: { id: string; name: string }[]; acceptedAt: string | null; acceptedBy: string; questions: string[];
+  mode: OfferMode; answers: OfferAnswers | null;
 }
 
 /** Tage und Nächte aus Beginn/Ende (ohne Ende: 1 Tag, 1 Nacht) */

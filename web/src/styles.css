@@ -985,3 +985,13 @@ a.linkcard.attention b { color: var(--warn); }
 .doclogo { float: right; max-height: 54px; max-width: 200px; margin: 0 0 6px 16px; object-fit: contain; }
 .guestlogo { display: block; max-height: 64px; max-width: 220px; margin: 0 0 12px; object-fit: contain; }
 .onlyprint { display: none; } @media print { .onlyprint { display: block; } }
+
+/* Angebote: Art wählen (nur Fragen / Angebot), Antworten des Kunden */
+.modepick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.modepick button { text-align: left; padding: 12px 14px; border: 1.5px solid var(--line-strong); border-radius: 12px; background: var(--surface); color: var(--ink); cursor: pointer; display: grid; gap: 4px; transition: border-color .15s, background .15s, box-shadow .2s; }
+.modepick button small { color: var(--ink-2); font-weight: 400; line-height: 1.35; }
+.modepick button.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.modeswitch { margin-bottom: 10px; }
+.answers dl { margin: 0; display: grid; gap: 10px; } .answers dt { font-weight: 600; } .answers dd { margin: 2px 0 0; white-space: pre-wrap; }
+@media (max-width: 640px) { .modepick { grid-template-columns: 1fr; } }
+.guestform .answers { margin: 12px 0 0; display: grid; gap: 10px; } .guestform .answers dt { font-weight: 600; } .guestform .answers dd { margin: 2px 0 0; white-space: pre-wrap; }

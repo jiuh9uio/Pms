@@ -129,11 +129,16 @@ describe('Angebote', () => {
     await ok('PUT', `/offers/${o2.id}`, user, { area: e2.area, customerCompany: '', customerName: 'Max Telefon', email: '', phone: '', street: '', zip: '', city: '', eventDate: null, eventEnd: null, persons: 8,
       title: '', intro: '', closing: '', questions: [], validUntil: e2.validUntil, depositPercent: 0, documentIds: [], notes: '', version: e2.version,
       lines: [{ itemId: null, description: 'Raummiete', detail: '', unit: 'flat', quantity: 1, unitPriceCents: 20000, taxRatePercent: 19 }] });
+    // im Entwurf gibt es noch nichts anzunehmen
+    expect((await call('POST', `/offers/${o2.id}/accept`, user, { method: 'telefon', name: 'Max Telefon', note: '' })).statusCode).toBe(409);
+    await db.execute(sql`update offers set status = 'sent', sent_at = now() where id = ${o2.id}`);
     await ok('POST', `/offers/${o2.id}/accept`, user, { method: 'telefon', name: 'Max Telefon', note: 'am Telefon zugesagt' });
     const d2 = await ok('GET', `/offers/${o2.id}`, user);
     expect(d2).toMatchObject({ status: 'accepted', acceptedMethod: 'telefon' });
     expect(d2.acceptedHash).toMatch(/^[0-9a-f]{64}$/);
     const o3 = await ok('POST', '/offers', user, { templateId: null, customerName: 'Nein Danke', persons: 2 });
+    expect((await call('POST', `/offers/${o3.id}/decline`, user)).statusCode).toBe(409); // Entwurf
+    await db.execute(sql`update offers set status = 'sent', sent_at = now() where id = ${o3.id}`);
     await ok('POST', `/offers/${o3.id}/decline`, user);
     expect((await call('POST', `/offers/${o3.id}/decline`, user)).statusCode).toBe(409);
     expect((await ok('GET', '/offers?state=declined', user)).map((x: { id: string }) => x.id)).toEqual([o3.id]);
@@ -198,5 +203,46 @@ describe('Angebote – Korrekturen aus der Prüfung', () => {
     const offerDep = dep!.value.find((x) => x.kind === 'offer')!;
     expect((await call('POST', `/restaurant/deposits/${offerDep.id}/cancel`, admin, {})).statusCode).toBe(404);
     expect((await call('POST', `/deposits/${offerDep.id}/cancel`, admin, {})).statusCode).toBe(404);
+  });
+});
+
+describe('Angebote: erst nur Fragen stellen', () => {
+  it('Fragen senden (ohne PDF), online beantworten, dann daraus ein Angebot machen', async () => {
+    const o = await ok('POST', '/offers', user, { templateId: null, mode: 'questions', customerName: 'Frage Kunde', email: 'frage@example.org', persons: 30 });
+    let d = await ok('GET', `/offers/${o.id}`, user);
+    expect(d).toMatchObject({ mode: 'questions', validUntil: null, state: 'draft' });
+    // ohne Fragen kein Versand; kein PDF; keine Annahme
+    expect((await call('GET', `/offers/${o.id}/mail`, user)).statusCode).toBe(409);
+    expect((await call('GET', `/offers/${o.id}/pdf`, user)).statusCode).toBe(409);
+    await ok('PUT', `/offers/${o.id}`, user, { area: d.area, mode: 'questions', customerCompany: '', customerName: 'Frage Kunde', email: 'frage@example.org', phone: '', street: '', zip: '', city: '',
+      eventDate: null, eventEnd: null, persons: 30, title: 'Sommerfest', intro: '', closing: '', questions: ['Wie viele Kinder?', 'Buffet oder Menü?'], validUntil: null, depositPercent: 0, documentIds: [], notes: '', lines: [], version: d.version });
+    const m = await ok('GET', `/offers/${o.id}/mail`, user);
+    expect(m.text).toMatch(/Wie viele Kinder\?/);
+    expect(m.attachment).toBe('');
+    // Versand nachbilden
+    await db.execute(sql`update offers set status = 'sent', sent_at = now() where id = ${o.id}`);
+    d = await ok('GET', `/offers/${o.id}`, user);
+    expect(d.state).toBe('asked');
+    expect((await call('POST', `/offers/${o.id}/accept`, user, { method: 'telefon', name: 'X', note: '' })).statusCode).toBe(409);
+    const token = new URL((await ok('GET', `/offers/${o.id}/link`, user)).url).pathname.split('/')[2]!;
+    const pub = await ok('GET', `/public/offer/${token}`, {});
+    expect(pub).toMatchObject({ mode: 'questions', questions: ['Wie viele Kinder?', 'Buffet oder Menü?'], totalCents: 0, documents: [] });
+    expect((await call('POST', `/public/offer/${token}/accept`, {}, { name: 'Frage Kunde', agree: true })).statusCode).toBe(409);
+    expect((await call('POST', `/public/offer/${token}/answer`, {}, { name: 'Frage Kunde', answers: ['', ''] })).statusCode).toBe(400);
+    await ok('POST', `/public/offer/${token}/answer`, {}, { name: 'Frage Kunde', answers: ['5 Kinder', 'Buffet'] });
+    expect((await call('POST', `/public/offer/${token}/answer`, {}, { name: 'Frage Kunde', answers: ['x', 'y'] })).statusCode).toBe(409); // nur einmal
+    d = await ok('GET', `/offers/${o.id}`, user);
+    expect(d.state).toBe('answered');
+    expect(d.answers.items).toEqual([{ q: 'Wie viele Kinder?', a: '5 Kinder' }, { q: 'Buffet oder Menü?', a: 'Buffet' }]);
+    const [n] = await db.execute(sql`select text from team_notes order by created_at desc limit 1`);
+    expect(String(n!.text)).toMatch(/Antworten zu .* eingegangen/);
+    expect((await ok('GET', '/offers?state=answered', user)).map((x: { id: string }) => x.id)).toContain(o.id);
+    // daraus ein Angebot machen: Entwurf mit Gültigkeit, Antworten bleiben, alter Link gilt nicht mehr
+    await ok('POST', `/offers/${o.id}/to-offer`, user);
+    d = await ok('GET', `/offers/${o.id}`, user);
+    expect(d).toMatchObject({ mode: 'offer', status: 'draft' });
+    expect(d.validUntil).toBeTruthy();
+    expect(d.answers.items).toHaveLength(2);
+    expect((await call('GET', `/public/offer/${token}`, {})).statusCode).toBe(404);
   });
 });

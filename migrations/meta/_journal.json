@@ -274,6 +274,13 @@
       "when": 1794884743731,
       "tag": "0038_sollbereich_je_messwert",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1794941798409,
+      "tag": "0039_angebot_fragen",
+      "breakpoints": true
     }
   ]
 }

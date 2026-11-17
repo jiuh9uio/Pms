@@ -761,6 +761,10 @@ export const offers = pgTable('offers', {
   id: id(),
   number: text('number').notNull().unique(),
   status: text('status', { enum: ['draft', 'sent', 'accepted', 'declined'] }).notNull().default('draft'),
+  /** 'questions' = erst nur Fragen an den Kunden (ohne Leistungen und Preise); 'offer' = Angebot mit Leistungen */
+  mode: text('mode', { enum: ['offer', 'questions'] }).notNull().default('offer'),
+  /** Antworten des Kunden auf den Fragenkatalog (online über den Link): { at, name, items: [{ q, a }] } */
+  answers: jsonb('answers'),
   area: text('area', { enum: ['hotel', 'restaurant', 'both'] }).notNull().default('both'),
   templateId: uuid('template_id').references(() => offerTemplates.id, { onDelete: 'set null' }),
   customerCompany: text('customer_company').notNull().default(''),
