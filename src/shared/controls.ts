@@ -18,6 +18,8 @@ export const hygienePointInput = z.object({
 }).refine((v) => v.minC == null || v.maxC == null || v.minC <= v.maxC, { message: 'Höchstwert liegt unter dem Mindestwert', path: ['maxC'] });
 export const hygieneReadingsInput = z.object({
   entries: z.array(z.object({ pointId: z.uuid(), date: isoDate, valueC: temp, note: text(300) })).min(1, 'Bitte mindestens einen Wert eintragen').max(200),
+  /** Abfrage beim Start: vorhandene Werte (z. B. von einer Kollegin inzwischen eingetragen) nicht überschreiben */
+  onlyNew: z.boolean().default(false),
 });
 
 /** Liegt der Wert außerhalb des Sollbereichs der Messstelle? */

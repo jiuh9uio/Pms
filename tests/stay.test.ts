@@ -106,5 +106,19 @@ describe('Stammgast-Hinweis in der Reservierung', () => {
     expect(second.earlierStays).toEqual({ count: 1, last: '2025-03-10' });
     // die erste Reservierung zählt sich selbst nicht
     expect((await ok('GET', `/bookings/${bookingId}`, user)).earlierStays.count).toBe(0);
+    // spätere Aufenthalte zählen nicht als „früher“
+    await db.execute(sql`update booking_rooms set status = 'checked_out', checked_out_at = now() + interval '40 days' where booking_id = ${again.id}`);
+    await db.execute(sql`update booking_rooms set status = 'confirmed', checked_out_at = null where booking_id = ${bookingId}`);
+    expect((await ok('GET', `/bookings/${bookingId}`, user)).earlierStays.count).toBe(0);
+  });
+
+  it('zurück zur Anfrage: Optionsfrist wird neu gesetzt (höchstens bis zur Anreise)', async () => {
+    const b = await ok('GET', `/bookings/${bookingId}`, user);
+    expect(b.optionUntil).toBeNull();
+    const r = b.rooms[0];
+    await ok('POST', `/booking-rooms/${r.id}/status`, user, { status: 'tentative', version: r.version });
+    const after = await ok('GET', `/bookings/${bookingId}`, user);
+    // Anreise ist heute → Option bis heute
+    expect(after.optionUntil).toBe(today);
   });
 });

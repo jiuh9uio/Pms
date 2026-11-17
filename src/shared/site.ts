@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+/** echtes Kalenderdatum (kein 30.02.) */
+const realDay = (s: string) => { const t = Date.parse(`${s}T00:00:00Z`); return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === s; };
+
 /**
  * Gästeseite: öffentliche Seite des Hauses – Startbild, Restaurant, Hotel mit Zimmern und Verfügbarkeit, Speisekarte,
  * Feiern, Gutscheine, Reservierung, Kontakt, häufige Fragen. Alle Texte und Bilder pflegt der Administrator.
@@ -122,7 +125,7 @@ export interface SitePublic {
 }
 export interface SiteAvailability { nights: number; categories: { id: string; available: boolean; totalCents: number | null }[] }
 export const siteAvailabilityQuery = z.object({
-  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(realDay), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(realDay),
   adults: z.coerce.number().int().min(1).max(20), children: z.coerce.number().int().min(0).max(20).default(0),
 });
 export const categoryPhotoInput = z.object({ mime: z.enum(['image/png', 'image/jpeg']), dataBase64: z.string().max(1_400_000) });
@@ -132,8 +135,8 @@ export const parseHours = (s: string) => s.split('\n').map((l) => l.trim()).filt
 /** Frage in der ersten Zeile, Antwort in den folgenden; Leerzeile trennt */
 export const parseFaq = (s: string) => s.replace(/\r/g, '').split(/\n\s*\n/).map((b) => b.trim()).filter(Boolean).slice(0, 20).map((b) => { const [q, ...a] = b.split('\n'); return { q: q!.trim(), a: a.join(' ').trim() }; }).filter((x) => x.q && x.a);
 
-const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Bitte ein Datum wählen');
-const opt = z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/).default('');
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Bitte ein Datum wählen').refine(realDay, 'Dieses Datum gibt es nicht');
+const opt = z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/).refine((s) => !s || realDay(s), 'Dieses Datum gibt es nicht').default('');
 const num = (min: number, max: number, msg: string) => z.coerce.number(msg).int(msg).min(min, msg).max(max, msg);
 const base = {
   name: z.string().trim().min(2, 'Bitte Ihren Namen eintragen').max(120),

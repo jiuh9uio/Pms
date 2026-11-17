@@ -7,6 +7,7 @@ import { extract, type MailExtract, type MailKind } from '../../shared/mailextra
 import type { Db, Exec } from '../db/client.js';
 import { REQUEST_LABEL, siteFrom, type SiteRequest } from '../../shared/site.js';
 import { inboxMails, restaurantTables, settings, tableReservations } from '../db/schema.js';
+import { clientKey } from '../lib/clientkey.js';
 import { AppError, conflict, notFound } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 import { bookingMailDraft, ready as mailReady, signature } from './hotelmail.js';
@@ -120,7 +121,9 @@ export const imapFetch: Fetcher = async (c, known) => {
       const uidValidity = String(box.uidValidity ?? '');
       const cont = known.uidValidity === uidValidity && known.lastUid > 0;
       const found = await client.search(cont ? { uid: `${known.lastUid + 1}:*` } : { since: new Date(Date.now() - FIRST_DAYS * 86_400_000) }, { uid: true });
-      const uids = (found || []).filter((u) => !cont || u > known.lastUid).sort((a, b) => a - b).slice(-MAX_PER_FETCH);
+      const sorted = (found || []).filter((u) => !cont || u > known.lastUid).sort((a, b) => a - b);
+      // beim Weiterlesen die ältesten zuerst (der Rest kommt beim nächsten Abruf) – sonst würden ältere übersprungen; beim ersten Abruf die neuesten
+      const uids = cont ? sorted.slice(0, MAX_PER_FETCH) : sorted.slice(-MAX_PER_FETCH);
       const mails: RawMail[] = [];
       if (uids.length) {
         for await (const m of client.fetch(uids.join(','), { uid: true, internalDate: true, source: { maxLength: 2_000_000 } }, { uid: true }))
@@ -153,8 +156,10 @@ export async function fetchInbox(db: Db, actor: Actor | null): Promise<{ added: 
   if (!ready(s)) throw conflict('Der E-Mail-Empfang ist noch nicht eingerichtet (Verwaltung → Einstellungen → E-Mail)', 'inbox_not_configured');
   if (running) throw conflict('Der Abruf läuft bereits', 'inbox_running');
   running = true;
-  const st = await read(db, 'inbox_state', STATE0);
+  // Zustand innerhalb von try lesen: ein Datenbankfehler hier darf den Abruf nicht dauerhaft als „läuft“ blockieren
+  let st: State | null = null;
   try {
+    st = await read(db, 'inbox_state', STATE0);
     const rules = await getMailRules(db);
     const got = await fetcher({ host: s.host, port: s.port, user: s.user, pass: decrypt(s.passEnc), folder: s.folder }, { uidValidity: st.uidValidity, lastUid: st.lastUid });
     let added = 0, lastUid = got.uidValidity === st.uidValidity ? st.lastUid : 0;
@@ -180,7 +185,7 @@ export async function fetchInbox(db: Db, actor: Actor | null): Promise<{ added: 
   } catch (e) {
     if (e instanceof AppError) throw e;
     const reason = explain(e);
-    await write(db, 'inbox_state', { ...st, lastFetchAt: new Date().toISOString(), lastError: reason.slice(0, 500) });
+    if (st) await write(db, 'inbox_state', { ...st, lastFetchAt: new Date().toISOString(), lastError: reason.slice(0, 500) });
     throw new AppError(502, 'inbox_failed', `Abruf fehlgeschlagen: ${reason}`);
   } finally { running = false; }
 }
@@ -313,10 +318,12 @@ const LOCAL_IP = /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|::ffff:
 function ipLimit(ip: string | null) {
   // Geräte im Hausnetz (und der Rechner selbst) zählen nicht – die Grenze gilt Anfragen aus dem Internet
   if (!ip || LOCAL_IP.test(ip)) return;
-  const now = Date.now(), list = (perIp.get(ip) ?? []).filter((t) => t > now - 24 * 3600_000);
+  const key = clientKey(ip); // IPv6 je /64-Netz
+  const now = Date.now(), list = (perIp.get(key) ?? []).filter((t) => t > now - 24 * 3600_000);
   if (list.length >= WEB_PER_IP) throw new AppError(429, 'too_many', 'Von Ihrem Anschluss sind heute schon mehrere Anfragen eingegangen. Bitte rufen Sie uns an oder schreiben Sie uns eine E-Mail.');
-  if (perIp.size > 5000) perIp.clear();
-  perIp.set(ip, [...list, now]);
+  // bei vielen Einträgen nur abgelaufene entfernen – nicht alle Zähler zurücksetzen
+  if (perIp.size > 5000) for (const [k, v] of perIp) if (!v.some((t) => t > now - 24 * 3600_000)) perIp.delete(k);
+  perIp.set(key, [...list, now]);
 }
 const WEB0: WebRequestSettings = { enabled: false, intro: '', privacy: '' };
 export const getWebRequest = (db: Exec) => read(db, 'web_request', WEB0);

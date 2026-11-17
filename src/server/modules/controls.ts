@@ -215,7 +215,7 @@ export async function confirmArea(db: Db, actor: Actor, areaId: string) {
  * Messwerte eintragen. Regeln: kein Datum in der Zukunft; liegt ein Wert außerhalb des Sollbereichs, muss die
  * ergriffene Maßnahme vermerkt sein. Wer wann eingetragen hat, wird gespeichert; Korrekturen stehen im Protokoll.
  */
-export async function saveReadings(db: Db, actor: Actor, entries: { pointId: string; date: string; valueC: number; note: string }[]) {
+export async function saveReadings(db: Db, actor: Actor, entries: { pointId: string; date: string; valueC: number; note: string }[], onlyNew = false) {
   const today = todayBerlin();
   return db.transaction(async (tx) => {
     const points = new Map((await tx.select().from(hygienePoints)).map((p) => [p.id, p]));
@@ -227,8 +227,10 @@ export async function saveReadings(db: Db, actor: Actor, entries: { pointId: str
       else if (outOfRange(e.valueC, p) && !e.note) fields[`entries.${i}.note`] = `${p.name}: Wert außerhalb des Sollbereichs – bitte die ergriffene Maßnahme eintragen`;
     });
     if (Object.keys(fields).length) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', fields);
+    let kept = 0;
     for (const e of entries) {
       const [before] = await tx.select().from(hygieneReadings).where(and(eq(hygieneReadings.pointId, e.pointId), eq(hygieneReadings.date, e.date))).for('update');
+      if (before && onlyNew) { kept++; continue; }
       if (before && before.valueC === e.valueC && before.note === e.note && !before.confirmed) continue;
       const p = points.get(e.pointId)!;
       if (before) {
@@ -240,7 +242,7 @@ export async function saveReadings(db: Db, actor: Actor, entries: { pointId: str
         await record(tx, actor, { action: 'create', entity: 'hygiene_reading', entityId: e.pointId, after: { point: p.name, date: e.date, valueC: e.valueC, note: e.note } });
       }
     }
-    return { saved: entries.length };
+    return { saved: entries.length - kept, kept };
   });
 }
 

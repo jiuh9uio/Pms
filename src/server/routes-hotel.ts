@@ -213,7 +213,7 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   api.get('/bookings/:id/deposits', user, (req) => deposits.listFor(db, 'booking', idOf(req)));
   api.get('/bookings/:id/deposits/draft', user, (req) => { const q = depositDraftQuery.parse(req.query); return deposits.draft(db, 'booking', idOf(req), q.amountCents, q.dueDate); });
   api.post('/bookings/:id/deposits', user, (req) => deposits.create(db, actor(req), 'booking', idOf(req), depositCreateInput.parse(req.body)));
-  api.post('/deposits/:id/cancel', user, (req) => deposits.cancel(db, actor(req), idOf(req)));
+  api.post('/deposits/:id/cancel', user, (req) => deposits.cancel(db, actor(req), 'booking', idOf(req)));
   api.get('/bookings/:id/mail', user, (req) => {
     const q = z.object({ as: z.enum(['confirmed', 'declined', 'cancelled', 'question']).optional(), rooms: z.string().max(2000).optional() }).parse(req.query);
     const ids = (q.rooms ?? '').split(',').filter((x) => /^[0-9a-f-]{36}$/.test(x));

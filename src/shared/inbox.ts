@@ -56,7 +56,8 @@ export const mailRulesInput = z.object({
 export type MailRules = z.infer<typeof mailRulesInput>;
 
 // ---------- Online-Buchungsanfrage (öffentliche Seite /anfrage) ----------
-const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Bitte ein Datum wählen');
+const realDay = (s: string) => { const t = Date.parse(`${s}T00:00:00Z`); return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === s; };
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Bitte ein Datum wählen').refine(realDay, 'Dieses Datum gibt es nicht');
 export const webRequestInput = z.object({
   name: z.string().trim().min(2, 'Bitte Ihren Namen eintragen').max(120),
   email: z.email('Bitte eine gültige E-Mail-Adresse eintragen'),

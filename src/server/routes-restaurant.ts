@@ -36,8 +36,8 @@ export function registerRestaurantRoutes(api: FastifyInstance, { db, requireUser
   api.get('/restaurant/reservations/:id/deposits', user, (req) => deposits.listFor(db, 'table', idOf(req)));
   api.get('/restaurant/reservations/:id/deposits/draft', user, (req) => { const q = depositDraftQuery.parse(req.query); return deposits.draft(db, 'table', idOf(req), q.amountCents, q.dueDate); });
   api.post('/restaurant/reservations/:id/deposits', user, (req) => deposits.create(db, actor(req), 'table', idOf(req), depositCreateInput.parse(req.body)));
-  api.post('/restaurant/deposits/:id/paid', user, (req) => deposits.markPaid(db, actor(req), idOf(req), depositPaidInput.parse(req.body).note));
-  api.post('/restaurant/deposits/:id/cancel', user, (req) => deposits.cancel(db, actor(req), idOf(req)));
+  api.post('/restaurant/deposits/:id/paid', user, (req) => deposits.markPaid(db, actor(req), 'table', idOf(req), depositPaidInput.parse(req.body).note));
+  api.post('/restaurant/deposits/:id/cancel', user, (req) => deposits.cancel(db, actor(req), 'table', idOf(req)));
   api.get('/restaurant/deposits', user, async (req) => {
     const d = z.object({ date: z.string().refine(isIsoDate) }).parse(req.query).date;
     const ids = (await restaurant.listReservations(db, d)).map((r) => r.id);

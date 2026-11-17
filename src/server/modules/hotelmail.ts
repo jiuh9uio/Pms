@@ -43,8 +43,10 @@ export async function bookingMailDraft(db: Exec, bookingId: string, asConfirmed 
     `- ${r.categoryName} (Zimmer ${r.roomNumber}): ${de(r.from)} bis ${de(r.to)}, ${r.nights} ${r.nights === 1 ? 'Nacht' : 'Nächte'}, ` +
     `${r.adults} ${r.adults === 1 ? 'Erwachsener' : 'Erwachsene'}${r.children ? `, ${r.children} ${r.children === 1 ? 'Kind' : 'Kinder'}` : ''} – ${formatMoney(r.lodgingCents)}` +
     (tentative ? ` (${STATUS_LABEL[r.status]})` : ''));
-  const extras = b.charges.map((c) => `- ${c.quantity} × ${c.name} – ${formatMoney(c.totalCents)}`);
-  const total = rooms.reduce((s, r) => s + r.lodgingCents, 0) + b.chargesCents;
+  // nur Leistungen der genannten Zimmer (und solche ohne Zimmerbezug) – nicht die stornierter oder nicht gewählter Zimmer
+  const shown = b.charges.filter((c) => !c.bookingRoomId || rooms.some((r) => r.id === c.bookingRoomId));
+  const extras = shown.map((c) => `- ${c.quantity} × ${c.name} – ${formatMoney(c.totalCents)}`);
+  const total = rooms.reduce((s, r) => s + r.lodgingCents, 0) + shown.reduce((s, c) => s + c.totalCents, 0);
   // Stornobedingungen und persönlicher Link (der Link nur, wenn das Programm aus dem Internet erreichbar ist)
   const { getPolicy, mailLink } = await import('./guestlink.js');
   const terms = cancelTerms(await getPolicy(db), rooms.map((r) => r.from).sort()[0]!, rooms.reduce((s, r) => s + r.lodgingCents, 0), todayBerlin());

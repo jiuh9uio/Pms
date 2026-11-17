@@ -3,6 +3,20 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.79.1
+
+Fehlerbehebungen aus der nächtlichen Prüfung (Einzelheiten: docs/pruefbericht-nachtschicht-2026-11-17.md):
+
+- **Angebote:** Versand und gleichzeitige Online-Annahme überschreiben sich nicht mehr. Die interne Notiz lässt sich ohne Folgen ändern – auch bei angenommenen Angeboten („Notiz speichern“). „Angenommen …“/„Abgelehnt“ speichern ungespeicherte Änderungen vorher. Abgelaufenes „Gültig bis“ wird beim Versand gemeldet. Ausgeblendete AGB werden nicht mehr übernommen. Kein „angenommen“ ohne Positionen. Listenfilter findet auch ältere Angebote.
+- **Anzahlungen** lassen sich nur noch im eigenen Bereich (Hotel, Restaurant, Angebote) ändern.
+- **Hotel:** Bestätigungs-E-Mail nennt nur Leistungen der genannten Zimmer. Einzelbelegungs-Nachlass bei langem Aufenthalt wird bei Personenänderung neu berechnet. Angaben des Gastes über den Link werden nicht mehr von einem offenen Formular überschrieben. „Check-out zurücknehmen“ nach vorzeitiger Abreise ist auch bei mehreren Zimmern gesperrt. Wieder zur Anfrage gemacht: Optionsfrist wird neu gesetzt. Stammgast-Hinweis zählt nur frühere Aufenthalte.
+- **Posteingang:** Bei mehr als 200 neuen E-Mails gehen ältere nicht mehr verloren; ein kurzer Datenbankfehler blockiert den Abruf nicht mehr.
+- **Restaurant:** Telefon/Notiz einer Reservierung lässt sich ändern, auch wenn der Tisch inzwischen verkleinert wurde; unmögliche Statuswechsel werden abgelehnt.
+- **Kontrollen:** Die Temperatur-Abfrage beim Start überschreibt keine Werte, die jemand anderes schon eingetragen hat. Sonderreinigungen gehen bei gleichzeitigen Einträgen nicht mehr verloren.
+- **Gästeseite und Formulare:** Unmögliche Daten (z. B. 30.02.) werden sauber abgelehnt; Schutz vor zu vielen Anfragen verbessert.
+- **Firmenkunden:** Firmen jenseits der ersten 300 lassen sich wieder öffnen.
+- Weitere Funde zu Rechnungen, Zahlungen, TSE, Löschfristen und Anmeldung sind **nicht** geändert – sie warten auf Freigabe (siehe Prüfbericht, Teil B).
+
 ## 1.79.0
 
 - **Neu: Angebote** (Hotel → Kunden → Angebote; im Restaurant über das Menü erreichbar) für Tagungen, Feiern und Gruppen:

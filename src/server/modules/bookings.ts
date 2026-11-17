@@ -1,6 +1,6 @@
 import { and, eq, sql, type SQL } from 'drizzle-orm';
 import {
-  TRANSITIONS, addDays, diffDays, eachNight, isActiveStatus, perFactor, personAdjust, todayBerlin,
+  TRANSITIONS, addDays, diffDays, eachNight, isActiveStatus, longStayDiscount, perFactor, personAdjust, todayBerlin,
   type BookingDto, type BookingListRow, type BookingRoomDto, type CalendarDto, type CalendarEntry, type ChargeDto, type DashboardDto,
   type GuestInput, type RoomStatus, type TaskDto,
 } from '../../shared/hotel.js';
@@ -9,6 +9,7 @@ import { bookingRoomNights, bookingRooms, bookings, charges, companies, companyR
 import { AppError, conflict, notFound, stale } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 import { createGuest, toGuestDto } from './guests.js';
+import { getHotel } from './settings.js';
 import { listRooms, lodgingTaxPercent, period, priceNights } from './rooms.js';
 
 type Raw = Record<string, unknown>;
@@ -74,9 +75,12 @@ export async function getBooking(db: Exec, id: string): Promise<BookingDto> {
   }));
   const lodgingCents = roomDtos.filter((r) => isActiveStatus(r.status)).reduce((s, r) => s + r.lodgingCents, 0);
   const chargesCents = chargeDtos.reduce((s, c) => s + c.totalCents, 0);
+  // nur Aufenthalte vor dieser Reservierung (nicht spätere, wenn man eine alte Reservierung öffnet)
+  const firstFrom = roomDtos.map((r) => r.from).sort()[0] ?? todayBerlin();
   const [earlier] = await db.execute(sql`
     select count(distinct b2.id)::int as n, max(br.checked_out_at) as last from bookings b2 join booking_rooms br on br.booking_id = b2.id
-    where b2.guest_id = ${b.guestId} and b2.id <> ${id} and br.status = 'checked_out'`) as unknown as { n: number; last: string | Date | null }[];
+    where b2.guest_id = ${b.guestId} and b2.id <> ${id} and br.status = 'checked_out'
+      and (br.checked_out_at at time zone 'Europe/Berlin')::date <= ${firstFrom}`) as unknown as { n: number; last: string | Date | null }[];
   const lastOut = earlier?.last ? new Date(earlier.last).toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' }) : null;
   return {
     id: b.id, number: b.number, groupName: b.groupName, source: b.source, paymentMethod: b.paymentMethod, notes: b.notes, version: b.version, optionUntil: b.optionUntil, arrivalTime: b.arrivalTime, guestMessage: b.guestMessage,
@@ -261,7 +265,9 @@ export async function updateBookingRoom(db: Db, actor: Actor, id: string, v: {
     // Dasselbe gilt, wenn der Aufenthalt durch die Änderung die Grenze für den Nachlass bei längerem Aufenthalt über- oder unterschreitet.
     const longStay = !!cat && cat.longStayNights >= 2 && (cat.longStayDiscountCents > 0 || cat.longStaySingleDiscountCents > 0) && (old.length >= cat.longStayNights) !== (dates.length >= cat.longStayNights);
     const repriced = !manual && v.pricePerNightCents === undefined && !!cat
-      && (longStay || personAdjust(cat, persons.adults, persons.children).cents !== personAdjust(cat, br.adults, br.children).cents);
+      && (longStay || personAdjust(cat, persons.adults, persons.children).cents !== personAdjust(cat, br.adults, br.children).cents
+        // Nachlass bei längerem Aufenthalt hängt bei Einzelbelegung auch von der Personenzahl ab
+        || (dates.length >= cat.longStayNights && cat.longStayNights >= 2 && longStayDiscount(cat, dates.length, persons.adults + persons.children) !== longStayDiscount(cat, old.length, br.adults + br.children)));
     if (typeof v.pricePerNightCents === 'number') {
       manual = true;
       nightly = dates.map((date) => ({ date, priceCents: v.pricePerNightCents as number, source: 'manuell' }));
@@ -308,14 +314,26 @@ export async function setRoomStatus(db: Db, actor: Actor, id: string, v: { statu
     }
     if (v.status === 'checked_in' && br.status === 'checked_out') {
       // Nach vorzeitiger Abreise wurden Nächte entfernt und der Zeitraum gekürzt – das lässt sich nicht einfach zurücknehmen
-      const [last] = await tx.execute(sql`select after from audit_log where entity = 'booking' and entity_id = ${br.bookingId} and action = 'status'
-        and after->>'status' = 'checked_out' order by id desc limit 1`) as unknown as { after: { room?: string; earlyDeparture?: unknown } }[];
+      // letzter Check-out genau dieses Zimmers (bei mehreren Zimmern zählt nicht der Check-out eines anderen)
       const [rm] = await tx.select({ number: rooms.number }).from(rooms).where(eq(rooms.id, alloc.roomId));
-      if (last?.after?.earlyDeparture && last.after.room === rm?.number)
+      const [last] = await tx.execute(sql`select after from audit_log where entity = 'booking' and entity_id = ${br.bookingId} and action = 'status'
+        and after->>'status' = 'checked_out' and after->>'room' = ${rm?.number ?? ''} order by id desc limit 1`) as unknown as { after: { room?: string; earlyDeparture?: unknown } }[];
+      if (last?.after?.earlyDeparture)
         throw conflict('Der Gast ist vorzeitig abgereist; dabei wurden die restlichen Nächte entfernt. Zurücknehmen geht hier nicht – bitte eine neue Zimmerbuchung für die fehlenden Nächte anlegen.');
       set.checkedOutAt = null;
     }
     if (v.status === 'confirmed' && br.status === 'checked_in') set.checkedInAt = null;
+    // wieder zur Anfrage (reaktiviert oder zurückgestuft): fehlende oder abgelaufene Optionsfrist neu setzen, höchstens bis zur Anreise
+    if (v.status === 'tentative') {
+      const [bk] = await tx.select({ optionUntil: bookings.optionUntil }).from(bookings).where(eq(bookings.id, br.bookingId));
+      if (!bk?.optionUntil || bk.optionUntil < today) {
+        const days = (await getHotel(tx)).requestOptionDays ?? 3;
+        const d = addDays(today, days);
+        const until = alloc.from < d ? (alloc.from < today ? today : alloc.from) : d;
+        await tx.update(bookings).set({ optionUntil: until, version: sql`${bookings.version} + 1`, updatedAt: new Date() }).where(eq(bookings.id, br.bookingId));
+        detail.optionUntil = until;
+      }
+    }
     if (v.status === 'checked_out') {
       set.checkedOutAt = new Date();
       // Nach der Abreise ist das Zimmer zu reinigen

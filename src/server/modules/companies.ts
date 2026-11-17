@@ -8,7 +8,7 @@ import { selectRooms } from './bookings.js';
 
 type Raw = Record<string, unknown>;
 
-export async function listCompanies(db: Exec, q = ''): Promise<CompanyDto[]> {
+export async function listCompanies(db: Exec, q = '', onlyId?: string): Promise<CompanyDto[]> {
   const like = '%' + q.replace(/[%_\\]/g, '') + '%';
   const rows = await db.execute(sql`
     select c.*,
@@ -18,7 +18,7 @@ export async function listCompanies(db: Exec, q = ''): Promise<CompanyDto[]> {
       (select coalesce(sum(i.gross_cents), 0) from invoices i join bookings b on b.id = i.booking_id
         where b.company_id = c.id and i.status <> 'draft')::int as revenue_cents
     from companies c
-    where ${q ? sql`(c.name ilike ${like} or c.city ilike ${like} or c.contact_name ilike ${like})` : sql`true`}
+    where ${onlyId ? sql`c.id = ${onlyId}` : q ? sql`(c.name ilike ${like} or c.city ilike ${like} or c.contact_name ilike ${like})` : sql`true`}
     order by lower(c.name) limit 300`);
   const rates = await db.select().from(companyRates);
   return Array.from(rows).map((r) => {
@@ -34,7 +34,8 @@ export async function listCompanies(db: Exec, q = ''): Promise<CompanyDto[]> {
 }
 
 export async function getCompany(db: Exec, id: string) {
-  const c = (await listCompanies(db)).find((x) => x.id === id);
+  // direkt nach der Kennung suchen (die Liste ist auf 300 Einträge begrenzt)
+  const [c] = await listCompanies(db, '', id);
   if (!c) throw notFound('Firma');
   return { company: c, bookings: await selectRooms(db, sql`b.company_id = ${id}`, sql`lower(a.period) desc`, 200) };
 }

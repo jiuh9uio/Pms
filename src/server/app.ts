@@ -45,6 +45,8 @@ import { mailSendInput, publicArrivalInput, publicCancelInput, publicCredInput, 
 import * as guestlink from './modules/guestlink.js';
 import { checkForUpdate, getChangelog, getUpdateStatus, installUpdate } from './update.js';
 
+import { clientKey } from './lib/clientkey.js';
+
 const COOKIE = 'pms_session';
 
 declare module 'fastify' {
@@ -136,14 +138,25 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     });
 
     // ---------- Online-Meldeschein: ohne Anmeldung, nur mit dem Zugangscode aus dem QR-Code ----------
-    const hits = new Map<string, { n: number; reset: number }>();
-    const publicLimit = async (req: FastifyRequest) => {
-      const now = Date.now();
-      if (hits.size > 5000) hits.clear();
-      const h = hits.get(req.ip);
-      if (!h || h.reset < now) { hits.set(req.ip, { n: 1, reset: now + 60_000 }); return; }
-      if (++h.n > 30) throw new AppError(429, 'too_many', 'Zu viele Anfragen – bitte einen Moment warten');
+    // Begrenzung je Absender und Minute. IPv6 je /64-Netz (sonst genügt ein Wechsel der Adresse); bei vielen Einträgen
+    // werden nur abgelaufene bzw. die ältesten entfernt – nicht alle Zähler auf einmal.
+    const limiter = (max: number) => {
+      const hits = new Map<string, { n: number; reset: number }>();
+      return async (req: FastifyRequest) => {
+        const now = Date.now();
+        const key = clientKey(req.ip);
+        if (hits.size > 5000) {
+          for (const [k, v] of hits) if (v.reset < now) hits.delete(k);
+          for (const k of hits.keys()) { if (hits.size <= 4000) break; hits.delete(k); }
+        }
+        const h = hits.get(key);
+        if (!h || h.reset < now) { hits.delete(key); hits.set(key, { n: 1, reset: now + 60_000 }); return; }
+        if (++h.n > max) throw new AppError(429, 'too_many', 'Zu viele Anfragen – bitte einen Moment warten');
+      };
     };
+    const publicLimit = limiter(30);
+    // Bilder und Video der Gästeseite: eine Seite lädt viele Bilder und das Video in Teilen – daher großzügiger
+    const mediaLimit = limiter(400);
     const tokenOf = (req: FastifyRequest) => z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{20,64}$/) }).parse(req.params).token;
     api.get('/public/guest-form/:token', { preHandler: publicLimit }, (req) => guestforms.publicForm(db, tokenOf(req)));
     api.post('/public/guest-form/:token', { preHandler: publicLimit, bodyLimit: 8 * 1024 }, async (req) => {
@@ -164,19 +177,19 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     const isAdminPreview = async (req: FastifyRequest) => (await auth.authenticate(db, req.cookies[COOKIE]))?.user.role === 'admin';
     api.get('/public/site', { preHandler: publicLimit }, async (req) => site.sitePublic(db, await isAdminPreview(req)));
     api.get('/public/site/availability', { preHandler: publicLimit }, async (req) => site.siteAvailability(db, SI.siteAvailabilityQuery.parse(req.query), await isAdminPreview(req)));
-    api.get('/public/site/photo/:id', async (req, reply) => {
+    api.get('/public/site/photo/:id', { preHandler: mediaLimit }, async (req, reply) => {
       const p = await site.publicPhoto(db, idParam(req), await isAdminPreview(req));
       if (!p) return reply.status(404).send({ error: { code: 'not_found', message: 'Kein Foto' } });
       return reply.header('Content-Type', p.mime).header('Cache-Control', 'public, max-age=86400').send(p.data);
     });
     const imageKey = (req: FastifyRequest) => z.object({ key: z.enum(SI.IMAGE_KEYS) }).parse(req.params).key;
-    api.get('/public/site/image/:key', async (req, reply) => {
+    api.get('/public/site/image/:key', { preHandler: mediaLimit }, async (req, reply) => {
       const p = await site.publicSiteImage(db, imageKey(req), await isAdminPreview(req));
       if (!p) return reply.status(404).send({ error: { code: 'not_found', message: 'Kein Bild' } });
       return reply.header('Content-Type', p.mime).header('Cache-Control', 'public, max-age=86400').send(p.data);
     });
     // Video im Startbild – mit Teilabruf (Range), wie ihn Browser, besonders auf iPhone/iPad, für Videos verlangen
-    api.get('/public/site/video', async (req, reply) => {
+    api.get('/public/site/video', { preHandler: mediaLimit }, async (req, reply) => {
       const v = await site.publicSiteVideo(db, await isAdminPreview(req));
       if (!v) return reply.status(404).send({ error: { code: 'not_found', message: 'Kein Video' } });
       const size = v.data.length;
@@ -189,7 +202,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
       if (start > end || start >= size) return reply.status(416).header('Content-Range', `bytes */${size}`).send();
       return reply.status(206).header('Content-Range', `bytes ${start}-${end}/${size}`).header('Content-Length', end - start + 1).send(v.data.subarray(start, end + 1));
     });
-    api.get('/public/site/logo', async (req, reply) => {
+    api.get('/public/site/logo', { preHandler: mediaLimit }, async (req, reply) => {
       const logo = await site.publicSiteLogo(db, await isAdminPreview(req));
       if (!logo) return reply.status(404).send({ error: { code: 'not_found', message: 'Kein Logo' } });
       return reply.header('Content-Type', logo.mime).header('Cache-Control', 'public, max-age=3600').send(logo.data);

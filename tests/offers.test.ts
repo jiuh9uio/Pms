@@ -108,8 +108,12 @@ describe('Angebote', () => {
     expect((await call('POST', `/public/offer/${token}/accept`, {}, { name: 'X Y', agree: true })).statusCode).toBe(409);
     const [n] = await db.execute(sql`select text from team_notes order by created_at desc limit 1`);
     expect(String(n!.text)).toMatch(/online angenommen von Erika Muster/);
-    // angenommen: nicht mehr änderbar
-    expect((await call('PUT', `/offers/${offerId}`, user, { ...d, version: d.version })).statusCode).toBe(409);
+    // angenommen: Inhalt nicht mehr änderbar, die interne Notiz schon
+    const body = { ...d, validUntil: d.validUntil, lines: d.lines.map((l: Record<string, unknown>) => ({ itemId: l.itemId, description: l.description, detail: l.detail, unit: l.unit, quantity: l.quantity, unitPriceCents: l.unitPriceCents, taxRatePercent: l.taxRatePercent })) };
+    expect((await call('PUT', `/offers/${offerId}`, user, { ...body, lines: [{ ...body.lines[0], unitPriceCents: 1 }], version: d.version })).statusCode).toBe(409);
+    await ok('PUT', `/offers/${offerId}`, user, { ...body, notes: 'Rückruf Freitag', version: d.version });
+    const d3 = await ok('GET', `/offers/${offerId}`, user);
+    expect(d3).toMatchObject({ status: 'accepted', notes: 'Rückruf Freitag', acceptedHash: 'abc123' });
   });
 
   it('Anzahlung zum Angebot erst nach Annahme; Annahme von Hand; Ablehnen', async () => {
@@ -119,6 +123,12 @@ describe('Angebote', () => {
     await ok('POST', `/offers/deposits/${dep[0].id}/paid`, user, { note: 'Überweisung' });
     const o2 = await ok('POST', '/offers', user, { templateId: null, customerName: 'Max Telefon', persons: 8 });
     expect((await call('POST', `/offers/${o2.id}/deposits`, user, { amountCents: 1000, dueDate: addDays(today, 7), send: false })).statusCode).toBe(409);
+    // ohne Positionen keine Annahme
+    expect((await call('POST', `/offers/${o2.id}/accept`, user, { method: 'telefon', name: 'Max Telefon', note: '' })).statusCode).toBe(409);
+    const e2 = await ok('GET', `/offers/${o2.id}`, user);
+    await ok('PUT', `/offers/${o2.id}`, user, { area: e2.area, customerCompany: '', customerName: 'Max Telefon', email: '', phone: '', street: '', zip: '', city: '', eventDate: null, eventEnd: null, persons: 8,
+      title: '', intro: '', closing: '', questions: [], validUntil: e2.validUntil, depositPercent: 0, documentIds: [], notes: '', version: e2.version,
+      lines: [{ itemId: null, description: 'Raummiete', detail: '', unit: 'flat', quantity: 1, unitPriceCents: 20000, taxRatePercent: 19 }] });
     await ok('POST', `/offers/${o2.id}/accept`, user, { method: 'telefon', name: 'Max Telefon', note: 'am Telefon zugesagt' });
     const d2 = await ok('GET', `/offers/${o2.id}`, user);
     expect(d2).toMatchObject({ status: 'accepted', acceptedMethod: 'telefon' });
@@ -143,5 +153,50 @@ describe('Angebote', () => {
     }
     expect((await web.inject({ method: 'GET', url: '/fehlt.js' })).statusCode).toBe(404);
     await web.close();
+  });
+});
+
+describe('Angebote – Korrekturen aus der Prüfung', () => {
+  const base = (o: Record<string, any>) => ({ area: o.area, customerCompany: o.customerCompany, customerName: o.customerName, email: o.email, phone: o.phone, street: o.street, zip: o.zip, city: o.city,
+    eventDate: o.eventDate, eventEnd: o.eventEnd, persons: o.persons, title: o.title, intro: o.intro, closing: o.closing, questions: o.questions, validUntil: o.validUntil, depositPercent: o.depositPercent,
+    documentIds: o.documentIds, notes: o.notes, version: o.version,
+    lines: o.lines.map((l: Record<string, unknown>) => ({ itemId: l.itemId, description: l.description, detail: l.detail, unit: l.unit, quantity: l.quantity, unitPriceCents: l.unitPriceCents, taxRatePercent: l.taxRatePercent })) });
+  let id = '';
+  it('interne Notiz an einem versendeten Angebot: bleibt versendet, Link bleibt gültig; Inhaltsänderung → Entwurf', async () => {
+    const o = await ok('POST', '/offers', user, { templateId: null, customerName: 'Notiz Test', persons: 4 });
+    id = o.id;
+    let d = await ok('GET', `/offers/${id}`, user);
+    await ok('PUT', `/offers/${id}`, user, { ...base(d), lines: [{ itemId: null, description: 'Saal', detail: '', unit: 'flat', quantity: 0.125, unitPriceCents: 8000, taxRatePercent: 19 }] });
+    d = await ok('GET', `/offers/${id}`, user);
+    // Menge wird auf 2 Stellen gerundet, die Zeilensumme passt dazu
+    expect(d.lines[0]).toMatchObject({ quantity: 0.13, totalCents: 1040 });
+    await db.execute(sql`update offers set status = 'sent', sent_pdf = '\x255044462d'::bytea, sent_hash = 'h1', sent_at = now() where id = ${id}`);
+    d = await ok('GET', `/offers/${id}`, user);
+    const r = await ok('PUT', `/offers/${id}`, user, { ...base(d), notes: 'Kunde ruft Freitag zurück' });
+    expect(r.backToDraft).toBe(false);
+    d = await ok('GET', `/offers/${id}`, user);
+    expect(d).toMatchObject({ status: 'sent', sentHash: 'h1', notes: 'Kunde ruft Freitag zurück' });
+    const r2 = await ok('PUT', `/offers/${id}`, user, { ...base(d), persons: 5 });
+    expect(r2.backToDraft).toBe(true);
+  });
+  it('abgelaufene Gültigkeit: kein E-Mail-Vorschlag und kein Versand', async () => {
+    const d = await ok('GET', `/offers/${id}`, user);
+    await ok('PUT', `/offers/${id}`, user, { ...base(d), validUntil: addDays(today, -1) });
+    const res = await call('GET', `/offers/${id}/mail`, user);
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toMatch(/nur bis zum/);
+  });
+  it('Statusfilter der Liste arbeitet in der Datenbank (abgelaufen / offen)', async () => {
+    await db.execute(sql`update offers set status = 'sent' where id = ${id}`);
+    const expired = await ok('GET', '/offers?state=expired', user);
+    expect(expired.map((x: { id: string }) => x.id)).toContain(id);
+    expect((await ok('GET', '/offers?state=sent', user)).map((x: { id: string }) => x.id)).not.toContain(id);
+    expect((await ok('GET', '/offers?state=open', user)).map((x: { id: string }) => x.id)).toContain(id);
+  });
+  it('Anzahlungen nur im eigenen Bereich änderbar', async () => {
+    const [dep] = await db.execute(sql`select value from settings where key = 'deposit_requests'`) as unknown as { value: { id: string; kind: string }[] }[];
+    const offerDep = dep!.value.find((x) => x.kind === 'offer')!;
+    expect((await call('POST', `/restaurant/deposits/${offerDep.id}/cancel`, admin, {})).statusCode).toBe(404);
+    expect((await call('POST', `/deposits/${offerDep.id}/cancel`, admin, {})).statusCode).toBe(404);
   });
 });

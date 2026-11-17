@@ -3,7 +3,8 @@ import { z } from 'zod';
 export const NOTE_KINDS = ['note', 'task', 'repair'] as const;
 export type NoteKind = (typeof NOTE_KINDS)[number];
 export const NOTE_KIND_LABEL: Record<NoteKind, string> = { note: 'Übergabe', task: 'Aufgabe', repair: 'Reparatur' };
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ungültiges Datum');
+const realDay = (s: string) => { const t = Date.parse(`${s}T00:00:00Z`); return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === s; };
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ungültiges Datum').refine(realDay, 'Ungültiges Datum');
 export const teamNoteInput = z.object({
   kind: z.enum(NOTE_KINDS), text: z.string().trim().min(1, 'Bitte einen Text eintragen').max(2000),
   place: z.string().trim().max(80).default(''), dueDate: z.union([isoDate, z.literal('').transform(() => null), z.null()]).default(null),
@@ -32,7 +33,7 @@ export const MANUAL_CLEAN_KINDS = ['full', 'interim'] as const;
 export const MANUAL_CLEAN_LABEL: Record<(typeof MANUAL_CLEAN_KINDS)[number], string> = { full: 'Komplettreinigung', interim: 'Zwischenreinigung' };
 export interface ManualClean { id: string; date: string; roomId: string; room: string; kind: (typeof MANUAL_CLEAN_KINDS)[number]; note: string; by: string; at: string; done: boolean }
 export const manualCleanInput = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Bitte ein Datum wählen'), roomId: z.uuid('Bitte ein Zimmer wählen'),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Bitte ein Datum wählen').refine(realDay, 'Dieses Datum gibt es nicht'), roomId: z.uuid('Bitte ein Zimmer wählen'),
   kind: z.enum(MANUAL_CLEAN_KINDS), note: z.string().trim().max(200).default(''),
 });
 

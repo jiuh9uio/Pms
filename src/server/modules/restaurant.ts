@@ -45,12 +45,14 @@ export const listReservations = async (db: Exec, date: string) =>
 interface In { date: string; time: string; durationMin: number; persons: number; name: string; phone: string; note: string; tableId: string | null }
 
 /** Sperrt den Tisch für diese Transaktion und lehnt Überschneidungen und zu kleine Tische ab. */
-async function checkTable(tx: Exec, v: In, selfId: string | null) {
+async function checkTable(tx: Exec, v: In, selfId: string | null, keep?: { tableId: string | null; persons: number }) {
   if (!v.tableId) return;
   const [table] = await tx.select().from(restaurantTables).where(eq(restaurantTables.id, v.tableId)).for('update');
   if (!table) throw notFound('Tisch');
-  if (!table.active) throw conflict(`${table.name} ist nicht mehr in Benutzung`);
-  if (v.persons > table.seats) throw conflict(`${table.name} hat nur ${table.seats} Plätze`, 'table_small');
+  // Tisch und Personenzahl unverändert (z. B. nur Telefon oder Notiz geändert): nicht an inzwischen geänderten Tischdaten scheitern
+  const unchanged = !!keep && keep.tableId === v.tableId && keep.persons >= v.persons;
+  if (!unchanged && !table.active) throw conflict(`${table.name} ist nicht mehr in Benutzung`);
+  if (!unchanged && v.persons > table.seats) throw conflict(`${table.name} hat nur ${table.seats} Plätze`, 'table_small');
   const same = await tx.select().from(tableReservations).where(and(
     eq(tableReservations.tableId, v.tableId), eq(tableReservations.date, v.date), selfId ? ne(tableReservations.id, selfId) : undefined));
   const clash = same.find((o) => holdsTable(o.status) && overlaps(o, v));
@@ -72,7 +74,7 @@ export async function updateReservation(db: Db, actor: Actor, id: string, v: In 
     if (!before) throw notFound('Reservierung');
     if (before.version !== v.version) throw stale();
     const { version, ...data } = v;
-    if (holdsTable(before.status)) await checkTable(tx, data, id);
+    if (holdsTable(before.status)) await checkTable(tx, data, id, { tableId: before.tableId, persons: before.persons });
     await tx.update(tableReservations).set({ ...data, version: version + 1, updatedAt: new Date() }).where(eq(tableReservations.id, id));
     await record(tx, actor, { action: 'update', entity: 'table_reservation', entityId: id,
       before: { date: before.date, time: before.time, persons: before.persons, name: before.name, tableId: before.tableId }, after: data });
@@ -87,7 +89,10 @@ export async function setStatus(db: Db, actor: Actor, id: string, status: TableS
     if (before.version !== version) throw stale();
     // „Gäste da“ nur am Tag selbst, „Nicht erschienen“ nicht im Voraus
     const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
-    if (status === 'seated' && before.status === 'booked' && before.date !== today) throw conflict('„Gäste da“ geht nur am Tag der Reservierung.');
+    // erlaubte Wechsel (wie in der Oberfläche)
+    const allowed: Record<TableStatus, TableStatus[]> = { booked: ['seated', 'cancelled', 'no_show'], seated: ['done', 'booked'], done: ['seated'], cancelled: ['booked'], no_show: ['booked'] };
+    if (!allowed[before.status as TableStatus]?.includes(status)) throw conflict('Dieser Statuswechsel ist nicht möglich.');
+    if (status === 'seated' && before.date !== today) throw conflict('„Gäste da“ geht nur am Tag der Reservierung.');
     if (status === 'no_show' && before.date > today) throw conflict('„Nicht erschienen“ geht erst am Tag der Reservierung.');
     // beim Reaktivieren muss der Tisch noch frei sein
     if (holdsTable(status) && !holdsTable(before.status)) await checkTable(tx, before, id);

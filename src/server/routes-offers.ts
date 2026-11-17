@@ -60,8 +60,8 @@ export function registerOfferRoutes(api: FastifyInstance, { db, requireUser, req
   api.get('/offers/:id/deposits', user, (req) => deposits.listFor(db, 'offer', idOf(req)));
   api.get('/offers/:id/deposits/draft', user, (req) => { const q = depositDraftQuery.parse(req.query); return deposits.draft(db, 'offer', idOf(req), q.amountCents, q.dueDate); });
   api.post('/offers/:id/deposits', user, (req) => deposits.create(db, actor(req), 'offer', idOf(req), depositCreateInput.parse(req.body)));
-  api.post('/offers/deposits/:id/paid', user, (req) => deposits.markPaid(db, actor(req), idOf(req), depositPaidInput.parse(req.body).note));
-  api.post('/offers/deposits/:id/cancel', user, (req) => deposits.cancel(db, actor(req), idOf(req)));
+  api.post('/offers/deposits/:id/paid', user, (req) => deposits.markPaid(db, actor(req), 'offer', idOf(req), depositPaidInput.parse(req.body).note));
+  api.post('/offers/deposits/:id/cancel', user, (req) => deposits.cancel(db, actor(req), 'offer', idOf(req)));
 
   // Öffentlich: Angebot über den Link ansehen und annehmen
   const pub = { preHandler: publicLimit };

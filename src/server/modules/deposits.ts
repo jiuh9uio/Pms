@@ -122,11 +122,12 @@ export async function create(db: Db, actor: Actor, kind: DepositKind, refId: str
   });
 }
 
-async function change(db: Db, actor: Actor, id: string, fn: (r: Raw) => void, action: string) {
+async function change(db: Db, actor: Actor, id: string, kind: DepositKind, fn: (r: Raw) => void, action: string) {
   return db.transaction(async (tx) => {
     const list = await loadAll(tx, true);
     const r = list.find((x) => x.id === id);
-    if (!r) throw notFound('Anzahlung');
+    // nur Anzahlungen des eigenen Bereichs (Hotel, Restaurant, Angebote) – sonst könnte z. B. ein Restaurant-Konto Hotel-Anzahlungen zurückziehen
+    if (!r || r.kind !== kind) throw notFound('Anzahlung');
     fn(r);
     await save(tx, list);
     await record(tx, actor, { action, entity: r.kind === 'booking' ? 'booking' : r.kind === 'offer' ? 'offer' : 'table_reservation', entityId: r.refId, after: { amountCents: r.amountCents, note: r.paidNote } });
@@ -134,17 +135,17 @@ async function change(db: Db, actor: Actor, id: string, fn: (r: Raw) => void, ac
   });
 }
 /** Restaurant: Eingang von Hand vermerken (die Buchung in der Kasse erfolgt dort). */
-export const markPaid = (db: Db, actor: Actor, id: string, note: string) => change(db, actor, id, (r) => {
+export const markPaid = (db: Db, actor: Actor, kind: DepositKind, id: string, note: string) => change(db, actor, id, kind, (r) => {
   if (r.kind === 'booking') throw conflict('Bei Hotelreservierungen wird die Anzahlung als Zahlung in der Reservierung gebucht.');
   if (r.status !== 'open') throw conflict('Diese Anzahlung ist nicht mehr offen.');
   r.status = 'paid'; r.paidAt = new Date().toISOString(); r.paidBy = actor.userName; r.paidNote = note;
 }, 'deposit_paid');
-export async function cancel(db: Db, actor: Actor, id: string) {
+export async function cancel(db: Db, actor: Actor, kind: DepositKind, id: string) {
   const all = await withState(db, await loadAll(db));
-  if (all.find((d) => d.id === id)?.state === 'paid') throw conflict('Bereits eingegangen – nicht mehr zurückziehbar.');
-  return cancelRaw(db, actor, id);
+  if (all.find((d) => d.id === id && d.kind === kind)?.state === 'paid') throw conflict('Bereits eingegangen – nicht mehr zurückziehbar.');
+  return cancelRaw(db, actor, kind, id);
 }
-const cancelRaw = (db: Db, actor: Actor, id: string) => change(db, actor, id, (r) => {
+const cancelRaw = (db: Db, actor: Actor, kind: DepositKind, id: string) => change(db, actor, id, kind, (r) => {
   if (r.status === 'cancelled') throw conflict('Bereits zurückgezogen.');
   if (r.status === 'paid') throw conflict('Bereits eingegangen – nicht mehr zurückziehbar.');
   r.status = 'cancelled'; r.cancelledBy = actor.userName;

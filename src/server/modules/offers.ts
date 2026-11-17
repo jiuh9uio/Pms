@@ -3,7 +3,7 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { taxBreakdown } from '../../shared/billing.js';
 import { formatMoney, todayBerlin } from '../../shared/hotel.js';
 import {
-  lineTotal, quantityFor, type OfferCreateInputT, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferItemInput, type OfferListRow,
+  lineTotal, quantityFor, type OfferCreateInputT, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferItemInput, type OfferLineInput, type OfferListRow,
   type OfferState, type OfferTemplateDto, type OfferTemplateInput, type OfferUpdateInput, type PublicOffer,
 } from '../../shared/offers.js';
 import type { Db, Exec } from '../db/client.js';
@@ -80,6 +80,9 @@ const tplDto = (r: typeof offerTemplates.$inferSelect): OfferTemplateDto => ({
 async function ensureDefaults(db: Db) {
   const [seeded] = await db.select().from(settings).where(eq(settings.key, 'offer_defaults'));
   if (seeded) return;
+  // Merker zuerst setzen: nur wer ihn tatsächlich anlegt, legt die Vorlagen an (zwei gleichzeitige Aufrufe → keine doppelten Vorlagen)
+  const mine = await db.insert(settings).values({ key: 'offer_defaults', value: { seeded: new Date().toISOString() } }).onConflictDoNothing().returning({ key: settings.key });
+  if (!mine.length) return;
   const [any] = await db.select({ id: offerTemplates.id }).from(offerTemplates).limit(1);
   if (!any) {
     const intro = 'vielen Dank für Ihre Anfrage. Gern unterbreiten wir Ihnen folgendes Angebot:';
@@ -95,7 +98,6 @@ async function ensureDefaults(db: Db) {
         questions: ['Anreise- und Abreisetag', 'Anzahl Einzel- und Doppelzimmer', 'Frühstück gewünscht?', 'Abendessen gewünscht?', 'Voraussichtliche Ankunftszeit', 'Rechnungsanschrift'] },
     ]);
   }
-  await db.insert(settings).values({ key: 'offer_defaults', value: { seeded: new Date().toISOString() } }).onConflictDoNothing();
 }
 export async function listTemplates(db: Db) {
   await ensureDefaults(db);
@@ -127,9 +129,16 @@ const customerOf = (r: { customerCompany: string; customerName: string }) => [r.
 
 export async function listOffers(db: Exec, f: { state?: string; q?: string }): Promise<OfferListRow[]> {
   const like = f.q ? `%${f.q.replace(/[%_\\]/g, '')}%` : null;
+  const today = todayBerlin();
+  const expired = sql`(o.status = 'sent' and o.valid_until is not null and o.valid_until < ${today})`;
+  const byState = !f.state || f.state === 'all' ? sql``
+    : f.state === 'open' ? sql`and o.status in ('draft', 'sent')`
+    : f.state === 'expired' ? sql`and ${expired}`
+    : f.state === 'sent' ? sql`and o.status = 'sent' and not ${expired}`
+    : f.state === 'draft' || f.state === 'accepted' || f.state === 'declined' ? sql`and o.status = ${f.state}` : sql``;
   const rows = await db.execute(sql`
     select o.*, coalesce((select sum(l.total_cents) from offer_lines l where l.offer_id = o.id), 0)::int as total
-    from offers o where true ${like ? sql`and (o.number ilike ${like} or o.customer_name ilike ${like} or o.customer_company ilike ${like} or o.title ilike ${like})` : sql``}
+    from offers o where true ${like ? sql`and (o.number ilike ${like} or o.customer_name ilike ${like} or o.customer_company ilike ${like} or o.title ilike ${like})` : sql``} ${byState}
     order by o.created_at desc limit 300`) as unknown as Record<string, unknown>[];
   const list = rows.map((x): OfferListRow => {
     const r = { status: x.status as Row['status'], validUntil: (x.valid_until as string | null) ?? null };
@@ -140,9 +149,7 @@ export async function listOffers(db: Exec, f: { state?: string; q?: string }): P
       bookingId: (x.booking_id as string | null) ?? null, tableReservationId: (x.table_reservation_id as string | null) ?? null, createdAt: new Date(x.created_at as string).toISOString(),
     };
   });
-  if (!f.state || f.state === 'all') return list;
-  if (f.state === 'open') return list.filter((r) => r.state === 'draft' || r.state === 'sent' || r.state === 'expired');
-  return list.filter((r) => r.state === f.state);
+  return list;
 }
 
 export async function getOffer(db: Exec, id: string): Promise<OfferDto> {
@@ -167,13 +174,16 @@ export async function createOffer(db: Db, actor: Actor, v: OfferCreateInputT) {
   if (v.templateId && !tpl) throw notFound('Vorlage');
   const today = todayBerlin();
   const items = tpl ? await db.select().from(offerItems) : [];
+  // ausgeblendete Dokumente (z. B. alte AGB) nicht mehr übernehmen
+  const tplDocs = (tpl?.documentIds as string[] | undefined) ?? [];
+  const activeDocs = tplDocs.length ? (await db.select({ id: offerDocuments.id }).from(offerDocuments).where(and(sql`${offerDocuments.id} in ${tplDocs}`, eq(offerDocuments.active, true)))).map((d) => d.id) : [];
   return db.transaction(async (tx) => {
     const number = await nextNumber(tx, Number(today.slice(0, 4)));
     const [o] = await tx.insert(offers).values({
       number, area: tpl?.area ?? v.area, templateId: tpl?.id ?? null, customerCompany: v.customerCompany, customerName: v.customerName, email: v.email, phone: v.phone,
       street: v.street, zip: v.zip, city: v.city, eventDate: v.eventDate, eventEnd: v.eventEnd, persons: v.persons,
       title: tpl?.title ?? '', intro: tpl?.intro ?? '', closing: tpl?.closing ?? '', questions: tpl?.questions ?? [], validUntil: addDays(today, tpl?.validDays ?? 14),
-      depositPercent: tpl?.depositPercent ?? 0, documentIds: tpl?.documentIds ?? [], createdBy: actor.userName,
+      depositPercent: tpl?.depositPercent ?? 0, documentIds: tplDocs.filter((d) => activeDocs.includes(d)), createdBy: actor.userName,
     }).returning();
     // Leistungen der Vorlage mit vorgeschlagener Menge (aus Personen, Tagen, Nächten)
     let pos = 1;
@@ -193,9 +203,30 @@ export async function updateOffer(db: Db, actor: Actor, id: string, v: OfferUpda
     const [b] = await tx.select().from(offers).where(eq(offers.id, id)).for('update');
     if (!b) throw notFound('Angebot');
     if (b.version !== v.version) throw stale();
-    if (b.status === 'accepted' || b.status === 'declined') throw conflict('Angenommene oder abgelehnte Angebote lassen sich nicht mehr ändern.');
     const { lines, version: _v, ...rest } = v;
-    // Änderung nach dem Versand: zurück zum Entwurf, die versendete Fassung und ihr Link gelten nicht mehr
+    const oldLines = await tx.select().from(offerLines).where(eq(offerLines.offerId, id)).orderBy(asc(offerLines.pos));
+    // Was der Kunde sieht (PDF, Link-Seite, E-Mail-Adresse) – die interne Notiz gehört nicht dazu
+    const seen = (o: Omit<OfferUpdateInput, 'lines' | 'version'>, ls: OfferLineInput[]) => JSON.stringify([
+      o.area, o.customerCompany, o.customerName, o.email, o.phone, o.street, o.zip, o.city, o.eventDate ?? null, o.eventEnd ?? null, o.persons, o.title, o.intro, o.closing,
+      o.questions, o.validUntil ?? null, o.depositPercent, [...o.documentIds].sort(),
+      ls.map((l) => [l.description, l.detail, l.unit, Number(l.quantity), l.unitPriceCents, Number(l.taxRatePercent)]),
+    ]);
+    const before = { area: b.area, customerCompany: b.customerCompany, customerName: b.customerName, email: b.email, phone: b.phone, street: b.street, zip: b.zip, city: b.city,
+      eventDate: b.eventDate, eventEnd: b.eventEnd, persons: b.persons, title: b.title, intro: b.intro, closing: b.closing, questions: b.questions as string[], validUntil: b.validUntil,
+      depositPercent: b.depositPercent, documentIds: b.documentIds as string[], notes: b.notes };
+    const visibleChange = seen(before, oldLines.map((l) => ({ ...l, unit: l.unit as OfferLineInput["unit"], taxRatePercent: Number(l.taxRatePercent) }))) !== seen(rest, lines);
+    if (b.status === 'accepted' || b.status === 'declined') {
+      // abgeschlossen: nur noch die interne Notiz
+      if (visibleChange) throw conflict('Angenommene oder abgelehnte Angebote lassen sich nicht mehr ändern – nur die interne Notiz.');
+      await tx.update(offers).set({ notes: rest.notes, version: b.version + 1, updatedAt: new Date() }).where(eq(offers.id, id));
+      await record(tx, actor, { action: 'update', entity: 'offer', entityId: id, after: { number: b.number, notes: true } });
+      return { ok: true, backToDraft: false };
+    }
+    if (!visibleChange) {
+      await tx.update(offers).set({ notes: rest.notes, version: b.version + 1, updatedAt: new Date() }).where(eq(offers.id, id));
+      return { ok: true, backToDraft: false };
+    }
+    // sichtbare Änderung nach dem Versand: zurück zum Entwurf, die versendete Fassung und ihr Link gelten nicht mehr
     const wasSent = b.status === 'sent';
     await tx.update(offers).set({ ...rest, ...(wasSent ? { status: 'draft' as const, sentPdf: null, sentHash: '', linkVersion: b.linkVersion + 1 } : {}), version: b.version + 1, updatedAt: new Date() }).where(eq(offers.id, id));
     await tx.delete(offerLines).where(eq(offerLines.offerId, id));
@@ -230,6 +261,13 @@ async function idOfToken(db: Exec, token: string) {
   if (want.length !== got.length || !timingSafeEqual(want, got)) throw GONE();
   return id;
 }
+/** wie idOfToken, zusätzlich die Link-Fassung (für die Prüfung innerhalb der Transaktion) */
+async function idAndVersionOfToken(db: Exec, token: string) {
+  const id = await idOfToken(db, token);
+  const [r] = await db.select({ v: offers.linkVersion }).from(offers).where(eq(offers.id, id));
+  if (!r || tokenFor(id, r.v) !== token) throw GONE();
+  return { id, v: r.v };
+}
 export async function offerLink(db: Exec, id: string, baseUrl: string) {
   const [r] = await db.select({ v: offers.linkVersion }).from(offers).where(eq(offers.id, id));
   if (!r) throw notFound('Angebot');
@@ -242,6 +280,7 @@ export async function mailDraft(db: Exec, id: string, baseUrl: string) {
   const [o, h] = [await getOffer(db, id), await getHotel(db)];
   if (o.status === 'accepted' || o.status === 'declined') throw conflict('Das Angebot ist bereits abgeschlossen.');
   if (!o.lines.length) throw conflict('Das Angebot hat noch keine Positionen.');
+  if (o.validUntil && o.validUntil < todayBerlin()) throw conflict(expiredMsg(o.validUntil));
   const link = await offerLink(db, id, baseUrl);
   const when = o.eventDate ? (o.eventEnd && o.eventEnd !== o.eventDate ? ` vom ${de(o.eventDate)} bis ${de(o.eventEnd)}` : ` am ${de(o.eventDate)}`) : '';
   const hello = o.customerName ? `Guten Tag ${o.customerName},` : 'Guten Tag,';
@@ -255,10 +294,12 @@ export async function mailDraft(db: Exec, id: string, baseUrl: string) {
   return { to: o.email, subject: `Angebot ${o.number}${o.title ? ` – ${o.title}` : ''} – ${h.name}`, text, attachment: `Angebot_${o.number}.pdf${docs.length ? ` + ${docs.join(', ')}` : ''}`, ready: await ready(db) };
 }
 
+const expiredMsg = (d: string) => `Das Angebot war nur bis zum ${de(d)} gültig. Bitte „Gültig bis“ anpassen und speichern, dann senden.`;
 export async function sendOffer(db: Db, actor: Actor, id: string, v: { to: string; subject: string; text: string }) {
   const o = await getOffer(db, id);
   if (o.status === 'accepted' || o.status === 'declined') throw conflict('Das Angebot ist bereits abgeschlossen.');
   if (!o.lines.length) throw conflict('Das Angebot hat noch keine Positionen.');
+  if (o.validUntil && o.validUntil < todayBerlin()) throw conflict(expiredMsg(o.validUntil));
   // erneuter Versand ohne Änderung: dieselbe Fassung; sonst neu erzeugen
   const [cur] = await db.select({ pdf: offers.sentPdf, hash: offers.sentHash }).from(offers).where(eq(offers.id, id));
   const pdf = o.status === 'sent' && cur?.pdf ? cur.pdf : await render(db, o);
@@ -267,8 +308,11 @@ export async function sendOffer(db: Db, actor: Actor, id: string, v: { to: strin
     { filename: `Angebot_${o.number}.pdf`, content: pdf, contentType: 'application/pdf' },
     ...docs.map((d) => ({ filename: d.fileName, content: d.data, contentType: 'application/pdf' })),
   ] });
-  await db.update(offers).set({ status: 'sent', sentAt: new Date(), sentTo: v.to, sentPdf: pdf, sentHash: sha(pdf), updatedAt: new Date(), version: o.version + 1 }).where(eq(offers.id, id));
-  await record(db, actor, { action: 'send', entity: 'offer', entityId: id, after: { to: v.to, number: o.number, documents: docs.map((d) => d.name) } });
+  // nur übernehmen, wenn das Angebot während des Versands unverändert blieb (nicht inzwischen geändert, angenommen oder abgelehnt)
+  const done = await db.update(offers).set({ status: 'sent', sentAt: new Date(), sentTo: v.to, sentPdf: pdf, sentHash: sha(pdf), updatedAt: new Date(), version: o.version + 1 })
+    .where(and(eq(offers.id, id), eq(offers.version, o.version), sql`${offers.status} in ('draft', 'sent')`)).returning({ id: offers.id });
+  await record(db, actor, { action: 'send', entity: 'offer', entityId: id, after: { to: v.to, number: o.number, documents: docs.map((d) => d.name), applied: done.length > 0 } });
+  if (!done.length) throw conflict('Die E-Mail wurde gesendet, aber das Angebot wurde währenddessen geändert, angenommen oder abgelehnt. Bitte den aktuellen Stand prüfen – der Status wurde nicht überschrieben.');
   return { ok: true };
 }
 
@@ -278,6 +322,8 @@ export async function acceptOffer(db: Db, actor: Actor, id: string, v: { method:
     const [b] = await tx.select().from(offers).where(eq(offers.id, id)).for('update');
     if (!b) throw notFound('Angebot');
     if (b.status === 'accepted' || b.status === 'declined') throw conflict('Das Angebot ist bereits abgeschlossen.');
+    const [line] = await tx.select({ id: offerLines.id }).from(offerLines).where(eq(offerLines.offerId, id)).limit(1);
+    if (!line) throw conflict('Das Angebot hat noch keine Positionen.');
     // Annahme ohne Versand (z. B. am Telefon besprochen): die aktuelle Fassung wird festgehalten
     let pdf = b.sentPdf;
     if (!pdf) pdf = await render(tx, await getOffer(tx, id));
@@ -319,10 +365,11 @@ export async function publicDocument(db: Exec, token: string, docId: string) {
 }
 /** Online annehmen: Name + Bestätigung; gespeichert werden Zeitpunkt, Name, IP-Adresse und der Prüfwert der angenommenen Fassung. */
 export async function publicAccept(db: Db, token: string, v: { name: string }, ip: string | null) {
-  const id = await idOfToken(db, token);
+  const { id, v: linkVersion } = await idAndVersionOfToken(db, token);
   return db.transaction(async (tx) => {
     const [b] = await tx.select().from(offers).where(eq(offers.id, id)).for('update');
-    if (!b) throw GONE();
+    // inzwischen geändert (neue Fassung, neuer Link) → dieser Link gilt nicht mehr
+    if (!b || b.linkVersion !== linkVersion) throw GONE();
     if (b.status === 'accepted') throw conflict('Dieses Angebot wurde bereits angenommen. Vielen Dank!');
     if (b.status !== 'sent' || !b.sentPdf) throw conflict('Dieses Angebot kann nicht mehr online angenommen werden. Bitte wenden Sie sich an uns.');
     if (b.validUntil && b.validUntil < todayBerlin()) throw conflict(`Dieses Angebot war bis zum ${de(b.validUntil)} gültig. Bitte sprechen Sie uns an – wir erstellen Ihnen gern ein neues.`);

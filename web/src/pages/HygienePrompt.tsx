@@ -42,9 +42,10 @@ export function HygienePrompt({ temp: askTemp = true, clean: askClean = true }: 
   const yes = async () => {
     setBusy(true);
     try {
-      if (q.kind === 'temp') await api('PUT', '/hygiene/readings', { entries: points.map((p) => ({ pointId: p.id, date: todayBerlin(), valueC: num(vals[p.id]), note: '' })) });
+      let kept = 0;
+      if (q.kind === 'temp') kept = (await api<{ kept: number }>('PUT', '/hygiene/readings', { onlyNew: true, entries: points.map((p) => ({ pointId: p.id, date: todayBerlin(), valueC: num(vals[p.id]), note: '' })) })).kept;
       else await api('POST', `/cleaning/areas/${area.areaId}/done`);
-      toast(`${area.areaName}: ${q.kind === 'temp' ? 'Werte gespeichert' : 'Reinigung erledigt'}`);
+      toast(`${area.areaName}: ${q.kind === 'temp' ? (kept ? `Werte gespeichert – ${kept} ${kept === 1 ? 'Wert war' : 'Werte waren'} schon von jemand anderem eingetragen und ${kept === 1 ? 'bleibt' : 'bleiben'} unverändert` : 'Werte gespeichert') : 'Reinigung erledigt'}`);
       skip();
       bump();
     } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }

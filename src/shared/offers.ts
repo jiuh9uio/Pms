@@ -41,8 +41,9 @@ export interface OfferDocumentDto { id: string; name: string; fileName: string; 
 
 export const offerLineInput = z.object({
   itemId: z.uuid().nullable().default(null), description: z.string().trim().min(1, 'Bitte eine Bezeichnung eintragen').max(200), detail: text(300),
-  unit: z.enum(OFFER_UNITS), quantity: z.number('Bitte eine Zahl eingeben').min(0).max(100000), unitPriceCents: cents, taxRatePercent: rate,
-});
+  // Menge auf 2 Nachkommastellen (so wird sie gespeichert) – sonst passt die Zeilensumme nicht zur gedruckten Menge
+  unit: z.enum(OFFER_UNITS), quantity: z.number('Bitte eine Zahl eingeben').min(0).max(100000).transform((q) => Math.round(q * 100) / 100), unitPriceCents: cents, taxRatePercent: rate,
+}).refine((l) => Math.abs(l.quantity * l.unitPriceCents) <= 1_000_000_000, { message: 'Betrag der Zeile ist zu hoch', path: ['quantity'] });
 export type OfferLineInput = z.infer<typeof offerLineInput>;
 
 const customer = {

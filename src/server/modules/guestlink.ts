@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import QRCode from 'qrcode';
 import { STAY_REQUEST_LABEL, cancelTerms, isActiveStatus, todayBerlin, type StayRequest, type CancelPolicy, type GuestLinkDto, type PublicBooking, type PublicBookingGate, type PublicCred } from '../../shared/hotel.js';
 import type { Db, Exec } from '../db/client.js';
@@ -150,7 +150,8 @@ export async function setArrival(db: Db, token: string, v: PublicCred & { time: 
   const id = await enter(db, token, v);
   const b = await view(db, id);
   if (!b.canArrival) throw conflict('Für diese Reservierung lässt sich die Ankunftszeit hier nicht ändern.');
-  await db.update(bookings).set({ arrivalTime: v.time, guestMessage: v.message, updatedAt: new Date() }).where(eq(bookings.id, id));
+  // Version erhöhen: ein geöffnetes Formular des Personals soll das nicht unbemerkt überschreiben
+  await db.update(bookings).set({ arrivalTime: v.time, guestMessage: v.message, version: sql`${bookings.version} + 1`, updatedAt: new Date() }).where(eq(bookings.id, id));
   await record(db, { ...GUEST, ip }, { action: 'guest_arrival', entity: 'booking', entityId: id, after: { arrivalTime: v.time, message: v.message.slice(0, 200) } });
   const changed = v.time !== b.arrivalTime || v.message !== b.guestMessage;
   if (changed && (v.time || v.message)) await tellTeam(db, `Reservierung ${b.number} (${b.guestName}, Anreise ${de(b.from)}): ${v.time ? `Ankunft voraussichtlich ${v.time} Uhr` : 'Nachricht des Gastes'}${v.message ? ` – „${v.message}“` : ''}`);
@@ -169,7 +170,7 @@ export async function cancelByGuest(db: Db, token: string, cred: PublicCred & { 
     await setRoomStatus(db, { ...GUEST, ip }, r.id, { status: 'cancelled', version: r.version });
   const fee = b.terms.feeCents > 0 ? `Ausfallgebühr laut Bedingungen: ${(b.terms.feeCents / 100).toFixed(2).replace('.', ',')} € (${b.terms.feePercent} % des Zimmerpreises) – bitte prüfen und berechnen.` : 'Kostenfrei innerhalb der Frist.';
   const line = `Online storniert am ${de(todayBerlin())} über den Gäste-Link. ${fee}`;
-  await db.update(bookings).set({ notes: [full.notes, line].filter(Boolean).join('\n').slice(0, 2000), updatedAt: new Date() }).where(eq(bookings.id, id));
+  await db.update(bookings).set({ notes: [full.notes, line].filter(Boolean).join('\n').slice(0, 2000), version: sql`${bookings.version} + 1`, updatedAt: new Date() }).where(eq(bookings.id, id));
   await record(db, { ...GUEST, ip }, { action: 'guest_cancel', entity: 'booking', entityId: id, after: { free: b.terms.free, feeCents: b.terms.feeCents } });
   await tellTeam(db, `Storno durch den Gast: Reservierung ${b.number} (${b.guestName}, ${de(b.from)} bis ${de(b.to)}). ${fee}`);
   return view(db, id);

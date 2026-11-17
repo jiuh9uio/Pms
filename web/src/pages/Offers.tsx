@@ -151,11 +151,15 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
     } catch (e) { const err = e as { message?: string; fields?: Record<string, string> }; toast(Object.values(err.fields ?? {}).join(' · ') || err.message || 'Fehler', 'error'); setBusy(null); return false; }
   };
   const decline = async () => {
-    if (!window.confirm(`Angebot ${o.number} als abgelehnt markieren?`)) return;
+    if (!window.confirm(`Angebot ${o.number} als abgelehnt markieren?${dirty ? ' Ihre Änderungen werden vorher gespeichert.' : ''}`)) return;
+    if (dirty && !(await save(true))) return;
     try { await api('POST', `/offers/${id}/decline`); toast('Als abgelehnt markiert'); bump(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
   };
   const openPdf = async () => { if (dirty && !(await save(true))) return; window.open(`/api/v1/offers/${id}/pdf`, '_blank', 'noopener'); };
   const startMail = async () => { if (dirty && !(await save(true))) return; setMail(true); };
+  // Annahme hält die gespeicherte Fassung fest – ungespeicherte Änderungen deshalb zuerst speichern
+  const startAccept = async () => { if (dirty && !(await save(true))) return; setAccepting(true); };
+  const expired = !locked && !!v.validUntil && v.validUntil < todayBerlin();
   const hotelBooking = () => {
     const [first, ...rest] = (o.customerName || o.customerCompany).split(' ');
     newBooking({ from: o.eventDate ?? undefined, to: o.eventEnd && o.eventEnd !== o.eventDate ? o.eventEnd : o.eventDate ? addDays(o.eventDate, 1) : undefined, source: 'E-Mail',
@@ -178,13 +182,14 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
       footer={<>
         <span className="left total">Gesamt <b>{formatMoney(total)}</b></span>
         <Button onClick={() => void openPdf()}>PDF ansehen</Button>
-        {!locked && <Button busy={busy === 'save'} disabled={!dirty} onClick={() => void save()}>Speichern</Button>}
+        {(!locked || dirty) && <Button busy={busy === 'save'} disabled={!dirty} onClick={() => void save()}>{locked ? 'Notiz speichern' : 'Speichern'}</Button>}
         {!locked && <Button onClick={() => void startMail()}>{o.status === 'sent' ? 'Erneut senden' : 'Per E-Mail senden'}</Button>}
-        {!locked && <Button variant="primary" onClick={() => setAccepting(true)}>Angenommen …</Button>}
+        {!locked && <Button variant="primary" busy={busy === 'save'} onClick={() => void startAccept()}>Angenommen …</Button>}
         {!locked && <Button variant="danger" onClick={() => void decline()}>Abgelehnt</Button>}
       </>}>
       {o.status === 'accepted' && <p className="notice small">Angenommen am {new Date(o.acceptedAt!).toLocaleString('de-DE')} von <b>{o.acceptedBy}</b> ({({ online: 'online über den Link', email: 'per E-Mail', telefon: 'telefonisch', persoenlich: 'persönlich', schriftlich: 'schriftlich' } as Record<string, string>)[o.acceptedMethod] ?? o.acceptedMethod}). Prüfwert der angenommenen Fassung: <code className="wrapcode">{o.acceptedHash.slice(0, 16)}…</code></p>}
-      {o.status === 'sent' && <p className="notice small">Versendet am {new Date(o.sentAt!).toLocaleString('de-DE')} an {o.sentTo}. Änderungen machen es wieder zum Entwurf; der bisherige Link zur Annahme gilt dann nicht mehr.</p>}
+      {expired && <p className="notice warn small">„Gültig bis“ ({new Date(`${v.validUntil}T12:00:00`).toLocaleDateString('de-DE')}) liegt in der Vergangenheit. Zum Versenden bitte ein neues Datum eintragen und speichern{o.status === 'sent' ? ' – online annehmen kann der Kunde es so nicht mehr' : ''}.</p>}
+      {o.status === 'sent' && <p className="notice small">Versendet am {new Date(o.sentAt!).toLocaleString('de-DE')} an {o.sentTo}. Änderungen am Inhalt machen es wieder zum Entwurf; der bisherige Link zur Annahme gilt dann nicht mehr. Die interne Notiz lässt sich ohne Folgen ändern.</p>}
       {o.status === 'accepted' && (
         <section className="card">
           <h3 className="first">Nach der Annahme</h3>
@@ -365,7 +370,7 @@ function TemplateDialog({ tpl, onClose }: { tpl: OfferTemplateDto | null; onClos
       <Field label="Fragenkatalog (eine Frage je Zeile)" wide><textarea rows={6} value={v.questions} onChange={(e) => setV({ ...v, questions: e.target.value })} /></Field>
       <Field label="Schlusstext" wide><textarea rows={2} value={v.closing} onChange={(e) => setV({ ...v, closing: e.target.value })} /></Field>
       <Field label="Vorausgewählte Leistungen" wide><div className="radiolist">{items.filter((i) => i.active).map((i) => <label key={i.id} className="check"><input type="checkbox" checked={v.itemIds.includes(i.id)} onChange={(e) => setV({ ...v, itemIds: toggle(v.itemIds, i.id, e.target.checked) })} /><span>{i.name} <small className="muted">{formatMoney(i.priceCents)} {UNIT_LABEL[i.unit]}</small></span></label>)}{items.length === 0 && <span className="muted small">Erst Leistungen anlegen.</span>}</div></Field>
-      <Field label="Anlagen" wide><div className="radiolist">{docs.filter((d) => d.active).map((d) => <label key={d.id} className="check"><input type="checkbox" checked={v.documentIds.includes(d.id)} onChange={(e) => setV({ ...v, documentIds: toggle(v.documentIds, d.id, e.target.checked) })} /><span>{d.name}</span></label>)}{docs.length === 0 && <span className="muted small">Noch keine Dokumente hochgeladen.</span>}</div></Field>
+      <Field label="Anlagen" wide><div className="radiolist">{docs.filter((d) => d.active || v.documentIds.includes(d.id)).map((d) => <label key={d.id} className="check"><input type="checkbox" checked={v.documentIds.includes(d.id)} onChange={(e) => setV({ ...v, documentIds: toggle(v.documentIds, d.id, e.target.checked) })} /><span>{d.name}{!d.active && <small className="muted"> (ausgeblendet – wird nicht mehr übernommen)</small>}</span></label>)}{docs.length === 0 && <span className="muted small">Noch keine Dokumente hochgeladen.</span>}</div></Field>
       <label className="check"><input type="checkbox" checked={v.active} onChange={(e) => setV({ ...v, active: e.target.checked })} /><span>In Benutzung</span></label>
     </Dialog>
   );
