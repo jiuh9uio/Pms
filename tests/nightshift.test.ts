@@ -335,3 +335,38 @@ describe('Aufs Zimmer und Ausfallgebühr', () => {
     expect((await call('POST', `/bookings/${b.id}/cancel-fee`, admin, { amountCents: 16000, taxRatePercent: 0, text: '' })).statusCode).toBe(409);
   });
 });
+
+describe('Temperaturprotokoll ausgeben', () => {
+  it('PDF, E-Mail mit PDF (nachgebildet) und kompakter Bon', async () => {
+    const [area] = await ok('GET', '/hygiene/areas', admin);
+    const p1 = await ok('POST', '/hygiene/points', admin, { areaId: area.id, name: 'Kühlzelle Druck', minC: 0, maxC: 7, active: true });
+    const p2 = await ok('POST', '/hygiene/points', admin, { areaId: area.id, name: 'Tiefkühl Druck', minC: null, maxC: -18, active: true });
+    const d1 = addDays(today, -2), d2 = addDays(today, -1);
+    await ok('PUT', '/hygiene/readings', admin, { entries: [
+      { pointId: p1.id, date: d1, valueC: 4, note: '' }, { pointId: p2.id, date: d1, valueC: -20, note: '' },
+      { pointId: p1.id, date: d2, valueC: 9, note: 'Tür offen, Ware geprüft' } ] });
+    const q = `from=${d1}&to=${today}&area=${area.id}`;
+    const pdf = await app.inject({ method: 'GET', url: `/api/v1/hygiene/export/pdf?${q}`, cookies: admin });
+    expect(pdf.statusCode).toBe(200);
+    expect(pdf.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+    expect((await app.inject({ method: 'GET', url: `/api/v1/hygiene/export/pdf?from=${today}&to=${d1}`, cookies: admin })).statusCode).toBe(400);
+    // E-Mail (Versand nachgebildet)
+    const { setMailSender } = await import('../src/server/modules/mail.js') as unknown as { setMailSender: (s: unknown) => void };
+    const sent: { to: string; attachments?: { filename: string }[] }[] = [];
+    setMailSender(async (_c: unknown, m: { to: string; attachments?: { filename: string }[] }) => { sent.push(m); });
+    await ok('PUT', '/settings/mail', admin, { enabled: true, host: 'mail.example.org', port: 587, user: 'haus@example.org', fromName: 'Haus', password: 'nur-test' });
+    const draft = await ok('GET', `/hygiene/export/mail?${q}`, admin);
+    expect(draft.subject).toMatch(/Temperaturprotokoll/);
+    await ok('POST', `/hygiene/export/mail?${q}`, admin, { to: 'amt@example.org', subject: draft.subject, text: draft.text });
+    expect(sent.at(-1)!.to).toBe('amt@example.org');
+    expect(sent.at(-1)!.attachments?.[0]?.filename).toMatch(/^Temperaturprotokoll_.*\.pdf$/);
+    // Bon: je Tag eine Zeile, Breite wird eingehalten
+    const { collectHygiene, bonLines } = await import('../src/server/modules/hygieneexport.js');
+    const data = await collectHygiene(db as never, { from: d1, to: today, areaId: area.id });
+    const lines = bonLines(data, { hotel: 'Testhaus', from: d1, to: today, by: 'Test' }, 32).filter((l): l is { text: string } => 'text' in l).map((l) => l.text);
+    for (const t of lines) expect(t.length).toBeLessThanOrEqual(32);
+    const dayLine = lines.find((t) => t.startsWith(`${d2.slice(8, 10)}.${d2.slice(5, 7)}.`))!;
+    expect(dayLine).toMatch(/9!/); // außerhalb des Sollbereichs markiert
+    expect(lines.some((t) => /Tür offen/.test(t))).toBe(true);
+  });
+});

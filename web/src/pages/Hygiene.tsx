@@ -12,6 +12,7 @@ import { WD, deDate, deShort } from '../hotel/common.tsx';
 import { Button, LoadState, printOnly, useLoad, useToast } from '../ui.tsx';
 import { MasterDialog } from './RoomsPrices.tsx';
 import { PrintLogo } from '../logo.tsx';
+import { HygieneExport } from './HygieneExport.tsx';
 
 const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
 const num = (n: number) => n.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -33,6 +34,7 @@ export function Hygiene() {
   const [areaId, setAreaId] = useState<string | null>(params.get('bereich'));
   const [date, setDate] = useState(today);
   const [mode, setMode] = useState<'entry' | 'month'>('entry');
+  const [exporting, setExporting] = useState(false);
   const [month, setMonth] = useState(today.slice(0, 7));
   const [dlg, setDlg] = useState<ReactNode>(null);
   const [draft, setDraft] = useState<Record<string, { value: string; note: string }>>({});
@@ -119,6 +121,7 @@ export function Hygiene() {
             <button type="button" role="radio" aria-checked={mode === 'entry'} className={mode === 'entry' ? 'on' : ''} onClick={() => setMode('entry')}>Eintragen</button>
             <button type="button" role="radio" aria-checked={mode === 'month'} className={mode === 'month' ? 'on' : ''} onClick={() => setMode('month')}>Monatsprotokoll</button>
           </div>
+          <Button onClick={() => setExporting(true)} title="Als PDF drucken, per E-Mail senden oder auf dem Bondrucker">Drucken / Senden …</Button>
           {isAdmin && <Button onClick={() => editArea()}>Bereich anlegen</Button>}
         </div>
       </div>
@@ -196,6 +199,7 @@ export function Hygiene() {
         </>
       )}
       {dlg}
+      {exporting && <HygieneExport areas={visible} currentAreaId={area?.id ?? null} onClose={() => setExporting(false)} />}
     </section>
   );
 }

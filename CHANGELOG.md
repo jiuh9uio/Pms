@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.88.0
+
+- **Temperaturprotokoll drucken und senden** (Kontrollen → Hygieneamt → Temperaturprotokoll → „Drucken / Senden …“): Zeitraum wählen (Dieser Monat, Letzter Monat, 7/30/90 Tage oder frei) und Bereich (alle oder einer).
+  - **Großer Drucker / PDF:** Tabelle im Querformat mit Sollbereichen, Abweichungen rot hinterlegt, allen Bemerkungen und Maßnahmen, Zusammenfassung und Logo – zum Ansehen, Drucken oder Speichern.
+  - **Per E-Mail:** dasselbe PDF als Anhang, z. B. an das Hygieneamt; Empfänger und Text prüfen Sie vor dem Senden.
+  - **Bondrucker:** sehr kompakt – eine Legende der Messstellen (A, B, C …) und dann je Tag eine Zeile mit allen Werten, z. B. „06.11. A9! B1 C-20 D5“. So passen 30 Tage mit vier Messstellen auf rund 50 Zeilen Kassenzettel. „!“ = außerhalb des Sollbereichs, „ok“ = im Soll bestätigt, „-“ = fehlt; Maßnahmen stehen am Ende.
+
 ## 1.87.0
 
 - **Fragenkatalog zum Anklicken** (Angebote): Bei „Nur Fragen stellen“ erscheinen alle gesammelten Fragen als Kästchen – einfach anklicken. Eigene Fragen tippen Sie dazu und können sie „für später im Katalog merken“. Der Katalog startet mit den Fragen der Vorlagen; entfernen kann ihn der Administrator (× an der Frage).

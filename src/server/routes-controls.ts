@@ -6,6 +6,8 @@ import type { Db } from './db/client.js';
 import type { Actor } from './modules/audit.js';
 import * as controls from './modules/controls.js';
 import * as goods from './modules/goods.js';
+import * as hygexp from './modules/hygieneexport.js';
+import { bonTarget } from './modules/quickprint.js';
 
 interface Ctx {
   db: Db;
@@ -81,6 +83,19 @@ export function registerControlRoutes(api: FastifyInstance, { db, requireUser, r
     return { ok: true };
   });
 
+  // Temperaturprotokoll ausgeben: PDF (ansehen/drucken), per E-Mail, kompakt auf dem Bondrucker
+  const expQ = (req: FastifyRequest) => {
+    const q = z.object({ from: z.string().refine(isIsoDate, 'Bitte ein Datum wählen'), to: z.string().refine(isIsoDate, 'Bitte ein Datum wählen'), area: z.uuid().optional() }).parse(req.query);
+    return { from: q.from, to: q.to, areaId: q.area ?? null };
+  };
+  api.get('/hygiene/export/pdf', user, async (req, reply) => {
+    const r = await hygexp.exportPdf(db, actor(req), expQ(req));
+    return reply.header('Content-Type', 'application/pdf').header('Content-Disposition', `inline; filename="${r.fileName}"`).send(r.pdf);
+  });
+  api.get('/hygiene/export/mail', user, (req) => hygexp.mailDraft(db, expQ(req)));
+  api.post('/hygiene/export/mail', user, (req) => hygexp.sendPdf(db, actor(req), expQ(req), z.object({ to: z.email('Ungültige E-Mail-Adresse'), subject: z.string().trim().min(1).max(200), text: z.string().trim().min(1).max(8000) }).parse(req.body)));
+  api.get('/hygiene/export/bon', user, async () => { const t = await bonTarget(db); return { ready: !!t, name: t?.name ?? '' }; });
+  api.post('/hygiene/export/bon', user, (req) => hygexp.printBon(db, actor(req), expQ(req)));
   api.get('/hygiene/open', user, () => controls.openToday(db));
   api.post('/hygiene/areas/:id/confirm', user, (req) => controls.confirmArea(db, actor(req), idOf(req)));
   api.put('/hygiene/readings', user, (req) => { const v = C.hygieneReadingsInput.parse(req.body); return controls.saveReadings(db, actor(req), v.entries, v.onlyNew, req.user!.role === 'admin'); });
