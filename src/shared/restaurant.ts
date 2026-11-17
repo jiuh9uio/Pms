@@ -35,3 +35,11 @@ export const endTime = (time: string, durationMin: number) => {
 /** Überschneiden sich zwei Reservierungen am selben Tag? (Reservierungen über Mitternacht hinaus zählen bis Tagesende.) */
 export const overlaps = (a: { time: string; durationMin: number }, b: { time: string; durationMin: number }) =>
   minutesOf(a.time) < minutesOf(b.time) + b.durationMin && minutesOf(b.time) < minutesOf(a.time) + a.durationMin;
+
+/** Verzehr aufs Zimmer schreiben */
+export const roomChargeInput = z.object({
+  bookingRoomId: z.uuid('Bitte ein Zimmer wählen'),
+  name: z.string().trim().min(1, 'Bitte eine Bezeichnung eintragen').max(80).default('Restaurant'),
+  amountCents: z.number('Bitte einen Betrag eintragen').int().min(1, 'Betrag größer als 0').max(1_000_000),
+  taxRateId: z.uuid('Bitte einen Steuersatz wählen'),
+});

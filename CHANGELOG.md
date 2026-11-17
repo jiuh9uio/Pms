@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.86.0
+
+- **Restaurant: „Aufs Zimmer“** – Verzehr eines Hotelgastes auf seine Zimmerrechnung schreiben: Zimmer antippen (nur eingecheckte Gäste), Betrag und Steuersatz eintragen. Erscheint in der Reservierung unter „Frühstück und Leistungen“ und kommt mit auf die Zimmerrechnung. Speisen und Getränke mit unterschiedlichem Steuersatz als zwei Einträge buchen.
+- **Ausfallgebühr mit einem Klick:** In der Reservierung unter „Rechnungen und Zahlungen“ → „Ausfallgebühr …“ (bei stornierten oder nicht angereisten Zimmern). Der Betrag wird nach Ihren Stornobedingungen vorgeschlagen; angelegt wird ein **Rechnungsentwurf**, den Sie prüfen und selbst ausstellen. Den Steuersatz wählen Sie selbst – ob eine Ausfallgebühr umsatzsteuerpflichtig ist, bitte mit dem Steuerberater klären.
+- **Kurzanleitung fürs Team** (Menü → Hilfe → Kurzanleitung): die zehn häufigsten Abläufe auf einer Seite, zum Ausdrucken und Aushängen.
+
 ## 1.85.0
 
 - **Als App auf dem Handy:** Das Programm lässt sich auf iPhone, iPad und Android-Handys auf den Home-Bildschirm legen und öffnet sich dann ohne Browserleiste wie eine App (eigenes Symbol „Schützenhaus“, passende Farben für hell und dunkel, Ränder für Notch und Home-Leiste, kein Hineinzoomen beim Tippen in Textfelder). Auf Android zeigt langes Drücken auf das Symbol Abkürzungen zu Belegungsplan, Reservierungen, Tischen und Übergabebuch.

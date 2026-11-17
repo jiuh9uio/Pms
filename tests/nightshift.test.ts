@@ -296,3 +296,42 @@ describe('Logo überall', () => {
     expect(sent[1]!.html).toBeUndefined();
   });
 });
+
+describe('Aufs Zimmer und Ausfallgebühr', () => {
+  it('Restaurant-Verzehr nur auf eingecheckte Zimmer; Ausfallgebühr als Entwurf nach den Bedingungen', async () => {
+    const cat = await ok('POST', '/categories', admin, { name: 'Gebührzimmer', description: '', stdOccupancy: 1, maxPersons: 1, basePriceCents: 10000, sort: 8 });
+    await ok('POST', '/rooms/bulk', admin, { categoryId: cat.id, count: 2, firstNumber: 501, floor: '5' });
+    const rooms = (await ok('GET', '/rooms', admin)).filter((r: { number: string }) => r.number === '501' || r.number === '502');
+    const guest = { salutation: '', firstName: 'Erfunden', lastName: 'Gebühr', company: '', email: '', phone: '', street: '', zip: '', city: '', country: '', birthdate: '', nationality: '', idNumber: '', notes: '' };
+    const b = await ok('POST', '/bookings', admin, { guest, groupName: '', source: 'Telefon', paymentMethod: '', notes: '', breakfast: false,
+      rooms: [{ roomId: rooms[0].id, from: today, to: addDays(today, 2), adults: 1, children: 0, status: 'confirmed', pricePerNightCents: null },
+        { roomId: rooms[1].id, from: addDays(today, 1), to: addDays(today, 3), adults: 1, children: 0, status: 'confirmed', pricePerNightCents: null }] });
+    let d = await ok('GET', `/bookings/${b.id}`, admin);
+    const [r1, r2] = d.rooms;
+    const tax = (await ok('GET', '/tax-rates', admin)).find((t: { ratePercent: number }) => t.ratePercent === 19) ?? (await ok('GET', '/tax-rates', admin))[0];
+    // noch nicht eingecheckt → abgelehnt
+    expect((await call('POST', '/restaurant/room-charge', admin, { bookingRoomId: r1.id, name: 'Restaurant', amountCents: 3850, taxRateId: tax.id })).statusCode).toBe(409);
+    await ok('POST', `/booking-rooms/${r1.id}/status`, admin, { status: 'checked_in', version: r1.version });
+    const inHouse = await ok('GET', '/restaurant/in-house', admin);
+    expect(inHouse.map((x: { room: string }) => x.room)).toContain('501');
+    await ok('POST', '/restaurant/room-charge', admin, { bookingRoomId: r1.id, name: 'Restaurant', amountCents: 3850, taxRateId: tax.id });
+    d = await ok('GET', `/bookings/${b.id}`, admin);
+    expect(d.charges.find((c: { name: string }) => c.name.startsWith('Restaurant'))).toMatchObject({ unitPriceCents: 3850, bookingRoomId: r1.id });
+    // Ausfallgebühr: ohne storniertes Zimmer nicht möglich
+    expect((await call('GET', `/bookings/${b.id}/cancel-fee`, admin)).statusCode).toBe(409);
+    // Bedingungen: kostenfrei bis 7 Tage vorher, danach 80 %
+    const pol = await ok('GET', '/settings/cancel-policy', admin).catch(() => null);
+    if (pol) await ok('PUT', '/settings/cancel-policy', admin, { ...pol, enabled: true, freeDays: 7, feePercent: 80 });
+    await ok('POST', `/booking-rooms/${r2.id}/status`, admin, { status: 'cancelled', version: d.rooms[1].version });
+    const s = await ok('GET', `/bookings/${b.id}/cancel-fee`, admin);
+    expect(s).toMatchObject({ rooms: ['502'], lodgingCents: 20000, noShow: false, existingDraftOrInvoice: null });
+    if (pol) expect(s).toMatchObject({ free: false, feePercent: 80, feeCents: 16000 });
+    const r = await ok('POST', `/bookings/${b.id}/cancel-fee`, admin, { amountCents: 16000, taxRatePercent: 0, text: '' });
+    const inv = await ok('GET', `/invoices/${r.invoiceId}`, admin);
+    expect(inv).toMatchObject({ status: 'draft', grossCents: 16000 });
+    expect(inv.lines).toHaveLength(1);
+    expect(inv.lines[0]).toMatchObject({ description: 'Ausfallgebühr', unitPriceCents: 16000, taxRatePercent: 0 });
+    // kein zweites Mal
+    expect((await call('POST', `/bookings/${b.id}/cancel-fee`, admin, { amountCents: 16000, taxRatePercent: 0, text: '' })).statusCode).toBe(409);
+  });
+});

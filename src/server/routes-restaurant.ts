@@ -9,6 +9,7 @@ import * as outlook from './modules/outlook.js';
 import * as deposits from './modules/deposits.js';
 import { depositCreateInput, depositDraftQuery, depositPaidInput } from '../shared/deposits.js';
 import * as restaurant from './modules/restaurant.js';
+import * as roomcharge from './modules/roomcharge.js';
 import { outlookEventInput, outlookSettingsInput } from '../shared/outlook.js';
 
 interface Ctx { db: Db; requireUser: (req: FastifyRequest) => Promise<void>; requireAdmin: (req: FastifyRequest) => Promise<void>; actor: (req: FastifyRequest) => Actor }
@@ -19,6 +20,9 @@ export function registerRestaurantRoutes(api: FastifyInstance, { db, requireUser
   const user = { preHandler: requireUser };
   const admin = { preHandler: requireAdmin };
   api.get('/restaurant/tables', user, () => restaurant.listTables(db));
+  // Verzehr eines Hotelgastes aufs Zimmer schreiben
+  api.get('/restaurant/in-house', user, () => roomcharge.inHouse(db));
+  api.post('/restaurant/room-charge', user, (req) => roomcharge.chargeToRoom(db, actor(req), R.roomChargeInput.parse(req.body)));
   api.post('/restaurant/tables', admin, (req) => restaurant.saveTable(db, actor(req), null, R.restaurantTableInput.parse(req.body)));
   api.put('/restaurant/tables/:id', admin, (req) =>
     restaurant.saveTable(db, actor(req), idOf(req), R.restaurantTableInput.parse(req.body), z.object({ version: z.number().int() }).parse(req.body).version));

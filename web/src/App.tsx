@@ -40,6 +40,7 @@ import { Users } from './pages/Users.tsx';
 import { Search } from './Search.tsx';
 import { ToastProvider } from './ui.tsx';
 import { Icon } from './icons.tsx';
+import { QuickGuide } from './pages/QuickGuide.tsx';
 
 interface AuthState { needsSetup: boolean; user: UserDto | null; guestHome?: boolean }
 const AuthCtx = createContext<{ user: UserDto; refresh: () => Promise<void> }>(null!);
@@ -94,6 +95,7 @@ const NAV: NavItem[] = [
   { to: '/benutzer', label: 'Benutzer', icon: '◉', admin: true, module: 'verwaltung', group: 'Verwaltung' },
   { to: '/protokoll', label: 'Protokoll', icon: '☰', admin: true, module: 'verwaltung', group: 'Verwaltung' },
   { to: '/erste-schritte', label: 'Erste Schritte', short: 'Start', icon: '✔', admin: true, module: 'verwaltung', group: 'Hilfe' },
+  { to: '/kurzanleitung', label: 'Kurzanleitung', short: 'Hilfe', icon: '✍', module: 'verwaltung', group: 'Hilfe' },
   { to: '/als-programm', label: 'Als Programm öffnen', short: 'Programm', icon: '▣', module: 'verwaltung', group: 'Hilfe' },
 ];
 const MODULE_TITLE: Record<string, string> = { hotel: 'Hotel', restaurant: 'Restaurant', schnelldruck: 'Schnelldruck', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet', email: 'E-Mail', team: 'Team', verwaltung: 'Verwaltung', rechnungen: 'Rechnungen' };
@@ -223,6 +225,7 @@ function Shell({ user }: { user: UserDto }) {
           {isAdmin && <Route path="/zimmer" element={<RoomsPrices />} />}
           <Route path="/konto" element={<Account />} />
           <Route path="/als-programm" element={<AsProgram />} />
+          <Route path="/kurzanleitung" element={<QuickGuide />} />
           {isAdmin && <Route path="/erste-schritte" element={<Setup />} />}
           {isAdmin && <Route path="/benutzer" element={<Users />} />}
           {hasModule(user, 'restaurant') && <Route path="/restaurant" element={<Restaurant />} />}

@@ -17,6 +17,7 @@ const SHOW_OUTLOOK = false;
 import { DepositPanel } from '../billing/DepositPanel.tsx';
 import { DEPOSIT_STATE_LABEL, type DepositDto } from '../../../src/shared/deposits.js';
 import { PrintLogo } from '../logo.tsx';
+import { RoomChargeDialog } from './RoomChargeDialog.tsx';
 
 const TONE: Record<TableStatus, 'accent' | 'ok' | 'neutral' | 'danger' | 'warn'> = { booked: 'accent', seated: 'ok', done: 'neutral', cancelled: 'danger', no_show: 'warn' };
 const WEEKDAY = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
@@ -76,6 +77,7 @@ export function Restaurant() {
           <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="Datum" />
           <Button onClick={() => setDate(addDays(date, 1))} aria-label="Nächster Tag">›</Button>
           {date !== today && <Button onClick={() => setDate(today)}>Heute</Button>}
+          <Button onClick={() => setDlg(<RoomChargeDialog onClose={() => setDlg(null)} />)} title="Verzehr eines Hotelgastes auf die Zimmerrechnung schreiben">Aufs Zimmer</Button>
           <Button onClick={() => window.print()}>Drucken</Button>
           {printer?.ready && <Button busy={sending} onClick={() => void sendKitchen()}>An Küche senden</Button>}
           <Button variant="primary" onClick={() => data && setDlg(<ReservationDialog date={date} tables={data.tables} list={data.list} res={null} onClose={close} />)}>Neue Reservierung</Button>

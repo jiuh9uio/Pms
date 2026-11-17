@@ -9,6 +9,7 @@ import * as slip from './modules/accountingslip.js';
 import * as terminal from './modules/terminal.js';
 import * as tsesign from './modules/tsesign.js';
 import * as logoMod from './modules/logo.js';
+import * as cancelfee from './modules/cancelfee.js';
 import { logoUsageInput } from '../shared/schemas.js';
 
 interface Ctx { db: Db; requireUser: (req: FastifyRequest) => Promise<void>; requireAdmin: (req: FastifyRequest) => Promise<void>; actor: (req: FastifyRequest) => Actor }
@@ -95,6 +96,9 @@ export function registerBillingRoutes(api: FastifyInstance, { db, requireUser, r
   api.post('/settings/logo/remove', admin, async (req) => { await billing.saveLogo(db, actor(req), null); return { ok: true }; });
 
   api.get('/bookings/:id/billing', user, (req) => billing.bookingBilling(db, idOf(req)));
+  // Ausfallgebühr für stornierte / nicht angereiste Zimmer: Vorschlag und Rechnungsentwurf (ausgestellt wird von Hand)
+  api.get('/bookings/:id/cancel-fee', user, (req) => cancelfee.suggestion(db, idOf(req)));
+  api.post('/bookings/:id/cancel-fee', user, (req) => cancelfee.createDraft(db, actor(req), idOf(req), B.cancelFeeInput.parse(req.body)));
   // Zettel für die Buchhaltung (A4-Ansicht und Bondrucker); payment = nur dieser Bezahlvorgang, sonst alle Zahlungen
   const paymentOf = (req: FastifyRequest) => z.object({ payment: z.uuid().optional() }).parse(req.query).payment ?? null;
   api.get('/bookings/:id/accounting-slip', user, (req) => slip.accountingSlip(db, actor(req), idOf(req), paymentOf(req)));

@@ -147,3 +147,10 @@ export const CHART_DEFAULTS: Record<'SKR03' | 'SKR04', AccountingSettings> = {
   SKR03: { chart: 'SKR03', receivables: '1400', cash: '1000', bank: '1200', card: '1360', paypal: '1360', voucher: '', revenue: { '7': '8300', '19': '8400', '0': '8100' } },
   SKR04: { chart: 'SKR04', receivables: '1200', cash: '1600', bank: '1800', card: '1460', paypal: '1460', voucher: '', revenue: { '7': '4300', '19': '4400', '0': '4100' } },
 };
+
+/** Ausfallgebühr als Rechnungsentwurf */
+export const cancelFeeInput = z.object({
+  amountCents: z.number('Bitte einen Betrag eintragen').int().min(1, 'Betrag größer als 0').max(10_000_000),
+  taxRatePercent: z.number('Bitte einen Steuersatz wählen').min(0).max(100),
+  text: z.string().trim().max(120).default(''),
+});

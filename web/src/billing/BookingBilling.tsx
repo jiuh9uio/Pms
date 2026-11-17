@@ -8,6 +8,7 @@ import { Button, useLoad, useToast } from '../ui.tsx';
 import { InvoiceStatus, PaymentForm, PaymentList } from './InvoiceDialog.tsx';
 import { SettleDialog } from './SettleDialog.tsx';
 import { DepositPanel } from './DepositPanel.tsx';
+import { CancelFeeDialog } from './CancelFeeDialog.tsx';
 
 /** In der Reservierung: Rechnungen, Anzahlungen, Zahlungen und was noch offen ist. */
 export function BookingBilling({ booking }: { booking: BookingDto }) {
@@ -17,6 +18,7 @@ export function BookingBilling({ booking }: { booking: BookingDto }) {
   const [pay, setPay] = useState(false);
   const [payCents, setPayCents] = useState<number | null>(null);
   const [settle, setSettle] = useState(false);
+  const [fee, setFee] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const create = async (include: 'all' | 'lodging' | 'extras') => {
     setBusy(include);
@@ -62,10 +64,12 @@ export function BookingBilling({ booking }: { booking: BookingDto }) {
           <Button busy={busy === 'extras'} onClick={() => void create('extras')}>Rechnung nur Extras</Button>
         </>}
         {drafts.length === 0 && data.uninvoicedCents > 0 && <Button busy={busy === 'all'} onClick={() => void create('all')}>Rechnungsentwurf</Button>}
+        {booking.rooms.some((r) => r.status === 'cancelled' || r.status === 'no_show') && <Button onClick={() => setFee(true)} title="Ausfallgebühr für stornierte oder nicht angereiste Zimmer als Rechnungsentwurf">Ausfallgebühr …</Button>}
         {toPay > 0 && <Button onClick={() => { setPayCents(null); setPay(!pay); }} aria-expanded={pay}>{pay ? 'Zahlung schließen' : 'Einzelne Zahlung'}</Button>}
       </div>
       {settled && <p className="notice">Alles berechnet und bezahlt – es ist nichts mehr zu kassieren. Eine falsch gebuchte Zahlung korrigiert der Administrator in der Rechnung über „Gegenbuchen“.</p>}
       {settle && <SettleDialog booking={booking} onClose={() => setSettle(false)} />}
+      {fee && <CancelFeeDialog bookingId={booking.id} onClose={() => setFee(false)} />}
       {pay && toPay > 0 && <PaymentForm bookingId={booking.id} suggestCents={payCents ?? toPay} onDone={() => { setPay(false); setPayCents(null); }} />}
       {!settled && toPay > 0 && <>
         <h3>Anzahlung</h3>
