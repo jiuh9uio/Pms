@@ -3,7 +3,7 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { taxBreakdown } from '../../shared/billing.js';
 import { formatMoney, todayBerlin } from '../../shared/hotel.js';
 import {
-  lineTotal, quantityFor, type OfferCreateInputT, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferItemInput, type OfferLineInput, type OfferListRow,
+  OFFER_LAYOUT_DEFAULT, lineTotal, offerLayoutInput, quantityFor, type OfferLayout, type OfferCreateInputT, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferItemInput, type OfferLineInput, type OfferListRow,
   type OfferState, type OfferTemplateDto, type OfferTemplateInput, type OfferUpdateInput, type PublicOffer,
 } from '../../shared/offers.js';
 import type { Db, Exec } from '../db/client.js';
@@ -237,8 +237,46 @@ export async function updateOffer(db: Db, actor: Actor, id: string, v: OfferUpda
   });
 }
 
+// ---------- Gestaltung (Angebotslayout) ----------
+export async function getOfferLayout(db: Exec): Promise<OfferLayout> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'offer_layout'));
+  return offerLayoutInput.parse({ ...OFFER_LAYOUT_DEFAULT, ...((row?.value as Partial<OfferLayout>) ?? {}) });
+}
+export async function saveOfferLayout(db: Db, actor: Actor, v: OfferLayout) {
+  await db.insert(settings).values({ key: 'offer_layout', value: v }).onConflictDoUpdate({ target: settings.key, set: { value: v, updatedAt: new Date() } });
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: 'offer_layout', after: v });
+  return v;
+}
+/** Wirksame Gestaltung: „wie die Rechnung“ übernimmt Stil, Farbe, Schrift, Logo, Tabelle, Abstände und Papier aus dem Rechnungslayout */
+async function effectiveLayout(db: Exec, v?: OfferLayout): Promise<OfferLayout> {
+  const own = v ?? await getOfferLayout(db);
+  if (!own.likeInvoice) return own;
+  const i = await getLayout(db);
+  return { ...own, style: i.style, accent: i.accent, accentHex: i.accentHex, font: i.font, logoPos: i.logoPos, logoSize: i.logoSize, table: i.table, spacing: i.spacing,
+    fontSize: i.fontSize, senderLine: i.senderLine, foldMarks: i.foldMarks, letterhead: i.letterhead };
+}
+/** Vorschau mit einem Muster-Angebot (erfundene Angaben) */
+export async function offerLayoutPreview(db: Exec, v: OfferLayout) {
+  const today = todayBerlin();
+  const mk = (pos: number, description: string, detail: string, unit: OfferDto['lines'][number]['unit'], quantity: number, unitPriceCents: number, taxRatePercent: number) =>
+    ({ id: String(pos), pos, itemId: null, description, detail, unit, quantity, unitPriceCents, taxRatePercent, totalCents: lineTotal(quantity, unitPriceCents) });
+  const lines = [mk(1, 'Tagungspauschale ganztags', 'Raum, Technik, zwei Kaffeepausen, Mittagessen', 'person_day', 40, 4900, 19),
+    mk(2, 'Übernachtung im Doppelzimmer mit Frühstück', '', 'night', 10, 9800, 7), mk(3, 'Abendessen als Buffet', 'inkl. Tischwasser', 'person', 20, 3200, 19)];
+  const total = lines.reduce((s, l) => s + l.totalCents, 0);
+  const sample = {
+    id: 'muster', number: 'AN-MUSTER-0001', status: 'draft', state: 'draft', area: 'both', title: 'Tagung Muster GmbH', customer: 'Muster GmbH', email: '', eventDate: addDays(today, 30), eventEnd: addDays(today, 31),
+    persons: 20, totalCents: total, validUntil: addDays(today, 14), sentAt: null, acceptedAt: null, bookingId: null, tableReservationId: null, createdAt: today,
+    templateId: null, customerCompany: 'Muster GmbH', customerName: 'Erika Mustermann', phone: '', street: 'Musterstraße 1', zip: '12345', city: 'Musterstadt',
+    intro: 'vielen Dank für Ihre Anfrage. Gern unterbreiten wir Ihnen folgendes Angebot:', closing: 'Wir freuen uns, Sie bei uns begrüßen zu dürfen.',
+    questions: ['Genaue Teilnehmerzahl', 'Gewünschte Bestuhlung', 'Besondere Ernährungswünsche oder Allergien'], depositPercent: 30, documentIds: [], notes: '',
+    sentTo: '', acceptedBy: '', acceptedMethod: '', acceptedHash: '', sentHash: '', declinedAt: null, lines, taxes: taxBreakdown(lines), version: 1,
+  } as unknown as OfferDto;
+  const [h, logo] = await Promise.all([getHotel(db), getLogo(db)]);
+  return Buffer.from(await renderOffer(sample, h, logo, await effectiveLayout(db, v), today));
+}
+
 async function render(db: Exec, o: OfferDto) {
-  const [h, logo, layout] = await Promise.all([getHotel(db), getLogo(db), getLayout(db)]);
+  const [h, logo, layout] = await Promise.all([getHotel(db), getLogo(db), effectiveLayout(db)]);
   return Buffer.from(await renderOffer(o, h, logo, layout, todayBerlin()));
 }
 /** PDF: versendete/angenommene Fassung unverändert, sonst aktuelle Vorschau */

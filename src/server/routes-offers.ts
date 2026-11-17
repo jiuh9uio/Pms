@@ -30,6 +30,11 @@ export function registerOfferRoutes(api: FastifyInstance, { db, requireUser, req
   api.get('/offer-templates', user, () => offers.listTemplates(db));
   api.post('/offer-templates', admin, (req) => offers.saveTemplate(db, actor(req), null, O.offerTemplateInput.parse(req.body)));
   api.put('/offer-templates/:id', admin, (req) => offers.saveTemplate(db, actor(req), idOf(req), O.offerTemplateInput.parse(req.body), versionOf(req)));
+  // Gestaltung des Angebots-PDFs
+  api.get('/settings/offer-layout', admin, () => offers.getOfferLayout(db));
+  api.put('/settings/offer-layout', admin, (req) => offers.saveOfferLayout(db, actor(req), O.offerLayoutInput.parse(req.body)));
+  api.get('/settings/offer-layout/preview', admin, async (req, reply) =>
+    reply.header('Content-Type', 'application/pdf').header('Content-Disposition', 'inline; filename="Muster-Angebot.pdf"').send(await offers.offerLayoutPreview(db, O.offerLayoutInput.parse(req.query))));
   api.get('/offer-documents', user, () => offers.listDocuments(db));
   api.post('/offer-documents', { ...admin, bodyLimit: 11 * 1024 * 1024 }, (req) => {
     if (!Buffer.isBuffer(req.body)) throw new AppError(400, 'bad_file', 'Bitte eine PDF-Datei wählen');

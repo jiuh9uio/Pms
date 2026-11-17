@@ -99,3 +99,30 @@ export function quantityFor(unit: OfferUnit, persons: number, from: string | nul
   return { person: persons, day: days, person_day: persons * days, night: nights, person_night: persons * nights, flat: 1 }[unit];
 }
 export const lineTotal = (q: number, unitPriceCents: number) => Math.round(q * unitPriceCents);
+
+// ---------- Gestaltung des Angebots-PDFs (Angebote → Gestaltung) ----------
+const flag = (d: boolean) => z.union([z.boolean(), z.enum(['true', 'false']).transform((v) => v === 'true')]).default(d);
+export const offerLayoutInput = z.object({
+  /** true = Farben, Schrift und Logo wie im Rechnungslayout; die übrigen Angaben gelten trotzdem */
+  likeInvoice: flag(true),
+  style: z.enum(['classic', 'modern', 'elegant']).default('classic'),
+  accent: z.enum(['black', 'blue', 'green', 'red', 'gold', 'petrol', 'custom']).default('black'),
+  accentHex: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Farbe als #RRGGBB').default('#1c457a'),
+  font: z.enum(['sans', 'serif']).default('sans'),
+  logoPos: z.enum(['right', 'left', 'center']).default('right'),
+  logoSize: z.enum(['small', 'normal', 'large']).default('normal'),
+  table: z.enum(['lines', 'stripes', 'plain']).default('lines'),
+  spacing: z.enum(['compact', 'normal', 'wide']).default('normal'),
+  fontSize: z.enum(['small', 'normal', 'large']).default('normal'),
+  /** Preise je Position zeigen oder nur den Gesamtbetrag (z. B. bei Pauschalangeboten) */
+  prices: z.enum(['all', 'total']).default('all'),
+  /** Feld „Ort, Datum, Unterschrift“ für die Annahme auf Papier */
+  signature: flag(true),
+  /** Fragenkatalog als Kästchen zum Ankreuzen/Ausfüllen statt als Aufzählung */
+  questionBoxes: flag(false),
+  senderLine: flag(true),
+  foldMarks: flag(false),
+  letterhead: flag(false),
+});
+export type OfferLayout = z.infer<typeof offerLayoutInput>;
+export const OFFER_LAYOUT_DEFAULT: OfferLayout = offerLayoutInput.parse({});

@@ -12,9 +12,10 @@ import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
 import { MailDialog } from '../hotel/MailDialog.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useTabs, useToast } from '../ui.tsx';
+import { OfferLayoutCard } from './OfferLayoutCard.tsx';
 
 const TONE: Record<OfferState, 'neutral' | 'accent' | 'ok' | 'danger' | 'warn'> = { draft: 'neutral', sent: 'accent', accepted: 'ok', declined: 'danger', expired: 'warn' };
-const TABS = [['angebote', 'Angebote'], ['leistungen', 'Leistungen'], ['vorlagen', 'Vorlagen'], ['dokumente', 'AGB & Dokumente']] as const;
+const TABS = [['angebote', 'Angebote'], ['leistungen', 'Leistungen'], ['vorlagen', 'Vorlagen'], ['dokumente', 'AGB & Dokumente'], ['gestaltung', 'Gestaltung']] as const;
 
 /** Angebote für Tagungen, Feiern und Gruppen: aus Vorlagen zusammenstellen, als PDF mit AGB versenden, Annahme festhalten. */
 export function Offers() {
@@ -29,6 +30,7 @@ export function Offers() {
       {current === 'leistungen' && isAdmin && <ItemsAdmin />}
       {current === 'vorlagen' && isAdmin && <TemplatesAdmin />}
       {current === 'dokumente' && isAdmin && <DocumentsAdmin />}
+      {current === 'gestaltung' && isAdmin && <OfferLayoutCard />}
     </>
   );
 }

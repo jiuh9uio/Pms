@@ -252,3 +252,17 @@ describe('Rechnungslayout: Zahlungs-QR-Code und eigene Farbe', () => {
     expect(res.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
   });
 });
+
+describe('Angebotslayout', () => {
+  it('speichert eigene Gestaltung und liefert ein Muster-Angebot als PDF', async () => {
+    const d = await ok('GET', '/settings/offer-layout', admin);
+    expect(d).toMatchObject({ likeInvoice: true, prices: 'all', signature: true });
+    await ok('PUT', '/settings/offer-layout', admin, { ...d, likeInvoice: false, style: 'elegant', accent: 'custom', accentHex: '#8a2d4f', prices: 'total', questionBoxes: true });
+    expect(await ok('GET', '/settings/offer-layout', admin)).toMatchObject({ likeInvoice: false, style: 'elegant', prices: 'total', questionBoxes: true });
+    const q = new URLSearchParams({ likeInvoice: 'false', style: 'modern', logoSize: 'large', foldMarks: 'true', letterhead: 'true', signature: 'false' });
+    const res = await app.inject({ method: 'GET', url: `/api/v1/settings/offer-layout/preview?${q}`, cookies: admin });
+    expect(res.statusCode).toBe(200);
+    expect(res.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+    expect((await call('PUT', '/settings/offer-layout', admin, { ...d, accentHex: 'rot' })).statusCode).toBe(400);
+  });
+});

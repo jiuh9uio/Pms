@@ -3,6 +3,19 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.82.0
+
+- **Neu: Gestaltung der Angebote** (Angebote → Reiter „Gestaltung“, Administrator):
+  - **„Wie die Rechnung gestalten“** (voreingestellt): Stil, Farbe, Schrift, Logo, Tabelle, Abstände und Papier kommen aus dem Rechnungslayout. Ausschalten, um Angebote eigens zu gestalten.
+  - Eigene Gestaltung: **Stil** (klassisch, modern, elegant), **Farbe** inkl. eigener Farbe, **Schrift**, **Logo-Lage** (rechts, links, mittig) und **Logo-Größe**, **Positionen** (Trennlinien, abwechselnd hinterlegt, ohne Linien), **Abstände** und **Schriftgröße**.
+  - **Preise:** Einzelpreis und Betrag je Position oder nur der Gesamtbetrag (z. B. für Pauschalangebote).
+  - **Feld für die Unterschrift** („Angebot angenommen: Ort, Datum, Unterschrift“) für die Annahme auf Papier.
+  - **Fragen zum Ausfüllen:** Fragenkatalog als Kästchen zum handschriftlichen Ausfüllen.
+  - **Absenderzeile**, **Falz- und Lochmarken**, **vorgedrucktes Briefpapier**.
+  - **Vorschau** als Muster-Angebot mit erfundenen Angaben, auch ohne zu speichern.
+  - Gilt für Angebote, die ab jetzt erzeugt oder versendet werden; bereits versendete bleiben unverändert.
+- Das Angebots-PDF zeigt Angebotsnummer, Datum, Gültigkeit, Termin und Personen jetzt übersichtlich rechts neben der Anschrift und Seitenzahlen bei mehreren Seiten.
+
 ## 1.81.0
 
 - **Neues Erscheinungsbild der Symbole:** Alle Symbole in Menü, Seitenleiste und Startseite sind jetzt einheitliche, eigens gezeichnete Linien-Symbole (vorher gemischte Schriftzeichen und bunte Emojis).
