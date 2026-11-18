@@ -370,3 +370,26 @@ describe('Temperaturprotokoll ausgeben', () => {
     expect(lines.some((t) => /Tür offen/.test(t))).toBe(true);
   });
 });
+
+describe('Steuersätze prüfen', () => {
+  it('schlägt Frühstück auf 7 % vor (Getränke-Pauschalen nicht) und stellt nur auf Knopfdruck um', async () => {
+    const r19 = (await ok('GET', '/tax-rates', admin)).find((t: { ratePercent: number }) => t.ratePercent === 19);
+    const fr = await ok('POST', '/services', admin, { name: 'Frühstück Steuertest', priceCents: 1500, per: 'person_night', taxRateId: r19.id, isBreakfast: true, active: true });
+    await ok('POST', '/services', admin, { name: 'Parkplatz Steuertest', priceCents: 800, per: 'night', taxRateId: r19.id, isBreakfast: false, active: true });
+    await ok('POST', '/offer-items', admin, { name: 'Getränkepauschale', description: '', unit: 'person', priceCents: 1500, taxRatePercent: 19, area: 'both', sort: 1, active: true });
+    await ok('POST', '/offer-items', admin, { name: 'Abendessen Buffet', description: '', unit: 'person', priceCents: 3200, taxRatePercent: 19, area: 'both', sort: 2, active: true });
+    const c = await ok('GET', '/tax-check', admin);
+    const names = c.findings.map((f: { name: string }) => f.name);
+    expect(names).toContain('Frühstück Steuertest');
+    expect(names).toContain('Abendessen Buffet');
+    expect(names).not.toContain('Parkplatz Steuertest');
+    expect(names).not.toContain('Getränkepauschale');
+    // nichts ändert sich ohne Knopfdruck
+    const svc = (await ok('GET', '/services', admin)).find((s: { id: string }) => s.id === fr.id);
+    expect(svc.taxRatePercent).toBe(19);
+    await ok('POST', '/tax-check/apply', admin, { ids: [fr.id] });
+    const after = (await ok('GET', '/services', admin)).find((s: { id: string }) => s.id === fr.id);
+    expect(after.taxRatePercent).toBe(7);
+    expect((await ok('GET', '/tax-check', admin)).findings.map((f: { name: string }) => f.name)).not.toContain('Frühstück Steuertest');
+  });
+});

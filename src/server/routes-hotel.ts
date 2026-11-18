@@ -26,6 +26,7 @@ import * as guests from './modules/guests.js';
 import * as hotelmail from './modules/hotelmail.js';
 import { yearReport } from './modules/reports.js';
 import * as rooms from './modules/rooms.js';
+import * as taxcheck from './modules/taxcheck.js';
 
 interface Ctx {
   db: Db;
@@ -81,6 +82,9 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
   api.delete('/rate-rules/:id', admin, (req) => rooms.deleteRateRule(db, actor(req), idOf(req)));
 
   api.get('/services', user, () => rooms.listServices(db));
+  // Steuersätze prüfen (Stand der Recherche siehe Oberfläche) und Vorschläge auf Knopfdruck übernehmen
+  api.get('/tax-check', admin, () => taxcheck.check(db));
+  api.post('/tax-check/apply', admin, (req) => taxcheck.apply(db, actor(req), z.object({ ids: z.array(z.uuid()).max(200) }).parse(req.body).ids));
   api.post('/services', admin, (req) => rooms.saveService(db, actor(req), null, H.serviceInput.parse(req.body)));
   api.put('/services/:id', admin, (req) => rooms.saveService(db, actor(req), idOf(req), H.serviceInput.parse(req.body), versionOf(req)));
   api.delete('/services/:id', admin, (req) => rooms.deleteService(db, actor(req), idOf(req)));

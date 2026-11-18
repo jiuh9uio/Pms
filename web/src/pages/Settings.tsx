@@ -26,6 +26,7 @@ import { Changelog, UpdateCard } from './UpdateCard.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
 import { forgetLogoInfo } from '../logo.tsx';
 import type { LogoUsage } from '../../../src/shared/schemas.js';
+import { TaxCheckBox } from './TaxCheckBox.tsx';
 
 export const SETTINGS_TABS = [
   ['haus', 'Haus'], ['email', 'E-Mail'], ['gaesteseite', 'Gästeseite'], ['drucker', 'Drucker'], ['ecgeraet', 'EC-Gerät'], ['tse', 'TSE'], ['steuern', 'Steuern & Nummern'], ['algorithmen', 'Algorithmen'], ['mitteilungen', 'Mitteilungen'], ['netz', 'Hausnetz'], ['sicherheit', 'Sicherheit'], ['sicherung', 'Datensicherung'], ['update', 'Programm-Update'], ['loeschen', 'Daten löschen'],
@@ -62,7 +63,7 @@ export function Settings() {
       {current === 'drucker' && <><KitchenPrinterCard kind="kitchen" /><KitchenPrinterCard kind="front" /></>}
       {current === 'ecgeraet' && <TerminalCard />}
       {current === 'tse' && <TseCard />}
-      {current === 'steuern' && <><TaxRates /><InvoiceNumberCard /></>}
+      {current === 'steuern' && <><TaxRates /><TaxCheckBox /><InvoiceNumberCard /></>}
       {current === 'algorithmen' && <Algorithms />}
       {current === 'mitteilungen' && <NoticesCard />}
       {current === 'gaesteseite' && <GuestSiteCard />}

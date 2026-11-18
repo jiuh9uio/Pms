@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.89.0
+
+- **Umsatzsteuer – Stand 2026 und Prüfung** (Einstellungen → Betrieb → Steuern & Nummern): Übersicht der Sätze für Hotel und Gastronomie mit Quellen (Übernachtung 7 %; Speisen inkl. Frühstück seit 1.1.2026 7 %; Getränke 19 %; Sonstiges in der Regel 19 %). Das Programm prüft Ihre Leistungen (z. B. Frühstück) und Speisen im Angebotskatalog und schlägt Änderungen vor – umgestellt wird nur auf Knopfdruck; bereits gebuchte Leistungen und ausgestellte Rechnungen behalten ihren Satz. Keine Steuerberatung – Sonderfälle bitte mit dem Steuerberater klären.
+- **Restaurant „Aufs Zimmer“:** getrennte Felder für Speisen (7 %) und Getränke (19 %); gebucht werden zwei Posten.
+
 ## 1.88.1
 
 - **Rechnung: Abschnitt „Zahlung per Überweisung“.** Ist auf einer Rechnung noch ein Betrag offen und Ihre IBAN hinterlegt, steht jetzt ein eigener Kasten mit Betrag, Zahlungsfrist, Empfänger, IBAN (in Viererblöcken), BIC, Bank und Verwendungszweck (Rechnungsnummer). Ist der GiroCode eingeschaltet, steht er rechts daneben.
