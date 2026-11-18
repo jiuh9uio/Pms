@@ -45,7 +45,7 @@ export function RoomChargeDialog({ onClose }: { onClose: () => void }) {
       footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={busy} disabled={!ok} onClick={() => void save()}>{ok ? `${formatMoney(cents)} aufs Zimmer` : 'Aufs Zimmer'}</Button></>}>
       {!rooms.data ? <LoadState error={rooms.error} loading /> : rooms.data.length === 0 ? <p className="notice">Gerade ist kein Hotelgast eingecheckt.</p> : <>
         <Field label="Zimmer">
-          <div className="roompick">{rooms.data.map((r) => (
+          <div className="chargerooms">{rooms.data.map((r) => (
             <button key={r.bookingRoomId} type="button" className={v.bookingRoomId === r.bookingRoomId ? 'on' : ''} onClick={() => setV({ ...v, bookingRoomId: r.bookingRoomId })}>
               <b>{r.room}</b><small>{r.guest}</small>
             </button>

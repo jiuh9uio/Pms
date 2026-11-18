@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.89.1
+
+- **Fehler behoben: „Neue Reservierung“ → „Gewählte Zimmer“** war seit 1.86.0 verrutscht (schmaler Rahmen, „Preis/Nacht“ ragte heraus, Entfernen-Knopf darunter). Ursache: eine neue Gestaltung für „Aufs Zimmer“ im Restaurant trug denselben internen Namen. Jetzt wieder eine Zeile mit Erwachsenen, Kindern, Preis/Nacht und ✕.
+- Ebenso behoben: Im Posteingang war der gewählte Filter (z. B. „Hotel“) seit 1.88.0 nur noch zart statt kräftig hervorgehoben.
+
 ## 1.89.0
 
 - **Umsatzsteuer – Stand 2026 und Prüfung** (Einstellungen → Betrieb → Steuern & Nummern): Übersicht der Sätze für Hotel und Gastronomie mit Quellen (Übernachtung 7 %; Speisen inkl. Frühstück seit 1.1.2026 7 %; Getränke 19 %; Sonstiges in der Regel 19 %). Das Programm prüft Ihre Leistungen (z. B. Frühstück) und Speisen im Angebotskatalog und schlägt Änderungen vor – umgestellt wird nur auf Knopfdruck; bereits gebuchte Leistungen und ausgestellte Rechnungen behalten ihren Satz. Keine Steuerberatung – Sonderfälle bitte mit dem Steuerberater klären.
