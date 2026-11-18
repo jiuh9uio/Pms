@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.88.1
+
+- **Rechnung: Abschnitt „Zahlung per Überweisung“.** Ist auf einer Rechnung noch ein Betrag offen und Ihre IBAN hinterlegt, steht jetzt ein eigener Kasten mit Betrag, Zahlungsfrist, Empfänger, IBAN (in Viererblöcken), BIC, Bank und Verwendungszweck (Rechnungsnummer). Ist der GiroCode eingeschaltet, steht er rechts daneben.
+- Bezahlte Rechnungen, Entwürfe und Stornobelege zeigen weder den Kasten noch den GiroCode – wie bisher.
+- Gilt für Rechnungen, die ab jetzt ausgestellt werden; bereits ausgestellte bleiben unverändert im Archiv.
+
 ## 1.88.0
 
 - **Temperaturprotokoll drucken und senden** (Kontrollen → Hygieneamt → Temperaturprotokoll → „Drucken / Senden …“): Zeitraum wählen (Dieser Monat, Letzter Monat, 7/30/90 Tage oder frei) und Bereich (alle oder einer).

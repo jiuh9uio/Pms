@@ -214,27 +214,44 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
     y -= row;
   }
   y -= 22 * g;
+  // Offener Betrag mit hinterlegter IBAN: eigener Abschnitt „Zahlung per Überweisung“ (statt nur eines Satzes im Schlusstext)
+  const payBlock = !cancel && !draft && inv.openCents > 0 && !!(issuer.iban ?? '').trim();
   const closing = [inv.notes,
-    !cancel && !draft && inv.openCents > 0 && inv.dueDate ? `Bitte überweisen Sie den Betrag bis zum ${de(inv.dueDate)} unter Angabe der Rechnungsnummer ${inv.number}.` : '',
+    !cancel && !draft && inv.openCents > 0 && inv.dueDate && !payBlock ? `Bitte überweisen Sie den Betrag bis zum ${de(inv.dueDate)} unter Angabe der Rechnungsnummer ${inv.number}.` : '',
     !cancel && inv.openCents === 0 && inv.paidCents !== 0 ? 'Der Rechnungsbetrag wurde vollständig bezahlt. Vielen Dank!' : '',
     !cancel ? layout.closing : ''].filter(Boolean).join('\n\n');
-  for (const t of closing ? wrap(closing, R - L, 10) : []) { need(15 * f); if (t) put(t, L, y); y -= (t ? 14 : 8) * f; }
 
-  // Zahlungs-QR-Code (GiroCode): nur bei offenem Betrag, ausgestellter Rechnung und hinterlegter IBAN
-  const epc = layout.qrCode && !cancel && !draft && inv.openCents > 0
-    ? epcPayload({ name: issuer.name, iban: issuer.iban ?? '', bic: issuer.bic ?? '', cents: inv.openCents, text: `Rechnung ${inv.number ?? ''}`.trim() }) : null;
-  if (epc) {
-    const png = await QRCode.toBuffer(epc, { errorCorrectionLevel: 'M', margin: 0, width: 360 });
-    const qr = await doc.embedPng(png);
-    const size = 78;
-    if (need(size + 18)) { /* neue Seite */ }
-    y -= 6 * g;
-    page.drawImage(qr, { x: L, y: y - size, width: size, height: size });
-    put('Bequem bezahlen', L + size + 14, y - 14, { size: 10, font: bold });
-    put('Code mit der Banking-App scannen (GiroCode):', L + size + 14, y - 29, { size: 9, color: grey });
-    put(`Empfänger, IBAN, Betrag ${money(inv.openCents)} und Verwendungszweck werden übernommen.`, L + size + 14, y - 42, { size: 9, color: grey });
-    y -= size + 10;
+  if (payBlock) {
+    // GiroCode (wenn eingeschaltet) daneben
+    const epc = layout.qrCode ? epcPayload({ name: issuer.name, iban: issuer.iban ?? '', bic: issuer.bic ?? '', cents: inv.openCents, text: `Rechnung ${inv.number ?? ''}`.trim() }) : null;
+    const size = 82;
+    const iban = (issuer.iban ?? '').replace(/\s+/g, '').toUpperCase().replace(/(.{4})/g, '$1 ').trim();
+    const rows: [string, string][] = [['Empfänger', issuer.name], ['IBAN', iban], ...(issuer.bic ? [['BIC', issuer.bic] as [string, string]] : []),
+      ...(issuer.bankName ? [['Bank', issuer.bankName] as [string, string]] : []), ['Betrag', money(inv.openCents)], ['Verwendungszweck', `Rechnung ${inv.number ?? ''}`.trim()]];
+    const lineH = 13.5 * f;
+    const boxH = Math.max(epc ? size + 36 : 0, 40 * f + rows.length * lineH);
+    need(boxH + 16 * g);
+    y -= 4 * g;
+    const top = y + 10 * f;
+    page.drawRectangle({ x: L, y: top - boxH, width: R - L, height: boxH, borderColor: elegant ? acc : hair, borderWidth: elegant ? 0.8 : 0.6, color: rgb(0.985, 0.985, 0.985) });
+    const tx = L + 12;
+    let ty = top - 18 * f;
+    put('Zahlung per Überweisung', tx, ty, { size: 10.5, font: bold, color: layout.style === 'classic' ? black : acc });
+    ty -= 15 * f;
+    put(inv.dueDate ? `Bitte überweisen Sie ${money(inv.openCents)} bis zum ${de(inv.dueDate)} auf folgendes Konto:` : `Bitte überweisen Sie ${money(inv.openCents)} auf folgendes Konto:`, tx, ty, { size: 9.5 });
+    ty -= lineH + 2;
+    for (const [k, v] of rows) { put(k, tx, ty, { size: 9.5, color: grey }); put(v, tx + 105, ty, { size: 9.5, font: k === 'IBAN' || k === 'Betrag' || k === 'Verwendungszweck' ? bold : regular }); ty -= lineH; }
+    if (epc) {
+      const png = await QRCode.toBuffer(epc, { errorCorrectionLevel: 'M', margin: 0, width: 360 });
+      const qr = await doc.embedPng(png);
+      const qx = R - 12 - size;
+      page.drawImage(qr, { x: qx, y: top - 10 - size, width: size, height: size });
+      put('GiroCode', qx + size / 2 - bold.widthOfTextAtSize('GiroCode', 7.5 * f) / 2, top - 10 - size - 9 * f, { size: 7.5, font: bold, color: grey });
+      put('mit der Banking-App scannen', qx + size / 2 - regular.widthOfTextAtSize('mit der Banking-App scannen', 6.5 * f) / 2, top - 10 - size - 17 * f, { size: 6.5, color: grey });
+    }
+    y = top - boxH - 18 * g;
   }
+  for (const t of closing ? wrap(closing, R - L, 10) : []) { need(15 * f); if (t) put(t, L, y); y -= (t ? 14 : 8) * f; }
 
   // Fuß und Seitenzahl auf jeder Seite
   pages.forEach((pg, i) => {
