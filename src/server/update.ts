@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { appendFileSync, chmodSync, createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { get as httpGet } from 'node:http';
 import { get as httpsGet } from 'node:https';
 import { join } from 'node:path';
@@ -297,15 +297,29 @@ async function runInstall(c: Ctx, rel: Release) {
     if (expected !== sha) { rmSync(zipFile, { force: true }); throw new Error('Die Prüfsumme der heruntergeladenen Datei stimmt nicht – Update abgebrochen. Bitte erneut versuchen.'); }
     step({ step: 'unpack' });
     const target = join(dir, 'new');
-    rmSync(target, { recursive: true, force: true });
-    if (win) execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', `Expand-Archive -LiteralPath '${zipFile.replace(/'/g, "''")}' -DestinationPath '${target.replace(/'/g, "''")}' -Force`], { windowsHide: true, stdio: 'ignore' });
-    else execFileSync('unzip', ['-q', zipFile, '-d', target], { stdio: 'ignore' });
+    // Entpacken: unter Windows zuerst mit „tar“ (in Windows 10/11 enthalten), sonst Expand-Archive; bei unvollständigem Ergebnis
+    // einmal mit dem anderen Verfahren wiederholen (Expand-Archive brach auf manchen Rechnern ohne Fehlermeldung mittendrin ab)
+    const exeName = win ? 'pms.exe' : 'pms';
+    const find = () => [target, join(target, 'SchuetzenhausPMS')].find((d) => existsSync(join(d, exeName)) && existsSync(join(d, 'app', 'version.json')));
+    const methods = win ? ['tar', 'expand'] as const : ['unzip'] as const;
+    let source: string | undefined;
+    const tried: string[] = [];
+    for (const m of methods) {
+      rmSync(target, { recursive: true, force: true });
+      mkdirSync(target, { recursive: true });
+      try {
+        if (m === 'tar') execFileSync('tar', ['-xf', zipFile, '-C', target], { windowsHide: true, stdio: 'ignore' });
+        else if (m === 'expand') execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', `$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath '${zipFile.replace(/'/g, "''")}' -DestinationPath '${target.replace(/'/g, "''")}' -Force`], { windowsHide: true, stdio: 'ignore' });
+        else execFileSync('unzip', ['-q', zipFile, '-d', target], { stdio: 'ignore' });
+      } catch (e) { tried.push(`${m}: ${e instanceof Error ? e.message.split('\n')[0] : 'Fehler'}`); continue; }
+      source = find();
+      if (source) break;
+      tried.push(`${m}: entpackt, aber ${exeName} oder app/version.json fehlt (gefunden: ${readdirSafe(target)})`);
+    }
+    if (!source) { log(`Entpacken fehlgeschlagen – ${tried.join(' | ')}`); throw new Error('Das heruntergeladene Paket ist unvollständig'); }
     rmSync(zipFile, { force: true }); rmSync(marker, { force: true });
 
-    // Paket prüfen: enthält Programm und Versionsangabe, passt zur Datenbank
-    const exeName = win ? 'pms.exe' : 'pms';
-    const source = [target, join(target, 'SchuetzenhausPMS')].find((d) => existsSync(join(d, exeName)) && existsSync(join(d, 'app', 'version.json')));
-    if (!source) throw new Error('Das heruntergeladene Paket ist unvollständig');
+    // Paket prüfen: passt zur Datenbank
     const info = JSON.parse(readFileSync(join(source, 'app', 'version.json'), 'utf8')) as { version: string; pgMajor: string };
     if (info.version !== rel.version) throw new Error(`Das Paket enthält Version ${info.version} statt ${rel.version}`);
     if (info.pgMajor !== c.pgMajor)
@@ -324,4 +338,9 @@ async function runInstall(c: Ctx, rel: Release) {
     status = { ...status, installing: false, progress: null, installError: msg };
     try { log(`FEHLER: ${e instanceof Error ? e.message : String(e)}`); } catch { /* Ordner nicht beschreibbar */ }
   }
+}
+
+/** Inhalt eines Ordners für das Update-Protokoll (höchstens 12 Einträge) */
+function readdirSafe(d: string) {
+  try { const l = readdirSync(d); return l.length ? l.slice(0, 12).join(', ') + (l.length > 12 ? ' …' : '') : 'leer'; } catch { return 'nicht lesbar'; }
 }

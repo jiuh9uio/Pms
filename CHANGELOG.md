@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.101.1
+
+- **Programm-Update robuster:** Das Entpacken des Updates nutzt unter Windows jetzt zuerst „tar“ (in Windows 10/11 enthalten) und nur ersatzweise das bisherige Verfahren; ist das Ergebnis unvollständig, wird einmal mit dem anderen Verfahren wiederholt. Im Update-Protokoll steht bei einem Fehler genauer, was gefunden wurde. Anlass: Auf dem Windows-Testrechner brach das Entpacken gelegentlich ohne Meldung ab („Paket unvollständig“).
+- Enthält den Design-Editor aus 1.101.0.
+
 ## 1.101.0
 
 - **Neu: Design-Editor für Gutscheine** (Gutscheine → Motive → „Neues Design gestalten“ bzw. „Im Editor bearbeiten“):
