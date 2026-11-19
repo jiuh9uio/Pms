@@ -272,7 +272,11 @@ export type LogoUsage = z.infer<typeof logoUsageInput>;
 // ---------- Einkauf: Warenzugang und Leergut (mit Bon für den Bondrucker) ----------
 const isoDay = z.string().refine(isIsoDate, 'Bitte ein Datum wählen');
 export const stockLineInput = z.object({ qty: z.number().int('Bitte eine ganze Zahl').min(1, 'Mindestens 1').max(999, 'Höchstens 999'), article: required(60) });
-export const stockArticlesInput = z.object({ articles: z.array(required(60)).max(40) });
+/** Artikel für die Schnellauswahl; depositCents = Pfand je Stück (0 = kein Pfand hinterlegt) */
+const depositCents = z.number('Bitte einen Betrag eingeben').int('Ungültiger Betrag').min(0, 'Mindestens 0').max(1_000_000, 'Betrag zu hoch');
+export const stockArticleInput = z.object({ name: required(60), depositCents });
+export type StockArticle = z.infer<typeof stockArticleInput>;
+export const stockArticlesInput = z.object({ articles: z.array(stockArticleInput).max(40) });
 export const STOCK_KINDS = ['in', 'out', 'empty_back', 'empty_return'] as const;
 export type StockKind = (typeof STOCK_KINDS)[number];
 export const STOCK_KIND_LABEL: Record<StockKind, string> = { in: 'Warenzugang', out: 'Ausgabe', empty_back: 'Leergut zurück erhalten', empty_return: 'Leergut abgegeben' };
@@ -282,18 +286,23 @@ export const stockReceiptInput = z.object({
   lines: stockLines,
   /** Leergut, das der Fahrer gleich wieder mitgenommen hat */
   empties: stockLines,
+  /** Pfand laut Lieferschein: für die erhaltene Ware und gutgeschrieben fürs mitgegebene Leergut – leer = nicht angegeben */
+  depositCents: depositCents.nullable(),
+  emptiesDepositCents: depositCents.nullable(),
   print: z.boolean(),
 }).refine((v) => v.lines.length + v.empties.length > 0, { path: ['lines'], message: 'Bitte mindestens eine Position eintragen' });
 export const stockEmptiesInput = z.object({
   date: isoDay, supplier: required(80), note: text(400),
   lines: stockLines.min(1, 'Bitte mindestens eine Position eintragen'),
+  /** Pfand für das zurückgegebene Leergut – leer = nicht angegeben */
+  depositCents: depositCents.nullable(),
   print: z.boolean(),
 });
 export type StockReceiptInput = z.infer<typeof stockReceiptInput>;
 export type StockEmptiesInput = z.infer<typeof stockEmptiesInput>;
 export type StockMoveDto = { id: string; date: string; kind: StockKind; partner: string; article: string; qty: number; ref: string; note: string; userName: string; voided: boolean; voidedBy: string | null };
-export type StockOpenDto = { partner: string; article: string; qty: number; since: string };
-export type StockBonDto = { auditId: number; kind: 'receipt' | 'empties'; number: string; date: string; supplier: string; summary: string; userName: string };
-export type StockOverviewDto = { articles: string[]; suppliers: string[]; atSuppliers: StockOpenDto[]; recent: StockMoveDto[]; bons: StockBonDto[]; printerReady: boolean; printerName: string };
+export type StockOpenDto = { partner: string; article: string; qty: number; since: string; /** offen × hinterlegtes Pfand je Stück, null = kein Pfand hinterlegt */ depositCents: number | null };
+export type StockBonDto = { auditId: number; kind: 'receipt' | 'empties'; number: string; date: string; supplier: string; summary: string; userName: string; /** Pfand-Saldo des Bons (+ gezahlt, − gutgeschrieben), null = kein Pfand eingetragen */ depositCents: number | null };
+export type StockOverviewDto = { articles: StockArticle[]; suppliers: string[]; atSuppliers: StockOpenDto[]; recent: StockMoveDto[]; bons: StockBonDto[]; printerReady: boolean; printerName: string };
 /** Ergebnis beim Speichern: gespeichert ist es immer; printError, wenn der Bon nicht gedruckt werden konnte */
 export type StockSaveResult = { number: string; printed: boolean; printError?: string };

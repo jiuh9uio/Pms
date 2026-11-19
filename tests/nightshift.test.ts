@@ -399,18 +399,18 @@ describe('Einkauf: Warenzugang und Leergut mit Bon', () => {
     await ok('PUT', '/settings/kitchen-printer', admin, { enabled: false, host: '', port: 9100, width: 48 });
     await ok('PUT', '/settings/front-printer', admin, { enabled: false, host: '', port: 9100, width: 48 });
     let o = await ok('GET', '/stock', admin);
-    expect(o.articles).toEqual(['Pils – Fass 50 l', 'Hefe – Fass 20 l', 'Kupfer – Fass 30 l']);
+    expect(o.articles.map((a: { name: string }) => a.name)).toEqual(['Pils – Fass 50 l', 'Hefe – Fass 20 l', 'Kupfer – Fass 30 l']);
     expect(o.printerReady).toBe(false);
     const at = (p: string, a: string) => o.atSuppliers.find((x: { partner: string; article: string }) => x.partner === p && x.article === a)?.qty ?? 0;
     // ohne Drucker: trotzdem gespeichert, Druckfehler wird gemeldet
     const r1 = await ok('POST', '/stock/receipts', admin, { date: '2031-07-02', supplier: 'Brauerei Beispiel', ref: 'B-77', note: '', print: true,
-      lines: [{ qty: 5, article: 'Pils – Fass 50 l' }, { qty: 2, article: 'Pils – Fass 50 l' }, { qty: 1, article: 'Hefe – Fass 20 l' }], empties: [] });
+      lines: [{ qty: 5, article: 'Pils – Fass 50 l' }, { qty: 2, article: 'Pils – Fass 50 l' }, { qty: 1, article: 'Hefe – Fass 20 l' }], empties: [], depositCents: null, emptiesDepositCents: null });
     expect(r1).toMatchObject({ number: 'WE-2031-0001', printed: false });
     expect(r1.printError).toBeTruthy();
     o = await ok('GET', '/stock', admin);
     expect(at('Brauerei Beispiel', 'Pils – Fass 50 l')).toBe(7); // gleiche Artikel zusammengefasst
     expect(o.suppliers).toContain('Brauerei Beispiel');
-    expect((await call('POST', '/stock/receipts', admin, { date: '2031-07-02', supplier: 'X', ref: '', note: '', print: false, lines: [], empties: [] })).statusCode).toBe(400);
+    expect((await call('POST', '/stock/receipts', admin, { date: '2031-07-02', supplier: 'X', ref: '', note: '', print: false, lines: [], empties: [], depositCents: null, emptiesDepositCents: null })).statusCode).toBe(400);
     // mit Drucker: Warenzugang mit Leergut → 2 Bons (Fahrer + uns)
     const { createServer } = await import('node:net');
     const jobs: Buffer[][] = [];
@@ -418,10 +418,10 @@ describe('Einkauf: Warenzugang und Leergut mit Bon', () => {
     await new Promise<void>((r) => printer.listen(0, '127.0.0.1', () => r()));
     await ok('PUT', '/settings/front-printer', admin, { enabled: true, host: '127.0.0.1', port: (printer.address() as { port: number }).port, width: 42 });
     expect(await ok('POST', '/stock/receipts', admin, { date: '2031-07-09', supplier: 'brauerei beispiel ', ref: '', note: '', print: true,
-      lines: [{ qty: 3, article: 'Kupfer – Fass 30 l' }], empties: [{ qty: 4, article: 'Pils – Fass 50 l' }] })).toEqual({ number: 'WE-2031-0002', printed: true });
+      lines: [{ qty: 3, article: 'Kupfer – Fass 30 l' }], empties: [{ qty: 4, article: 'Pils – Fass 50 l' }], depositCents: 9000, emptiesDepositCents: 12000 })).toEqual({ number: 'WE-2031-0002', printed: true });
     // Leergut-Rückgabe allein (auch mehr als offen erlaubt – Fässer aus der Zeit vor dem Programm)
     expect(await ok('POST', '/stock/empties', admin, { date: '2031-07-10', supplier: 'Brauerei Beispiel', note: 'ein Fass verbeult', print: true,
-      lines: [{ qty: 3, article: 'Pils – Fass 50 l' }, { qty: 2, article: 'Hefe – Fass 20 l' }] })).toEqual({ number: 'LG-2031-0001', printed: true });
+      lines: [{ qty: 3, article: 'Pils – Fass 50 l' }, { qty: 2, article: 'Hefe – Fass 20 l' }], depositCents: 13000 })).toEqual({ number: 'LG-2031-0001', printed: true });
     await new Promise((r) => setTimeout(r, 150));
     expect(jobs).toHaveLength(4);
     const [drv, ours, lgDrv] = jobs.map((j) => Buffer.concat(j).toString('latin1'));
@@ -430,6 +430,9 @@ describe('Einkauf: Warenzugang und Leergut mit Bon', () => {
     expect(drv).toContain('Unterschrift Fahrer');
     expect(drv).toContain('Exemplar f');
     expect(ours).toContain('abheften');
+    expect(drv).toContain('Pfand Saldo');
+    expect(drv).toContain('-30,00 \xa4'.replace('\xa4', String.fromCharCode(0xd5))); // € in Codepage 858
+    expect(lgDrv).toContain('Pfand Leergut (Gutschrift)');
     expect(lgDrv).toContain('LG-2031-0001');
     expect(lgDrv).toContain('ein Fass verbeult');
     expect(lgDrv).not.toContain('Ware angenommen');
@@ -437,6 +440,9 @@ describe('Einkauf: Warenzugang und Leergut mit Bon', () => {
     expect(at('Brauerei Beispiel', 'Pils – Fass 50 l')).toBe(0); // 7 − 4 − 3
     expect(at('Brauerei Beispiel', 'Hefe – Fass 20 l')).toBe(0); // 1 − 2 → nicht negativ angezeigt
     expect(at('Brauerei Beispiel', 'Kupfer – Fass 30 l')).toBe(3);
+    expect(o.bons.find((b: { number: string }) => b.number === 'WE-2031-0002').depositCents).toBe(-3000);
+    expect(o.bons.find((b: { number: string }) => b.number === 'LG-2031-0001').depositCents).toBe(-13000);
+    expect(o.bons.find((b: { number: string }) => b.number === 'WE-2031-0001').depositCents).toBeNull();
     // Nachdruck
     expect(o.bons.map((b: { number: string }) => b.number).slice(0, 3)).toEqual(['LG-2031-0001', 'WE-2031-0002', 'WE-2031-0001']);
     expect(await ok('POST', `/stock/bons/${o.bons[2].auditId}/reprint`, admin, {})).toEqual({ ok: true });
@@ -454,7 +460,12 @@ describe('Einkauf: Warenzugang und Leergut mit Bon', () => {
     expect(at('Brauerei Beispiel', 'Kupfer – Fass 30 l')).toBe(0);
     expect(o.recent.find((m: { id: string }) => m.id === kupfer.id).voided).toBe(true);
     // Artikel ändern
-    expect(await ok('PUT', '/stock/articles', admin, { articles: ['Pils – Fass 50 l', ' Radler – Fass 30 l ', 'Pils – Fass 50 l'] })).toEqual(['Pils – Fass 50 l', 'Radler – Fass 30 l']);
+    expect(await ok('PUT', '/stock/articles', admin, { articles: [{ name: 'Kupfer – Fass 30 l', depositCents: 3000 }, { name: ' Radler – Fass 30 l ', depositCents: 0 }, { name: 'kupfer – fass 30 l', depositCents: 1 }] }))
+      .toEqual([{ name: 'Kupfer – Fass 30 l', depositCents: 3000 }, { name: 'Radler – Fass 30 l', depositCents: 0 }]);
+    await ok('POST', '/stock/receipts', admin, { date: '2031-07-11', supplier: 'Brauerei Beispiel', ref: '', note: '', print: false, lines: [{ qty: 2, article: 'Kupfer – Fass 30 l' }], empties: [], depositCents: 6000, emptiesDepositCents: null });
+    o = await ok('GET', '/stock', admin);
+    expect(o.atSuppliers.find((x: { article: string }) => x.article === 'Kupfer – Fass 30 l')).toMatchObject({ qty: 2, depositCents: 6000 });
+    expect(o.atSuppliers.find((x: { article: string }) => x.article === 'Hefe – Fass 20 l')).toBeUndefined();
     await ok('PUT', '/settings/front-printer', admin, { enabled: false, host: '', port: 9100, width: 48 });
     printer.close();
   });

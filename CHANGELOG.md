@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.94.0
+
+- **Pfand beim Warenzugang und beim Leergut eintragen:** Felder „Pfand für die erhaltene Ware“ und „Pfand fürs mitgegebene Leergut“ (Warenzugang) bzw. „Pfand (Gutschrift)“ (Leergut). Der Betrag steht auf dem Bon, mit Pfand-Saldo.
+- Unter „Artikel ändern“ lässt sich je Artikel ein **Pfand je Stück** hinterlegen (z. B. Pils – Fass 50 l: 30 €). Dann rechnet das Programm das Pfand beim Eintragen vor – änderbar, z. B. wenn der Lieferschein etwas anderes sagt.
+- „Noch beim Lieferanten offen“ zeigt zusätzlich das geschätzte Pfand (offene Stück × Pfand je Stück); die Bon-Liste zeigt das Pfand je Bon.
+- Bondruck: geschütztes Leerzeichen in Beträgen wird jetzt als normales Leerzeichen gedruckt (vorher „?“).
+
 ## 1.93.0
 
 - **Einkauf umgebaut – aus Sicht des Restaurants:** Der Lieferschein für eigene Kunden und die Liste „Bei Kunden draußen“ sind entfernt (passten nicht, Sie liefern nicht selbst aus).

@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
-import type { StockBonDto, StockEmptiesInput, StockKind, StockMoveDto, StockOpenDto, StockOverviewDto, StockReceiptInput, StockSaveResult } from '../../shared/schemas.js';
+import { formatMoney } from '../../shared/hotel.js';
+import type { StockArticle, StockBonDto, StockEmptiesInput, StockKind, StockMoveDto, StockOpenDto, StockOverviewDto, StockReceiptInput, StockSaveResult } from '../../shared/schemas.js';
 import type { Db, Exec } from '../db/client.js';
 import { auditLog, numberSequences, settings, stockMoves } from '../db/schema.js';
 import { AppError, conflict, notFound } from '../lib/errors.js';
@@ -15,14 +16,17 @@ import { getHotel } from './settings.js';
  * Bewegungen werden nie gelöscht, nur storniert. Der Inhalt jedes Bons steht im Änderungsprotokoll (für den Nachdruck).
  */
 
-export const ARTICLES_DEFAULT = ['Pils – Fass 50 l', 'Hefe – Fass 20 l', 'Kupfer – Fass 30 l'];
+export const ARTICLES_DEFAULT: StockArticle[] = ['Pils – Fass 50 l', 'Hefe – Fass 20 l', 'Kupfer – Fass 30 l'].map((name) => ({ name, depositCents: 0 }));
 const ART_KEY = 'delivery_articles';
-export async function getArticles(db: Exec): Promise<string[]> {
+export async function getArticles(db: Exec): Promise<StockArticle[]> {
   const [row] = await db.select().from(settings).where(eq(settings.key, ART_KEY));
-  return Array.isArray(row?.value) ? (row.value as string[]) : ARTICLES_DEFAULT;
+  if (!Array.isArray(row?.value)) return ARTICLES_DEFAULT;
+  // frühere Versionen speicherten nur Namen
+  return (row.value as (string | StockArticle)[]).map((a) => (typeof a === 'string' ? { name: a, depositCents: 0 } : a));
 }
-export async function saveArticles(db: Db, actor: Actor, articles: string[]) {
-  const v = [...new Set(articles.map((a) => a.trim()).filter(Boolean))];
+export async function saveArticles(db: Db, actor: Actor, articles: StockArticle[]) {
+  const seen = new Set<string>();
+  const v = articles.map((a) => ({ name: a.name.trim(), depositCents: a.depositCents })).filter((a) => a.name && !seen.has(key(a.name)) && seen.add(key(a.name)));
   await db.insert(settings).values({ key: ART_KEY, value: v }).onConflictDoUpdate({ target: settings.key, set: { value: v, updatedAt: new Date() } });
   await record(db, actor, { action: 'update', entity: 'settings', entityId: ART_KEY, after: v });
   return v;
@@ -41,7 +45,11 @@ async function atSuppliers(db: Exec): Promise<StockOpenDto[]> {
     group by lower(trim(partner)), lower(trim(article))
     having sum(case when kind = 'in' then qty else -qty end) > 0
     order by min(partner), min(article)`) as unknown as StockOpenDto[];
-  return rows.map((r) => ({ ...r, since: r.since ?? '' }));
+  const arts = await getArticles(db);
+  return rows.map((r) => {
+    const dep = arts.find((a) => key(a.name) === key(r.article))?.depositCents ?? 0;
+    return { ...r, since: r.since ?? '', depositCents: dep > 0 ? dep * r.qty : null };
+  });
 }
 
 const dto = (r: typeof stockMoves.$inferSelect): StockMoveDto => ({
@@ -61,7 +69,7 @@ export async function overview(db: Exec): Promise<StockOverviewDto> {
   const bons: StockBonDto[] = audit.filter((r) => isBon(r.after)).map((r) => {
     const b = r.after as BonRecord;
     const lines = b.kind === 'receipt' ? [...b.v.lines, ...b.v.empties.map((e) => ({ ...e, article: `Leergut ${e.article}` }))] : b.v.lines;
-    return { auditId: r.id, kind: b.kind, number: b.number, date: b.v.date, supplier: b.v.supplier, summary: lines.map((l) => `${l.qty}× ${l.article}`).join(', '), userName: r.userName };
+    return { auditId: r.id, kind: b.kind, number: b.number, date: b.v.date, supplier: b.v.supplier, summary: lines.map((l) => `${l.qty}× ${l.article}`).join(', '), userName: r.userName, depositCents: depositSaldo(b) };
   });
   const t = await bonTarget(db);
   return {
@@ -86,6 +94,13 @@ async function nextNumber(tx: Exec, seq: 'stock_receipt' | 'stock_empties', pref
   const [row] = await tx.insert(numberSequences).values({ key: seq, year, last: 1 })
     .onConflictDoUpdate({ target: [numberSequences.key, numberSequences.year], set: { last: sql`${numberSequences.last} + 1` } }).returning();
   return `${prefix}-${year}-${String(row!.last).padStart(4, '0')}`;
+}
+
+/** Pfand eines Bons: + bezahlt (erhaltene Ware), − gutgeschrieben (Leergut); null = nichts eingetragen */
+function depositSaldo(b: BonRecord): number | null {
+  const paid = b.kind === 'receipt' ? b.v.depositCents ?? null : null;
+  const credit = b.kind === 'receipt' ? b.v.emptiesDepositCents ?? null : b.v.depositCents ?? null;
+  return paid == null && credit == null ? null : (paid ?? 0) - (credit ?? 0);
 }
 
 // ---------- Bon ----------
@@ -114,12 +129,23 @@ async function bon(db: Exec, b: BonRecord, copy: 'driver' | 'ours' | 'single' | 
     ...(b.kind === 'receipt' && b.v.ref ? [{ text: columns('Lieferschein-Nr.', b.v.ref, w) } as Line] : []),
     ...(received.length ? [{ rule: true } as Line, { text: 'Erhalten', bold: true } as Line, ...lineRows(received, w), { text: columns('Stück gesamt', String(received.reduce((s, l) => s + l.qty, 0)), w) } as Line] : []),
     ...(empties.length ? [{ rule: true } as Line, { text: 'Leergut abgegeben', bold: true } as Line, ...lineRows(empties, w), { text: columns('Stück gesamt', String(empties.reduce((s, l) => s + l.qty, 0)), w) } as Line] : []),
+    ...depositLines(b, w),
     ...(b.v.note ? [{ rule: true } as Line, ...b.v.note.split('\n').flatMap((a) => wrap(a, w)).map((text) => ({ text }))] : []),
     { rule: true },
     ...(empties.length ? [{ text: 'Leergut vollständig übernommen:' } as Line, ...sign('Unterschrift Fahrer / Lieferant', w), { feed: 1 } as Line, { text: '_'.repeat(w) } as Line, { text: 'Name in Druckbuchstaben' } as Line] : []),
     ...(received.length ? [{ feed: 1 } as Line, { text: 'Ware angenommen:' } as Line, ...sign('Unterschrift ' + h.name, w)] : []),
     ...(copy === 'driver' ? [{ feed: 1 } as Line, ...center('Exemplar für den Fahrer', w)] : copy === 'ours' ? [{ feed: 1 } as Line, ...center('Exemplar für uns – bitte abheften', w)] : []),
   ];
+}
+function depositLines(b: BonRecord, w: number): Line[] {
+  const paid = b.kind === 'receipt' ? b.v.depositCents ?? null : null;
+  const credit = b.kind === 'receipt' ? b.v.emptiesDepositCents ?? null : b.v.depositCents ?? null;
+  if (paid == null && credit == null) return [];
+  const out: Line[] = [{ rule: true }, { text: 'Pfand', bold: true }];
+  if (paid != null) out.push({ text: columns('Pfand für erhaltene Ware', formatMoney(paid), w) });
+  if (credit != null) out.push({ text: columns('Pfand Leergut (Gutschrift)', formatMoney(-credit), w) });
+  if (paid != null && credit != null) out.push({ text: columns('Pfand Saldo', formatMoney(paid - credit), w), bold: true });
+  return out;
 }
 /** Druckt den Bon; Fehler beim Drucken werden zurückgemeldet, die Daten sind trotzdem gespeichert. */
 async function printBon(db: Exec, b: BonRecord, reprint = false): Promise<{ printed: boolean; printError?: string }> {
