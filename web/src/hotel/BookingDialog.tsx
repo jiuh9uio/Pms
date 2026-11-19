@@ -73,10 +73,43 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
     : inHouse ? (needsPay ? 'Im Haus' : `Im Haus · bezahlt${to ? ` – Check-out am ${deDate(to)} automatisch` : ''}`)
     : active.some((r) => r.status === 'tentative') ? 'Vorläufig' : (from && from > today ? 'Anreise erwartet' : 'Anreise heute');
   if (b && !full && active.length > 0 && active.every((r) => r.status === 'tentative')) return <RequestView booking={b} onClose={onClose} onFull={() => setFull(true)} />;
+  // feste Reservierung: zuerst die einfache Ansicht (nächster Schritt, Kontakt); „Mehr einblenden“ zeigt alles
+  const simple = !!b && !full && active.length > 0 && !active.some((r) => r.status === 'tentative');
+  const phone = b?.guest.phone.trim() ?? '';
   return (
-    <Dialog title={b ? <>Reservierung {b.number}</> : 'Reservierung'} onClose={onClose} size="xl"
-      footer={<>{b && <a className="btn" href={`/meldeschein/${b.id}`} target="_blank" rel="noopener">Meldeschein drucken</a>}{b && <Button onClick={() => setQr(true)}>Meldeschein per QR</Button>}{b && <Button onClick={() => setMail(true)}>Bestätigung per E-Mail</Button>}<Button onClick={onClose}>Schließen</Button></>}>
-      {!b ? <LoadState error={error} loading /> : (
+    <Dialog title={b ? <>Reservierung {b.number}</> : 'Reservierung'} onClose={onClose} size={simple ? 'md' : 'xl'}
+      footer={simple
+        ? <><Button className="left" title="Zimmer ändern, Stornieren, Frühstück und Leistungen, Rechnungen, Meldeschein per QR, Verlauf …" onClick={() => setFull(true)}>Mehr einblenden …</Button><Button onClick={onClose}>Schließen</Button></>
+        : <>{b && <a className="btn" href={`/meldeschein/${b.id}`} target="_blank" rel="noopener">Meldeschein drucken</a>}{b && <Button onClick={() => setQr(true)}>Meldeschein per QR</Button>}{b && <Button onClick={() => setMail(true)}>Bestätigung per E-Mail</Button>}<Button onClick={onClose}>Schließen</Button></>}>
+      {!b ? <LoadState error={error} loading /> : simple ? (
+        <div className="rq">
+          <div className="bk-sname">
+            <b>{guestName || '(ohne Namen)'}</b>{b.guest.company && <small className="muted"> · {b.guest.company}</small>}
+            {b.earlierStays.count > 0 && <> <Badge tone="accent">{b.earlierStays.count >= 2 ? 'Stammgast' : 'War schon einmal hier'}</Badge></>}
+          </div>
+          <div className="rq-facts">
+            <div><span>Wann</span><b>{deDate(from).slice(0, 6)} – {deDate(to)}</b><small>{nights} {nights === 1 ? 'Nacht' : 'Nächte'}</small></div>
+            <div><span>Zimmer</span><b>{active.map((r) => r.roomNumber).join(', ')}</b><small>{pax} {pax === 1 ? 'Person' : 'Personen'}</small></div>
+            <div className={billing && toPay > 0 ? '' : 'paid'}><span>Betrag</span><b>{formatMoney(b.totalCents)}</b><small>{!billing ? ' ' : toPay > 0 ? `offen ${formatMoney(toPay)}` : 'bezahlt'}</small></div>
+            <div><span>Stand</span><b className="bk-sstate">{state}</b><small> </small></div>
+          </div>
+          {(next || needsPay) && (
+            <div className="bk-snext">
+              {next && <Button variant="primary" className="big" onClick={next.run}>{next.label}</Button>}
+              {next?.label === 'Check-in' && needsPay && <Button onClick={() => setPaying(true)}>Gleich bezahlen</Button>}
+              {!next && needsPay && <Button variant="primary" className="big" onClick={() => setPaying(true)}>Bezahlen · {formatMoney(toPay)}</Button>}
+            </div>
+          )}
+          <h3>Gast</h3>
+          <div className="rq-contact">
+            {phone ? <a className="btn" href={`tel:${phone.replace(/[^\d+]/g, '')}`}>Anrufen · {phone}</a> : <span className="muted small">keine Telefonnummer</span>}
+            {b.guest.email && <a className="btn" href={`mailto:${b.guest.email}`}>E-Mail schreiben</a>}
+            <a className="btn" href={`/meldeschein/${b.id}`} target="_blank" rel="noopener">Meldeschein drucken</a>
+            <Button onClick={() => openGuest(b.guest.id)}>Gästeprofil</Button>
+          </div>
+          {b.notes.trim() && <pre className="rq-notes">{b.notes.trim()}</pre>}
+        </div>
+      ) : (
         <div className="bk">
           <section className="bk-hero">
             <div className="bk-guest">

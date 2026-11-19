@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.103.0
+
+- **Reservierungs-Fenster vereinfacht** (feste Reservierungen – wie zuvor bei den Anfragen): Beim Öffnen erscheint jetzt eine schlanke Ansicht:
+  - Name des Gastes (ggf. „Stammgast“), vier Kästchen **Wann · Zimmer · Betrag · Stand** – „bezahlt“ grün,
+  - ein großer Knopf für den **nächsten Schritt** (Check-in → Bezahlen → Check-out), vor der Anreise zusätzlich „Gleich bezahlen“,
+  - **Gast:** Anrufen, E-Mail schreiben, Meldeschein drucken, Gästeprofil; darunter die Notiz zur Buchung.
+  - Alles Weitere (Zimmer ändern oder hinzufügen, Stornieren, Frühstück und Leistungen, Rechnungen, Meldeschein per QR, Bestätigung per E-Mail, Verlauf) über **„Mehr einblenden …“** – dort ist alles wie bisher.
+
 ## 1.102.0
 
 - **Gutscheine – fertige Design-Vorlagen** (Gutscheine → Motive → „Vorlagen“): sechs eigene Entwürfe zum Übernehmen – **Elegant Gold**, **Winterzeit**, **Fröhlich**, **Modern Dunkel**, **Genuss** und **Natur & Ruhe**. Mit Vorschau; „Übernehmen“ legt eine eigene Kopie an, „Anpassen …“ öffnet die Vorlage gleich im Editor. Eigene Designs stehen darunter unter „Ihre Designs“.
