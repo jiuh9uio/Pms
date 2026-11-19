@@ -1,28 +1,45 @@
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
-import type { StockKind, StockMoveDto, StockOpenDto, StockOverviewDto } from '../../shared/schemas.js';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import type { StockBonDto, StockEmptiesInput, StockKind, StockMoveDto, StockOpenDto, StockOverviewDto, StockReceiptInput, StockSaveResult } from '../../shared/schemas.js';
 import type { Db, Exec } from '../db/client.js';
-import { stockMoves } from '../db/schema.js';
-import { conflict, notFound } from '../lib/errors.js';
+import { auditLog, numberSequences, settings, stockMoves } from '../db/schema.js';
+import { AppError, conflict, notFound } from '../lib/errors.js';
+import { columns, wrap, type Line } from '../lib/escpos.js';
 import { record, type Actor } from './audit.js';
-import { getArticles } from './deliverynote.js';
+import { bonTarget, printJobs } from './quickprint.js';
+import { getHotel } from './settings.js';
 
 /**
- * Einkauf: Warenzugang und Leergut. Offene Mengen werden aus den Bewegungen berechnet:
- * bei Kunden = geliefert − zurückbekommen, beim Lieferanten = erhalten − zurückgegeben (jeweils je Name und Artikel).
- * Nur Stückzahlen, kein Pfand in Euro.
+ * Einkauf aus Sicht des Betriebs: Warenzugang vom Lieferanten (z. B. Brauerei) und Leergut, das an den Lieferanten zurückgeht.
+ * Zu beidem gibt es einen Bon für den Bondrucker – beim Leergut mit Unterschrift des Fahrers als Nachweis fürs Pfand.
+ * Offen beim Lieferanten = erhalten − als Leergut abgegeben (nur Stückzahlen, kein Pfand in Euro).
+ * Bewegungen werden nie gelöscht, nur storniert. Der Inhalt jedes Bons steht im Änderungsprotokoll (für den Nachdruck).
  */
-type Line = { qty: number; article: string };
+
+export const ARTICLES_DEFAULT = ['Pils – Fass 50 l', 'Hefe – Fass 20 l', 'Kupfer – Fass 30 l'];
+const ART_KEY = 'delivery_articles';
+export async function getArticles(db: Exec): Promise<string[]> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, ART_KEY));
+  return Array.isArray(row?.value) ? (row.value as string[]) : ARTICLES_DEFAULT;
+}
+export async function saveArticles(db: Db, actor: Actor, articles: string[]) {
+  const v = [...new Set(articles.map((a) => a.trim()).filter(Boolean))];
+  await db.insert(settings).values({ key: ART_KEY, value: v }).onConflictDoUpdate({ target: settings.key, set: { value: v, updatedAt: new Date() } });
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: ART_KEY, after: v });
+  return v;
+}
+
+type Line_ = { qty: number; article: string };
 const key = (s: string) => s.trim().toLowerCase();
 
-/** offene Mengen je Partner und Artikel; plus = Ausgang (out/in), minus = Rückgabe */
-async function openList(db: Exec, plus: StockKind, minus: StockKind): Promise<StockOpenDto[]> {
+/** Beim Lieferanten noch offen (erhalten − abgegeben), nur positive Mengen – Leergut aus der Zeit vor dem Programm macht nichts kaputt. */
+async function atSuppliers(db: Exec): Promise<StockOpenDto[]> {
   const rows = await db.execute(sql`
     select min(partner) as partner, min(article) as article,
-      sum(case when kind = ${plus} then qty else -qty end)::int as qty,
-      min(date) filter (where kind = ${plus})::text as since
-    from stock_moves where voided_at is null and kind in (${plus}, ${minus})
+      sum(case when kind = 'in' then qty else -qty end)::int as qty,
+      min(date) filter (where kind = 'in')::text as since
+    from stock_moves where voided_at is null and kind in ('in', 'empty_return')
     group by lower(trim(partner)), lower(trim(article))
-    having sum(case when kind = ${plus} then qty else -qty end) <> 0
+    having sum(case when kind = 'in' then qty else -qty end) > 0
     order by min(partner), min(article)`) as unknown as StockOpenDto[];
   return rows.map((r) => ({ ...r, since: r.since ?? '' }));
 }
@@ -32,64 +49,122 @@ const dto = (r: typeof stockMoves.$inferSelect): StockMoveDto => ({
   voided: !!r.voidedAt, voidedBy: r.voidedBy,
 });
 
+type BonRecord = { kind: 'receipt'; v: StockReceiptInput; number: string } | { kind: 'empties'; v: StockEmptiesInput; number: string };
+const BON_ENTITIES = ['stock_receipt', 'stock_empties'];
+
 export async function overview(db: Exec): Promise<StockOverviewDto> {
-  const sup = await db.execute(sql`select partner from stock_moves where kind = 'in' group by partner order by max(created_at) desc limit 30`) as unknown as { partner: string }[];
+  const sup = await db.execute(sql`select partner from stock_moves where kind in ('in', 'empty_return') group by partner order by max(created_at) desc limit 30`) as unknown as { partner: string }[];
   const recent = await db.select().from(stockMoves).orderBy(desc(stockMoves.createdAt)).limit(60);
+  const audit = await db.select().from(auditLog).where(and(inArray(auditLog.entity, BON_ENTITIES), eq(auditLog.action, 'create'))).orderBy(desc(auditLog.id)).limit(30);
+  // nur Einträge mit Bon-Inhalt (Version 1.92.0 hat dieselben Namen ohne Bon-Nummer protokolliert)
+  const isBon = (x: unknown): x is BonRecord => !!x && typeof x === 'object' && 'number' in x && 'v' in x && 'kind' in x;
+  const bons: StockBonDto[] = audit.filter((r) => isBon(r.after)).map((r) => {
+    const b = r.after as BonRecord;
+    const lines = b.kind === 'receipt' ? [...b.v.lines, ...b.v.empties.map((e) => ({ ...e, article: `Leergut ${e.article}` }))] : b.v.lines;
+    return { auditId: r.id, kind: b.kind, number: b.number, date: b.v.date, supplier: b.v.supplier, summary: lines.map((l) => `${l.qty}× ${l.article}`).join(', '), userName: r.userName };
+  });
+  const t = await bonTarget(db);
   return {
     articles: await getArticles(db), suppliers: sup.map((s) => s.partner),
-    customers: await openList(db, 'out', 'empty_back'), atSuppliers: await openList(db, 'in', 'empty_return'),
-    recent: recent.map(dto),
+    atSuppliers: await atSuppliers(db), recent: recent.map(dto), bons, printerReady: !!t, printerName: t?.name ?? '',
   };
 }
 
-async function insert(tx: Exec, actor: Actor, kind: StockKind, v: { date: string; partner: string; ref?: string; note: string }, lines: Line[]) {
+async function insert(tx: Exec, actor: Actor, kind: StockKind, v: { date: string; partner: string; ref: string; note: string }, lines: Line_[]) {
   // gleiche Artikel zusammenfassen
-  const merged = new Map<string, Line>();
+  const merged = new Map<string, Line_>();
   for (const l of lines) { const k = key(l.article); const m = merged.get(k); merged.set(k, m ? { ...m, qty: m.qty + l.qty } : { qty: l.qty, article: l.article.trim() }); }
-  const rows = [...merged.values()].map((l) => ({ date: v.date, kind, partner: v.partner.trim(), article: l.article, qty: l.qty, ref: v.ref ?? '', note: v.note, userName: actor.userName }));
+  // gleiche Schreibweise wie beim ersten Eintrag dieses Lieferanten (z. B. „brauerei x“ → „Brauerei X“)
+  const [known] = await tx.select({ partner: stockMoves.partner }).from(stockMoves).where(sql`lower(trim(${stockMoves.partner})) = ${key(v.partner)}`).orderBy(stockMoves.createdAt).limit(1);
+  const partner = known?.partner ?? v.partner.trim();
+  const rows = [...merged.values()].map((l) => ({ date: v.date, kind, partner, article: l.article, qty: l.qty, ref: v.ref, note: v.note, userName: actor.userName }));
   if (rows.length) await tx.insert(stockMoves).values(rows);
   return rows;
 }
-
-/** Lieferschein gedruckt → Ware ist beim Kunden (wird vom Lieferschein aufgerufen, gleiche Transaktion). */
-export const recordDelivery = (tx: Exec, actor: Actor, v: { date: string; recipient: string; number: string; note: string; lines: Line[] }) =>
-  insert(tx, actor, 'out', { date: v.date, partner: v.recipient, ref: v.number, note: '' }, v.lines);
-
-export async function addReceipt(db: Db, actor: Actor, v: { date: string; supplier: string; ref: string; note: string; lines: Line[]; empties: Line[] }) {
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('stock_moves'))`);
-    await checkEnough(tx, 'in', 'empty_return', v.supplier, v.empties, v.lines);
-    const a = await insert(tx, actor, 'in', { date: v.date, partner: v.supplier, ref: v.ref, note: v.note }, v.lines);
-    const b = await insert(tx, actor, 'empty_return', { date: v.date, partner: v.supplier, ref: v.ref, note: v.note }, v.empties);
-    await record(tx, actor, { action: 'create', entity: 'stock_receipt', entityId: v.ref || null, after: { ...v } });
-    return { added: a.length + b.length };
-  });
+async function nextNumber(tx: Exec, seq: 'stock_receipt' | 'stock_empties', prefix: string, date: string) {
+  const year = Number(date.slice(0, 4));
+  const [row] = await tx.insert(numberSequences).values({ key: seq, year, last: 1 })
+    .onConflictDoUpdate({ target: [numberSequences.key, numberSequences.year], set: { last: sql`${numberSequences.last} + 1` } }).returning();
+  return `${prefix}-${year}-${String(row!.last).padStart(4, '0')}`;
 }
 
-/** Rückgabe darf nicht mehr sein, als offen ist (sonst stimmt die Übersicht nicht mehr). */
-async function checkEnough(tx: Exec, plus: StockKind, minus: StockKind, partner: string, back: Line[], alsoNow: Line[] = []) {
-  if (!back.length) return;
-  const open = await openList(tx, plus, minus);
-  for (const l of back) {
-    const have = (open.find((o) => key(o.partner) === key(partner) && key(o.article) === key(l.article))?.qty ?? 0)
-      + alsoNow.filter((x) => key(x.article) === key(l.article)).reduce((s, x) => s + x.qty, 0);
-    const want = back.filter((x) => key(x.article) === key(l.article)).reduce((s, x) => s + x.qty, 0);
-    if (want > have) {
-      throw conflict(plus === 'out'
-        ? `Bei „${partner}“ sind von „${l.article}“ nur ${have} offen, nicht ${want}. Ältere Lieferungen aus der Zeit vor dem Programm bitte zuerst als Lieferschein nachtragen.`
-        : `Von „${l.article}“ sind bei „${partner}“ nur ${have} offen, nicht ${want}. Fässer aus der Zeit vor dem Programm bitte zuerst als Warenzugang („Anfangsbestand“) nachtragen.`, 'stock_not_open');
-    }
+// ---------- Bon ----------
+const de = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
+const center = (t: string, w: number, o: { bold?: boolean; big?: boolean } = {}): Line[] => wrap(t, o.big ? Math.floor(w / 2) : w).map((text) => ({ text, align: 'center' as const, ...o }));
+const lineRows = (lines: Line_[], w: number): Line[] => lines.flatMap((l) => {
+  const q = `${l.qty} x`;
+  return wrap(l.article, w - q.length - 1).map((p, i) => ({ text: i === 0 ? columns(p, q, w) : p }));
+});
+const sign = (label: string, w: number): Line[] => [{ feed: 2 }, { text: '_'.repeat(w) }, { text: label }];
+
+async function bon(db: Exec, b: BonRecord, copy: 'driver' | 'ours' | 'single' | 'reprint') {
+  const h = await getHotel(db);
+  const address = [h.street, [h.zip, h.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  const empties = b.kind === 'receipt' ? b.v.empties : b.v.lines;
+  const received = b.kind === 'receipt' ? b.v.lines : [];
+  return (w: number): Line[] => [
+    ...center(h.name, w, { bold: true }), ...(address ? center(address, w) : []),
+    { rule: true, char: '=' },
+    ...center(b.kind === 'receipt' ? 'WARENZUGANG' : 'LEERGUT-RÜCKGABE', w, { bold: true, big: true }),
+    ...(copy === 'reprint' ? center('– Nachdruck –', w, { bold: true }) : []),
+    { rule: true, char: '=' },
+    { text: columns('Nr.', b.number, w), bold: true },
+    { text: columns('Datum', de(b.v.date), w) },
+    ...(b.v.supplier.length <= w - 11 ? [{ text: columns('Lieferant', b.v.supplier, w) } as Line] : [{ text: 'Lieferant' } as Line, ...wrap(b.v.supplier, w).map((text) => ({ text }))]),
+    ...(b.kind === 'receipt' && b.v.ref ? [{ text: columns('Lieferschein-Nr.', b.v.ref, w) } as Line] : []),
+    ...(received.length ? [{ rule: true } as Line, { text: 'Erhalten', bold: true } as Line, ...lineRows(received, w), { text: columns('Stück gesamt', String(received.reduce((s, l) => s + l.qty, 0)), w) } as Line] : []),
+    ...(empties.length ? [{ rule: true } as Line, { text: 'Leergut abgegeben', bold: true } as Line, ...lineRows(empties, w), { text: columns('Stück gesamt', String(empties.reduce((s, l) => s + l.qty, 0)), w) } as Line] : []),
+    ...(b.v.note ? [{ rule: true } as Line, ...b.v.note.split('\n').flatMap((a) => wrap(a, w)).map((text) => ({ text }))] : []),
+    { rule: true },
+    ...(empties.length ? [{ text: 'Leergut vollständig übernommen:' } as Line, ...sign('Unterschrift Fahrer / Lieferant', w), { feed: 1 } as Line, { text: '_'.repeat(w) } as Line, { text: 'Name in Druckbuchstaben' } as Line] : []),
+    ...(received.length ? [{ feed: 1 } as Line, { text: 'Ware angenommen:' } as Line, ...sign('Unterschrift ' + h.name, w)] : []),
+    ...(copy === 'driver' ? [{ feed: 1 } as Line, ...center('Exemplar für den Fahrer', w)] : copy === 'ours' ? [{ feed: 1 } as Line, ...center('Exemplar für uns – bitte abheften', w)] : []),
+  ];
+}
+/** Druckt den Bon; Fehler beim Drucken werden zurückgemeldet, die Daten sind trotzdem gespeichert. */
+async function printBon(db: Exec, b: BonRecord, reprint = false): Promise<{ printed: boolean; printError?: string }> {
+  const twoCopies = !reprint && (b.kind === 'empties' || b.v.empties.length > 0);
+  const copies = reprint ? (['reprint'] as const) : twoCopies ? (['driver', 'ours'] as const) : (['single'] as const);
+  try {
+    await printJobs(db, await Promise.all(copies.map((c) => bon(db, b, c))));
+    return { printed: true };
+  } catch (e) {
+    if (reprint) throw e;
+    return { printed: false, printError: e instanceof Error ? e.message : 'Druckfehler' };
   }
 }
 
-export async function addEmpties(db: Db, actor: Actor, v: { kind: 'empty_back' | 'empty_return'; date: string; partner: string; note: string; lines: Line[] }) {
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('stock_moves'))`);
-    await checkEnough(tx, v.kind === 'empty_back' ? 'out' : 'in', v.kind, v.partner, v.lines);
-    const rows = await insert(tx, actor, v.kind, v, v.lines);
-    await record(tx, actor, { action: 'create', entity: 'stock_empties', entityId: null, after: { ...v } });
-    return { added: rows.length };
+export async function addReceipt(db: Db, actor: Actor, v: StockReceiptInput): Promise<StockSaveResult> {
+  const b = await db.transaction(async (tx) => {
+    const number = await nextNumber(tx, 'stock_receipt', 'WE', v.date);
+    await insert(tx, actor, 'in', { date: v.date, partner: v.supplier, ref: v.ref || number, note: v.note }, v.lines);
+    await insert(tx, actor, 'empty_return', { date: v.date, partner: v.supplier, ref: number, note: v.note }, v.empties);
+    const rec: BonRecord = { kind: 'receipt', v, number };
+    await record(tx, actor, { action: 'create', entity: 'stock_receipt', entityId: number, after: rec });
+    return rec;
   });
+  return { number: b.number, ...(v.print ? await printBon(db, b) : { printed: false }) };
+}
+
+export async function addEmpties(db: Db, actor: Actor, v: StockEmptiesInput): Promise<StockSaveResult> {
+  const b = await db.transaction(async (tx) => {
+    const number = await nextNumber(tx, 'stock_empties', 'LG', v.date);
+    await insert(tx, actor, 'empty_return', { date: v.date, partner: v.supplier, ref: number, note: v.note }, v.lines);
+    const rec: BonRecord = { kind: 'empties', v, number };
+    await record(tx, actor, { action: 'create', entity: 'stock_empties', entityId: number, after: rec });
+    return rec;
+  });
+  return { number: b.number, ...(v.print ? await printBon(db, b) : { printed: false }) };
+}
+
+export async function reprint(db: Db, actor: Actor, auditId: number) {
+  const [row] = await db.select().from(auditLog).where(and(eq(auditLog.id, auditId), inArray(auditLog.entity, BON_ENTITIES), eq(auditLog.action, 'create')));
+  if (!row) throw notFound('Bon');
+  const b = row.after as BonRecord;
+  if (!b || typeof b !== 'object' || !('number' in b) || !('v' in b)) throw notFound('Bon');
+  try { await printBon(db, b, true); } catch (e) { throw e instanceof AppError ? e : new AppError(502, 'printer_failed', 'Druckfehler'); }
+  await record(db, actor, { action: 'reprint', entity: row.entity, entityId: b.number });
+  return { ok: true };
 }
 
 /** Fehleintrag stornieren – die Zeile bleibt sichtbar (durchgestrichen). */
@@ -98,13 +173,6 @@ export async function voidMove(db: Db, actor: Actor, id: string) {
     const [row] = await tx.select().from(stockMoves).where(eq(stockMoves.id, id)).for('update');
     if (!row) throw notFound('Eintrag');
     if (row.voidedAt) throw conflict('Dieser Eintrag ist bereits storniert', 'already_voided');
-    // Ausgang/Zugang erst stornieren, wenn dazu kein Leergut mehr als zurück gebucht ist (sonst würde die Übersicht negativ)
-    if (row.kind === 'in' || row.kind === 'out') {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('stock_moves'))`);
-      const open = await openList(tx, row.kind, row.kind === 'out' ? 'empty_back' : 'empty_return');
-      const have = open.find((o) => key(o.partner) === key(row.partner) && key(o.article) === key(row.article))?.qty ?? 0;
-      if (have < row.qty) throw conflict(`Von „${row.article}“ ist schon Leergut als zurück eingetragen. Bitte zuerst diese Rückgabe stornieren.`, 'stock_in_use');
-    }
     await tx.update(stockMoves).set({ voidedAt: new Date(), voidedBy: actor.userName }).where(and(eq(stockMoves.id, id), isNull(stockMoves.voidedAt)));
     await record(tx, actor, { action: 'void', entity: 'stock_move', entityId: id, before: dto(row) });
     return { ok: true };

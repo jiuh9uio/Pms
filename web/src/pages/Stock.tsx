@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { STOCK_KIND_LABEL, stockEmptiesInput, stockReceiptInput, type StockMoveDto, type StockOpenDto, type StockOverviewDto } from '../../../src/shared/schemas.js';
+import { STOCK_KIND_LABEL, stockArticlesInput, stockEmptiesInput, stockReceiptInput, type StockBonDto, type StockMoveDto, type StockOverviewDto, type StockSaveResult } from '../../../src/shared/schemas.js';
 import { todayBerlin } from '../../../src/shared/hotel.js';
 import { api } from '../api.ts';
+import { useAuth } from '../App.tsx';
 import { deDate } from '../hotel/common.tsx';
 import { Button, Dialog, Field, LoadState, useLoad, useSubmit, useToast } from '../ui.tsx';
 
@@ -9,7 +10,7 @@ const num = (s: string) => (s.trim() === '' ? 0 : Number(s.replace(',', '.')));
 type Counts = Record<string, string>;
 type Extra = { qty: string; article: string };
 
-/** Artikel mit + / − und freie Zusatzzeilen; liefert die Zeilen für den Server. */
+/** Artikel mit + / − und freie Zusatzzeilen. */
 function ArticlePicker({ label, articles, counts, extra, onCounts, onExtra, error, idp }: {
   label: string; articles: string[]; counts: Counts; extra: Extra[]; onCounts: (c: Counts) => void; onExtra: (e: Extra[]) => void; error?: string; idp: string;
 }) {
@@ -30,7 +31,7 @@ function ArticlePicker({ label, articles, counts, extra, onCounts, onExtra, erro
         ))}
         {extra.map((x, i) => (
           <div key={i} className="extra">
-            <input value={x.article} placeholder="weiterer Artikel, z. B. Kiste Apfelschorle" aria-label="weiterer Artikel" onChange={(e) => onExtra(extra.map((y, j) => (j === i ? { ...y, article: e.target.value } : y)))} />
+            <input value={x.article} placeholder="weiterer Artikel, z. B. Kiste Mineralwasser" aria-label="weiterer Artikel" onChange={(e) => onExtra(extra.map((y, j) => (j === i ? { ...y, article: e.target.value } : y)))} />
             <input inputMode="numeric" className="qty" value={x.qty} placeholder="Anz." aria-label="Anzahl" onChange={(e) => onExtra(extra.map((y, j) => (j === i ? { ...y, qty: e.target.value } : y)))} />
             <button type="button" className="linkbtn" onClick={() => onExtra(extra.filter((_, j) => j !== i))}>entfernen</button>
           </div>
@@ -52,107 +53,147 @@ function useStock() {
   const load = useLoad(() => api<StockOverviewDto>('GET', '/stock'), [rev]);
   return { ...load, reload: () => setRev((r) => r + 1) };
 }
-
-/** Warenzugang: was der Lieferant gebracht hat – und welches Leergut er gleich mitgenommen hat. */
-export function StockReceipt() {
+function useSaved() {
   const toast = useToast();
+  return (what: string, r: StockSaveResult, print: boolean) => {
+    if (!print) toast(`${what} ${r.number} gespeichert`);
+    else if (r.printed) toast(`${what} ${r.number} gespeichert und Bon gedruckt`);
+    else toast(`${what} ${r.number} ist gespeichert, aber der Bon wurde nicht gedruckt: ${r.printError ?? 'Druckfehler'}. Nachdruck unten unter „Bons“.`, 'error');
+  };
+}
+function PrinterLine({ data }: { data: StockOverviewDto }) {
+  const { user } = useAuth();
+  return data.printerReady
+    ? <p className="muted small">Bon wird gedruckt auf: <b>{data.printerName}</b>.</p>
+    : <p className="notice warn">Es ist noch kein Bondrucker eingerichtet – speichern geht trotzdem. {user.role === 'admin' ? 'Einrichten unter Verwaltung → Einstellungen → Bondrucker vorne.' : 'Das richtet der Administrator ein.'}</p>;
+}
+function SupplierField({ value, onChange, error, suppliers }: { value: string; onChange: (s: string) => void; error?: string; suppliers: string[] }) {
+  return (
+    <>
+      <Field label="Lieferant" error={error} hint="z. B. Name der Brauerei oder des Getränkehändlers">
+        <input value={value} list="stock-suppliers" onChange={(e) => onChange(e.target.value)} />
+      </Field>
+      <datalist id="stock-suppliers">{suppliers.map((s) => <option key={s} value={s} />)}</datalist>
+    </>
+  );
+}
+
+/** Warenzugang: was der Lieferant gebracht hat – und welches Leergut der Fahrer gleich mitgenommen hat. */
+export function StockReceipt() {
   const { data, error, reload } = useStock();
-  const empty = () => ({ date: todayBerlin(), supplier: '', ref: '', note: '', counts: {} as Counts, extra: [] as Extra[], eCounts: {} as Counts, eExtra: [] as Extra[] });
+  const saved = useSaved();
+  const empty = () => ({ date: todayBerlin(), supplier: '', ref: '', note: '', counts: {} as Counts, extra: [] as Extra[], eCounts: {} as Counts, eExtra: [] as Extra[], print: true });
   const [v, setV] = useState(empty);
+  const [articles, setArticles] = useState(false);
+  const { user } = useAuth();
   const f = useSubmit(stockReceiptInput, async (d) => {
-    await api('POST', '/stock/receipts', d);
-    toast('Warenzugang gespeichert');
-    setV(empty());
+    const r = await api<StockSaveResult>('POST', '/stock/receipts', d);
+    saved('Warenzugang', r, d.print);
+    setV({ ...empty(), print: v.print });
     reload();
   });
   if (!data) return <LoadState error={error} loading />;
   const send = (e?: React.FormEvent) => void f.submit({
-    date: v.date, supplier: v.supplier, ref: v.ref, note: v.note,
+    date: v.date, supplier: v.supplier, ref: v.ref, note: v.note, print: v.print && data.printerReady,
     lines: toLines(data.articles, v.counts, v.extra), empties: toLines(data.articles, v.eCounts, v.eExtra),
   }, e);
+  const hasEmpties = toLines(data.articles, v.eCounts, v.eExtra).length > 0;
   return (
     <>
       <section className="card">
-        <h2>Ware ist gekommen</h2>
-        <p className="muted small">Zum Beispiel: Die Brauerei bringt volle Fässer und nimmt Leergut mit. Die Fässer zählen dann unter „Leergut“ als „beim Lieferanten noch zurückzugeben“.</p>
+        <div className="cardhead"><h2>Ware ist gekommen</h2>{user.role === 'admin' && <button type="button" className="linkbtn" onClick={() => setArticles(true)}>Artikel ändern</button>}</div>
+        <p className="muted small">Lieferung eintragen, z. B. von der Brauerei. Nimmt der Fahrer gleich Leergut mit, tragen Sie es unten mit ein – dann kommt auf den Bon ein Feld für seine Unterschrift.</p>
+        <PrinterLine data={data} />
         <form className="formgrid" onSubmit={send} noValidate>
-          <Field label="Lieferant" error={f.errors.supplier} hint="z. B. Name der Brauerei oder des Getränkehändlers">
-            <input value={v.supplier} list="stock-suppliers" onChange={(e) => setV({ ...v, supplier: e.target.value })} />
-          </Field>
-          <datalist id="stock-suppliers">{data.suppliers.map((s) => <option key={s} value={s} />)}</datalist>
+          <SupplierField value={v.supplier} onChange={(s) => setV({ ...v, supplier: s })} error={f.errors.supplier} suppliers={data.suppliers} />
           <Field label="Datum" error={f.errors.date}><input type="date" value={v.date} onChange={(e) => setV({ ...v, date: e.target.value })} /></Field>
-          <Field label="Lieferschein-Nr. des Lieferanten" error={f.errors.ref} hint="freiwillig"><input value={v.ref} onChange={(e) => setV({ ...v, ref: e.target.value })} /></Field>
+          <Field label="Lieferschein-Nr. des Lieferanten" error={f.errors.ref} hint="freiwillig – steht auf dem Papier, das der Fahrer mitbringt"><input value={v.ref} onChange={(e) => setV({ ...v, ref: e.target.value })} /></Field>
           <ArticlePicker idp="Erhalten" label="Erhalten (volle Ware)" articles={data.articles} counts={v.counts} extra={v.extra} onCounts={(c) => setV({ ...v, counts: c })} onExtra={(x) => setV({ ...v, extra: x })} error={errOf(f.errors, 'lines')} />
           <ArticlePicker idp="Leergut" label="Leergut gleich mitgegeben (freiwillig)" articles={data.articles} counts={v.eCounts} extra={v.eExtra} onCounts={(c) => setV({ ...v, eCounts: c })} onExtra={(x) => setV({ ...v, eExtra: x })} error={errOf(f.errors, 'empties')} />
           <Field label="Hinweis" error={f.errors.note} wide hint="freiwillig, z. B. Fass beschädigt, Nachlieferung folgt"><textarea rows={2} value={v.note} onChange={(e) => setV({ ...v, note: e.target.value })} /></Field>
+          <label className="check wide"><input type="checkbox" checked={v.print && data.printerReady} disabled={!data.printerReady} onChange={(e) => setV({ ...v, print: e.target.checked })} />
+            <span>Bon drucken{hasEmpties ? ' (2 Stück: für den Fahrer und für uns)' : ''}</span></label>
           <div className="wide"><Button type="submit" variant="primary" busy={f.busy}>Warenzugang speichern</Button></div>
         </form>
         <p className="muted small">Die Kontrolle für das Hygieneamt (Temperatur, Zustand) bleibt wie bisher unter Kontrollen → Hygieneamt → Wareneingang.</p>
       </section>
+      <Bons bons={data.bons} printerReady={data.printerReady} />
       <History moves={data.recent} onChange={reload} />
+      {articles && <ArticlesDialog articles={data.articles} onClose={() => setArticles(false)} onDone={() => { setArticles(false); reload(); }} />}
     </>
   );
 }
 
-/** Leergut: was noch bei Kunden steht und was noch an Lieferanten zurückgeht. */
+/** Leergut an den Lieferanten zurückgeben – mit Bon, den der Fahrer unterschreibt. */
 export function StockEmpties() {
   const { data, error, reload } = useStock();
-  const [ret, setRet] = useState<{ kind: 'empty_back' | 'empty_return'; partner: string; open: StockOpenDto[] } | null>(null);
+  const saved = useSaved();
+  const empty = () => ({ date: todayBerlin(), supplier: '', note: '', counts: {} as Counts, extra: [] as Extra[], print: true });
+  const [v, setV] = useState(empty);
+  const f = useSubmit(stockEmptiesInput, async (d) => {
+    const r = await api<StockSaveResult>('POST', '/stock/empties', d);
+    saved('Leergut-Rückgabe', r, d.print);
+    setV({ ...empty(), print: v.print });
+    reload();
+  });
   if (!data) return <LoadState error={error} loading />;
-  const group = (list: StockOpenDto[]) => [...new Set(list.map((o) => o.partner))].map((p) => ({ partner: p, open: list.filter((o) => o.partner === p) }));
-  const block = (title: string, hint: string, list: StockOpenDto[], kind: 'empty_back' | 'empty_return', button: string, none: string) => (
-    <section className="card">
-      <h2>{title}</h2>
-      <p className="muted small">{hint}</p>
-      {list.length === 0 ? <p className="muted">{none}</p> : (
-        <div className="tablewrap"><table className="temps">
-          <thead><tr><th>{kind === 'empty_back' ? 'Kunde' : 'Lieferant'}</th><th>Artikel</th><th>offen</th><th>seit</th><th /></tr></thead>
-          <tbody>{group(list).map((g) => g.open.map((o, i) => (
-            <tr key={`${g.partner}|${o.article}`}>
-              <td>{i === 0 ? <b>{g.partner}</b> : ''}</td><td>{o.article}</td><td><b>{o.qty}</b></td><td>{o.since ? deDate(o.since) : '–'}</td>
-              <td>{i === 0 && <Button onClick={() => setRet({ kind, partner: g.partner, open: g.open })}>{button}</Button>}</td>
-            </tr>
-          )))}</tbody>
-        </table></div>
-      )}
-    </section>
-  );
+  const send = (e?: React.FormEvent) => void f.submit({ date: v.date, supplier: v.supplier, note: v.note, print: v.print && data.printerReady, lines: toLines(data.articles, v.counts, v.extra) }, e);
+  const open = data.atSuppliers.filter((o) => o.partner.trim().toLowerCase() === v.supplier.trim().toLowerCase());
   return (
     <>
-      {block('Bei Kunden draußen', 'Kommt automatisch aus den gedruckten Lieferscheinen. Wenn das Leergut zurück ist: „zurückbekommen“ tippen.', data.customers, 'empty_back', 'zurückbekommen', 'Zurzeit ist nichts bei Kunden draußen.')}
-      {block('Beim Lieferanten noch zurückzugeben', 'Aus dem Warenzugang: erhaltene Fässer, die noch nicht als Leergut an den Lieferanten zurückgegangen sind.', data.atSuppliers, 'empty_return', 'zurückgegeben', 'Beim Lieferanten ist nichts offen.')}
-      <p className="muted small">Nur Stückzahlen – Pfand in Euro wird noch nicht berechnet.</p>
+      <section className="card">
+        <h2>Leergut abgeben</h2>
+        <p className="muted small">Der Fahrer holt Leergut ab: eintragen, Bon drucken, Fahrer unterschreibt. Ein Exemplar bekommt der Fahrer, eines heften Sie ab – so ist das Pfand belegt.</p>
+        <PrinterLine data={data} />
+        <form className="formgrid" onSubmit={send} noValidate>
+          <SupplierField value={v.supplier} onChange={(s) => setV({ ...v, supplier: s })} error={f.errors.supplier} suppliers={data.suppliers} />
+          <Field label="Datum" error={f.errors.date}><input type="date" value={v.date} onChange={(e) => setV({ ...v, date: e.target.value })} /></Field>
+          {open.length > 0 && <p className="muted small wide">Laut Programm noch offen bei {open[0]!.partner}: {open.map((o) => `${o.qty}× ${o.article}`).join(', ')}.{' '}
+            <button type="button" className="linkbtn" onClick={() => setV({ ...v, counts: Object.fromEntries(open.map((o) => [o.article, String(o.qty)])) })}>alles übernehmen</button></p>}
+          <ArticlePicker idp="Leergut" label="Leergut (Anzahl)" articles={data.articles} counts={v.counts} extra={v.extra} onCounts={(c) => setV({ ...v, counts: c })} onExtra={(x) => setV({ ...v, extra: x })} error={errOf(f.errors, 'lines')} />
+          <Field label="Hinweis" error={f.errors.note} wide hint="freiwillig, z. B. ein Fass beschädigt"><textarea rows={2} value={v.note} onChange={(e) => setV({ ...v, note: e.target.value })} /></Field>
+          <label className="check wide"><input type="checkbox" checked={v.print && data.printerReady} disabled={!data.printerReady} onChange={(e) => setV({ ...v, print: e.target.checked })} /><span>Bon drucken (2 Stück: für den Fahrer und für uns)</span></label>
+          <div className="wide"><Button type="submit" variant="primary" busy={f.busy}>Leergut-Rückgabe speichern</Button></div>
+        </form>
+      </section>
+      <section className="card">
+        <h2>Noch beim Lieferanten offen</h2>
+        <p className="muted small">Erhaltene Fässer laut Warenzugang, die noch nicht als Leergut zurückgegangen sind (also noch im Haus, voll oder leer). Nur Stückzahlen, kein Pfand in Euro.</p>
+        {data.atSuppliers.length === 0 ? <p className="muted">Nichts offen.</p> : (
+          <div className="tablewrap"><table className="temps">
+            <thead><tr><th>Lieferant</th><th>Artikel</th><th>offen</th><th>seit</th></tr></thead>
+            <tbody>{data.atSuppliers.map((o, i) => (
+              <tr key={`${o.partner}|${o.article}`}><td>{i === 0 || data.atSuppliers[i - 1]!.partner !== o.partner ? <b>{o.partner}</b> : ''}</td><td>{o.article}</td><td><b>{o.qty}</b></td><td>{o.since ? deDate(o.since) : '–'}</td></tr>
+            ))}</tbody>
+          </table></div>
+        )}
+      </section>
+      <Bons bons={data.bons} printerReady={data.printerReady} />
       <History moves={data.recent} onChange={reload} />
-      {ret && <ReturnDialog {...ret} onClose={() => setRet(null)} onDone={() => { setRet(null); reload(); }} />}
     </>
   );
 }
 
-function ReturnDialog({ kind, partner, open, onClose, onDone }: { kind: 'empty_back' | 'empty_return'; partner: string; open: StockOpenDto[]; onClose: () => void; onDone: () => void }) {
+function Bons({ bons, printerReady }: { bons: StockBonDto[]; printerReady: boolean }) {
   const toast = useToast();
-  const [counts, setCounts] = useState<Counts>(Object.fromEntries(open.map((o) => [o.article, String(o.qty)])));
-  const [date, setDate] = useState(todayBerlin());
-  const [note, setNote] = useState('');
-  const f = useSubmit(stockEmptiesInput, async (d) => { await api('POST', '/stock/empties', d); toast('Leergut gespeichert'); onDone(); });
-  const send = () => void f.submit({ kind, partner, date, note, lines: open.map((o) => ({ qty: num(counts[o.article] ?? ''), article: o.article })).filter((l) => l.qty !== 0) });
+  const [busy, setBusy] = useState<number | null>(null);
+  if (!bons.length) return null;
+  const again = async (b: StockBonDto) => {
+    setBusy(b.auditId);
+    try { await api('POST', `/stock/bons/${b.auditId}/reprint`); toast(`${b.number} nachgedruckt`); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+    setBusy(null);
+  };
   return (
-    <Dialog title={kind === 'empty_back' ? `Leergut zurück von ${partner}` : `Leergut an ${partner} zurückgegeben`} onClose={onClose}
-      footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={f.busy} onClick={send}>Speichern</Button></>}>
-      <p className="muted small">Vorgeschlagen ist alles, was offen ist. Kam weniger zurück, die Zahl einfach verkleinern – der Rest bleibt offen.</p>
-      <div className="deliveryarticles">
-        {open.map((o) => (
-          <div key={o.article}>
-            <span>{o.article} <small className="muted">(offen: {o.qty})</small></span>
-            <span className="dlstep"><input inputMode="numeric" value={counts[o.article] ?? ''} aria-label={`Anzahl ${o.article}`} onChange={(e) => setCounts({ ...counts, [o.article]: e.target.value })} /></span>
-          </div>
-        ))}
-      </div>
-      {errOf(f.errors, 'lines') && <p className="error">{errOf(f.errors, 'lines')}</p>}
-      <div className="formgrid">
-        <Field label="Datum" error={f.errors.date}><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
-        <Field label="Hinweis" error={f.errors.note} hint="freiwillig, z. B. ein Fass fehlt"><input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
-      </div>
-    </Dialog>
+    <details className="card deliveryrecent">
+      <summary>Bons (letzte {bons.length}) – Nachdruck</summary>
+      <div className="tablewrap"><table className="temps">
+        <thead><tr><th>Nr.</th><th>Datum</th><th>Lieferant</th><th>Inhalt</th><th>von</th><th /></tr></thead>
+        <tbody>{bons.map((b) => (
+          <tr key={b.auditId}><td>{b.number}</td><td>{deDate(b.date)}</td><td>{b.supplier}</td><td>{b.summary}</td><td>{b.userName}</td>
+            <td><Button busy={busy === b.auditId} disabled={!printerReady} onClick={() => void again(b)}>Nachdruck</Button></td></tr>
+        ))}</tbody>
+      </table></div>
+    </details>
   );
 }
 
@@ -167,7 +208,7 @@ function History({ moves, onChange }: { moves: StockMoveDto[]; onChange: () => v
     <details className="card deliveryrecent">
       <summary>Verlauf (letzte {moves.length})</summary>
       <div className="tablewrap"><table className="temps">
-        <thead><tr><th>Datum</th><th>Vorgang</th><th>Kunde / Lieferant</th><th>Artikel</th><th>Anzahl</th><th>Beleg</th><th>von</th><th /></tr></thead>
+        <thead><tr><th>Datum</th><th>Vorgang</th><th>Lieferant</th><th>Artikel</th><th>Anzahl</th><th>Beleg</th><th>von</th><th /></tr></thead>
         <tbody>{moves.map((m) => (
           <tr key={m.id} className={m.voided ? 'off' : ''}>
             <td>{deDate(m.date)}</td><td>{STOCK_KIND_LABEL[m.kind]}</td><td>{m.partner}</td><td>{m.voided ? <s>{m.article}</s> : m.article}</td><td>{m.qty}</td><td>{m.ref || '–'}</td>
@@ -177,5 +218,20 @@ function History({ moves, onChange }: { moves: StockMoveDto[]; onChange: () => v
         ))}</tbody>
       </table></div>
     </details>
+  );
+}
+
+function ArticlesDialog({ articles, onClose, onDone }: { articles: string[]; onClose: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const [text, setText] = useState(articles.join('\n'));
+  const f = useSubmit(stockArticlesInput, async (d) => { await api('PUT', '/stock/articles', d); toast('Artikel gespeichert'); onDone(); });
+  const send = () => void f.submit({ articles: text.split('\n').map((s) => s.trim()).filter(Boolean) });
+  return (
+    <Dialog title="Artikel für Warenzugang und Leergut" onClose={onClose}
+      footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={f.busy} onClick={send}>Speichern</Button></>}>
+      <Field label="Ein Artikel pro Zeile" error={Object.values(f.errors)[0]} wide hint="z. B. „Pils – Fass 50 l“. Diese Artikel erscheinen als Schnellauswahl.">
+        <textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} autoFocus />
+      </Field>
+    </Dialog>
   );
 }

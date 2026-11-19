@@ -269,36 +269,31 @@ export const logoUsageInput = z.object({
 });
 export type LogoUsage = z.infer<typeof logoUsageInput>;
 
-// ---------- Lieferschein auf dem Bondrucker (z. B. Fassbier) ----------
+// ---------- Einkauf: Warenzugang und Leergut (mit Bon für den Bondrucker) ----------
 const isoDay = z.string().refine(isIsoDate, 'Bitte ein Datum wählen');
-export const deliveryLineInput = z.object({ qty: z.number().int('Bitte eine ganze Zahl').min(1, 'Mindestens 1').max(999, 'Höchstens 999'), article: required(60) });
-export const deliveryNoteInput = z.object({
-  recipient: required(80), address: text(200), date: isoDay,
-  /** Rückgabe des Leerguts bis – leer = keine Angabe */
-  returnBy: z.union([z.literal(''), isoDay]),
-  lines: z.array(deliveryLineInput).min(1, 'Bitte mindestens eine Position eintragen').max(30),
-  note: text(400), copies: z.number().int().min(1).max(3),
-}).refine((v) => !v.returnBy || v.returnBy >= v.date, { path: ['returnBy'], message: 'Die Rückgabe liegt vor dem Lieferdatum' });
-export const deliveryArticlesInput = z.object({ articles: z.array(required(60)).max(40) });
-export type DeliveryNoteInput = z.infer<typeof deliveryNoteInput>;
-export type DeliveryNoteDto = DeliveryNoteInput & { auditId: number; number: string; userName: string; printedAt: string };
-export type DeliveryOverviewDto = { articles: string[]; recent: DeliveryNoteDto[]; preview: string };
-
-// ---------- Einkauf: Warenzugang und Leergut ----------
+export const stockLineInput = z.object({ qty: z.number().int('Bitte eine ganze Zahl').min(1, 'Mindestens 1').max(999, 'Höchstens 999'), article: required(60) });
+export const stockArticlesInput = z.object({ articles: z.array(required(60)).max(40) });
 export const STOCK_KINDS = ['in', 'out', 'empty_back', 'empty_return'] as const;
 export type StockKind = (typeof STOCK_KINDS)[number];
-export const STOCK_KIND_LABEL: Record<StockKind, string> = { in: 'Warenzugang', out: 'Geliefert (Lieferschein)', empty_back: 'Leergut vom Kunden zurück', empty_return: 'Leergut an Lieferant zurück' };
-const stockLines = z.array(deliveryLineInput).max(30);
+export const STOCK_KIND_LABEL: Record<StockKind, string> = { in: 'Warenzugang', out: 'Ausgabe', empty_back: 'Leergut zurück erhalten', empty_return: 'Leergut abgegeben' };
+const stockLines = z.array(stockLineInput).max(30);
 export const stockReceiptInput = z.object({
   date: isoDay, supplier: required(80), ref: text(40), note: text(400),
   lines: stockLines,
-  /** Leergut, das der Lieferant gleich wieder mitgenommen hat */
+  /** Leergut, das der Fahrer gleich wieder mitgenommen hat */
   empties: stockLines,
+  print: z.boolean(),
 }).refine((v) => v.lines.length + v.empties.length > 0, { path: ['lines'], message: 'Bitte mindestens eine Position eintragen' });
 export const stockEmptiesInput = z.object({
-  kind: z.enum(['empty_back', 'empty_return']), date: isoDay, partner: required(80), note: text(400),
+  date: isoDay, supplier: required(80), note: text(400),
   lines: stockLines.min(1, 'Bitte mindestens eine Position eintragen'),
+  print: z.boolean(),
 });
+export type StockReceiptInput = z.infer<typeof stockReceiptInput>;
+export type StockEmptiesInput = z.infer<typeof stockEmptiesInput>;
 export type StockMoveDto = { id: string; date: string; kind: StockKind; partner: string; article: string; qty: number; ref: string; note: string; userName: string; voided: boolean; voidedBy: string | null };
 export type StockOpenDto = { partner: string; article: string; qty: number; since: string };
-export type StockOverviewDto = { articles: string[]; suppliers: string[]; customers: StockOpenDto[]; atSuppliers: StockOpenDto[]; recent: StockMoveDto[] };
+export type StockBonDto = { auditId: number; kind: 'receipt' | 'empties'; number: string; date: string; supplier: string; summary: string; userName: string };
+export type StockOverviewDto = { articles: string[]; suppliers: string[]; atSuppliers: StockOpenDto[]; recent: StockMoveDto[]; bons: StockBonDto[]; printerReady: boolean; printerName: string };
+/** Ergebnis beim Speichern: gespeichert ist es immer; printError, wenn der Bon nicht gedruckt werden konnte */
+export type StockSaveResult = { number: string; printed: boolean; printError?: string };

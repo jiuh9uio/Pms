@@ -394,95 +394,78 @@ describe('Steuersätze prüfen', () => {
   });
 });
 
-describe('Lieferschein auf dem Bondrucker', () => {
-  it('druckt mit fortlaufender Nummer, verbraucht bei Druckfehler keine Nummer und druckt nach', async () => {
-    const note = { recipient: 'Testverein e. V.', address: 'Teststraße 1\n00000 Testort', date: '2031-06-12', returnBy: '2031-06-14', note: 'Zapfanlage mitgegeben', copies: 2,
-      lines: [{ qty: 2, article: 'Pils – Fass 50 l' }, { qty: 1, article: 'Kupfer – Fass 30 l' }] };
-    const o = await ok('GET', '/delivery-notes', admin);
-    expect(o.articles).toEqual(['Pils – Fass 50 l', 'Hefe – Fass 20 l', 'Kupfer – Fass 30 l']);
-    expect(o.preview).toContain('LIEFERSCHEIN');
-    // Prüfungen
-    expect((await call('POST', '/delivery-notes', admin, { ...note, lines: [] })).statusCode).toBe(400);
-    expect((await call('POST', '/delivery-notes', admin, { ...note, returnBy: '2031-06-01' })).statusCode).toBe(400);
-    // ohne Drucker: Fehler, keine Nummer verbraucht
+describe('Einkauf: Warenzugang und Leergut mit Bon', () => {
+  it('speichert Warenzugang und Leergut, druckt Bons (auch ohne Drucker gespeichert), rechnet offene Fässer und storniert ohne Löschen', async () => {
     await ok('PUT', '/settings/kitchen-printer', admin, { enabled: false, host: '', port: 9100, width: 48 });
     await ok('PUT', '/settings/front-printer', admin, { enabled: false, host: '', port: 9100, width: 48 });
-    expect((await call('POST', '/delivery-notes', admin, note)).json().error.code).toBe('printer_not_configured');
+    let o = await ok('GET', '/stock', admin);
+    expect(o.articles).toEqual(['Pils – Fass 50 l', 'Hefe – Fass 20 l', 'Kupfer – Fass 30 l']);
+    expect(o.printerReady).toBe(false);
+    const at = (p: string, a: string) => o.atSuppliers.find((x: { partner: string; article: string }) => x.partner === p && x.article === a)?.qty ?? 0;
+    // ohne Drucker: trotzdem gespeichert, Druckfehler wird gemeldet
+    const r1 = await ok('POST', '/stock/receipts', admin, { date: '2031-07-02', supplier: 'Brauerei Beispiel', ref: 'B-77', note: '', print: true,
+      lines: [{ qty: 5, article: 'Pils – Fass 50 l' }, { qty: 2, article: 'Pils – Fass 50 l' }, { qty: 1, article: 'Hefe – Fass 20 l' }], empties: [] });
+    expect(r1).toMatchObject({ number: 'WE-2031-0001', printed: false });
+    expect(r1.printError).toBeTruthy();
+    o = await ok('GET', '/stock', admin);
+    expect(at('Brauerei Beispiel', 'Pils – Fass 50 l')).toBe(7); // gleiche Artikel zusammengefasst
+    expect(o.suppliers).toContain('Brauerei Beispiel');
+    expect((await call('POST', '/stock/receipts', admin, { date: '2031-07-02', supplier: 'X', ref: '', note: '', print: false, lines: [], empties: [] })).statusCode).toBe(400);
+    // mit Drucker: Warenzugang mit Leergut → 2 Bons (Fahrer + uns)
     const { createServer } = await import('node:net');
     const jobs: Buffer[][] = [];
     const printer = createServer({ allowHalfOpen: true }, (sock) => { const j: Buffer[] = []; jobs.push(j); sock.on('data', (d) => j.push(d)); });
     await new Promise<void>((r) => printer.listen(0, '127.0.0.1', () => r()));
     await ok('PUT', '/settings/front-printer', admin, { enabled: true, host: '127.0.0.1', port: (printer.address() as { port: number }).port, width: 42 });
-    expect(await ok('POST', '/delivery-notes', admin, note)).toEqual({ number: 'LS-2031-0001' });
-    expect(await ok('POST', '/delivery-notes', admin, { ...note, copies: 1 })).toEqual({ number: 'LS-2031-0002' });
+    expect(await ok('POST', '/stock/receipts', admin, { date: '2031-07-09', supplier: 'brauerei beispiel ', ref: '', note: '', print: true,
+      lines: [{ qty: 3, article: 'Kupfer – Fass 30 l' }], empties: [{ qty: 4, article: 'Pils – Fass 50 l' }] })).toEqual({ number: 'WE-2031-0002', printed: true });
+    // Leergut-Rückgabe allein (auch mehr als offen erlaubt – Fässer aus der Zeit vor dem Programm)
+    expect(await ok('POST', '/stock/empties', admin, { date: '2031-07-10', supplier: 'Brauerei Beispiel', note: 'ein Fass verbeult', print: true,
+      lines: [{ qty: 3, article: 'Pils – Fass 50 l' }, { qty: 2, article: 'Hefe – Fass 20 l' }] })).toEqual({ number: 'LG-2031-0001', printed: true });
     await new Promise((r) => setTimeout(r, 150));
-    expect(jobs).toHaveLength(3);
-    const [forRecipient, toSign, single] = jobs.map((j) => Buffer.concat(j).toString('latin1'));
-    expect(forRecipient).toContain('LS-2031-0001');
-    expect(forRecipient).toContain('Testverein e. V.');
-    expect(forRecipient).toContain('2 x');
-    expect(forRecipient).toContain('14.06.2031');
-    expect(forRecipient).toContain('Exemplar f');
-    expect(forRecipient).not.toContain('Datum, Unterschrift');
-    expect(toSign).toContain('Datum, Unterschrift');
-    expect(single).toContain('LS-2031-0002');
-    expect(single).toContain('Datum, Unterschrift');
-    // Liste und Nachdruck
-    const list = (await ok('GET', '/delivery-notes', admin)).recent;
-    expect(list.map((n: { number: string }) => n.number).slice(0, 2)).toEqual(['LS-2031-0002', 'LS-2031-0001']);
-    expect(await ok('POST', `/delivery-notes/${list[1].auditId}/reprint`, admin, {})).toEqual({ ok: true });
+    expect(jobs).toHaveLength(4);
+    const [drv, ours, lgDrv] = jobs.map((j) => Buffer.concat(j).toString('latin1'));
+    expect(drv).toContain('WARENZUGANG');
+    expect(drv).toContain('WE-2031-0002');
+    expect(drv).toContain('Unterschrift Fahrer');
+    expect(drv).toContain('Exemplar f');
+    expect(ours).toContain('abheften');
+    expect(lgDrv).toContain('LG-2031-0001');
+    expect(lgDrv).toContain('ein Fass verbeult');
+    expect(lgDrv).not.toContain('Ware angenommen');
+    o = await ok('GET', '/stock', admin);
+    expect(at('Brauerei Beispiel', 'Pils – Fass 50 l')).toBe(0); // 7 − 4 − 3
+    expect(at('Brauerei Beispiel', 'Hefe – Fass 20 l')).toBe(0); // 1 − 2 → nicht negativ angezeigt
+    expect(at('Brauerei Beispiel', 'Kupfer – Fass 30 l')).toBe(3);
+    // Nachdruck
+    expect(o.bons.map((b: { number: string }) => b.number).slice(0, 3)).toEqual(['LG-2031-0001', 'WE-2031-0002', 'WE-2031-0001']);
+    expect(await ok('POST', `/stock/bons/${o.bons[2].auditId}/reprint`, admin, {})).toEqual({ ok: true });
     await new Promise((r) => setTimeout(r, 150));
-    const again = Buffer.concat(jobs[3]!).toString('latin1');
+    const again = Buffer.concat(jobs[4]!).toString('latin1');
     expect(again).toContain('Nachdruck');
-    expect(again).toContain('LS-2031-0001');
-    expect((await call('POST', '/delivery-notes/999999999/reprint', admin, {})).statusCode).toBe(404);
+    expect(again).toContain('WE-2031-0001');
+    expect(again).toContain('B-77');
+    expect((await call('POST', '/stock/bons/999999999/reprint', admin, {})).statusCode).toBe(404);
+    // Stornieren: Eintrag bleibt, zählt nicht mehr
+    const kupfer = o.recent.find((m: { kind: string; article: string }) => m.kind === 'in' && m.article === 'Kupfer – Fass 30 l');
+    await ok('POST', `/stock/moves/${kupfer.id}/void`, admin, {});
+    expect((await call('POST', `/stock/moves/${kupfer.id}/void`, admin, {})).json().error.code).toBe('already_voided');
+    o = await ok('GET', '/stock', admin);
+    expect(at('Brauerei Beispiel', 'Kupfer – Fass 30 l')).toBe(0);
+    expect(o.recent.find((m: { id: string }) => m.id === kupfer.id).voided).toBe(true);
     // Artikel ändern
-    expect(await ok('PUT', '/delivery-notes/articles', admin, { articles: ['Pils – Fass 50 l', ' Radler – Fass 30 l ', 'Pils – Fass 50 l'] })).toEqual(['Pils – Fass 50 l', 'Radler – Fass 30 l']);
+    expect(await ok('PUT', '/stock/articles', admin, { articles: ['Pils – Fass 50 l', ' Radler – Fass 30 l ', 'Pils – Fass 50 l'] })).toEqual(['Pils – Fass 50 l', 'Radler – Fass 30 l']);
     await ok('PUT', '/settings/front-printer', admin, { enabled: false, host: '', port: 9100, width: 48 });
     printer.close();
   });
 });
 
-describe('Einkauf: Warenzugang und Leergut', () => {
-  it('rechnet offene Fässer bei Kunden und Lieferanten, prüft Rückgaben und storniert ohne Löschen', async () => {
-    const { createServer } = await import('node:net');
-    const printer = createServer({ allowHalfOpen: true }, (sock) => { sock.on('data', () => {}); });
-    await new Promise<void>((r) => printer.listen(0, '127.0.0.1', () => r()));
-    await ok('PUT', '/settings/front-printer', admin, { enabled: true, host: '127.0.0.1', port: (printer.address() as { port: number }).port, width: 42 });
-    // Lieferschein → beim Kunden offen
-    await ok('POST', '/delivery-notes', admin, { recipient: 'Kegelclub Test', address: '', date: '2031-07-01', returnBy: '', note: '', copies: 1,
-      lines: [{ qty: 3, article: 'Pils – Fass 50 l' }, { qty: 1, article: 'Kupfer – Fass 30 l' }] });
-    let o = await ok('GET', '/stock', admin);
-    const at = (list: { partner: string; article: string; qty: number }[], p: string, a: string) => list.find((x) => x.partner === p && x.article === a)?.qty ?? 0;
-    expect(at(o.customers, 'Kegelclub Test', 'Pils – Fass 50 l')).toBe(3);
-    expect(at(o.customers, 'Kegelclub Test', 'Kupfer – Fass 30 l')).toBe(1);
-    // mehr zurück als offen → abgelehnt
-    const tooMuch = await call('POST', '/stock/empties', admin, { kind: 'empty_back', date: '2031-07-03', partner: 'Kegelclub Test', note: '', lines: [{ qty: 4, article: 'Pils – Fass 50 l' }] });
-    expect(tooMuch.json().error.code).toBe('stock_not_open');
-    await ok('POST', '/stock/empties', admin, { kind: 'empty_back', date: '2031-07-03', partner: 'kegelclub test ', note: '', lines: [{ qty: 2, article: 'Pils – Fass 50 l' }, { qty: 1, article: 'Kupfer – Fass 30 l' }] });
-    o = await ok('GET', '/stock', admin);
-    expect(at(o.customers, 'Kegelclub Test', 'Pils – Fass 50 l')).toBe(1);
-    expect(at(o.customers, 'Kegelclub Test', 'Kupfer – Fass 30 l')).toBe(0);
-    // Warenzugang: 5 volle, 2 Leergut gleich mitgegeben (nur wenn offen – hier aus derselben Lieferung)
-    await ok('POST', '/stock/receipts', admin, { date: '2031-07-02', supplier: 'Brauerei Beispiel', ref: 'B-77', note: '',
-      lines: [{ qty: 5, article: 'Pils – Fass 50 l' }, { qty: 2, article: 'Pils – Fass 50 l' }], empties: [{ qty: 2, article: 'Pils – Fass 50 l' }] });
-    o = await ok('GET', '/stock', admin);
-    expect(at(o.atSuppliers, 'Brauerei Beispiel', 'Pils – Fass 50 l')).toBe(5);
-    expect(o.suppliers).toContain('Brauerei Beispiel');
-    expect((await call('POST', '/stock/receipts', admin, { date: '2031-07-02', supplier: 'Brauerei Beispiel', ref: '', note: '', lines: [], empties: [] })).statusCode).toBe(400);
-    expect((await call('POST', '/stock/empties', admin, { kind: 'empty_return', date: '2031-07-04', partner: 'Andere Brauerei', note: '', lines: [{ qty: 1, article: 'Pils – Fass 50 l' }] })).json().error.code).toBe('stock_not_open');
-    // Stornieren: Eintrag bleibt, zählt aber nicht mehr
-    const recv = o.recent.find((m: { kind: string; partner: string }) => m.kind === 'in' && m.partner === 'Brauerei Beispiel');
-    expect(recv.qty).toBe(7); // gleiche Artikel zusammengefasst
-    expect((await call('POST', `/stock/moves/${recv.id}/void`, admin, {})).json().error.code).toBe('stock_in_use');
-    const back = o.recent.find((m: { kind: string; partner: string }) => m.kind === 'empty_return' && m.partner === 'Brauerei Beispiel');
-    await ok('POST', `/stock/moves/${back.id}/void`, admin, {});
-    await ok('POST', `/stock/moves/${recv.id}/void`, admin, {});
-    expect((await call('POST', `/stock/moves/${recv.id}/void`, admin, {})).json().error.code).toBe('already_voided');
-    o = await ok('GET', '/stock', admin);
-    expect(at(o.atSuppliers, 'Brauerei Beispiel', 'Pils – Fass 50 l')).toBe(0);
-    expect(o.recent.find((m: { id: string }) => m.id === recv.id).voided).toBe(true);
-    await ok('PUT', '/settings/front-printer', admin, { enabled: false, host: '', port: 9100, width: 48 });
-    printer.close();
+describe('Einkauf: alte Protokolleinträge aus Version 1.92.0', () => {
+  it('ignoriert Einträge ohne Bon-Inhalt in der Bon-Liste und beim Nachdruck', async () => {
+    await db.execute(sql`insert into audit_log (user_name, action, entity, entity_id, after) values ('alt', 'create', 'stock_receipt', null, ${JSON.stringify({ date: '2026-11-19', supplier: 'Alt', ref: '', note: '', lines: [{ qty: 1, article: 'Pils' }], empties: [] })}::jsonb)`);
+    const o = await ok('GET', '/stock', admin);
+    expect(o.bons.every((b: { number: string }) => !!b.number)).toBe(true);
+    const [row] = await db.execute(sql`select max(id)::int as id from audit_log where entity = 'stock_receipt' and user_name = 'alt'`) as unknown as { id: number }[];
+    expect((await call('POST', `/stock/bons/${row!.id}/reprint`, admin, {})).statusCode).toBe(404);
   });
 });

@@ -16,7 +16,6 @@ import * as auth from './modules/auth.js';
 import * as guestforms from './modules/guestforms.js';
 import * as network from './modules/network.js';
 import * as quickprint from './modules/quickprint.js';
-import * as deliverynote from './modules/deliverynote.js';
 import * as stock from './modules/stock.js';
 import { overview } from './modules/overview.js';
 import { search } from './modules/search.js';
@@ -414,16 +413,13 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     // ---------- Bereich „Schnelldruck“: Info-Zettel auf dem Bondrucker ----------
     const quick = { preHandler: requireModule('schnelldruck') };
     api.get('/quickprint', quick, () => quickprint.overview(db));
-    // Lieferschein auf dem Bondrucker (z. B. Fassbier)
-    api.get('/delivery-notes', quick, () => deliverynote.overview(db));
-    api.post('/delivery-notes', quick, (req) => deliverynote.create(db, actor(req), S.deliveryNoteInput.parse(req.body)));
-    api.post('/delivery-notes/:id/reprint', quick, (req) => deliverynote.reprint(db, actor(req), z.coerce.number().int().positive().parse((req.params as { id: string }).id)));
-    // Einkauf: Warenzugang und Leergut
+    // Einkauf: Warenzugang und Leergut (mit Bon)
     api.get('/stock', quick, () => stock.overview(db));
     api.post('/stock/receipts', quick, (req) => stock.addReceipt(db, actor(req), S.stockReceiptInput.parse(req.body)));
     api.post('/stock/empties', quick, (req) => stock.addEmpties(db, actor(req), S.stockEmptiesInput.parse(req.body)));
+    api.post('/stock/bons/:id/reprint', quick, (req) => stock.reprint(db, actor(req), z.coerce.number().int().positive().parse((req.params as { id: string }).id)));
     api.post('/stock/moves/:id/void', quick, (req) => stock.voidMove(db, actor(req), idParam(req)));
-    api.put('/delivery-notes/articles', { preHandler: requireAdmin }, (req) => deliverynote.saveArticles(db, actor(req), S.deliveryArticlesInput.parse(req.body).articles));
+    api.put('/stock/articles', { preHandler: requireAdmin }, (req) => stock.saveArticles(db, actor(req), S.stockArticlesInput.parse(req.body).articles));
     api.post('/quickprint/print', quick, (req) => { const v = S.quickPrintInput.parse(req.body); return quickprint.printSlip(db, actor(req), v.id, v.copies); });
     api.post('/quickprint/text', quick, (req) => quickprint.printText(db, actor(req), S.quickTextInput.parse(req.body)));
     api.get('/quickprint/suggestions', { preHandler: requireAdmin }, () => quickprint.suggestions(db));

@@ -57,7 +57,7 @@ export function QuickPrint() {
               <Button type="submit" variant="primary" busy={f.busy} disabled={!data.printerReady}>Drucken</Button>
             </form>
           </div>
-          <p className="muted small">Lieferscheine (z. B. Fassbier) finden Sie im Bereich <Link to="/einkauf">Einkauf</Link>.</p>
+          <p className="muted small">Bons für Warenzugang und Leergut finden Sie im Bereich <Link to="/einkauf">Einkauf</Link>.</p>
           <p className="muted small">Öffnungszeiten, Telefon und Adresse stammen aus Verwaltung → Einstellungen → Hotel; der WLAN-Zettel erscheint, sobald unter Internet das Gäste-WLAN hinterlegt ist. Die Vorschau zeigt den Text ungefähr so, wie er auf dem Bon steht.</p>
         </>
       )}

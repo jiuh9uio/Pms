@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.93.0
+
+- **Einkauf umgebaut – aus Sicht des Restaurants:** Der Lieferschein für eigene Kunden und die Liste „Bei Kunden draußen“ sind entfernt (passten nicht, Sie liefern nicht selbst aus).
+- **Warenzugang mit Bon:** Lieferung eintragen (z. B. Brauerei: Pils 50 l, Hefe 20 l, Kupfer 30 l), Bon wird gedruckt (Nummer WE-Jahr-Nummer) zum Abheften und Vergleichen mit der Rechnung. Nimmt der Fahrer gleich Leergut mit, steht es mit auf dem Bon – mit Unterschriftsfeld für den Fahrer, dann 2 Bons (Fahrer + uns).
+- **Leergut-Bon für den Fahrer:** Unter Einkauf → Leergut Leergut eintragen, Bon drucken (Nummer LG-Jahr-Nummer, 2 Stück), Fahrer unterschreibt – Nachweis fürs Pfand. Vorschlag „alles übernehmen“ aus dem, was laut Warenzugang noch offen ist.
+- Gespeichert wird immer, auch wenn der Drucker nicht erreichbar ist; dann erscheint ein Hinweis, und der Bon lässt sich unter „Bons“ nachdrucken.
+- Fehler behoben, der mit 1.92.0 gespeicherte Warenzugänge in der neuen Bon-Liste hätte stören können.
+
 ## 1.92.0
 
 - **Neu unter Einkauf → Warenzugang:** eintragen, was gekommen ist (z. B. die Brauerei bringt 4 Fässer Pils und 1 Fass Hefe). Lieferant (wird beim nächsten Mal vorgeschlagen), Datum, Lieferschein-Nr. des Lieferanten, Artikel mit + / −, weitere Artikel frei. Leergut, das der Lieferant gleich mitnimmt, wird im selben Schritt eingetragen.
