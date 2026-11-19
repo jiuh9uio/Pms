@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.97.1
+
+- **Neue Reservierung:** Beim Wählen der Anreise wird die Abreise automatisch eingetragen – mit derselben Anzahl Nächte wie gerade gewählt (z. B. „2 Nächte“), sonst 1 Nacht. Mit den Knöpfen „1/2/3/7 Nächte“ lässt sie sich mit einem Tipp ändern.
+
 ## 1.97.0
 
 - **Neue Reservierung, Schritt „Zimmer“:** wieder Anreise/Abreise (mit Schnellwahl) und darunter die Zimmer nach Etagen – jetzt farbig: **grün = frei**, **rot = belegt**, **blau mit Haken = gewählt**. Der Belegungsplan im Schritt ist wieder herausgenommen.

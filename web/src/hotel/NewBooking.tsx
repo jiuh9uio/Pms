@@ -187,7 +187,7 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
         <section className="nbstep">
           <h3 className="first">Wann?</h3>
           <div className="formgrid cols3 nb-dates">
-            <Field label="Anreise"><input type="date" value={from} min={today} onChange={(e) => { setFrom(e.target.value); if (isIsoDate(e.target.value) && e.target.value >= to) setTo(addDays(e.target.value, 1)); }} /></Field>
+            <Field label="Anreise" hint="Abreise wird automatisch eingetragen (gleiche Anzahl Nächte, sonst 1)"><input type="date" value={from} min={today} onChange={(e) => { const v = e.target.value; setFrom(v); if (isIsoDate(v)) setTo(addDays(v, nights > 0 ? nights : 1)); }} /></Field>
             <Field label="Abreise" error={!valid ? 'Muss nach der Anreise liegen' : undefined} hint={valid ? `${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}` : undefined}><input type="date" value={to} min={isIsoDate(from) ? addDays(from, 1) : undefined} onChange={(e) => setTo(e.target.value)} /></Field>
           </div>
           <div className="nbchips"><span className="muted small">Anreise:</span>
