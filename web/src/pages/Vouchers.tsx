@@ -9,7 +9,8 @@ import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
 import { MailDialog } from '../hotel/MailDialog.tsx';
-import { VoucherDesignEditor } from './VoucherDesignEditor.tsx';
+import { DESIGN_PRESETS, type DesignPreset } from '../../../src/shared/voucherPresets.js';
+import { LayoutPreview, VoucherDesignEditor } from './VoucherDesignEditor.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
 
 const TONE = { active: 'ok', redeemed: 'neutral', cancelled: 'danger' } as const;
@@ -184,6 +185,12 @@ function Designs({ data, isAdmin, onChange }: { data: VoucherOverviewDto; isAdmi
   const [pos, setPos] = useState<TextPos>('right');
   const [busy, setBusy] = useState(false);
   const [editor, setEditor] = useState<string | 'new' | null>(null);
+  const [preset, setPreset] = useState<DesignPreset | null>(null);
+  const logoInfo = useLoad(() => api<{ present: boolean }>('GET', '/settings/logo-info').catch(() => ({ present: false })));
+  const take = async (p: DesignPreset) => {
+    try { await api('POST', '/voucher-designs/editor', { name: p.name, layout: p.layout }); toast(`Design „${p.name}“ übernommen – Sie finden es unten bei Ihren Designs`); onChange(); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+  };
   const upload = (file: File | undefined) => {
     if (!file) return;
     if (!/^image\/(png|jpeg)$/.test(file.type)) { toast('Bitte ein PNG- oder JPG-Bild wählen', 'error'); return; }
@@ -210,6 +217,22 @@ function Designs({ data, isAdmin, onChange }: { data: VoucherOverviewDto; isAdmi
         <div><h2>Design-Editor</h2><p className="muted small">Gutschein frei gestalten: Logo, eigene Texte, Flächen, Strichcode, Hintergrundbild oder -farbe, Farbpalette – mit der Maus an den richtigen Platz ziehen.</p></div>
         <Button variant="primary" onClick={() => setEditor('new')}>Neues Design gestalten</Button>
       </section>
+      <h2 className="vc-h">Vorlagen</h2>
+      <p className="muted small">Fertige Designs zum Übernehmen – danach im Editor frei anpassen (Farben, Texte, Logo, eigenes Bild). Die Beispieltexte werden beim Drucken durch die echten Angaben ersetzt.</p>
+      <div className="vc-presets">
+        {DESIGN_PRESETS.map((p) => (
+          <section key={p.key} className="card vc-preset">
+            <LayoutPreview layout={p.layout} logo={!!logoInfo.data?.present} />
+            <b>{p.name}</b>
+            <span className="muted small">{p.description}</span>
+            <div className="vc-design-actions">
+              <Button variant="primary" onClick={() => void take(p)}>Übernehmen</Button>
+              <Button onClick={() => setPreset(p)}>Anpassen …</Button>
+            </div>
+          </section>
+        ))}
+      </div>
+      <h2 className="vc-h">Ihre Designs</h2>
       <details className="card">
         <summary><b>Nur ein Bild hochladen</b> <small className="muted">(einfaches Motiv mit festem Textfeld)</small></summary>
         <p className="muted small">Ein Bild im <b>Querformat</b> (z. B. 2100 × 1480 Pixel, DIN A5 quer), JPG oder PNG, höchstens 5 MB. Es füllt den ganzen Gutschein; Wert, Name, Gruß und Nummern stehen in einem hellen Feld darauf – lassen Sie dafür im Motiv eine ruhige Fläche frei.</p>
@@ -219,7 +242,7 @@ function Designs({ data, isAdmin, onChange }: { data: VoucherOverviewDto; isAdmi
           <label className="btn wide vc-upload">{busy ? 'Wird hochgeladen …' : 'Bild auswählen und hochladen'}<input type="file" accept="image/png,image/jpeg" hidden disabled={busy} onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ''; }} /></label>
         </div>
       </details>
-      {data.designs.length === 0 ? <p className="muted">Noch keine Motive – ohne Motiv wird der Gutschein schlicht mit Rahmen und Logo gedruckt.</p> : (
+      {data.designs.length === 0 ? <p className="muted">Noch keine eigenen Designs – oben eine Vorlage übernehmen oder ein neues Design gestalten. Ohne Design wird der Gutschein schlicht mit Rahmen und Logo gedruckt.</p> : (
         <div className="vc-designs">
           {data.designs.map((d) => (
             <section key={d.id} className="card vc-design">
@@ -236,6 +259,7 @@ function Designs({ data, isAdmin, onChange }: { data: VoucherOverviewDto; isAdmi
         </div>
       )}
       {editor && <VoucherDesignEditor designId={editor === 'new' ? null : editor} onClose={() => setEditor(null)} onSaved={onChange} />}
+      {preset && <VoucherDesignEditor designId={null} initial={{ name: preset.name, layout: preset.layout }} onClose={() => setPreset(null)} onSaved={onChange} />}
     </>
   );
 }

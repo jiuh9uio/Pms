@@ -1158,3 +1158,9 @@ a.linkcard.attention b { color: var(--warn); }
 .vde-layers { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .vde-layers button { width: 100%; text-align: left; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: inherit; font: inherit; cursor: pointer; }
 .vde-layers button.off { opacity: .55; }
+.vc-h { margin: 22px 0 6px; }
+.vc-presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.vc-preset { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.vde-stage.ro { padding: 0; border: 0; background: none; }
+.vde-stage.ro .vde-el { cursor: default; } .vde-stage.ro .vde-el:hover { outline: none; }
+.vde-stage.ro .vde-page { box-shadow: 0 1px 6px rgba(0,0,0,.18); border-radius: 4px; }

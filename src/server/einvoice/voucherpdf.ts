@@ -159,7 +159,8 @@ export async function renderVoucherLayout(v: VoucherPrint, h: HotelSettings, lay
       const w = e.w * MM, hh = e.h * MM, r = Math.min(e.radius * MM, w / 2, hh / 2);
       // Rechteck mit runden Ecken als Pfad (Koordinaten von oben links, y nach unten)
       const path = r > 0
-        ? `M ${r} 0 L ${w - r} 0 Q ${w} 0 ${w} ${r} L ${w} ${hh - r} Q ${w} ${hh} ${w - r} ${hh} L ${r} ${hh} Q 0 ${hh} 0 ${hh - r} L 0 ${r} Q 0 0 ${r} 0 Z`
+        // Ecken als Viertelkreise (Bézier-Näherung, k = 0,5523) – bei Radius = halbe Breite ergibt das einen Kreis
+        ? (() => { const k = 0.5523 * r; return `M ${r} 0 L ${w - r} 0 C ${w - r + k} 0 ${w} ${r - k} ${w} ${r} L ${w} ${hh - r} C ${w} ${hh - r + k} ${w - r + k} ${hh} ${w - r} ${hh} L ${r} ${hh} C ${r - k} ${hh} 0 ${hh - r + k} 0 ${hh - r} L 0 ${r} C 0 ${r - k} ${r - k} 0 ${r} 0 Z`; })()
         : `M 0 0 L ${w} 0 L ${w} ${hh} L 0 ${hh} Z`;
       page.drawSvgPath(path, {
         x: X(e.x), y: Y(e.y),

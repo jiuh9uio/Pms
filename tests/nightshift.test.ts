@@ -563,3 +563,17 @@ describe('Gutschein-Design-Editor', () => {
     expect(fillText('für {empfaenger}\nausgestellt am {ausgestellt} · gültig bis {gueltig}', { empfaenger: '', ausgestellt: '01.01.2027', gueltig: '' })).toBe('ausgestellt am 01.01.2027');
   });
 });
+
+describe('Gutschein-Vorlagen', () => {
+  it('alle Vorlagen sind gültig und lassen sich übernehmen und drucken', async () => {
+    const { DESIGN_PRESETS } = await import('../src/shared/voucherPresets.js');
+    const { voucherLayout } = await import('../src/shared/vouchers.js');
+    expect(DESIGN_PRESETS.length).toBeGreaterThanOrEqual(5);
+    for (const p of DESIGN_PRESETS) {
+      expect(voucherLayout.safeParse(p.layout).success, p.key).toBe(true);
+      const d = await ok('POST', '/voucher-designs/editor', admin, { name: p.name, layout: p.layout });
+      const pv = await call('GET', `/voucher-designs/${d.id}/preview`, admin);
+      expect(pv.rawPayload.subarray(0, 4).toString(), p.key).toBe('%PDF');
+    }
+  });
+});

@@ -22,7 +22,7 @@ type Img = { mime: 'image/png' | 'image/jpeg'; dataBase64: string; url: string }
  * und an der Ecke in der Größe ändern; rechts Schrift, Größe, Farbe aus der Palette, Ausrichtung, Ebenen.
  * Die Vorschau ist eine Annäherung – maßgeblich ist das PDF („Speichern & Druckvorschau“).
  */
-export function VoucherDesignEditor({ designId, onClose, onSaved }: { designId: string | null; onClose: () => void; onSaved: () => void }) {
+export function VoucherDesignEditor({ designId, initial, onClose, onSaved }: { designId: string | null; initial?: { name: string; layout: VoucherLayout }; onClose: () => void; onSaved: () => void }) {
   const toast = useToast();
   const existing = useLoad(async () => (designId ? api<VoucherDesignDetailDto>('GET', `/voucher-designs/${designId}`) : null), [designId]);
   const logo = useLoad(() => api<{ present: boolean }>('GET', '/settings/logo-info').catch(() => ({ present: false })));
@@ -37,8 +37,9 @@ export function VoucherDesignEditor({ designId, onClose, onSaved }: { designId: 
   useEffect(() => {
     if (designId && !existing.data) return;
     const d = existing.data;
-    setName(d?.name ?? 'Neues Design');
-    setLayout(d?.layout ?? layoutTemplate(d ? (d.textPos === 'bottom' ? 'bottom' : 'right') : 'classic'));
+    setName(d?.name ?? initial?.name ?? 'Neues Design');
+    setLayout(d?.layout ?? (initial ? structuredClone(initial.layout) : layoutTemplate(d ? (d.textPos === 'bottom' ? 'bottom' : 'right') : 'classic')));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [designId, existing.data]);
 
   const hasImage = image === undefined ? !!existing.data?.hasImage : !!image;
@@ -151,8 +152,13 @@ export function VoucherDesignEditor({ designId, onClose, onSaved }: { designId: 
   );
 }
 
-function Canvas({ layout, imageUrl, sel, onSelect, onChange, logo }: {
-  layout: VoucherLayout; imageUrl: string | null; sel: string | null; onSelect: (id: string | null) => void; onChange: (id: string, p: Partial<DesignElement>) => void; logo: boolean;
+/** Nur ansehen (z. B. Vorlagen-Galerie) */
+export function LayoutPreview({ layout, logo }: { layout: VoucherLayout; logo: boolean }) {
+  return <Canvas layout={layout} imageUrl={null} sel={null} onSelect={() => {}} onChange={() => {}} logo={logo} readOnly />;
+}
+
+function Canvas({ layout, imageUrl, sel, onSelect, onChange, logo, readOnly }: {
+  layout: VoucherLayout; imageUrl: string | null; sel: string | null; onSelect: (id: string | null) => void; onChange: (id: string, p: Partial<DesignElement>) => void; logo: boolean; readOnly?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [cw, setCw] = useState(600);
@@ -165,6 +171,7 @@ function Canvas({ layout, imageUrl, sel, onSelect, onChange, logo }: {
   const k = cw / PAGE_W; // px je mm
   const drag = useRef<{ id: string; mode: 'move' | 'size'; sx: number; sy: number; e: DesignElement } | null>(null);
   const down = (ev: RPointerEvent, e: DesignElement, mode: 'move' | 'size') => {
+    if (readOnly) return;
     ev.stopPropagation(); ev.preventDefault();
     onSelect(e.id);
     (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
@@ -184,7 +191,7 @@ function Canvas({ layout, imageUrl, sel, onSelect, onChange, logo }: {
     if (m[ev.key]) { ev.preventDefault(); onChange(e.id, m[ev.key]!); }
   };
   return (
-    <div className="vde-stage">
+    <div className={readOnly ? 'vde-stage ro' : 'vde-stage'}>
       <div ref={ref} className="vde-page" tabIndex={0} onKeyDown={key} onPointerDown={() => onSelect(null)} onPointerMove={moveP} onPointerUp={up}
         style={{ background: layout.background, aspectRatio: `${PAGE_W} / ${PAGE_H}` }}>
         {imageUrl && <img className="vde-bg" src={imageUrl} alt="" style={{ objectFit: layout.imageFit }} draggable={false} />}
@@ -263,7 +270,7 @@ function ElementPanel({ e, palette, onChange, onAddColor, onFront, onBack, onDup
           <Field label={`Deckkraft ${Math.round(e.opacity * 100)} %`}><input type="range" min={0} max={1} step={0.05} value={e.opacity} onChange={(ev) => onChange({ opacity: Number(ev.target.value) })} /></Field>
           <label className="check"><input type="checkbox" checked={!!e.border} onChange={(ev) => onChange({ border: ev.target.checked ? '#1f1f24' : '' })} /><span>Rahmenlinie</span></label>
           {e.border && <ColorPick label="Rahmenfarbe" value={e.border} palette={palette} onChange={(c) => onChange({ border: c })} onAdd={onAddColor} />}
-          <Field label="Ecken abrunden (mm)"><input type="number" min={0} max={30} value={e.radius} onChange={(ev) => onChange({ radius: Number(ev.target.value) || 0 })} /></Field>
+          <Field label="Ecken abrunden (mm)" hint="halbe Breite = Kreis"><input type="number" min={0} max={120} value={e.radius} onChange={(ev) => onChange({ radius: Number(ev.target.value) || 0 })} /></Field>
         </>
       )}
       {e.type === 'logo' && (

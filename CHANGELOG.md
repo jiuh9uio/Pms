@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.102.0
+
+- **Gutscheine – fertige Design-Vorlagen** (Gutscheine → Motive → „Vorlagen“): sechs eigene Entwürfe zum Übernehmen – **Elegant Gold**, **Winterzeit**, **Fröhlich**, **Modern Dunkel**, **Genuss** und **Natur & Ruhe**. Mit Vorschau; „Übernehmen“ legt eine eigene Kopie an, „Anpassen …“ öffnet die Vorlage gleich im Editor. Eigene Designs stehen darunter unter „Ihre Designs“.
+- Editor: runde Formen bis zum Kreis (Ecken abrunden bis halbe Breite), im PDF jetzt sauber rund.
+
 ## 1.101.1
 
 - **Programm-Update robuster:** Das Entpacken des Updates nutzt unter Windows jetzt zuerst „tar“ (in Windows 10/11 enthalten) und nur ersatzweise das bisherige Verfahren; ist das Ergebnis unvollständig, wird einmal mit dem anderen Verfahren wiederholt. Im Update-Protokoll steht bei einem Fehler genauer, was gefunden wurde. Anlass: Auf dem Windows-Testrechner brach das Entpacken gelegentlich ohne Meldung ab („Paket unvollständig“).

@@ -80,7 +80,7 @@ export const designElement = z.object({
   type: z.enum(DESIGN_ELEMENT_TYPES),
   /** Bezeichnung in der Elementliste */
   label: text(40),
-  x: mm(PAGE_W + 50), y: mm(PAGE_H + 50), w: z.number().min(2).max(PAGE_W + 100), h: z.number().min(2).max(PAGE_H + 100),
+  x: mm(PAGE_W + 50), y: mm(PAGE_H + 50), w: z.number().min(0.3).max(PAGE_W + 100), h: z.number().min(0.3).max(PAGE_H + 100),
   hidden: z.boolean().default(false),
   // Text
   text: text(600).default(''),
@@ -93,7 +93,7 @@ export const designElement = z.object({
   // Fläche
   fill: hex.default('#ffffff'),
   opacity: z.number().min(0).max(1).default(1),
-  radius: z.number().min(0).max(30).default(0),
+  radius: z.number().min(0).max(120).default(0),
   border: z.union([z.literal(''), hex]).default(''),
 });
 export type DesignElement = z.infer<typeof designElement>;
