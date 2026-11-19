@@ -43,6 +43,13 @@ async function send(db: Exec, make: (width: number) => Line[], copies = 1) {
 export const bonTarget = (db: Exec) => target(db);
 /** Druckt beliebige Zeilen auf dem Bondrucker (vorne, sonst Küche) – für andere Bereiche wie das TSE-Datenblatt. */
 export const printLines = (db: Exec, make: (width: number) => Line[]) => send(db, make);
+/** Druckt mehrere unterschiedliche Bons nacheinander (z. B. Lieferschein: Exemplar Empfänger + Exemplar zum Unterschreiben). */
+export async function printJobs(db: Exec, makes: ((width: number) => Line[])[]) {
+  const t = await target(db);
+  if (!t) throw conflict('Es ist noch kein Bondrucker eingerichtet (Verwaltung → Einstellungen → Bondrucker vorne)', 'printer_not_configured');
+  try { for (const make of makes) await sendToPrinter(t.printer.host, t.printer.port, buildJob(make(t.printer.width), t.printer.width)); }
+  catch (e) { throw new AppError(502, 'printer_failed', e instanceof Error ? e.message : 'Druckfehler'); }
+}
 
 export const testFrontPrinter = async (db: Exec) => {
   const p = await getFrontPrinter(db);
@@ -135,7 +142,7 @@ async function slips(db: Exec): Promise<Slip[]> {
   });
   return out;
 }
-const preview = (lines: Line[], width: number) => lines.map((l) =>
+export const preview = (lines: Line[], width: number) => lines.map((l) =>
   'rule' in l ? (l.char ?? '-').repeat(width) : 'feed' in l ? '' : 'qr' in l ? '[QR-Code]'.padStart(Math.floor((width + 9) / 2)) :
   l.align === 'center' ? ' '.repeat(Math.max(0, Math.floor((width - l.text.length * (l.big ? 2 : 1)) / 2 / (l.big ? 2 : 1)))) + l.text : l.text).join('\n');
 

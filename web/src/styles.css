@@ -1034,3 +1034,17 @@ a.linkcard.attention b { color: var(--warn); }
 .exportchoices section { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; align-content: start; gap: 6px; }
 .btn.disabled { pointer-events: none; opacity: .55; }
 @media (max-width: 760px) { .exportchoices { grid-template-columns: minmax(0, 1fr); } }
+
+/* Lieferschein (Schnelldruck) */
+.deliverynote { margin-top: 16px; }
+.deliverygrid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; align-items: start; }
+@media (max-width: 900px) { .deliverygrid { grid-template-columns: 1fr; } }
+.deliveryarticles { display: grid; gap: 6px; margin: 4px 0 6px; }
+.deliveryarticles > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px 6px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.deliveryarticles > div.on { border-color: var(--accent); background: var(--accent-soft); }
+.deliveryarticles > div.extra input:first-child { flex: 1; min-width: 0; }
+.deliveryarticles .qty { width: 64px; }
+.dlstep { display: inline-flex; align-items: center; gap: 4px; }
+.dlstep input { width: 52px; text-align: center; }
+.dlstep button { width: 34px; height: 34px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: inherit; font-size: 18px; cursor: pointer; }
+.deliveryrecent { margin-top: 14px; } .deliveryrecent summary { cursor: pointer; font-weight: 600; }

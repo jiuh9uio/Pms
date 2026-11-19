@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.90.0
+
+- **Neu: Lieferschein auf dem Bondrucker** (Schnelldruck → ganz unten „Lieferschein“), z. B. für Fassbier zu einer Feier. Fertig hinterlegt sind **Pils – Fass 50 l, Hefe – Fass 20 l und Kupfer – Fass 30 l**; Anzahl mit + / − eintippen, weitere Positionen (z. B. Zapfanlage) frei dazuschreiben. Dazu Empfänger, Anschrift, Lieferdatum, „Leergut zurück bis“ und ein Hinweis.
+- Jeder Lieferschein bekommt eine fortlaufende Nummer (LS-Jahr-Nummer). Bei 2 Ausdrucken kommt ein Exemplar für den Empfänger und eines mit Unterschriftsfeld „Ware vollständig und einwandfrei erhalten“. Klappt der Druck nicht, wird keine Nummer verbraucht.
+- „Zuletzt gedruckt“ zeigt die letzten 30 Lieferscheine mit **Nachdruck** (als „Nachdruck“ gekennzeichnet).
+- Der Administrator kann die Artikelliste über „Artikel ändern“ anpassen.
+- Ohne Preise: Der Lieferschein ist keine Rechnung und kein Kassenbeleg; die Rechnung schreiben Sie wie gewohnt.
+
 ## 1.89.1
 
 - **Fehler behoben: „Neue Reservierung“ → „Gewählte Zimmer“** war seit 1.86.0 verrutscht (schmaler Rahmen, „Preis/Nacht“ ragte heraus, Entfernen-Knopf darunter). Ursache: eine neue Gestaltung für „Aufs Zimmer“ im Restaurant trug denselben internen Namen. Jetzt wieder eine Zeile mit Erwachsenen, Kindern, Preis/Nacht und ✕.

@@ -16,6 +16,7 @@ import * as auth from './modules/auth.js';
 import * as guestforms from './modules/guestforms.js';
 import * as network from './modules/network.js';
 import * as quickprint from './modules/quickprint.js';
+import * as deliverynote from './modules/deliverynote.js';
 import { overview } from './modules/overview.js';
 import { search } from './modules/search.js';
 import { shortcutBat, validHost } from './lib/shortcut.js';
@@ -412,6 +413,11 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     // ---------- Bereich „Schnelldruck“: Info-Zettel auf dem Bondrucker ----------
     const quick = { preHandler: requireModule('schnelldruck') };
     api.get('/quickprint', quick, () => quickprint.overview(db));
+    // Lieferschein auf dem Bondrucker (z. B. Fassbier)
+    api.get('/delivery-notes', quick, () => deliverynote.overview(db));
+    api.post('/delivery-notes', quick, (req) => deliverynote.create(db, actor(req), S.deliveryNoteInput.parse(req.body)));
+    api.post('/delivery-notes/:id/reprint', quick, (req) => deliverynote.reprint(db, actor(req), z.coerce.number().int().positive().parse((req.params as { id: string }).id)));
+    api.put('/delivery-notes/articles', { preHandler: requireAdmin }, (req) => deliverynote.saveArticles(db, actor(req), S.deliveryArticlesInput.parse(req.body).articles));
     api.post('/quickprint/print', quick, (req) => { const v = S.quickPrintInput.parse(req.body); return quickprint.printSlip(db, actor(req), v.id, v.copies); });
     api.post('/quickprint/text', quick, (req) => quickprint.printText(db, actor(req), S.quickTextInput.parse(req.body)));
     api.get('/quickprint/suggestions', { preHandler: requireAdmin }, () => quickprint.suggestions(db));

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { printTemplateInput, quickTextInput, reviewSlipInput, type QuickPrintDto, type QuickSlipDto, type SlipSuggestionDto } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { useAuth } from '../App.tsx';
+import { DeliveryNoteCard } from './DeliveryNote.tsx';
 import { Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useToast } from '../ui.tsx';
 
 /** Bereich „Schnelldruck“: Info-Zettel für Gäste mit einem Tipp aus dem Bondrucker. */
@@ -56,6 +57,7 @@ export function QuickPrint() {
               <Button type="submit" variant="primary" busy={f.busy} disabled={!data.printerReady}>Drucken</Button>
             </form>
           </div>
+          <DeliveryNoteCard printerReady={data.printerReady} isAdmin={isAdmin} />
           <p className="muted small">Öffnungszeiten, Telefon und Adresse stammen aus Verwaltung → Einstellungen → Hotel; der WLAN-Zettel erscheint, sobald unter Internet das Gäste-WLAN hinterlegt ist. Die Vorschau zeigt den Text ungefähr so, wie er auf dem Bon steht.</p>
         </>
       )}

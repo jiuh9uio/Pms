@@ -393,3 +393,52 @@ describe('Steuersätze prüfen', () => {
     expect((await ok('GET', '/tax-check', admin)).findings.map((f: { name: string }) => f.name)).not.toContain('Frühstück Steuertest');
   });
 });
+
+describe('Lieferschein auf dem Bondrucker', () => {
+  it('druckt mit fortlaufender Nummer, verbraucht bei Druckfehler keine Nummer und druckt nach', async () => {
+    const note = { recipient: 'Testverein e. V.', address: 'Teststraße 1\n00000 Testort', date: '2031-06-12', returnBy: '2031-06-14', note: 'Zapfanlage mitgegeben', copies: 2,
+      lines: [{ qty: 2, article: 'Pils – Fass 50 l' }, { qty: 1, article: 'Kupfer – Fass 30 l' }] };
+    const o = await ok('GET', '/delivery-notes', admin);
+    expect(o.articles).toEqual(['Pils – Fass 50 l', 'Hefe – Fass 20 l', 'Kupfer – Fass 30 l']);
+    expect(o.preview).toContain('LIEFERSCHEIN');
+    // Prüfungen
+    expect((await call('POST', '/delivery-notes', admin, { ...note, lines: [] })).statusCode).toBe(400);
+    expect((await call('POST', '/delivery-notes', admin, { ...note, returnBy: '2031-06-01' })).statusCode).toBe(400);
+    // ohne Drucker: Fehler, keine Nummer verbraucht
+    await ok('PUT', '/settings/kitchen-printer', admin, { enabled: false, host: '', port: 9100, width: 48 });
+    await ok('PUT', '/settings/front-printer', admin, { enabled: false, host: '', port: 9100, width: 48 });
+    expect((await call('POST', '/delivery-notes', admin, note)).json().error.code).toBe('printer_not_configured');
+    const { createServer } = await import('node:net');
+    const jobs: Buffer[][] = [];
+    const printer = createServer({ allowHalfOpen: true }, (sock) => { const j: Buffer[] = []; jobs.push(j); sock.on('data', (d) => j.push(d)); });
+    await new Promise<void>((r) => printer.listen(0, '127.0.0.1', () => r()));
+    await ok('PUT', '/settings/front-printer', admin, { enabled: true, host: '127.0.0.1', port: (printer.address() as { port: number }).port, width: 42 });
+    expect(await ok('POST', '/delivery-notes', admin, note)).toEqual({ number: 'LS-2031-0001' });
+    expect(await ok('POST', '/delivery-notes', admin, { ...note, copies: 1 })).toEqual({ number: 'LS-2031-0002' });
+    await new Promise((r) => setTimeout(r, 150));
+    expect(jobs).toHaveLength(3);
+    const [forRecipient, toSign, single] = jobs.map((j) => Buffer.concat(j).toString('latin1'));
+    expect(forRecipient).toContain('LS-2031-0001');
+    expect(forRecipient).toContain('Testverein e. V.');
+    expect(forRecipient).toContain('2 x');
+    expect(forRecipient).toContain('14.06.2031');
+    expect(forRecipient).toContain('Exemplar f');
+    expect(forRecipient).not.toContain('Datum, Unterschrift');
+    expect(toSign).toContain('Datum, Unterschrift');
+    expect(single).toContain('LS-2031-0002');
+    expect(single).toContain('Datum, Unterschrift');
+    // Liste und Nachdruck
+    const list = (await ok('GET', '/delivery-notes', admin)).recent;
+    expect(list.map((n: { number: string }) => n.number).slice(0, 2)).toEqual(['LS-2031-0002', 'LS-2031-0001']);
+    expect(await ok('POST', `/delivery-notes/${list[1].auditId}/reprint`, admin, {})).toEqual({ ok: true });
+    await new Promise((r) => setTimeout(r, 150));
+    const again = Buffer.concat(jobs[3]!).toString('latin1');
+    expect(again).toContain('Nachdruck');
+    expect(again).toContain('LS-2031-0001');
+    expect((await call('POST', '/delivery-notes/999999999/reprint', admin, {})).statusCode).toBe(404);
+    // Artikel ändern
+    expect(await ok('PUT', '/delivery-notes/articles', admin, { articles: ['Pils – Fass 50 l', ' Radler – Fass 30 l ', 'Pils – Fass 50 l'] })).toEqual(['Pils – Fass 50 l', 'Radler – Fass 30 l']);
+    await ok('PUT', '/settings/front-printer', admin, { enabled: false, host: '', port: 9100, width: 48 });
+    printer.close();
+  });
+});

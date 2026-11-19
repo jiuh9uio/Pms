@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isIsoDate } from './hotel.js';
 
 /** Eingabeschemas – vom Server immer geprüft, von der Oberfläche für Sofort-Rückmeldung mitbenutzt. */
 
@@ -267,3 +268,18 @@ export const logoUsageInput = z.object({
   emails: z.boolean().default(false),
 });
 export type LogoUsage = z.infer<typeof logoUsageInput>;
+
+// ---------- Lieferschein auf dem Bondrucker (z. B. Fassbier) ----------
+const isoDay = z.string().refine(isIsoDate, 'Bitte ein Datum wählen');
+export const deliveryLineInput = z.object({ qty: z.number().int('Bitte eine ganze Zahl').min(1, 'Mindestens 1').max(999, 'Höchstens 999'), article: required(60) });
+export const deliveryNoteInput = z.object({
+  recipient: required(80), address: text(200), date: isoDay,
+  /** Rückgabe des Leerguts bis – leer = keine Angabe */
+  returnBy: z.union([z.literal(''), isoDay]),
+  lines: z.array(deliveryLineInput).min(1, 'Bitte mindestens eine Position eintragen').max(30),
+  note: text(400), copies: z.number().int().min(1).max(3),
+}).refine((v) => !v.returnBy || v.returnBy >= v.date, { path: ['returnBy'], message: 'Die Rückgabe liegt vor dem Lieferdatum' });
+export const deliveryArticlesInput = z.object({ articles: z.array(required(60)).max(40) });
+export type DeliveryNoteInput = z.infer<typeof deliveryNoteInput>;
+export type DeliveryNoteDto = DeliveryNoteInput & { auditId: number; number: string; userName: string; printedAt: string };
+export type DeliveryOverviewDto = { articles: string[]; recent: DeliveryNoteDto[]; preview: string };
