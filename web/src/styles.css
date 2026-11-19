@@ -1170,3 +1170,4 @@ a.linkcard.attention b { color: var(--warn); }
 .rq-facts > div.paid small { color: var(--ok); font-weight: 600; }
 .bk-snext { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 16px 0 4px; }
 .bk-snext .btn.big { font-size: 17px; padding: 12px 26px; }
+.vc-ship { display: flex; flex-wrap: wrap; gap: 6px 20px; }

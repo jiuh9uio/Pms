@@ -89,13 +89,29 @@ function VoucherDialog({ voucher: v, data, isAdmin, onClose, onChanged }: { vouc
   const [busy, setBusy] = useState('');
   const set = (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   const locked = v?.status === 'cancelled';
+  // Neuer Gutschein: Rechnungsentwurf gleich mit anlegen (Gutschein 0 %, bei Postversand Versandkosten)
+  const [inv, setInv] = useState({ create: true, post: false, postage: data.numbering.postageCents ? moneyInput(data.numbering.postageCents) : '', postageTax: '19' });
+  const [invError, setInvError] = useState('');
   const s = useSubmit(voucherInput, async (d) => {
-    if (v) await api('PUT', `/vouchers/${v.id}`, { ...d, version: v.version });
-    else await api('POST', '/vouchers', d);
-    toast(v ? 'Gutschein gespeichert' : `Gutschein ${d.number} angelegt`);
-    onChanged(); onClose();
+    if (v) { await api('PUT', `/vouchers/${v.id}`, { ...d, version: v.version }); toast('Gutschein gespeichert'); onChanged(); onClose(); return; }
+    const created = await api<{ id: string; number: string }>('POST', '/vouchers', d);
+    if (!inv.create) { toast(`Gutschein ${d.number} angelegt`); onChanged(); onClose(); return; }
+    try {
+      const postage = inv.post && inv.postage.trim() ? parseMoney(inv.postage) : 0;
+      const r = await api<{ invoiceId: string }>('POST', `/vouchers/${created.id}/invoice`, { valueTaxPercent: 0, postageCents: Number.isNaN(postage) ? 0 : postage, postageTaxPercent: Number(inv.postageTax) });
+      toast(`Gutschein ${d.number} angelegt – Rechnungsentwurf bitte prüfen und ausstellen`);
+      onChanged(); onClose(); openInvoice(r.invoiceId);
+    } catch (e) {
+      toast(`Gutschein ${d.number} ist angelegt, die Rechnung aber nicht: ${e instanceof Error ? e.message : 'Fehler'} – bitte im Gutschein „Rechnung schreiben“.`, 'error');
+      onChanged(); onClose();
+    }
   });
-  const save = () => void s.submit({ ...f, valueCents: f.value.trim() === '' ? NaN : parseMoney(f.value) });
+  const save = () => {
+    setInvError('');
+    if (!v && inv.create && !f.buyerName.trim() && !f.buyerCompany.trim()) { setInvError('Für die Rechnung bitte Name oder Firma des Käufers eintragen – oder „Rechnung gleich mit anlegen“ abwählen.'); return; }
+    if (!v && inv.create && inv.post && inv.postage.trim() && Number.isNaN(parseMoney(inv.postage))) { setInvError('Bitte die Versandkosten als Betrag eintragen, z. B. 2,50'); return; }
+    void s.submit({ ...f, valueCents: f.value.trim() === '' ? NaN : parseMoney(f.value) });
+  };
   const status = async (to: 'redeemed' | 'cancelled' | 'active') => {
     if (!v) return;
     if (to === 'cancelled' && !window.confirm(`Gutschein ${v.number} stornieren? Er bleibt in der Liste (als storniert) erhalten und lässt sich nicht mehr drucken oder senden.`)) return;
@@ -140,6 +156,26 @@ function VoucherDialog({ voucher: v, data, isAdmin, onClose, onChanged }: { vouc
         <Field label="Ort" error={s.errors.buyerCity}><input value={f.buyerCity} onChange={set('buyerCity')} disabled={locked} /></Field>
         <Field label="E-Mail" error={s.errors.buyerEmail} wide><input type="email" value={f.buyerEmail} onChange={set('buyerEmail')} disabled={locked} /></Field>
         <Field label="Notiz (intern)" error={s.errors.note} wide><input value={f.note} onChange={set('note')} disabled={locked} /></Field>
+        {!v && (
+          <>
+            <h3 className="wide">Rechnung und Versand</h3>
+            <label className="check wide"><input type="checkbox" checked={inv.create} onChange={(e) => setInv({ ...inv, create: e.target.checked })} />
+              <span>Rechnung gleich mit anlegen<small>als Entwurf an den Käufer: Gutscheinwert mit 0 % (Mehrzweckgutschein – Umsatzsteuer erst bei Einlösung). Danach prüfen und „Ausstellen“ drücken.</small></span></label>
+            {inv.create && (
+              <>
+                <div className="wide vc-ship">
+                  <label className="check"><input type="radio" name="ship" checked={!inv.post} onChange={() => setInv({ ...inv, post: false })} /><span>wird übergeben oder per E-Mail geschickt</span></label>
+                  <label className="check"><input type="radio" name="ship" checked={inv.post} onChange={() => setInv({ ...inv, post: true })} /><span>wird per Post verschickt</span></label>
+                </div>
+                {inv.post && <>
+                  <Field label="Versandkosten" hint="Vorschlag aus „Nummern & Porto“"><span className="moneyin"><input inputMode="decimal" value={inv.postage} onChange={(e) => setInv({ ...inv, postage: e.target.value })} placeholder="0,00" /><span>€</span></span></Field>
+                  <Field label="Steuersatz Versandkosten" hint="bitte mit dem Steuerberater klären"><select value={inv.postageTax} onChange={(e) => setInv({ ...inv, postageTax: e.target.value })}><option value="19">19 %</option><option value="7">7 %</option><option value="0">0 %</option></select></Field>
+                </>}
+              </>
+            )}
+            {invError && <p className="notice danger wide">{invError}</p>}
+          </>
+        )}
       </form>
       {v && (
         <div className="vc-status">

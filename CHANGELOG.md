@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.104.0
+
+- **Gutschein anlegen mit Rechnung in einem Schritt:** Im Fenster „Neuer Gutschein“ gibt es unten „Rechnung und Versand“. „Rechnung gleich mit anlegen“ (vorausgewählt) erzeugt beim Speichern einen **Rechnungsentwurf** an den Käufer mit dem Gutscheinwert zu **0 %** (Hinweis „Mehrzweckgutschein – Umsatzsteuer fällt bei Einlösung an“). Bei „wird per Post verschickt“ kommen die **Versandkosten** dazu (Vorschlag aus „Nummern & Porto“, Steuersatz wählbar, Vorgabe 19 %).
+- Der Entwurf öffnet sich direkt – prüfen und „Ausstellen“ drücken. Ohne Name oder Firma des Käufers weist das Fenster vorher darauf hin.
+- Der Knopf „Rechnung schreiben“ beim Gutschein bleibt für Gutscheine ohne Rechnung.
+
 ## 1.103.0
 
 - **Reservierungs-Fenster vereinfacht** (feste Reservierungen – wie zuvor bei den Anfragen): Beim Öffnen erscheint jetzt eine schlanke Ansicht:
