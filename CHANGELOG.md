@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.96.0
+
+- **Neue Reservierung nach Ihrem Ablauf:** ① Zuerst wählen: **Feste Reservierung** oder **Anfrage**. ② Dann öffnet sich der **Belegungsplan** (2 Wochen, blättern mit ‹ ›): im gewünschten Zimmer auf den Anreisetag tippen, dann auf die letzte Nacht – belegte Tage sind grau. Weitere Zimmer für denselben Zeitraum in deren Zeile antippen. ③ Gast suchen oder eintragen. ④ Fertig: Übersicht, Extras (Frühstück, Quelle, Zahlung, Notiz, Firma) und ein Knopf – „Fest buchen“ bzw. „Anfrage speichern“.
+- Bei einer **Anfrage** muss Telefon oder E-Mail eingetragen sein (für Rückruf bzw. Bestätigung); das Zimmer wird bis „Option bis“ vorgemerkt.
+- **Neu: Anfragen-Ordner** (Hotel → Heute → Anfragen, auch über die Kachel „Offene Anfragen“): jede Anfrage mit Zeitraum, Zimmer, Option und Rückruf-Notiz; Knopf **Anrufen** (Telefonnummer), **Bestätigungs-E-Mail** und **Öffnen – zusagen oder absagen**. Abgelaufene Optionen sind rot markiert und stehen oben.
+- Bei festen Reservierungen wird keine Bestätigungs-E-Mail angeboten; sie lässt sich bei Bedarf wie bisher in der Reservierung über „Bestätigung per E-Mail“ senden.
+
 ## 1.95.0
 
 - **Neue Reservierung jetzt Schritt für Schritt:** Statt allem auf einer Seite gibt es fünf Schritte – ① Zeitraum ② Zimmer ③ Gast ④ Extras ⑤ Prüfen. Oben sieht man, wo man ist; erledigte Schritte haben einen Haken und lassen sich jederzeit wieder antippen.

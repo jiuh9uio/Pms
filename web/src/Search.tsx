@@ -12,6 +12,7 @@ interface Page { to: string; title: string; area: string; words: string; module?
 const PAGES: Page[] = [
   { to: '/hotel', title: 'Übersicht', area: 'Hotel', words: 'dashboard anreisen abreisen auslastung aufgaben heute', module: 'hotel' },
   { to: '/plan', title: 'Belegungsplan', area: 'Hotel', words: 'kalender zimmerplan sperren belegung', module: 'hotel' },
+  { to: '/anfragen', title: 'Anfragen', area: 'Hotel', words: 'anfrage anfragen vorläufig option rückruf zurückrufen bestätigung vorgemerkt', module: 'hotel' },
   { to: '/reservierungen', title: 'Reservierungen', area: 'Hotel', words: 'buchung buchungen check-in check-out stornieren meldeschein', module: 'hotel' },
   { to: '/fruehstueck', title: 'Frühstück', area: 'Hotel', words: 'frühstücksliste küche bon', module: 'hotel' },
   { to: '/gaeste', title: 'Gäste', area: 'Hotel', words: 'gästekartei kundenkartei gast adresse datenschutz', module: 'hotel' },

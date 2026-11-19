@@ -26,6 +26,7 @@ import { Plan } from './pages/Plan.tsx';
 import { QuickPrint } from './pages/QuickPrint.tsx';
 import { Purchasing } from './pages/Purchasing.tsx';
 import { Reservations } from './pages/Reservations.tsx';
+import { Requests } from './pages/Requests.tsx';
 import { Offers } from './pages/Offers.tsx';
 import { Restaurant } from './pages/Restaurant.tsx';
 import { DayReport } from './pages/DayReport.tsx';
@@ -67,6 +68,7 @@ const NAV: NavItem[] = [
   { to: '/hotel', label: 'Übersicht', icon: '◧', module: 'hotel', group: 'Heute' },
   { to: '/plan', label: 'Belegungsplan', short: 'Plan', icon: '▦', module: 'hotel', group: 'Heute' },
   { to: '/reservierungen', label: 'Reservierungen', short: 'Buchungen', icon: '☷', module: 'hotel', group: 'Heute' },
+  { to: '/anfragen', label: 'Anfragen', icon: '✉', module: 'hotel', group: 'Heute' },
   { to: '/fruehstueck', label: 'Frühstück', icon: '☕', module: 'hotel', group: 'Haus' },
   { to: '/reinigung', label: 'Reinigung', icon: '✧', module: 'hotel', group: 'Haus' },
   { to: '/gaeste', label: 'Gäste', icon: '☺', module: 'hotel', group: 'Kunden' },
@@ -216,6 +218,7 @@ function Shell({ user }: { user: UserDto }) {
           {kontrollen && <Route path="/kontrollen/:id" element={<ControlType />} />}
           {hotel && <Route path="/plan" element={<Plan />} />}
           {hotel && <Route path="/reservierungen" element={<Reservations />} />}
+          {hotel && <Route path="/anfragen" element={<Requests />} />}
           {(hotel || hasModule(user, 'restaurant')) && <Route path="/angebote" element={<Offers />} />}
           {hotel && <Route path="/fruehstueck" element={<Breakfast />} />}
           {hotel && <Route path="/reinigung" element={<Housekeeping />} />}

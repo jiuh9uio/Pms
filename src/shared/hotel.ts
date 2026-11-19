@@ -171,6 +171,8 @@ export interface BookingDto {
 }
 export interface BookingListRow extends BookingRoomDto {
   number: string; guestId: string; guestName: string; groupName: string; source: string; roomCount: number;
+  /** für Rückruf bzw. Bestätigungs-E-Mail (Anfragen-Ordner) */
+  guestPhone: string; guestEmail: string;
   /** interne Bemerkung (z. B. Rückruf-Notiz bei Anfragen) und Optionsfrist der Reservierung */
   notes: string; optionUntil: string | null;
 }

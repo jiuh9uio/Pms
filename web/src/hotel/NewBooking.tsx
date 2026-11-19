@@ -1,21 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  PAYMENT_METHODS, SOURCES, addDays, bookingCreateInput, diffDays, formatMoney, isIsoDate, parseMoney, personAdjust, todayBerlin,
-  type CategoryDto, type FreeRoomDto, type GuestDto, type RoomDto, type ServiceDto,
+  PAYMENT_METHODS, SOURCES, addDays, bookingCreateInput, diffDays, formatMoney, isIsoDate, parseMoney, personAdjust, todayBerlin, weekdayOf,
+  type CalendarDto, type CategoryDto, type FreeRoomDto, type GuestDto, type RoomDto, type ServiceDto,
 } from '../../../src/shared/hotel.js';
 import type { HotelSettings } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { useData, type NewPreset } from '../data.tsx';
 import { Button, Dialog, Field, useLoad, useSubmit, useToast } from '../ui.tsx';
-import { GuestFields, deDate, toDraft, type GuestDraft } from './common.tsx';
+import { GuestFields, WD, deDate, deShort, toDraft, type GuestDraft } from './common.tsx';
 import { CompanySelect } from './CompanySelect.tsx';
 import { catColorIndex, groupByFloor } from './roomgroups.ts';
 
 interface Pick { adults: string; children: string; price: string }
 
 /**
- * Neue Reservierung Schritt für Schritt: 1 Zeitraum → 2 freies Zimmer antippen (nach Etage, Farbe je Kategorie) → 3 Gast wählen oder eintragen →
- * 4 Extras (Frühstück, Quelle, Zahlung, Firma, Notiz) → 5 Prüfen: „Als Anfrage anlegen“ (Zimmer bis „Option bis“ freigehalten) oder „Fest buchen“.
+ * Neue Reservierung Schritt für Schritt:
+ * 1 Art: feste Reservierung oder Anfrage → 2 Zimmer im Belegungsplan antippen (Anreisetag, dann letzte Nacht) →
+ * 3 Gast (bei Anfragen mit Telefon oder E-Mail für Rückruf/Bestätigung) → 4 Fertig: Extras, Übersicht, ein Knopf.
+ * Anfragen landen im Anfragen-Ordner (vorläufig, Zimmer bis „Option bis“ freigehalten).
  */
 export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: () => void }) {
   const { bump } = useData();
@@ -35,8 +37,13 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
   const [companyId, setCompanyId] = useState(preset.companyId ?? '');
   const [breakfast, setBreakfast] = useState(false);
   const [dropped, setDropped] = useState<string[]>([]);
-  // Schritt für Schritt: 1 Zeitraum · 2 Zimmer · 3 Gast · 4 Extras · 5 Prüfen (aus dem Belegungsplan mit Zimmer: gleich Schritt 2)
-  const [step, setStep] = useState(preset.roomId ? 2 : 1);
+  // Schritt für Schritt: 1 Art · 2 Zimmer (Plan) · 3 Gast · 4 Fertig
+  const [step, setStep] = useState(1);
+  const [kind, setKind] = useState<'confirmed' | 'tentative' | null>(null);
+  /** Plan: erster Tag der angezeigten zwei Wochen; pending = Anreise angetippt, letzte Nacht noch offen */
+  const [planStart, setPlanStart] = useState(() => addDays(preset.from ?? todayBerlin(), -1) < todayBerlin() ? todayBerlin() : addDays(preset.from ?? todayBerlin(), -1));
+  const [pending, setPending] = useState(false);
+  const [planMsg, setPlanMsg] = useState('');
 
   const valid = isIsoDate(from) && isIsoDate(to) && from < to;
   const nights = valid ? diffDays(from, to) : 0;
@@ -90,7 +97,7 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
 
   const f = useSubmit(bookingCreateInput, async (d) => {
     const r = await api<{ id: string; number: string }>('POST', '/bookings', d);
-    toast(d.rooms[0]?.status === 'tentative' ? `Anfrage ${r.number} angelegt – Zimmer freigehalten bis ${deDate(d.optionUntil ?? '')}` : `Reservierung ${r.number} fest gebucht`);
+    toast(d.rooms[0]?.status === 'tentative' ? `Anfrage ${r.number} gespeichert – liegt im Anfragen-Ordner, Zimmer vorgemerkt bis ${deDate(d.optionUntil ?? '')}` : `Reservierung ${r.number} fest gebucht`);
     preset.onCreated?.(r.id);
     bump();
     onClose();
@@ -106,6 +113,8 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
     if (keys.some((k) => k.startsWith('guest'))) setStep(3);
     else if (keys.some((k) => k.startsWith('rooms'))) setStep(2);
   }, [f.errors]);
+  const PLAN_DAYS = 14;
+  const plan = useLoad(() => api<CalendarDto>('GET', `/calendar?from=${planStart}&days=${PLAN_DAYS}`), [planStart]);
   const payload = (status: 'confirmed' | 'tentative') => ({
     ...(guest ? { guestId: guest.id } : draft.lastName.trim() ? { guest: draft } : {}),
     ...meta, breakfast, ...(companyId ? { companyId } : {}), ...(status === 'tentative' ? { optionUntil: option } : {}),
@@ -124,25 +133,59 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
 
   const guestName = guest ? [guest.firstName, guest.lastName].filter(Boolean).join(' ') : [draft.firstName, draft.lastName].filter((x) => x.trim()).join(' ');
   const hasGuest = !!guest || draft.lastName.trim() !== '';
+  const phone = guest ? guest.phone ?? '' : draft.phone;
+  const email = guest ? guest.email ?? '' : draft.email;
+  const contactOk = kind !== 'tentative' || !!(phone?.trim() || email?.trim());
+  const roomsOk = valid && selected.length > 0 && !pending;
   /** bis zu welchem Schritt man vorspringen darf */
-  const reachable = !valid ? 1 : selected.length === 0 ? 2 : !hasGuest ? 3 : 5;
-  const STEPS = ['Zeitraum', 'Zimmer', 'Gast', 'Extras', 'Prüfen'];
-  const next = () => { if (step < reachable || (step === 4 && reachable >= 5)) setStep(step + 1); };
-  const blockReason = step === 1 && !valid ? 'Bitte Anreise und Abreise wählen' : step === 2 && selected.length === 0 ? 'Bitte mindestens ein Zimmer antippen' : step === 3 && !hasGuest ? 'Bitte einen Gast wählen oder mindestens den Nachnamen eintragen' : '';
-  const setDates = (a: string, n: number) => { setFrom(a); setTo(addDays(a, n)); };
-  const chip = (label: string, on: boolean, click: () => void) => <button type="button" className={`nbchip${on ? ' on' : ''}`} aria-pressed={on} onClick={click}>{label}</button>;
+  const reachable = !kind ? 1 : !roomsOk ? 2 : !hasGuest || !contactOk ? 3 : 4;
+  const STEPS = ['Art', 'Zimmer', 'Gast', 'Fertig'];
+  const blockReason = step === 1 && !kind ? 'Bitte „Feste Reservierung“ oder „Anfrage“ wählen'
+    : step === 2 && !roomsOk ? (pending ? 'Bitte noch die letzte Nacht im Plan antippen' : 'Bitte im Plan ein freies Zimmer antippen')
+    : step === 3 && !hasGuest ? 'Bitte einen Gast wählen oder mindestens den Nachnamen eintragen'
+    : step === 3 && !contactOk ? 'Für den Rückruf bzw. die Bestätigung bitte Telefon oder E-Mail eintragen' : '';
+  const next = () => { if (!blockReason && step < 4) setStep(step + 1); };
   const sourceAndPay = [meta.source, meta.paymentMethod ? `Zahlung: ${meta.paymentMethod}` : 'Zahlung offen'].join(' · ');
+  const isTentative = kind === 'tentative';
+
+  // ---------- Plan ----------
+  const planDays = Array.from({ length: PLAN_DAYS }, (_, i) => addDays(planStart, i));
+  const busyOn = (roomId: string, d: string) => plan.data?.entries.find((e) => e.roomId === roomId && e.from <= d && d < e.to);
+  const freeRange = (roomId: string, a: string, b: string) => { for (let d = a; d < b; d = addDays(d, 1)) if (busyOn(roomId, d)) return d; return null; };
+  const roomOf = (id: string) => base.data?.rooms.find((r) => r.id === id);
+  const pickRoom = (id: string) => { const cat = base.data?.cats.find((c) => c.id === roomOf(id)?.categoryId); return { adults: String(cat?.stdOccupancy ?? 2), children: '0', price: '' }; };
+  const clickCell = (roomId: string, d: string) => {
+    setPlanMsg(''); setDropped([]);
+    if (d < today) return;
+    const on = !!picks[roomId];
+    // Ende festlegen: gleiches Zimmer, Tag ab Anreise
+    if (pending && on && d >= from) {
+      const clash = freeRange(roomId, from, addDays(d, 1));
+      if (clash) { setPlanMsg(`Zimmer ${roomOf(roomId)?.number} ist am ${deDate(clash)} belegt – bitte eine frühere letzte Nacht wählen.`); return; }
+      setTo(addDays(d, 1)); setPending(false); return;
+    }
+    // weiteres Zimmer für denselben Zeitraum
+    if (!pending && selected.length > 0 && d >= from && d < to) {
+      if (on) { setPicks((cur) => { const n = { ...cur }; delete n[roomId]; return n; }); return; }
+      const clash = freeRange(roomId, from, to);
+      if (clash) { setPlanMsg(`Zimmer ${roomOf(roomId)?.number} ist am ${deDate(clash)} belegt und passt nicht in den Zeitraum.`); return; }
+      setPicks((cur) => ({ ...cur, [roomId]: pickRoom(roomId) })); return;
+    }
+    // neu anfangen: Anreise in diesem Zimmer
+    if (busyOn(roomId, d)) return;
+    setFrom(d); setTo(addDays(d, 1)); setPicks({ [roomId]: pickRoom(roomId) }); setPending(true);
+  };
+  const inSel = (roomId: string, d: string) => !!picks[roomId] && d >= from && d < to;
 
   return (
-    <Dialog title="Neue Reservierung" onClose={onClose} size="xl"
-      footer={<><span className="left total">{selected.length > 0 && <>{selected.length} Zimmer · {nights} {nights === 1 ? 'Nacht' : 'Nächte'} · <b>{formatMoney(total)}</b> Logis</>}</span>
+    <Dialog title={kind === 'tentative' ? 'Neue Anfrage' : kind === 'confirmed' ? 'Neue feste Reservierung' : 'Neue Reservierung'} onClose={onClose} size="xl"
+      footer={<><span className="left total">{selected.length > 0 && valid && <>{selected.length} Zimmer · {nights} {nights === 1 ? 'Nacht' : 'Nächte'} · <b>{formatMoney(total)}</b> Logis</>}</span>
         <span className="nb-actions">
           {step === 1 ? <Button onClick={onClose}>Abbrechen</Button> : <Button onClick={() => setStep(step - 1)}>← Zurück</Button>}
-          {step < 5 && <Button variant="primary" disabled={!!blockReason} title={blockReason || undefined} onClick={next}>Weiter →</Button>}
-          {step === 5 && <>
-            <Button busy={sending === 'tentative'} disabled={!!sending} onClick={() => void submit('tentative')} title={`Zimmer wird bis ${deDate(option)} freigehalten; später bestätigen oder stornieren`}>Als Anfrage anlegen</Button>
-            <Button variant="primary" busy={sending === 'confirmed'} disabled={!!sending} onClick={() => void submit('confirmed')}>Fest buchen</Button>
-          </>}
+          {step < 4 && <Button variant="primary" disabled={!!blockReason} title={blockReason || undefined} onClick={next}>Weiter →</Button>}
+          {step === 4 && (isTentative
+            ? <Button variant="primary" busy={sending === 'tentative'} disabled={!!sending} onClick={() => void submit('tentative')}>Anfrage speichern</Button>
+            : <Button variant="primary" busy={sending === 'confirmed'} disabled={!!sending} onClick={() => void submit('confirmed')}>Fest buchen</Button>)}
         </span></>}>
       <ol className="nbsteps" aria-label="Schritte">
         {STEPS.map((label, i) => {
@@ -156,85 +199,92 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
           );
         })}
       </ol>
-      {/* Enter = Weiter (im letzten Schritt bewusst nichts: ob Anfrage oder feste Buchung, entscheidet der Knopf) */}
-      <form onSubmit={(e) => { e.preventDefault(); if (step < 5 && !blockReason) next(); }} noValidate>
+      {step > 1 && blockReason && <p className="muted small nbhint">{blockReason}</p>}
+      <form onSubmit={(e) => { e.preventDefault(); if (step < 4) next(); }} noValidate>
 
       {step === 1 && (
         <section className="nbstep">
-          <h3 className="first">Wann kommt der Gast?</h3>
-          <div className="formgrid cols3 nb-dates">
-            <Field label="Anreise"><input type="date" value={from} autoFocus onChange={(e) => { setFrom(e.target.value); if (isIsoDate(e.target.value) && e.target.value >= to) setTo(addDays(e.target.value, 1)); }} /></Field>
-            <Field label="Abreise" error={!valid ? 'Muss nach der Anreise liegen' : undefined} hint={valid ? `${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}` : undefined}><input type="date" value={to} min={isIsoDate(from) ? addDays(from, 1) : undefined} onChange={(e) => setTo(e.target.value)} /></Field>
+          <h3 className="first">Was möchten Sie anlegen?</h3>
+          <div className="nbkinds">
+            <button type="button" className={kind === 'confirmed' ? 'on' : ''} aria-pressed={kind === 'confirmed'} onClick={() => { setKind('confirmed'); setStep(2); }}>
+              <b>Feste Reservierung</b><span>Der Gast hat verbindlich zugesagt. Das Zimmer ist gebucht.</span></button>
+            <button type="button" className={kind === 'tentative' ? 'on' : ''} aria-pressed={kind === 'tentative'} onClick={() => { setKind('tentative'); setStep(2); }}>
+              <b>Anfrage</b><span>Der Gast fragt erst an. Das Zimmer wird vorgemerkt, die Anfrage landet im Anfragen-Ordner – zum Rückruf oder für die Bestätigungs-E-Mail.</span></button>
           </div>
-          <div className="nbchips"><span className="muted small">Anreise:</span>
-            {chip('heute', from === today, () => setDates(today, Math.max(1, nights)))}
-            {chip('morgen', from === addDays(today, 1), () => setDates(addDays(today, 1), Math.max(1, nights)))}
-          </div>
-          <div className="nbchips"><span className="muted small">Dauer:</span>
-            {[1, 2, 3, 7].map((n) => chip(`${n} ${n === 1 ? 'Nacht' : 'Nächte'}`, valid && nights === n, () => isIsoDate(from) && setTo(addDays(from, n))))}
-          </div>
-          {valid && free.data && <p className="muted">{free.data.length === 0 ? 'In diesem Zeitraum ist kein Zimmer frei.' : `${free.data.length} ${free.data.length === 1 ? 'Zimmer ist' : 'Zimmer sind'} frei.`}</p>}
         </section>
       )}
 
       {step === 2 && (<>
-      <section className="roomboard" aria-label="Zimmer wählen">
-        <div className="roomboard-head">
-          <h3 className="first">Welches Zimmer?{valid && free.data ? <small className="inl"> · {free.data.length} frei {deDate(from)} – {deDate(to)}</small> : null}</h3>
-          <div className="catlegend">{[...(base.data?.cats ?? [])].sort((a, b) => a.sort - b.sort).filter((c) => base.data?.rooms.some((r) => r.categoryId === c.id)).map((c) => (
-            <span key={c.id} className={`cat-${catColorIndex(base.data?.cats, c.id)}`}><i className="catdot" />{c.name}</span>))}</div>
-        </div>
-        {free.error && <p className="notice danger">{free.error}</p>}
-        {dropped.length > 0 && <p className="notice warn">Im neuen Zeitraum belegt und deshalb abgewählt: Zimmer {dropped.join(', ')}.</p>}
-        {valid && free.data?.length === 0 && <p className="notice warn">In diesem Zeitraum ist kein Zimmer frei.</p>}
-        {groupByFloor(base.data?.rooms ?? []).map((g) => (
-          <div key={g.floor} className="floorrow">
-            <div className="floorlabel">{g.label}</div>
-            <div className="roomtiles">
-              {g.rooms.map((room) => {
-                const fr = free.data?.find((x) => x.id === room.id);
-                const on = !!picks[room.id];
-                return (
-                  <button key={room.id} type="button" disabled={!fr} aria-pressed={on} onClick={() => fr && toggle(fr)}
-                    className={`roomtile cat-${catColorIndex(base.data?.cats, room.categoryId)}${on ? ' on' : ''}${fr ? '' : ' taken'}`}
-                    title={fr ? `${room.categoryName} – ${formatMoney(fr.quoteCents)} für ${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}` : `${room.categoryName} – im Zeitraum belegt`}>
-                    <b>{room.number}</b><small>{room.categoryName}</small>
-                    <span className="rt-price">{!valid ? '' : !free.data ? '…' : fr ? `${formatMoney(Math.round(fr.quoteCents / Math.max(1, nights)))}/Nacht` : 'belegt'}</span>
-                    {on && <i className="rt-check" aria-hidden>✓</i>}
-                  </button>
-                );
-              })}
-            </div>
+        <div className="nbplanbar">
+          <div className="stepper">
+            <Button onClick={() => setPlanStart(addDays(planStart, -7))} aria-label="Eine Woche zurück">‹</Button>
+            <Button onClick={() => setPlanStart(today)}>Heute</Button>
+            <Button onClick={() => setPlanStart(addDays(planStart, 7))} aria-label="Eine Woche weiter">›</Button>
           </div>
-        ))}
-      </section>
-      <h3>Gewählte Zimmer</h3>
-      {selected.length === 0 && <p className="muted">Noch kein Zimmer gewählt – oben ein freies Zimmer antippen. Mehrere Zimmer sind möglich.</p>}
-      <div className="roompick">
-        {selected.map((r) => {
-          const p = picks[r.id]!;
-          return (
-            <div key={r.id} className={`pickrow on cat-${catColorIndex(base.data?.cats, r.categoryId)}`}>
-              <span className="pickname"><i className="catdot" /><b>Zimmer {r.number}</b> <small className="inl">{r.categoryName}</small></span>
-              <div className="pickedit">
-                <label><small>Erw.</small><input type="number" min={1} value={p.adults} onChange={(e) => setPick(r.id, { adults: e.target.value })} /></label>
-                <label><small>Kinder</small><input type="number" min={0} value={p.children} onChange={(e) => setPick(r.id, { children: e.target.value })} /></label>
-                <label><small>Preis/Nacht</small><input inputMode="decimal" value={p.price} placeholder={nights ? (quoteFor(r, p) / nights / 100).toFixed(2).replace('.', ',') : ''} onChange={(e) => setPick(r.id, { price: e.target.value })} /></label>
-              </div>
-              <button type="button" className="iconbtn" aria-label={`Zimmer ${r.number} abwählen`} title="abwählen" onClick={() => toggle(r)}>✕</button>
-            </div>
-          );
-        })}
-      </div>
-      {selected.length > 0 && <p className="muted small">Preis/Nacht leer lassen = Preis nach Preisregeln und Personenzahl. Ein eingetragener Betrag gilt als Sonderpreis für alle Nächte.</p>}
+          <label className="inlinelabel">Anreise <input type="date" value={from} min={today} onChange={(e) => { const v = e.target.value; if (!isIsoDate(v)) return; setFrom(v); if (v >= to) setTo(addDays(v, 1)); setPending(false); if (v < planStart || v >= addDays(planStart, PLAN_DAYS)) setPlanStart(v); }} /></label>
+          <label className="inlinelabel">Abreise <input type="date" value={to} min={isIsoDate(from) ? addDays(from, 1) : undefined} onChange={(e) => { if (isIsoDate(e.target.value)) { setTo(e.target.value); setPending(false); } }} /></label>
+          {valid && <span className="muted small">{nights} {nights === 1 ? 'Nacht' : 'Nächte'}</span>}
+        </div>
+        <p className="muted small">Im Plan auf den <b>Anreisetag</b> im gewünschten Zimmer tippen, dann auf die <b>letzte Nacht</b>. Weitere Zimmer für denselben Zeitraum: in deren Zeile innerhalb des Zeitraums antippen. Grau = belegt.</p>
+        {planMsg && <p className="notice warn">{planMsg}</p>}
+        {dropped.length > 0 && <p className="notice warn">Im neuen Zeitraum belegt und deshalb abgewählt: Zimmer {dropped.join(', ')}.</p>}
+        {plan.error && <p className="notice danger">{plan.error}</p>}
+        <div className="nbplanwrap">
+          <table className="nbplan">
+            <thead><tr><th className="nbroom">Zimmer</th>{planDays.map((d) => <th key={d} className={[d === today ? 'today' : '', weekdayOf(d) === 0 || weekdayOf(d) === 6 ? 'we' : ''].join(' ')}><small>{WD[weekdayOf(d)]}</small><br />{deShort(d)}</th>)}</tr></thead>
+            <tbody>
+              {groupByFloor(base.data?.rooms ?? []).flatMap((g) => g.rooms).map((room) => (
+                <tr key={room.id} className={picks[room.id] ? 'picked' : ''}>
+                  <th className={`nbroom cat-${catColorIndex(base.data?.cats, room.categoryId)}`}><i className="catdot" /><b>{room.number}</b><small>{room.categoryName}</small></th>
+                  {planDays.map((d) => {
+                    const busy = busyOn(room.id, d);
+                    const sel = inSel(room.id, d);
+                    const past = d < today;
+                    const label = busy ? (busy.kind === 'block' ? 'gesperrt' : busy.guestName ?? 'belegt') : sel ? (d === from ? 'Anreise' : '') : '';
+                    return (
+                      <td key={d} className={[busy ? (busy.kind === 'block' ? 'blk' : 'busy') : '', sel ? 'sel' : '', past ? 'past' : ''].join(' ')}>
+                        <button type="button" disabled={(!!busy && !sel) || past} title={busy ? `${room.number}: ${busy.kind === 'block' ? 'gesperrt' : `belegt (${busy.guestName ?? ''})`}` : `Zimmer ${room.number}, ${deDate(d)}`}
+                          aria-label={`Zimmer ${room.number} ${deDate(d)}${busy ? ' belegt' : sel ? ' gewählt' : ' frei'}`} onClick={() => clickCell(room.id, d)}>{label}</button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {selected.length > 0 && !pending && (<>
+          <h3>Gewählte Zimmer · {deDate(from)} – {deDate(to)}</h3>
+          <div className="roompick">
+            {selected.map((r) => {
+              const p = picks[r.id]!;
+              return (
+                <div key={r.id} className={`pickrow on cat-${catColorIndex(base.data?.cats, r.categoryId)}`}>
+                  <span className="pickname"><i className="catdot" /><b>Zimmer {r.number}</b> <small className="inl">{r.categoryName}</small></span>
+                  <div className="pickedit">
+                    <label><small>Erw.</small><input type="number" min={1} value={p.adults} onChange={(e) => setPick(r.id, { adults: e.target.value })} /></label>
+                    <label><small>Kinder</small><input type="number" min={0} value={p.children} onChange={(e) => setPick(r.id, { children: e.target.value })} /></label>
+                    <label><small>Preis/Nacht</small><input inputMode="decimal" value={p.price} placeholder={nights ? (quoteFor(r, p) / nights / 100).toFixed(2).replace('.', ',') : ''} onChange={(e) => setPick(r.id, { price: e.target.value })} /></label>
+                  </div>
+                  <button type="button" className="iconbtn" aria-label={`Zimmer ${r.number} abwählen`} title="abwählen" onClick={() => toggle(r)}>✕</button>
+                </div>
+              );
+            })}
+          </div>
+          <p className="muted small">Preis/Nacht leer lassen = Preis nach Preisregeln und Personenzahl. Ein eingetragener Betrag gilt als Sonderpreis für alle Nächte.</p>
+        </>)}
       </>)}
 
       {step === 3 && (
         <section className="nbstep">
           <h3 className="first">Wer kommt?</h3>
+          {isTentative && <p className="notice">Für die Anfrage bitte <b>Telefon</b> (zum Rückruf) oder <b>E-Mail</b> (für die Bestätigung) eintragen – beides steht dann im Anfragen-Ordner.</p>}
           {guest ? (
-            <div className="chosen"><span><b>{guestName}</b><br /><small>{[guest.company, guest.city, guest.email].filter(Boolean).join(' · ') || 'aus der Gästekartei'}</small></span>
-              <Button onClick={() => setGuest(null)}>Anderen Gast</Button></div>
+            <>
+              <div className="chosen"><span><b>{guestName}</b><br /><small>{[guest.company, guest.city, guest.phone, guest.email].filter(Boolean).join(' · ') || 'aus der Gästekartei'}</small></span>
+                <Button onClick={() => setGuest(null)}>Anderen Gast</Button></div>
+              {!contactOk && <p className="notice warn">Bei diesem Gast sind weder Telefon noch E-Mail gespeichert. Bitte „Anderen Gast“ wählen und neu eintragen oder die Gästekarte ergänzen.</p>}
+            </>
           ) : (
             <>
               <Field label="Schon einmal da gewesen? In der Gästekartei suchen" wide>
@@ -259,38 +309,33 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
 
       {step === 4 && (
         <section className="nbstep">
-          <h3 className="first">Extras und Angaben</h3>
+          <h3 className="first">{isTentative ? 'Anfrage fertigstellen' : 'Reservierung fertigstellen'}</h3>
+          <dl className="nbsum">
+            <dt>Gast</dt><dd>{guestName || '–'}{(phone || email) && <small className="inl"> · {[phone, email].filter(Boolean).join(' · ')}</small>} <button type="button" className="linkbtn" onClick={() => setStep(3)}>ändern</button></dd>
+            <dt>Zeitraum</dt><dd>{deDate(from)} – {deDate(to)} · {nights} {nights === 1 ? 'Nacht' : 'Nächte'} <button type="button" className="linkbtn" onClick={() => setStep(2)}>ändern</button></dd>
+            <dt>Zimmer</dt><dd>{selected.map((r) => `${r.number} (${picks[r.id]!.adults} Erw.${Number(picks[r.id]!.children) ? `, ${picks[r.id]!.children} Ki.` : ''})`).join(', ')}</dd>
+            <dt>Logis</dt><dd><b>{formatMoney(total)}</b></dd>
+          </dl>
+          {isTentative && (
+            <Field label="Zimmer vorgemerkt bis (Option)" hint="Bis dahin bleibt das Zimmer frei gehalten – danach erinnert die Übersicht an den Rückruf.">
+              <input type="date" value={option} min={today} max={isIsoDate(from) && from >= today ? from : undefined} onChange={(e) => setOptionUntil(e.target.value)} />
+            </Field>
+          )}
+          <h3>Extras (freiwillig)</h3>
           <div className="formgrid">
             {base.data?.breakfast && (
               <label className="check wide"><input type="checkbox" checked={breakfast} onChange={(e) => setBreakfast(e.target.checked)} />
                 <span>Mit Frühstück <small className="inl">{formatMoney(base.data.breakfast.priceCents)} pro Person und Nacht</small></span></label>
             )}
-            <Field label="Buchungsquelle"><select value={meta.source} onChange={(e) => setMeta({ ...meta, source: e.target.value })}>{SOURCES.map((s) => <option key={s}>{s}</option>)}</select></Field>
-            <Field label="Zahlungsart"><select value={meta.paymentMethod} onChange={(e) => setMeta({ ...meta, paymentMethod: e.target.value })}><option value="">offen</option>{PAYMENT_METHODS.map((s) => <option key={s}>{s}</option>)}</select></Field>
+            <Field label="Buchungsquelle"><select value={meta.source} onChange={(e) => setMeta({ ...meta, source: e.target.value })}>{SOURCES.map((x) => <option key={x}>{x}</option>)}</select></Field>
+            <Field label="Zahlungsart"><select value={meta.paymentMethod} onChange={(e) => setMeta({ ...meta, paymentMethod: e.target.value })}><option value="">offen</option>{PAYMENT_METHODS.map((x) => <option key={x}>{x}</option>)}</select></Field>
             {selected.length > 1 && <Field label="Gruppenname" wide><input value={meta.groupName} onChange={(e) => setMeta({ ...meta, groupName: e.target.value })} placeholder="z. B. Hochzeit Müller" /></Field>}
-            <Field label="Notiz (intern)" wide hint="bei Anfragen z. B. „ruft Freitag zurück“ – steht dann in der Anfrageliste"><textarea rows={2} placeholder="z. B. ruft Freitag zurück, möchte ruhiges Zimmer" value={meta.notes} onChange={(e) => setMeta({ ...meta, notes: e.target.value })} /></Field>
+            <Field label={isTentative ? 'Notiz zum Rückruf (intern)' : 'Notiz (intern)'} wide hint={isTentative ? 'steht im Anfragen-Ordner, z. B. „ruft Freitag zurück“' : undefined}><textarea rows={2} placeholder={isTentative ? 'z. B. ruft Freitag zurück, möchte ruhiges Zimmer' : 'z. B. möchte ruhiges Zimmer'} value={meta.notes} onChange={(e) => setMeta({ ...meta, notes: e.target.value })} /></Field>
           </div>
-          <h3>Firma (nur bei Firmenbuchung)</h3>
-          <CompanySelect value={companyId} onChange={(cid) => { setCompanyId(cid); if (cid) setMeta({ ...meta, source: 'Firma', paymentMethod: 'Rechnung an Firma' }); }} />
-          <p className="muted small">Alles hier ist freiwillig – einfach „Weiter“.</p>
-        </section>
-      )}
-
-      {step === 5 && (
-        <section className="nbstep">
-          <h3 className="first">Alles richtig?</h3>
-          <dl className="nbsum">
-            <dt>Gast</dt><dd>{guestName || '–'} <button type="button" className="linkbtn" onClick={() => setStep(3)}>ändern</button></dd>
-            <dt>Zeitraum</dt><dd>{deDate(from)} – {deDate(to)} · {nights} {nights === 1 ? 'Nacht' : 'Nächte'} <button type="button" className="linkbtn" onClick={() => setStep(1)}>ändern</button></dd>
-            <dt>Zimmer</dt><dd>{selected.map((r) => `${r.number} (${picks[r.id]!.adults} Erw.${Number(picks[r.id]!.children) ? `, ${picks[r.id]!.children} Ki.` : ''})`).join(', ')} <button type="button" className="linkbtn" onClick={() => setStep(2)}>ändern</button></dd>
-            <dt>Logis</dt><dd><b>{formatMoney(total)}</b>{breakfast && base.data?.breakfast ? ' · mit Frühstück' : ''}</dd>
-            <dt>Angaben</dt><dd>{sourceAndPay}{meta.notes ? ` · ${meta.notes}` : ''} <button type="button" className="linkbtn" onClick={() => setStep(4)}>ändern</button></dd>
-          </dl>
-          <div className="nbchoice">
-            <div><b>Fest buchen</b><p className="muted small">Der Gast hat zugesagt – das Zimmer ist verbindlich gebucht.</p></div>
-            <div><b>Als Anfrage anlegen</b><p className="muted small">Noch nicht sicher – das Zimmer wird freigehalten bis:</p>
-              <input type="date" aria-label="Option bis" value={option} min={today} max={isIsoDate(from) && from >= today ? from : undefined} onChange={(e) => setOptionUntil(e.target.value)} /></div>
-          </div>
+          <details className="nbmore"><summary>Firmenbuchung</summary>
+            <CompanySelect value={companyId} onChange={(cid) => { setCompanyId(cid); if (cid) setMeta({ ...meta, source: 'Firma', paymentMethod: 'Rechnung an Firma' }); }} />
+          </details>
+          <p className="muted small">{sourceAndPay}</p>
           {otherErrors.length > 0 && <p className="notice danger" role="alert">{[...new Set(otherErrors)].join(' · ')}</p>}
         </section>
       )}

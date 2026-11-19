@@ -21,7 +21,7 @@ const ROOM_SELECT = sql`
     lower(a.period)::text as "from", upper(a.period)::text as "to", br.status, br.adults, br.children, br.price_manual, br.version,
     br.checked_in_at, br.checked_out_at,
     coalesce((select sum(n.price_cents) from booking_room_nights n where n.booking_room_id = br.id), 0)::int as lodging_cents,
-    b.number, b.guest_id, b.group_name, b.source, b.notes, b.option_until::text as option_until, trim(g.first_name || ' ' || g.last_name) as guest_name,
+    b.number, b.guest_id, b.group_name, b.source, b.notes, b.option_until::text as option_until, trim(g.first_name || ' ' || g.last_name) as guest_name, g.phone as guest_phone, g.email as guest_email,
     (select count(*) from booking_rooms x where x.booking_id = b.id)::int as room_count
   from booking_rooms br
     join room_allocations a on a.id = br.allocation_id
@@ -36,7 +36,7 @@ const toRow = (x: Raw): BookingListRow => ({
   status: x.status as RoomStatus, adults: x.adults as number, children: x.children as number, priceManual: x.price_manual as boolean,
   lodgingCents: x.lodging_cents as number, version: x.version as number, checkedInAt: iso(x.checked_in_at), checkedOutAt: iso(x.checked_out_at),
   number: x.number as string, guestId: x.guest_id as string, guestName: x.guest_name as string, groupName: x.group_name as string,
-  source: x.source as string, roomCount: x.room_count as number, notes: (x.notes as string) ?? '', optionUntil: (x.option_until as string) ?? null,
+  source: x.source as string, roomCount: x.room_count as number, guestPhone: (x.guest_phone as string) ?? '', guestEmail: (x.guest_email as string) ?? '', notes: (x.notes as string) ?? '', optionUntil: (x.option_until as string) ?? null,
 });
 
 export async function selectRooms(db: Exec, where: SQL, order: SQL = sql`lower(a.period), r.number`, limit = 500) {
