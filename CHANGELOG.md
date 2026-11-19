@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.98.1
+
+- **Anfrage-Fenster:** drittes Feld in Gelb – **Nachfrage stellen**: mit E-Mail-Adresse öffnet sich eine Rückfrage-E-Mail an den Gast, ohne E-Mail die Notiz zum Anruf (die Anfrage bleibt offen). Reihenfolge: grün Zusagen · gelb Nachfrage · rot Absagen.
+- Weitere Angaben (Zimmer ändern, Rechnungen, Meldeschein, Verlauf) über den Knopf **„Mehr einblenden …“**.
+
 ## 1.98.0
 
 - **Anfrage-Fenster vereinfacht:** Wer eine offene Anfrage öffnet (aus dem Anfragen-Ordner, der Übersicht oder den Reservierungen), sieht jetzt ein schlankes Fenster statt der vollen Reservierung:

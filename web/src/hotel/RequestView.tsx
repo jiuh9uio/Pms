@@ -32,7 +32,6 @@ export function RequestView({ booking: b, onClose, onFull }: { booking: BookingD
   const [mail, setMail] = useState(false);
   const [note, setNote] = useState(false);
   const [text, setText] = useState('');
-  const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const save = async (extendDays: number) => {
@@ -54,7 +53,7 @@ export function RequestView({ booking: b, onClose, onFull }: { booking: BookingD
 
   return (
     <Dialog title={`Anfrage von ${name || 'Gast'}`} onClose={onClose}
-      footer={<><button type="button" className="linkbtn left" onClick={onFull}>Alle Details der Reservierung</button><Button onClick={onClose}>Schließen</Button></>}>
+      footer={<><Button className="left" title="Zimmer ändern, Rechnungen, Meldeschein, Verlauf …" onClick={onFull}>Mehr einblenden …</Button><Button onClick={onClose}>Schließen</Button></>}>
       <div className="rq">
         <div className="rq-facts">
           <div><span>Wann</span><b>{deDate(from)} – {deDate(to)}</b><small>{nights} {nights === 1 ? 'Nacht' : 'Nächte'}</small></div>
@@ -84,12 +83,10 @@ export function RequestView({ booking: b, onClose, onFull }: { booking: BookingD
         <h3>2. Entscheiden</h3>
         <div className="rq-decide">
           <button type="button" className="rq-yes" onClick={() => setFlow('confirm')}><b>Zusagen</b><span>Der Gast kommt – fest buchen</span></button>
+          <button type="button" className="rq-ask" onClick={() => (email ? setFlow('question') : setNote(true))}><b>Nachfrage stellen</b><span>{email ? 'Rückfrage per E-Mail – die Anfrage bleibt offen' : 'Noch offen – Ergebnis vom Anruf vermerken'}</span></button>
           <button type="button" className="rq-no" onClick={() => setFlow('decline')}><b>Absagen</b><span>Der Gast kommt nicht – Zimmer wieder frei</span></button>
         </div>
         <p className="muted small">{email ? 'Bei Zusagen und Absagen erscheint zuerst die E-Mail an den Gast – Sie können sie senden oder ohne E-Mail fortfahren.' : 'Ohne E-Mail-Adresse wird nach einer kurzen Rückfrage direkt zugesagt bzw. abgesagt.'}</p>
-        {email && (more
-          ? <Button onClick={() => setFlow('question')}>Rückfrage per E-Mail (z. B. fehlende Angaben)</Button>
-          : <button type="button" className="linkbtn" onClick={() => setMore(true)}>Weitere Möglichkeiten …</button>)}
       </div>
       {flow && <StatusFlow booking={b} kind={flow} roomIds={open.map((r) => r.id)} onClose={(changed) => { setFlow(null); if (changed && flow !== 'question') onClose(); }} />}
       {mail && <MailDialog path={`/bookings/${b.id}/mail`} title={`Anfrage ${b.number}: Zimmer vorgemerkt`} onClose={() => setMail(false)} onSent={() => { setMail(false); bump(); }} />}
