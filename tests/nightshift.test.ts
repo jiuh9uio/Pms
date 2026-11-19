@@ -480,3 +480,57 @@ describe('Einkauf: alte Protokolleinträge aus Version 1.92.0', () => {
     expect((await call('POST', `/stock/bons/${row!.id}/reprint`, admin, {})).statusCode).toBe(404);
   });
 });
+
+describe('Gutscheine', () => {
+  it('vergibt Nummern, verschlüsselt den PIN, erzeugt PDF, Rechnungsentwurf mit Porto und storniert ohne Löschen', async () => {
+    await ok('PUT', '/voucher-numbering', admin, { prefix: 'SH-', start: 1001, digits: 4, validYears: 3, postageCents: 250 });
+    let o = await ok('GET', '/vouchers', admin);
+    expect(o.nextNumber).toBe('SH-1001');
+    expect(o.suggestedValidUntil).toBe(`${Number(today.slice(0, 4)) + 3}-12-31`);
+    const base = { pin: '4711-0815', posCardNo: 'K-99', valueCents: 5000, issuedOn: today, validUntil: '', buyerName: 'Erika Erfunden', buyerCompany: '', buyerStreet: 'Weg 1', buyerZip: '11111', buyerCity: 'Ort', buyerCountry: '', buyerEmail: '', recipientName: 'Max', message: 'Alles Gute!', designId: '', note: '' };
+    const v1 = await ok('POST', '/vouchers', admin, { ...base, number: o.nextNumber });
+    expect(v1.number).toBe('SH-1001');
+    expect((await ok('GET', '/vouchers', admin)).nextNumber).toBe('SH-1002');
+    // doppelte Nummer
+    expect((await call('POST', '/vouchers', admin, { ...base, number: 'SH-1001' })).json().error.fields.number).toMatch(/vergeben/);
+    // PIN: verschlüsselt in der Datenbank, in der Liste nur die letzten Stellen
+    const [raw] = await db.execute(sql`select pin_enc, pin_hint from vouchers where id = ${v1.id}`) as unknown as { pin_enc: string; pin_hint: string }[];
+    expect(raw!.pin_enc).not.toContain('4711');
+    expect(raw!.pin_hint).toBe('15');
+    o = await ok('GET', '/vouchers', admin);
+    const listed = o.vouchers.find((v: { id: string }) => v.id === v1.id);
+    expect(JSON.stringify(listed)).not.toContain('4711');
+    expect(listed).toMatchObject({ hasPin: true, pinHint: '15', status: 'active' });
+    expect(await ok('POST', `/vouchers/${v1.id}/pin`, admin, {})).toEqual({ pin: '4711-0815' });
+    // PDF
+    const pdf = await call('GET', `/vouchers/${v1.id}/pdf`, admin);
+    expect(pdf.headers['content-type']).toBe('application/pdf');
+    expect(pdf.rawPayload.subarray(0, 4).toString()).toBe('%PDF');
+    // Motiv hochladen (kleines PNG)
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+    const d = await ok('POST', '/voucher-designs', admin, { name: 'Winter', mime: 'image/png', dataBase64: png.toString('base64'), textPos: 'right' });
+    expect((await call('POST', '/voucher-designs', admin, { name: 'Falsch', mime: 'image/png', dataBase64: Buffer.from('kein bild').toString('base64'), textPos: 'right' })).statusCode).toBe(400);
+    expect((await call('GET', `/voucher-designs/${d.id}/preview`, admin)).headers['content-type']).toBe('application/pdf');
+    // Rechnungsentwurf: Gutschein 0 %, Porto 19 %
+    const inv = await ok('POST', `/vouchers/${v1.id}/invoice`, admin, { valueTaxPercent: 0, postageCents: 250, postageTaxPercent: 19 });
+    const draft = await ok('GET', `/invoices/${inv.invoiceId}`, admin);
+    expect(draft.status).toBe('draft');
+    expect(draft.recipientName).toBe('Erika Erfunden');
+    expect(draft.lines.map((l: { description: string; totalCents: number; taxRatePercent: number }) => [l.description, l.totalCents, l.taxRatePercent])).toEqual([['Gutschein Nr. SH-1001', 5000, 0], ['Porto und Versand', 250, 19]]);
+    expect((await call('POST', `/vouchers/${v1.id}/invoice`, admin, { valueTaxPercent: 0, postageCents: 0, postageTaxPercent: 19 })).json().error.code).toBe('voucher_invoiced');
+    o = await ok('GET', '/vouchers', admin);
+    expect(o.vouchers.find((v: { id: string }) => v.id === v1.id).invoiceStatus).toBe('draft');
+    // Bearbeiten ohne PIN: PIN bleibt
+    const cur = o.vouchers.find((v: { id: string }) => v.id === v1.id);
+    await ok('PUT', `/vouchers/${v1.id}`, admin, { ...base, number: 'SH-1001', pin: '', message: 'Neu', version: cur.version });
+    expect(await ok('POST', `/vouchers/${v1.id}/pin`, admin, {})).toEqual({ pin: '4711-0815' });
+    // Stornieren: bleibt erhalten, PDF nicht mehr möglich
+    const cur2 = (await ok('GET', '/vouchers', admin)).vouchers.find((v: { id: string }) => v.id === v1.id);
+    await ok('POST', `/vouchers/${v1.id}/status`, admin, { status: 'cancelled', version: cur2.version });
+    expect((await call('GET', `/vouchers/${v1.id}/pdf`, admin)).statusCode).toBe(409);
+    expect((await ok('GET', '/vouchers', admin)).vouchers.find((v: { id: string }) => v.id === v1.id).status).toBe('cancelled');
+    // Protokoll ohne PIN
+    const [log] = await db.execute(sql`select count(*)::int as n from audit_log where entity = 'voucher' and (after::text like '%4711%' or before::text like '%4711%')`) as unknown as { n: number }[];
+    expect(log!.n).toBe(0);
+  });
+});

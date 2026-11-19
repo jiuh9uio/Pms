@@ -842,3 +842,53 @@ export const stockMoves = pgTable('stock_moves', {
   voidedAt: ts('voided_at'),
   voidedBy: text('voided_by'),
 }, (t) => [index('stock_moves_partner_idx').on(t.partner), index('stock_moves_date_idx').on(t.date)]);
+
+// =====================================================================================
+// Gutscheine (Geschenkkarten aus dem Kassenprogramm)
+// =====================================================================================
+
+/** Hochgeladene Gutschein-Motive (Hintergrundbild für Druck und PDF) */
+export const voucherDesigns = pgTable('voucher_designs', {
+  id: id(),
+  name: text('name').notNull(),
+  mime: text('mime').notNull(),
+  data: bytea('data').notNull(),
+  /** Lage des Textfelds auf dem Motiv: right | left | bottom */
+  textPos: text('text_pos').notNull().default('right'),
+  createdAt: ts('created_at').notNull().defaultNow(),
+});
+
+/**
+ * Gutschein: interne Nummer (fortlaufend mit Kürzel), PIN aus dem Kassenprogramm (verschlüsselt),
+ * Wert, Käufer (für Rechnung und Versand), Beschenkter und Grußtext. Wird nicht gelöscht, nur storniert.
+ */
+export const vouchers = pgTable('vouchers', {
+  id: id(),
+  number: text('number').notNull(),
+  pinEnc: text('pin_enc'),
+  /** letzte zwei Stellen des PIN – für die Anzeige in Listen */
+  pinHint: text('pin_hint').notNull().default(''),
+  /** Nummer der Geschenkkarte im Kassenprogramm (falls vorhanden) */
+  posCardNo: text('pos_card_no').notNull().default(''),
+  valueCents: integer('value_cents').notNull(),
+  issuedOn: date('issued_on', { mode: 'string' }).notNull(),
+  validUntil: date('valid_until', { mode: 'string' }),
+  buyerName: text('buyer_name').notNull().default(''),
+  buyerCompany: text('buyer_company').notNull().default(''),
+  buyerStreet: text('buyer_street').notNull().default(''),
+  buyerZip: text('buyer_zip').notNull().default(''),
+  buyerCity: text('buyer_city').notNull().default(''),
+  buyerCountry: text('buyer_country').notNull().default('Deutschland'),
+  buyerEmail: text('buyer_email').notNull().default(''),
+  recipientName: text('recipient_name').notNull().default(''),
+  message: text('message').notNull().default(''),
+  designId: uuid('design_id').references(() => voucherDesigns.id, { onDelete: 'set null' }),
+  /** active | redeemed | cancelled */
+  status: text('status').notNull().default('active'),
+  invoiceId: uuid('invoice_id').references(() => invoices.id, { onDelete: 'set null' }),
+  sentAt: ts('sent_at'),
+  sentTo: text('sent_to'),
+  note: text('note').notNull().default(''),
+  createdBy: text('created_by').notNull(),
+  ...stamps,
+}, (t) => [uniqueIndex('vouchers_number_idx').on(t.number), index('vouchers_status_idx').on(t.status)]);

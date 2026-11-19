@@ -31,6 +31,7 @@ import { registerBillingRoutes } from './routes-billing.js';
 import { registerControlRoutes } from './routes-controls.js';
 import { registerEInvoiceRoutes } from './routes-einvoice.js';
 import { registerOfferRoutes } from './routes-offers.js';
+import { registerVoucherRoutes } from './routes-vouchers.js';
 import { registerHotelRoutes } from './routes-hotel.js';
 import { registerRestaurantRoutes } from './routes-restaurant.js';
 import { getBackupStatus, runBackup } from './backup.js';
@@ -337,6 +338,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     registerBillingRoutes(api, { db, requireUser: requireModule('hotel'), requireAdmin, actor });
     registerEInvoiceRoutes(api, { db, requireUser: requireModule('erechnung'), requireAdmin, actor });
     registerOfferRoutes(api, { db, requireUser, requireAdmin, actor, publicLimit });
+    registerVoucherRoutes(api, { db, requireUser, requireAdmin, actor });
 
     // ---------- Umzug auf einen anderen Rechner/Server (nur Administrator) ----------
     const pkgPassword = (req: FastifyRequest) => decodeURIComponent(String(req.headers['x-package-password'] ?? ''));

@@ -25,6 +25,7 @@ import { Login } from './pages/Login.tsx';
 import { Plan } from './pages/Plan.tsx';
 import { QuickPrint } from './pages/QuickPrint.tsx';
 import { Purchasing } from './pages/Purchasing.tsx';
+import { Vouchers } from './pages/Vouchers.tsx';
 import { Reservations } from './pages/Reservations.tsx';
 import { Requests } from './pages/Requests.tsx';
 import { Offers } from './pages/Offers.tsx';
@@ -90,6 +91,7 @@ const NAV: NavItem[] = [
   // Einkauf: vorerst mit der Freigabe „Schnelldruck“ (die Bons kommen aus dem Bondrucker)
   { to: '/einkauf', label: 'Warenzugang', short: 'Zugang', icon: 'box', module: 'einkauf', need: 'schnelldruck', group: 'Einkauf' },
   { to: '/einkauf', tab: 'leergut', label: 'Leergut', icon: 'keg', module: 'einkauf', need: 'schnelldruck', group: 'Einkauf' },
+  { to: '/gutscheine', label: 'Gutscheine', icon: 'gift', module: 'gutscheine', group: 'Gutscheine' },
   { to: '/schnelldruck', label: 'Schnelldruck', short: 'Druck', icon: '⎙', module: 'schnelldruck' },
   { to: '/kontrollen', label: 'Kontrollen', icon: '✓', module: 'kontrollen' },
   { to: '/internet', label: 'Internet', short: 'Netz', icon: '⌁', module: 'internet' },
@@ -104,7 +106,7 @@ const NAV: NavItem[] = [
   { to: '/kurzanleitung', label: 'Kurzanleitung', short: 'Hilfe', icon: '✍', module: 'verwaltung', group: 'Hilfe' },
   { to: '/als-programm', label: 'Als Programm öffnen', short: 'Programm', icon: '▣', module: 'verwaltung', group: 'Hilfe' },
 ];
-const MODULE_TITLE: Record<string, string> = { hotel: 'Hotel', restaurant: 'Restaurant', schnelldruck: 'Schnelldruck', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet', email: 'E-Mail', team: 'Team', einkauf: 'Einkauf', verwaltung: 'Verwaltung', rechnungen: 'Rechnungen' };
+const MODULE_TITLE: Record<string, string> = { hotel: 'Hotel', restaurant: 'Restaurant', schnelldruck: 'Schnelldruck', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet', email: 'E-Mail', team: 'Team', einkauf: 'Einkauf', gutscheine: 'Gutscheine', verwaltung: 'Verwaltung', rechnungen: 'Rechnungen' };
 
 export function App() {
   const [state, setState] = useState<AuthState | null>(null);
@@ -238,6 +240,7 @@ function Shell({ user }: { user: UserDto }) {
           {hasModule(user, 'restaurant') && <Route path="/restaurant" element={<Restaurant />} />}
           {hasModule(user, 'schnelldruck') && <Route path="/schnelldruck" element={<QuickPrint />} />}
           {hasModule(user, 'schnelldruck') && <Route path="/einkauf" element={<Purchasing />} />}
+          {(hotel || hasModule(user, 'restaurant')) && <Route path="/gutscheine" element={<Vouchers />} />}
           {internet && <Route path="/internet" element={<Network />} />}
           {email && <Route path="/email" element={<Inbox />} />}
           {isAdmin && <Route path="/protokoll" element={<Audit />} />}

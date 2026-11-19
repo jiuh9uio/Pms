@@ -3,6 +3,18 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.99.0
+
+- **Neu: Gutscheine** (Hauptmenü → Büro → Gutscheine; für alle mit Freigabe Hotel oder Restaurant):
+  - **Neuer Gutschein:** interne Nummer wird automatisch fortlaufend vorgeschlagen (z. B. SH-1001, SH-1002 …), Wert, **PIN aus dem Kassenprogramm**, auf Wunsch die Kartennummer der Kasse, ausgestellt am, gültig bis (Vorschlag: Jahresende nach 3 Jahren – änderbar), beschenkte Person, Gruß und Käufer (Name, Anschrift, E-Mail).
+  - **PIN:** wird verschlüsselt gespeichert und steht auf dem Gutschein. In Listen nur „••15“; ganz anzeigen kann ihn nur der Administrator, jedes Anzeigen steht im Protokoll. Im Änderungsprotokoll erscheint der PIN nie.
+  - **Motive:** eigenes Bild hochladen (JPG/PNG, Querformat), Textfeld rechts, links oder unten, Vorschau als PDF. Ohne Motiv: schlichter Rahmen mit Logo.
+  - **Ansehen / Drucken** als PDF (DIN A5 quer) und **Per E-Mail senden** (Gutschein als PDF im Anhang, Text vorher änderbar).
+  - **Rechnung schreiben:** legt einen Rechnungsentwurf an den Käufer an – Gutscheinwert (Vorgabe 0 %, Hinweis „Mehrzweckgutschein – Umsatzsteuer fällt bei Einlösung an“) und Porto (Vorgabe 19 %). Ausgestellt wird erst unter Rechnungen mit „Ausstellen“.
+  - **Als eingelöst markieren** (eingelöst wird weiterhin an der Kasse) und **Stornieren** – Gutscheine werden nie gelöscht.
+  - Administrator: Reiter „Nummern & Porto“ (Kürzel, Startwert, Stellen, Gültigkeit, Porto-Vorschlag).
+- Neue Datenbank-Tabellen „Gutscheine“ und „Gutschein-Motive“ (mit Freigabe).
+
 ## 1.98.1
 
 - **Anfrage-Fenster:** drittes Feld in Gelb – **Nachfrage stellen**: mit E-Mail-Adresse öffnet sich eine Rückfrage-E-Mail an den Gast, ohne E-Mail die Notiz zum Anruf (die Anfrage bleibt offen). Reihenfolge: grün Zusagen · gelb Nachfrage · rot Absagen.

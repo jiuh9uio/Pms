@@ -4,8 +4,10 @@ import { api } from '../api.ts';
 import { Button, Dialog, Field, LoadState, useLoad, useSubmit, useToast } from '../ui.tsx';
 
 /** E-Mail an den Gast: Vorschlag laden, anpassen, senden. path = /bookings/<id>/mail oder /invoices/<id>/mail?kind=invoice|reminder */
-export function MailDialog({ path, title, onClose, onSent, beforeSend, sendLabel = 'Senden', extra, intro, appliedIntro, appliedText }: {
+export function MailDialog({ path, title, onClose, onSent, beforeSend, sendLabel = 'Senden', extra, intro, appliedIntro, appliedText, attachmentNote }: {
   path: string; title: string; onClose: () => void; onSent?: () => void;
+  /** Erklärung hinter dem Namen des Anhangs (Vorgabe: Rechnung aus dem Archiv) */
+  attachmentNote?: string;
   /** wird unmittelbar vor dem Senden ausgeführt (z. B. Zusage buchen); schlägt es fehl, wird nicht gesendet */
   beforeSend?: () => Promise<void>; sendLabel?: string; extra?: ReactNode; intro?: ReactNode;
   /** nach geglücktem beforeSend, aber fehlgeschlagenem Senden: Hinweis und Fehlertext */
@@ -36,7 +38,7 @@ export function MailDialog({ path, title, onClose, onSent, beforeSend, sendLabel
             <Field label="Betreff" error={f.errors.subject} wide><input value={v.subject} onChange={(e) => setV({ ...v, subject: e.target.value })} /></Field>
             <Field label="Text" error={f.errors.text} wide><textarea rows={14} value={v.text} onChange={(e) => setV({ ...v, text: e.target.value })} /></Field>
           </div>
-          {data.attachment && <p className="muted small">Anhang: {data.attachment} (die Rechnung als PDF, wie sie im Rechnungsarchiv liegt)</p>}
+          {data.attachment && <p className="muted small">Anhang: {data.attachment} {attachmentNote ?? '(die Rechnung als PDF, wie sie im Rechnungsarchiv liegt)'}</p>}
         </form>
       )}
     </Dialog>

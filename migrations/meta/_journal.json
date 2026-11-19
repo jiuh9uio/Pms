@@ -288,6 +288,13 @@
       "when": 1795093249974,
       "tag": "0040_warenbewegungen",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1795123171093,
+      "tag": "0041_gutscheine",
+      "breakpoints": true
     }
   ]
 }

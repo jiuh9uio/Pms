@@ -25,6 +25,7 @@ const PAGES: Page[] = [
   { to: '/zimmer?ansicht=leistungen', title: 'Frühstück und Zusatzleistungen', area: 'Hotel · Zimmer & Preise', words: 'leistung parkplatz haustier frühstückspreis', module: 'hotel', admin: true },
   { to: '/restaurant', title: 'Tischreservierungen', area: 'Restaurant', words: 'tisch tische reservieren restaurant', module: 'restaurant' },
   { to: '/schnelldruck', title: 'Schnelldruck', area: 'Schnelldruck', words: 'zettel bon drucken öffnungszeiten wlan google bewertung rezension taxi rufnummern info aufenthalt website', module: 'schnelldruck' },
+  { to: '/gutscheine', title: 'Gutscheine', area: 'Gutscheine', words: 'gutschein gutscheine geschenkkarte geschenk pin motiv porto', module: 'restaurant' },
   { to: '/einkauf', title: 'Warenzugang', area: 'Einkauf', words: 'einkauf warenzugang ware gekommen lieferant lieferung lieferschein brauerei getränkehändler bon fass bier', module: 'schnelldruck' },
   { to: '/einkauf?ansicht=leergut', title: 'Leergut', area: 'Einkauf', words: 'leergut fässer fass zurück pfand kisten fahrer abholung brauerei', module: 'schnelldruck' },
   { to: '/kontrollen', title: 'Kontrollen', area: 'Kontrollen', words: 'hygieneamt finanzamt temperatur temperaturprotokoll kühltruhe reinigung reinigungsprotokoll wareneingang unterlagen zonen bereiche messstellen', module: 'kontrollen' },
