@@ -86,7 +86,7 @@ export async function renderVoucher(v: VoucherPrint, h: HotelSettings, design: {
   const facts = [
     `Gutschein-Nr. ${v.number}`,
     ...(v.pin ? [`PIN ${v.pin}`] : []),
-    ...(v.posCardNo ? [`Karte ${v.posCardNo}`] : []),
+    ...(v.posCardNo ? [`Karten-Nr. ${v.posCardNo}`] : []),
     `ausgestellt am ${de(v.issuedOn)}${v.validUntil ? ` · gültig bis ${de(v.validUntil)}` : ''}`,
   ];
   let fy = box.y + pad + (facts.length - 1) * 12 + 14;

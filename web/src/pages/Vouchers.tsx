@@ -13,7 +13,7 @@ import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit
 
 const TONE = { active: 'ok', redeemed: 'neutral', cancelled: 'danger' } as const;
 
-/** Gutscheine: anlegen (Nummer automatisch, PIN aus der Kasse), als PDF mit Motiv drucken, per E-Mail senden, Rechnung mit Porto. */
+/** Gutscheine: anlegen (Nummer automatisch, Geschenkkarten-Nr. aus der Kasse), als PDF mit Motiv drucken, per E-Mail senden, Rechnung mit Porto. */
 export function Vouchers() {
   const { user } = useAuth();
   const isAdmin = user.role === 'admin';
@@ -47,7 +47,7 @@ export function Vouchers() {
               <thead><tr><th>Nr.</th><th className="num">Wert</th><th>für</th><th className="hide-sm">Käufer</th><th className="hide-sm">gültig bis</th><th>Status</th><th className="hide-sm">Rechnung</th><th className="hide-sm">E-Mail</th></tr></thead>
               <tbody>{list.map((v) => (
                 <tr key={v.id} className="rowlink" tabIndex={0} onClick={() => setOpen(v)} onKeyDown={(e) => { if (e.key === 'Enter') setOpen(v); }}>
-                  <td><b>{v.number}</b>{v.hasPin && <><br /><small className="muted">PIN ••{v.pinHint}</small></>}</td>
+                  <td><b>{v.number}</b>{v.posCardNo && <><br /><small className="muted">Karte {v.posCardNo}</small></>}</td>
                   <td className="num">{formatMoney(v.valueCents)}</td>
                   <td>{v.recipientName || '–'}</td>
                   <td className="hide-sm">{v.buyerCompany || v.buyerName || '–'}</td>
@@ -81,8 +81,6 @@ function VoucherDialog({ voucher: v, data, isAdmin, onClose, onChanged }: { vouc
     buyerCountry: v?.buyerCountry ?? 'Deutschland', buyerEmail: v?.buyerEmail ?? '', recipientName: v?.recipientName ?? '', message: v?.message ?? '',
     designId: v?.designId ?? data.designs[0]?.id ?? '', note: v?.note ?? '',
   }));
-  const [showPin, setShowPin] = useState(false);
-  const [pin, setPin] = useState<string | null>(null);
   const [mail, setMail] = useState(false);
   const [invoice, setInvoice] = useState(false);
   const [busy, setBusy] = useState('');
@@ -103,10 +101,6 @@ function VoucherDialog({ voucher: v, data, isAdmin, onClose, onChanged }: { vouc
     catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
     setBusy('');
   };
-  const reveal = async () => {
-    if (!v) return;
-    try { setPin((await api<{ pin: string }>('POST', `/vouchers/${v.id}/pin`)).pin || '(kein PIN gespeichert)'); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
-  };
   return (
     <Dialog title={v ? `Gutschein ${v.number}` : 'Neuer Gutschein'} onClose={onClose} size="lg"
       footer={<>
@@ -124,14 +118,9 @@ function VoucherDialog({ voucher: v, data, isAdmin, onClose, onChanged }: { vouc
         <h3 className="wide first">Gutschein</h3>
         <Field label="Gutscheinnummer (intern)" error={s.errors.number} hint={v ? undefined : 'automatisch fortlaufend – bei Bedarf ändern'}><input value={f.number} onChange={set('number')} disabled={locked} /></Field>
         <Field label="Wert" error={s.errors.valueCents}><span className="moneyin"><input inputMode="decimal" value={f.value} onChange={set('value')} placeholder="50,00" autoFocus={!v} disabled={locked} /><span>€</span></span></Field>
-        <Field label="PIN aus dem Kassenprogramm" error={s.errors.pin} hint={v?.hasPin ? `gespeichert (endet auf ••${v.pinHint}) – leer lassen = unverändert` : 'wird verschlüsselt gespeichert und steht auf dem Gutschein'}>
-          <span className="moneyin"><input type={showPin ? 'text' : 'password'} autoComplete="off" value={f.pin} onChange={set('pin')} disabled={locked} placeholder={v?.hasPin ? '••••' : ''} />
-            <button type="button" className="linkbtn" onClick={() => setShowPin(!showPin)}>{showPin ? 'verbergen' : 'zeigen'}</button></span>
-        </Field>
-        <Field label="Kartennummer in der Kasse" error={s.errors.posCardNo} hint="freiwillig"><input value={f.posCardNo} onChange={set('posCardNo')} disabled={locked} /></Field>
+        <Field label="Geschenkkarten-Nr. aus der Kasse" error={s.errors.posCardNo} hint="steht auf dem Gutschein – damit öffnet die Kasse die Karte"><input value={f.posCardNo} onChange={set('posCardNo')} disabled={locked} /></Field>
         <Field label="Ausgestellt am" error={s.errors.issuedOn}><input type="date" value={f.issuedOn} onChange={set('issuedOn')} disabled={locked} /></Field>
         <Field label="Gültig bis" error={s.errors.validUntil} hint="leer = ohne Datum auf dem Gutschein"><input type="date" value={f.validUntil} onChange={set('validUntil')} disabled={locked} /></Field>
-        {v?.hasPin && isAdmin && <p className="wide small">{pin == null ? <button type="button" className="linkbtn" onClick={() => void reveal()}>PIN vollständig anzeigen (wird protokolliert)</button> : <>PIN: <b className="mono">{pin}</b></>}</p>}
 
         <h3 className="wide">Für wen?</h3>
         <Field label="Beschenkte Person" error={s.errors.recipientName} hint="steht auf dem Gutschein („für …“)"><input value={f.recipientName} onChange={set('recipientName')} disabled={locked} /></Field>
@@ -157,7 +146,7 @@ function VoucherDialog({ voucher: v, data, isAdmin, onClose, onChanged }: { vouc
           {v.status !== 'cancelled' && <Button variant="danger" busy={busy === 'cancelled'} onClick={() => void status('cancelled')}>Stornieren</Button>}
         </div>
       )}
-      {mail && v && <MailDialog path={`/vouchers/${v.id}/mail`} title={`Gutschein ${v.number} per E-Mail`} attachmentNote="(der Gutschein als PDF mit Motiv und PIN)" onClose={() => setMail(false)} onSent={() => { onChanged(); }} />}
+      {mail && v && <MailDialog path={`/vouchers/${v.id}/mail`} title={`Gutschein ${v.number} per E-Mail`} attachmentNote="(der Gutschein als PDF mit Motiv und Kartennummer)" onClose={() => setMail(false)} onSent={() => { onChanged(); }} />}
       {invoice && v && <InvoiceDialog voucher={v} postageCents={data.numbering.postageCents} onClose={() => setInvoice(false)} onDone={(id) => { setInvoice(false); onChanged(); onClose(); openInvoice(id); }} />}
     </Dialog>
   );
@@ -216,7 +205,7 @@ function Designs({ data, isAdmin, onChange }: { data: VoucherOverviewDto; isAdmi
     <>
       <section className="card">
         <h2>Motiv hochladen</h2>
-        <p className="muted small">Ein Bild im <b>Querformat</b> (z. B. 2100 × 1480 Pixel, DIN A5 quer), JPG oder PNG, höchstens 5 MB. Es füllt den ganzen Gutschein; Wert, Name, Gruß, Nummer und PIN stehen in einem hellen Feld darauf – lassen Sie dafür im Motiv eine ruhige Fläche frei.</p>
+        <p className="muted small">Ein Bild im <b>Querformat</b> (z. B. 2100 × 1480 Pixel, DIN A5 quer), JPG oder PNG, höchstens 5 MB. Es füllt den ganzen Gutschein; Wert, Name, Gruß und Nummern stehen in einem hellen Feld darauf – lassen Sie dafür im Motiv eine ruhige Fläche frei.</p>
         <div className="formgrid">
           <Field label="Name des Motivs" hint="z. B. Weihnachten, Geburtstag, Neutral"><input value={name} onChange={(e) => setName(e.target.value)} /></Field>
           <Field label="Textfeld"><select value={pos} onChange={(e) => setPos(e.target.value as TextPos)}>{TEXT_POS.map((p) => <option key={p} value={p}>{TEXT_POS_LABEL[p]}</option>)}</select></Field>

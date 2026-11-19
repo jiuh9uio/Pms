@@ -196,7 +196,7 @@ export async function mailDraft(db: Exec, id: string) {
     hello, '',
     `vielen Dank für Ihren Gutschein${r.recipientName ? ` für ${r.recipientName}` : ''} über ${money(r.valueCents)}. Sie finden ihn als PDF im Anhang – zum Ausdrucken oder Weiterleiten.`, '',
     `Gutschein-Nr.: ${r.number}`, ...(r.validUntil ? [`Gültig bis: ${r.validUntil.slice(8, 10)}.${r.validUntil.slice(5, 7)}.${r.validUntil.slice(0, 4)}`] : []), '',
-    'Bitte bewahren Sie den Gutschein sorgfältig auf: Der PIN darauf wird zum Einlösen benötigt.', '',
+    ...(r.posCardNo ? ['Bitte bewahren Sie den Gutschein sorgfältig auf: Zum Einlösen wird die Kartennummer darauf benötigt.', ''] : []),
     'Herzliche Grüße', h.name,
   ].join('\n');
   return { to: r.buyerEmail, subject: `Ihr Gutschein ${r.number} – ${h.name}`, text, attachment: `Gutschein-${r.number.replace(/[^\w-]/g, '_')}.pdf`, ready: await ready(db) };

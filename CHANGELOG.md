@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.99.1
+
+- **Gutscheine ohne PIN:** Das PIN-Feld ist entfernt – stattdessen gibt es das Feld **„Geschenkkarten-Nr. aus der Kasse“**. Sie steht auf dem Gutschein („Karten-Nr. …“), in der Liste unter der Gutscheinnummer und ist über die Suche auffindbar. Die E-Mail an den Käufer weist darauf hin, dass die Kartennummer zum Einlösen gebraucht wird.
+
 ## 1.99.0
 
 - **Neu: Gutscheine** (Hauptmenü → Büro → Gutscheine; für alle mit Freigabe Hotel oder Restaurant):
