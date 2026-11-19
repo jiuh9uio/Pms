@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.91.0
+
+- **Neuer Bereich „Einkauf“** im Menü (unter „Büro“). Er ist für alles rund um Einkauf und Lieferungen gedacht und wird nach und nach erweitert.
+- Die **Lieferscheine** (z. B. Fassbier: Pils, Hefe, Kupfer) sind dorthin umgezogen. Unter Schnelldruck steht ein Hinweis mit Link.
+- Zugang wie bisher über die Freigabe „Schnelldruck“; eine eigene Freigabe „Einkauf“ gibt es noch nicht.
+
 ## 1.90.0
 
 - **Neu: Lieferschein auf dem Bondrucker** (Schnelldruck → ganz unten „Lieferschein“), z. B. für Fassbier zu einer Feier. Fertig hinterlegt sind **Pils – Fass 50 l, Hefe – Fass 20 l und Kupfer – Fass 30 l**; Anzahl mit + / − eintippen, weitere Positionen (z. B. Zapfanlage) frei dazuschreiben. Dazu Empfänger, Anschrift, Lieferdatum, „Leergut zurück bis“ und ein Hinweis.

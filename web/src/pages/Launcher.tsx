@@ -20,6 +20,7 @@ const TILES: Tile[] = [
   { group: 'tag', to: '/team', title: 'Team', text: 'Übergabebuch, Aufgaben und Reparaturen für alle Schichten', icon: '✎' },
   { group: 'buero', to: '/rechnungen', alt: '/erechnung', title: 'Rechnungen', text: 'Hotelrechnungen, Tagesabschluss, E-Rechnung und Archiv', icon: '€', module: ['hotel', 'erechnung'] },
   { group: 'buero', to: '/auswertung', title: 'Auswertung', text: 'Belegungsvorschau, Jahresvergleich, Herkunft der Gäste, Buchungsquellen', icon: '◔', module: 'hotel' },
+  { group: 'buero', to: '/einkauf', title: 'Einkauf', text: 'Lieferscheine aus dem Bondrucker, z. B. für Fassbier', icon: 'cart', module: 'schnelldruck' },
   { group: 'buero', to: '/kontrollen', title: 'Kontrollen', text: 'Hygieneamt, Finanzamt und weitere: Unterlagen, Temperaturprotokolle, Besuche', icon: '✓', module: 'kontrollen' },
   { group: 'haus', to: '/internet', title: 'Internet', text: 'Verbindung, Gäste-WLAN, Geräte im Hausnetz', icon: '⌁', module: 'internet' },
   { group: 'haus', to: '/schnelldruck', title: 'Schnelldruck', text: 'Öffnungszeiten, WLAN und Info-Zettel aus dem Bondrucker', icon: '⎙', module: 'schnelldruck' },
