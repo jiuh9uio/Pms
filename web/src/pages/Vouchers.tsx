@@ -36,7 +36,7 @@ export function Vouchers() {
       {data && current === 'liste' && (
         <>
           <div className="filters">
-            <input type="search" placeholder="Nummer, Name, Käufer, Kartennummer …" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Suche" />
+            <input type="search" placeholder="Kassennummer, interne Nr., Name, Käufer …" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Suche" />
             <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
               <option value="active">gültige</option><option value="redeemed">eingelöste</option><option value="cancelled">stornierte</option><option value="">alle</option>
             </select>
@@ -44,10 +44,11 @@ export function Vouchers() {
           </div>
           {list.length === 0 ? <p className="muted">{data.vouchers.length ? 'Keine Gutscheine für diese Auswahl.' : 'Noch keine Gutscheine – oben rechts „Neuer Gutschein“.'}</p> : (
             <div className="card flush tablewrap"><table>
-              <thead><tr><th>Nr.</th><th className="num">Wert</th><th>für</th><th className="hide-sm">Käufer</th><th className="hide-sm">gültig bis</th><th>Status</th><th className="hide-sm">Rechnung</th><th className="hide-sm">E-Mail</th></tr></thead>
+              <thead><tr><th>Kassennummer</th><th className="hide-sm">interne Nr.</th><th className="num">Wert</th><th>für</th><th className="hide-sm">Käufer</th><th className="hide-sm">gültig bis</th><th>Status</th><th className="hide-sm">Rechnung</th><th className="hide-sm">E-Mail</th></tr></thead>
               <tbody>{list.map((v) => (
                 <tr key={v.id} className="rowlink" tabIndex={0} onClick={() => setOpen(v)} onKeyDown={(e) => { if (e.key === 'Enter') setOpen(v); }}>
-                  <td><b>{v.number}</b>{v.posCardNo && <><br /><small className="muted">Karte {v.posCardNo}</small></>}</td>
+                  <td><b>{v.posCardNo || '–'}</b></td>
+                  <td className="hide-sm">{v.number}</td>
                   <td className="num">{formatMoney(v.valueCents)}</td>
                   <td>{v.recipientName || '–'}</td>
                   <td className="hide-sm">{v.buyerCompany || v.buyerName || '–'}</td>
@@ -116,9 +117,9 @@ function VoucherDialog({ voucher: v, data, isAdmin, onClose, onChanged }: { vouc
       {v?.status === 'redeemed' && <p className="notice">Als eingelöst markiert.</p>}
       <form className="formgrid" onSubmit={(e) => { e.preventDefault(); save(); }} noValidate>
         <h3 className="wide first">Gutschein</h3>
-        <Field label="Gutscheinnummer (intern)" error={s.errors.number} hint={v ? undefined : 'automatisch fortlaufend – bei Bedarf ändern'}><input value={f.number} onChange={set('number')} disabled={locked} /></Field>
-        <Field label="Wert" error={s.errors.valueCents}><span className="moneyin"><input inputMode="decimal" value={f.value} onChange={set('value')} placeholder="50,00" autoFocus={!v} disabled={locked} /><span>€</span></span></Field>
-        <Field label="Geschenkkarten-Nr. aus der Kasse" error={s.errors.posCardNo} hint="steht auf dem Gutschein – damit öffnet die Kasse die Karte"><input value={f.posCardNo} onChange={set('posCardNo')} disabled={locked} /></Field>
+        <Field label="Kassennummer (Gutscheinnummer der Kasse)" error={s.errors.posCardNo} hint="steht groß auf dem Gutschein, mit Strichcode zum Scannen an der Kasse"><input value={f.posCardNo} onChange={set('posCardNo')} disabled={locked} autoFocus={!v} /></Field>
+        <Field label="Gutscheinnummer intern" error={s.errors.number} hint={v ? undefined : 'automatisch fortlaufend – bei Bedarf ändern'}><input value={f.number} onChange={set('number')} disabled={locked} /></Field>
+        <Field label="Wert" error={s.errors.valueCents}><span className="moneyin"><input inputMode="decimal" value={f.value} onChange={set('value')} placeholder="50,00" disabled={locked} /><span>€</span></span></Field>
         <Field label="Ausgestellt am" error={s.errors.issuedOn}><input type="date" value={f.issuedOn} onChange={set('issuedOn')} disabled={locked} /></Field>
         <Field label="Gültig bis" error={s.errors.validUntil} hint="leer = ohne Datum auf dem Gutschein"><input type="date" value={f.validUntil} onChange={set('validUntil')} disabled={locked} /></Field>
 
@@ -234,20 +235,21 @@ function Designs({ data, isAdmin, onChange }: { data: VoucherOverviewDto; isAdmi
 function NumberingCard({ data, onSaved }: { data: VoucherOverviewDto; onSaved: () => void }) {
   const toast = useToast();
   const n = data.numbering;
-  const [v, setV] = useState({ prefix: n.prefix, start: String(n.start), digits: String(n.digits), validYears: String(n.validYears), postage: n.postageCents ? moneyInput(n.postageCents) : '' });
+  const [v, setV] = useState({ prefix: n.prefix, start: String(n.start), digits: String(n.digits), validYears: String(n.validYears), postage: n.postageCents ? moneyInput(n.postageCents) : '', barcode: n.barcode });
   const s = useSubmit(voucherNumberingInput, async (d) => { await api('PUT', '/voucher-numbering', d); toast('Gespeichert'); onSaved(); });
   const example = `${v.prefix}${String(Number(v.start) || 1).padStart(Number(v.digits) || 1, '0')}`;
   return (
     <section className="card">
       <h2>Gutscheinnummern, Gültigkeit und Porto</h2>
       <p className="muted small">Die nächste Nummer ist immer die höchste schon vergebene + 1 (mindestens der Startwert). Nächste Nummer zurzeit: <b>{data.nextNumber}</b>.</p>
-      <form className="formgrid" onSubmit={(e) => { e.preventDefault(); void s.submit({ prefix: v.prefix, start: Number(v.start), digits: Number(v.digits), validYears: Number(v.validYears), postageCents: v.postage.trim() === '' ? 0 : parseMoney(v.postage) }); }} noValidate>
+      <form className="formgrid" onSubmit={(e) => { e.preventDefault(); void s.submit({ prefix: v.prefix, start: Number(v.start), digits: Number(v.digits), validYears: Number(v.validYears), postageCents: v.postage.trim() === '' ? 0 : parseMoney(v.postage), barcode: v.barcode }); }} noValidate>
         <Field label="Kürzel" error={s.errors.prefix} hint="z. B. SH- (darf leer sein)"><input value={v.prefix} onChange={(e) => setV({ ...v, prefix: e.target.value })} /></Field>
         <Field label="Startwert" error={s.errors.start} hint={`Beispiel: ${example}`}><input inputMode="numeric" value={v.start} onChange={(e) => setV({ ...v, start: e.target.value })} /></Field>
         <Field label="Stellen" error={s.errors.digits} hint="mit führenden Nullen auffüllen"><select value={v.digits} onChange={(e) => setV({ ...v, digits: e.target.value })}>{[1, 2, 3, 4, 5, 6].map((d) => <option key={d} value={d}>{d}</option>)}</select></Field>
         <Field label="Gültigkeit vorschlagen" error={s.errors.validYears} hint="bis zum Jahresende nach … Jahren (eigene Vorgabe, rechtlich bitte selbst prüfen)">
           <select value={v.validYears} onChange={(e) => setV({ ...v, validYears: e.target.value })}><option value="0">kein Datum</option>{[1, 2, 3, 4, 5].map((y) => <option key={y} value={y}>{y} {y === 1 ? 'Jahr' : 'Jahre'}</option>)}</select>
         </Field>
+        <label className="check wide"><input type="checkbox" checked={v.barcode} onChange={(e) => setV({ ...v, barcode: e.target.checked })} /><span>Strichcode der Kassennummer auf den Gutschein drucken<small>Code 128 – lässt sich mit einem üblichen Handscanner an der Kasse einlesen (bitte einmal ausprobieren)</small></span></label>
         <Field label="Porto (Vorschlag für die Rechnung)" error={s.errors.postageCents}><span className="moneyin"><input inputMode="decimal" value={v.postage} onChange={(e) => setV({ ...v, postage: e.target.value })} placeholder="0,00" /><span>€</span></span></Field>
         <div className="wide"><Button type="submit" variant="primary" busy={s.busy}>Speichern</Button></div>
       </form>

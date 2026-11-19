@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.100.0
+
+- **Gutscheine mit zwei Nummern:** **Kassennummer** (die Gutscheinnummer aus der Kasse – steht groß auf dem Gutschein als „Gutschein-Nr.“) und **Gutscheinnummer intern** (automatisch fortlaufend, klein darunter als „interne Nr.“). Beide werden im selben Fenster eingegeben; die Kassennummer steht jetzt oben an erster Stelle. Die Liste zeigt beide Nummern.
+- **Strichcode:** Die Kassennummer wird als Strichcode (Code 128) auf den Gutschein gedruckt – zum Scannen an der Kasse. Abschaltbar unter Gutscheine → Nummern & Porto.
+- Kassennummer: nur einfache Zeichen (A–Z, 0–9, Satzzeichen), damit der Strichcode lesbar bleibt.
+
 ## 1.99.1
 
 - **Gutscheine ohne PIN:** Das PIN-Feld ist entfernt – stattdessen gibt es das Feld **„Geschenkkarten-Nr. aus der Kasse“**. Sie steht auf dem Gutschein („Karten-Nr. …“), in der Liste unter der Gutscheinnummer und ist über die Suche auffindbar. Die E-Mail an den Käufer weist darauf hin, dass die Kartennummer zum Einlösen gebraucht wird.

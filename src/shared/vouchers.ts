@@ -25,15 +25,17 @@ export const voucherNumberingInput = z.object({
   validYears: z.number().int().min(0).max(10),
   /** Porto, das beim Rechnungsentwurf vorgeschlagen wird */
   postageCents: cents(0, 'Mindestens 0'),
+  /** Strichcode der Kassennummer auf den Gutschein drucken */
+  barcode: z.boolean().default(true),
 });
 export type VoucherNumbering = z.infer<typeof voucherNumberingInput>;
-export const VOUCHER_NUMBERING_DEFAULT: VoucherNumbering = { prefix: 'SH-', start: 1001, digits: 4, validYears: 3, postageCents: 0 };
+export const VOUCHER_NUMBERING_DEFAULT: VoucherNumbering = { prefix: 'SH-', start: 1001, digits: 4, validYears: 3, postageCents: 0, barcode: true };
 
 export const voucherInput = z.object({
   number: required(40),
   /** leer lassen = PIN unverändert (beim Bearbeiten) */
   pin: text(40),
-  posCardNo: text(60),
+  posCardNo: text(60).regex(/^[\x20-\x7e]*$/, 'Bitte nur Buchstaben ohne Umlaute, Ziffern und einfache Zeichen (wegen des Strichcodes)'),
   valueCents: cents(1, 'Bitte einen Wert eintragen'),
   issuedOn: isoDate,
   validUntil: z.union([z.literal(''), isoDate]),

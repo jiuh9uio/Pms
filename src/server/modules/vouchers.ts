@@ -169,7 +169,7 @@ async function render(db: Exec, r: Row, designOverride?: string | null) {
   const [d] = did ? await db.select().from(voucherDesigns).where(eq(voucherDesigns.id, did)) : [];
   const layout = await billing.getLayout(db);
   const pdf = await renderVoucher(
-    { number: r.number, pin: r.pinEnc ? decrypt(r.pinEnc) : null, posCardNo: r.posCardNo, valueCents: r.valueCents, issuedOn: r.issuedOn, validUntil: r.validUntil, recipientName: r.recipientName, message: r.message },
+    { number: r.number, pin: r.pinEnc ? decrypt(r.pinEnc) : null, posCardNo: r.posCardNo, valueCents: r.valueCents, issuedOn: r.issuedOn, validUntil: r.validUntil, recipientName: r.recipientName, message: r.message, barcode: (await getNumbering(db)).barcode },
     h, d ? { mime: d.mime, data: d.data, textPos: d.textPos as TextPos } : null, await billing.getLogo(db), accentRgb(layout));
   return { filename: `Gutschein-${r.number.replace(/[^\w-]/g, '_')}.pdf`, pdf: Buffer.from(pdf) };
 }
