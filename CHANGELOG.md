@@ -3,6 +3,19 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.101.0
+
+- **Neu: Design-Editor für Gutscheine** (Gutscheine → Motive → „Neues Design gestalten“ bzw. „Im Editor bearbeiten“):
+  - Vorschau in Originalproportion (DIN A5 quer). Elemente mit Maus oder Finger **verschieben**, an der Ecke unten rechts **in der Größe ändern**; Pfeiltasten verschieben um 1 mm (mit Umschalt 5 mm).
+  - **Einfügen:** Text, Fläche (Farbe, Deckkraft, Rahmen, runde Ecken), Logo (aus den Einstellungen), Strichcode der Kassennummer.
+  - **Texte:** Schrift mit/ohne Serifen, Größe, fett, kursiv, links/Mitte/rechts, Farbe. **Platzhalter** per Klick einfügen – Wert, beschenkte Person, Gruß, Kassennummer, interne Nummer, ausgestellt am, gültig bis, Name, Anschrift, Telefon, Website. Leere Angaben fallen beim Drucken weg.
+  - **Hintergrund:** Farbe und/oder eigenes Bild (füllt die Seite oder ganz sichtbar).
+  - **Farbpalette** je Design: Farben hinzufügen und entfernen, eigene Farbe wählen.
+  - **Vorlagen:** Klassisch, Text rechts, Text unten. Ebenen nach vorn/hinten, Ausblenden, Duplizieren, Löschen.
+  - „Speichern & Druckvorschau“ zeigt das echte PDF. Die Vorschau im Editor ist eine Annäherung.
+- Ältere Motive (nur Bild) funktionieren unverändert und lassen sich im Editor weiterbearbeiten.
+- Datenbank: Gutschein-Motive haben eine zusätzliche Spalte für die Gestaltung; das Hintergrundbild ist freiwillig (mit Freigabe).
+
 ## 1.100.0
 
 - **Gutscheine mit zwei Nummern:** **Kassennummer** (die Gutscheinnummer aus der Kasse – steht groß auf dem Gutschein als „Gutschein-Nr.“) und **Gutscheinnummer intern** (automatisch fortlaufend, klein darunter als „interne Nr.“). Beide werden im selben Fenster eingegeben; die Kassennummer steht jetzt oben an erster Stelle. Die Liste zeigt beide Nummern.

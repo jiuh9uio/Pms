@@ -1,7 +1,7 @@
 import fontkit from '@pdf-lib/fontkit';
-import { PDFDocument, rgb, type PDFFont, type PDFImage } from 'pdf-lib';
+import { PDFDocument, degrees, rgb, type PDFFont, type PDFImage } from 'pdf-lib';
 import type { HotelSettings } from '../../shared/schemas.js';
-import type { TextPos } from '../../shared/vouchers.js';
+import { PAGE_H, PAGE_W, fillText, type TextPos, type VoucherLayout } from '../../shared/vouchers.js';
 import type { Logo } from './invoicepdf.js';
 import { code128 } from '../lib/code128.js';
 import { asset } from './pdf.js';
@@ -110,6 +110,89 @@ export async function renderVoucher(v: VoucherPrint, h: HotelSettings, design: {
       const by = top + 2;
       page.drawRectangle({ x: x - 10 * mw, y: by - 2, width: total, height: bh + 4, color: rgb(1, 1, 1) });
       bars.forEach((w, i) => { if (i % 2 === 0) page.drawRectangle({ x, y: by, width: w * mw, height: bh, color: rgb(0, 0, 0) }); x += w * mw; });
+    }
+  }
+  return doc.save();
+}
+
+// ---------- Gestaltung aus dem Design-Editor ----------
+const MM = 72 / 25.4;
+const hexRgb = (h: string) => rgb(parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255);
+
+/** Werte für die Platzhalter eines Gutscheins */
+export function placeholderValues(v: VoucherPrint, h: HotelSettings): Record<string, string> {
+  return {
+    wert: money(v.valueCents), empfaenger: v.recipientName, gruss: v.message, kassennr: v.posCardNo, intern: v.number,
+    ausgestellt: de(v.issuedOn), gueltig: v.validUntil ? de(v.validUntil) : '', hotel: h.name,
+    adresse: [h.street, [h.zip, h.city].filter(Boolean).join(' ')].filter(Boolean).join(', '), telefon: h.phone, website: h.website,
+  };
+}
+
+/** Gutschein nach einer frei gestalteten Vorlage (Elemente mit Lage in mm, Reihenfolge = Ebenen von hinten nach vorn). */
+export async function renderVoucherLayout(v: VoucherPrint, h: HotelSettings, layout: VoucherLayout, image: { mime: string; data: Buffer } | null, logo: Logo | null): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  doc.registerFontkit(fontkit);
+  const fonts = {
+    serif: { regular: await doc.embedFont(asset('LiberationSerif-Regular.ttf'), { subset: true }), bold: await doc.embedFont(asset('LiberationSerif-Bold.ttf'), { subset: true }) },
+    sans: { regular: await doc.embedFont(asset('LiberationSans-Regular.ttf'), { subset: true }), bold: await doc.embedFont(asset('LiberationSans-Bold.ttf'), { subset: true }) },
+  };
+  doc.setTitle(`Gutschein ${v.number}`); doc.setAuthor(h.name);
+  const W = PAGE_W * MM, H = PAGE_H * MM;
+  const page = doc.addPage([W, H]);
+  page.drawRectangle({ x: 0, y: 0, width: W, height: H, color: hexRgb(layout.background) });
+  if (image && layout.useImage) {
+    try {
+      const img = image.mime === 'image/png' ? await doc.embedPng(image.data) : await doc.embedJpg(image.data);
+      const s = layout.imageFit === 'contain' ? Math.min(W / img.width, H / img.height) : Math.max(W / img.width, H / img.height);
+      page.drawImage(img, { x: (W - img.width * s) / 2, y: (H - img.height * s) / 2, width: img.width * s, height: img.height * s });
+    } catch { /* Bild nicht lesbar – ohne */ }
+  }
+  let logoImg: PDFImage | null = null;
+  if (logo) { try { logoImg = logo.mime === 'image/png' ? await doc.embedPng(logo.data) : await doc.embedJpg(logo.data); } catch { logoImg = null; } }
+  const values = placeholderValues(v, h);
+  // Ursprung oben links in mm → PDF-Punkte von unten links
+  const X = (mmX: number) => mmX * MM;
+  const Y = (mmY: number, mmH = 0) => H - (mmY + mmH) * MM;
+  for (const e of layout.elements) {
+    if (e.hidden) continue;
+    if (e.type === 'box') {
+      const w = e.w * MM, hh = e.h * MM, r = Math.min(e.radius * MM, w / 2, hh / 2);
+      // Rechteck mit runden Ecken als Pfad (Koordinaten von oben links, y nach unten)
+      const path = r > 0
+        ? `M ${r} 0 L ${w - r} 0 Q ${w} 0 ${w} ${r} L ${w} ${hh - r} Q ${w} ${hh} ${w - r} ${hh} L ${r} ${hh} Q 0 ${hh} 0 ${hh - r} L 0 ${r} Q 0 0 ${r} 0 Z`
+        : `M 0 0 L ${w} 0 L ${w} ${hh} L 0 ${hh} Z`;
+      page.drawSvgPath(path, {
+        x: X(e.x), y: Y(e.y),
+        ...(e.opacity > 0 ? { color: hexRgb(e.fill), opacity: e.opacity } : {}),
+        ...(e.border ? { borderColor: hexRgb(e.border), borderWidth: 1, borderOpacity: 1 } : {}),
+      });
+    } else if (e.type === 'logo') {
+      if (!logoImg) continue;
+      const s = Math.min((e.w * MM) / logoImg.width, (e.h * MM) / logoImg.height);
+      const w = logoImg.width * s, hh = logoImg.height * s;
+      const x = e.align === 'right' ? X(e.x) + e.w * MM - w : e.align === 'left' ? X(e.x) : X(e.x) + (e.w * MM - w) / 2;
+      page.drawImage(logoImg, { x, y: Y(e.y) - hh, width: w, height: hh });
+    } else if (e.type === 'barcode') {
+      if (!v.posCardNo) continue;
+      let bars: number[] = [];
+      try { bars = code128(v.posCardNo); } catch { continue; }
+      const modules = bars.reduce((s, b) => s + b, 0) + 20;
+      const mw = (e.w * MM) / modules;
+      page.drawRectangle({ x: X(e.x), y: Y(e.y, e.h), width: e.w * MM, height: e.h * MM, color: rgb(1, 1, 1) });
+      let x = X(e.x) + 10 * mw;
+      bars.forEach((b, i) => { if (i % 2 === 0) page.drawRectangle({ x, y: Y(e.y, e.h) + 1, width: b * mw, height: e.h * MM - 2, color: rgb(0, 0, 0) }); x += b * mw; });
+    } else {
+      const font = fonts[e.font][e.bold ? 'bold' : 'regular'];
+      const text = fillText(e.text, values);
+      if (!text.trim()) continue;
+      const lh = e.size * 1.22;
+      let y = Y(e.y) - e.size * 0.92;
+      for (const line of wrap(text, font, e.size, e.w * MM)) {
+        const tw = font.widthOfTextAtSize(line, e.size);
+        const x = e.align === 'center' ? X(e.x) + (e.w * MM - tw) / 2 : e.align === 'right' ? X(e.x) + e.w * MM - tw : X(e.x);
+        page.drawText(line, { x, y, size: e.size, font, color: hexRgb(e.color), ...(e.italic ? { ySkew: degrees(12) } : {}) });
+        y -= lh;
+      }
     }
   }
   return doc.save();

@@ -1,11 +1,11 @@
 import { desc, eq, sql } from 'drizzle-orm';
 import {
-  VOUCHER_NUMBERING_DEFAULT, type TextPos, type VoucherDesignDto, type VoucherDto, type VoucherInput, type VoucherNumbering, type VoucherOverviewDto, type VoucherStatus,
+  VOUCHER_NUMBERING_DEFAULT, type TextPos, type VoucherDesignDto, type VoucherDto, type VoucherInput, type VoucherDesignDetailDto, type VoucherLayout, type VoucherNumbering, type VoucherOverviewDto, type VoucherStatus,
 } from '../../shared/vouchers.js';
 import type { Db, Exec } from '../db/client.js';
 import { invoices, settings, voucherDesigns, vouchers } from '../db/schema.js';
 import { accentRgb } from '../einvoice/invoicepdf.js';
-import { renderVoucher } from '../einvoice/voucherpdf.js';
+import { renderVoucher, renderVoucherLayout } from '../einvoice/voucherpdf.js';
 import { AppError, conflict, notFound, stale } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 import * as billing from './billing.js';
@@ -56,11 +56,11 @@ function dto(r: Row, inv?: { number: string | null; status: string } | null): Vo
 export async function overview(db: Exec, today: string): Promise<VoucherOverviewDto> {
   const rows = await db.select({ v: vouchers, invNumber: invoices.number, invStatus: invoices.status }).from(vouchers)
     .leftJoin(invoices, eq(invoices.id, vouchers.invoiceId)).orderBy(desc(vouchers.createdAt)).limit(500);
-  const designs = await db.select({ id: voucherDesigns.id, name: voucherDesigns.name, textPos: voucherDesigns.textPos, createdAt: voucherDesigns.createdAt }).from(voucherDesigns).orderBy(voucherDesigns.createdAt);
+  const designs = await db.select({ id: voucherDesigns.id, name: voucherDesigns.name, textPos: voucherDesigns.textPos, createdAt: voucherDesigns.createdAt, hasImage: sql<boolean>`${voucherDesigns.mime} is not null`, hasLayout: sql<boolean>`${voucherDesigns.layout} is not null` }).from(voucherDesigns).orderBy(voucherDesigns.createdAt);
   const numbering = await getNumbering(db);
   return {
     vouchers: rows.map((r) => dto(r.v, r.invNumber !== undefined && r.v.invoiceId ? { number: r.invNumber, status: r.invStatus ?? '' } : null)),
-    designs: designs.map((d): VoucherDesignDto => ({ id: d.id, name: d.name, textPos: d.textPos as TextPos, createdAt: d.createdAt.toISOString() })),
+    designs: designs.map((d): VoucherDesignDto => ({ id: d.id, name: d.name, textPos: d.textPos as TextPos, createdAt: d.createdAt.toISOString(), hasImage: d.hasImage, hasLayout: d.hasLayout })),
     numbering, nextNumber: await nextNumber(db), suggestedValidUntil: suggestValidUntil(today, numbering.validYears),
   };
 }
@@ -158,8 +158,38 @@ export async function removeDesign(db: Db, actor: Actor, id: string) {
 }
 export async function designImage(db: Exec, id: string) {
   const [row] = await db.select({ mime: voucherDesigns.mime, data: voucherDesigns.data }).from(voucherDesigns).where(eq(voucherDesigns.id, id));
-  if (!row) throw notFound('Motiv');
-  return row;
+  if (!row?.mime || !row.data) throw notFound('Bild');
+  return { mime: row.mime, data: row.data };
+}
+
+// ---------- Design-Editor ----------
+function checkImage(img: { mime: 'image/png' | 'image/jpeg'; dataBase64: string }) {
+  const data = Buffer.from(img.dataBase64, 'base64');
+  if (data.length > MAX_IMG) throw new AppError(400, 'validation', 'Das Bild ist zu groß (höchstens 5 MB)');
+  const png = data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const jpg = data[0] === 0xff && data[1] === 0xd8;
+  if ((img.mime === 'image/png' && !png) || (img.mime === 'image/jpeg' && !jpg)) throw new AppError(400, 'validation', 'Bitte ein PNG- oder JPG-Bild wählen');
+  return { mime: img.mime, data };
+}
+export async function getDesign(db: Exec, id: string): Promise<VoucherDesignDetailDto> {
+  const [d] = await db.select({ id: voucherDesigns.id, name: voucherDesigns.name, mime: voucherDesigns.mime, textPos: voucherDesigns.textPos, layout: voucherDesigns.layout }).from(voucherDesigns).where(eq(voucherDesigns.id, id));
+  if (!d) throw notFound('Design');
+  return { id: d.id, name: d.name, hasImage: !!d.mime, textPos: d.textPos as TextPos, layout: (d.layout as VoucherLayout | null) ?? null };
+}
+/** Design aus dem Editor anlegen (id = null) oder speichern; image: neu / null = entfernen / undefined = unverändert */
+export async function saveDesign(db: Db, actor: Actor, id: string | null, v: { name: string; layout: VoucherLayout; image?: { mime: 'image/png' | 'image/jpeg'; dataBase64: string } | null }) {
+  const img = v.image ? checkImage(v.image) : v.image === null ? { mime: null, data: null } : undefined;
+  const set = { name: v.name, layout: v.layout, ...(img ? { mime: img.mime, data: img.data } : {}) };
+  const after = { name: v.name, elements: v.layout.elements.length, image: v.image === undefined ? 'unverändert' : v.image ? 'neu' : 'entfernt' };
+  if (!id) {
+    const [row] = await db.insert(voucherDesigns).values(set).returning({ id: voucherDesigns.id });
+    await record(db, actor, { action: 'create', entity: 'voucher_design', entityId: row!.id, after });
+    return { id: row!.id };
+  }
+  const [row] = await db.update(voucherDesigns).set(set).where(eq(voucherDesigns.id, id)).returning({ id: voucherDesigns.id });
+  if (!row) throw notFound('Design');
+  await record(db, actor, { action: 'update', entity: 'voucher_design', entityId: id, after });
+  return { id };
 }
 
 // ---------- PDF, E-Mail ----------
@@ -168,9 +198,11 @@ async function render(db: Exec, r: Row, designOverride?: string | null) {
   const did = designOverride === undefined ? r.designId : designOverride;
   const [d] = did ? await db.select().from(voucherDesigns).where(eq(voucherDesigns.id, did)) : [];
   const layout = await billing.getLayout(db);
-  const pdf = await renderVoucher(
-    { number: r.number, pin: r.pinEnc ? decrypt(r.pinEnc) : null, posCardNo: r.posCardNo, valueCents: r.valueCents, issuedOn: r.issuedOn, validUntil: r.validUntil, recipientName: r.recipientName, message: r.message, barcode: (await getNumbering(db)).barcode },
-    h, d ? { mime: d.mime, data: d.data, textPos: d.textPos as TextPos } : null, await billing.getLogo(db), accentRgb(layout));
+  const print = { number: r.number, pin: r.pinEnc ? decrypt(r.pinEnc) : null, posCardNo: r.posCardNo, valueCents: r.valueCents, issuedOn: r.issuedOn, validUntil: r.validUntil, recipientName: r.recipientName, message: r.message, barcode: (await getNumbering(db)).barcode };
+  const image = d?.mime && d.data ? { mime: d.mime, data: d.data } : null;
+  const pdf = d?.layout
+    ? await renderVoucherLayout(print, h, d.layout as VoucherLayout, image, await billing.getLogo(db))
+    : await renderVoucher(print, h, image ? { ...image, textPos: d!.textPos as TextPos } : null, await billing.getLogo(db), accentRgb(layout));
   return { filename: `Gutschein-${r.number.replace(/[^\w-]/g, '_')}.pdf`, pdf: Buffer.from(pdf) };
 }
 export async function pdf(db: Db, actor: Actor, id: string) {
@@ -182,7 +214,7 @@ export async function pdf(db: Db, actor: Actor, id: string) {
 }
 /** Vorschau eines Motivs mit Beispieltext (ohne echte Daten) */
 export async function designPreview(db: Exec, designId: string) {
-  const sample = { number: 'SH-0000', pinEnc: null, posCardNo: '', valueCents: 5000, issuedOn: new Date().toISOString().slice(0, 10), validUntil: null, recipientName: 'Erika Beispiel', message: 'Alles Gute zum Geburtstag!', designId } as unknown as Row;
+  const sample = { number: 'SH-0000', pinEnc: null, posCardNo: '100234', valueCents: 5000, issuedOn: new Date().toISOString().slice(0, 10), validUntil: `${new Date().getFullYear() + 3}-12-31`, recipientName: 'Erika Beispiel', message: 'Alles Gute zum Geburtstag!', designId } as unknown as Row;
   return render(db, sample, designId);
 }
 

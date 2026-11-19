@@ -37,6 +37,10 @@ export function registerVoucherRoutes(api: FastifyInstance, { db, requireUser, r
   api.post('/voucher-designs', { ...user, bodyLimit: 9 * 1024 * 1024 }, (req) => vouchers.addDesign(db, actor(req), V.voucherDesignInput.parse(req.body)));
   api.put('/voucher-designs/:id', user, (req) => vouchers.setDesignPos(db, actor(req), idOf(req), z.object({ textPos: z.enum(V.TEXT_POS) }).parse(req.body).textPos));
   api.post('/voucher-designs/:id/remove', admin, (req) => vouchers.removeDesign(db, actor(req), idOf(req)));
+  // Design-Editor
+  api.get('/voucher-designs/:id', user, (req) => vouchers.getDesign(db, idOf(req)));
+  api.post('/voucher-designs/editor', { ...user, bodyLimit: 9 * 1024 * 1024 }, (req) => vouchers.saveDesign(db, actor(req), null, V.voucherDesignSave.parse(req.body)));
+  api.put('/voucher-designs/:id/editor', { ...user, bodyLimit: 9 * 1024 * 1024 }, (req) => vouchers.saveDesign(db, actor(req), idOf(req), V.voucherDesignSave.parse(req.body)));
   api.get('/voucher-designs/:id/image', user, async (req, reply) => {
     const img = await vouchers.designImage(db, idOf(req));
     return reply.header('Content-Type', img.mime).header('Cache-Control', 'private, max-age=300').send(img.data);

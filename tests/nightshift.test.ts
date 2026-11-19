@@ -534,3 +534,32 @@ describe('Gutscheine', () => {
     expect(log!.n).toBe(0);
   });
 });
+
+describe('Gutschein-Design-Editor', () => {
+  it('speichert Gestaltung ohne Bild, liefert sie zurück und druckt danach', async () => {
+    const { layoutTemplate, fillText } = await import('../src/shared/vouchers.js');
+    const layout = layoutTemplate('classic');
+    layout.elements.push({ ...layout.elements[2]!, id: 'eigen', label: 'Eigener Text', text: 'Einlösbar im Restaurant · {website}', y: 120 });
+    const d = await ok('POST', '/voucher-designs/editor', admin, { name: 'Editor-Test', layout });
+    const got = await ok('GET', `/voucher-designs/${d.id}`, admin);
+    expect(got).toMatchObject({ name: 'Editor-Test', hasImage: false });
+    expect(got.layout.elements.map((e: { label: string }) => e.label)).toContain('Eigener Text');
+    const pv = await call('GET', `/voucher-designs/${d.id}/preview`, admin);
+    expect(pv.headers['content-type']).toBe('application/pdf');
+    expect(pv.rawPayload.subarray(0, 4).toString()).toBe('%PDF');
+    // Bild ergänzen, dann wieder entfernen
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    await ok('PUT', `/voucher-designs/${d.id}/editor`, admin, { name: 'Editor-Test', layout, image: { mime: 'image/png', dataBase64: png } });
+    expect((await ok('GET', `/voucher-designs/${d.id}`, admin)).hasImage).toBe(true);
+    await ok('PUT', `/voucher-designs/${d.id}/editor`, admin, { name: 'Editor-Test 2', layout, image: null });
+    expect(await ok('GET', `/voucher-designs/${d.id}`, admin)).toMatchObject({ name: 'Editor-Test 2', hasImage: false });
+    expect((await call('GET', `/voucher-designs/${d.id}/image`, admin)).statusCode).toBe(404);
+    // Liste kennt das Design
+    expect((await ok('GET', '/vouchers', admin)).designs.find((x: { id: string }) => x.id === d.id)).toMatchObject({ hasLayout: true, hasImage: false });
+    // ungültige Farbe wird abgelehnt
+    const bad = structuredClone(layout); bad.elements[0]!.color = 'rot';
+    expect((await call('POST', '/voucher-designs/editor', admin, { name: 'x', layout: bad })).statusCode).toBe(400);
+    // Platzhalter: leere Zeilen und leere Teilstücke fallen weg
+    expect(fillText('für {empfaenger}\nausgestellt am {ausgestellt} · gültig bis {gueltig}', { empfaenger: '', ausgestellt: '01.01.2027', gueltig: '' })).toBe('ausgestellt am 01.01.2027');
+  });
+});

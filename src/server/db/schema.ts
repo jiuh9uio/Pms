@@ -851,10 +851,13 @@ export const stockMoves = pgTable('stock_moves', {
 export const voucherDesigns = pgTable('voucher_designs', {
   id: id(),
   name: text('name').notNull(),
-  mime: text('mime').notNull(),
-  data: bytea('data').notNull(),
-  /** Lage des Textfelds auf dem Motiv: right | left | bottom */
+  /** Hintergrundbild (freiwillig, seit dem Design-Editor) */
+  mime: text('mime'),
+  data: bytea('data'),
+  /** Lage des Textfelds auf dem Motiv: right | left | bottom (nur ohne eigene Gestaltung) */
   textPos: text('text_pos').notNull().default('right'),
+  /** Gestaltung aus dem Design-Editor (Elemente mit Lage, Größe, Farbe …); leer = einfaches Motiv mit Textfeld */
+  layout: jsonb('layout'),
   createdAt: ts('created_at').notNull().defaultNow(),
 });
 

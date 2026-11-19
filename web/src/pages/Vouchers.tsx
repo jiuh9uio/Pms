@@ -9,6 +9,7 @@ import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
 import { MailDialog } from '../hotel/MailDialog.tsx';
+import { VoucherDesignEditor } from './VoucherDesignEditor.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
 
 const TONE = { active: 'ok', redeemed: 'neutral', cancelled: 'danger' } as const;
@@ -182,6 +183,7 @@ function Designs({ data, isAdmin, onChange }: { data: VoucherOverviewDto; isAdmi
   const [name, setName] = useState('');
   const [pos, setPos] = useState<TextPos>('right');
   const [busy, setBusy] = useState(false);
+  const [editor, setEditor] = useState<string | 'new' | null>(null);
   const upload = (file: File | undefined) => {
     if (!file) return;
     if (!/^image\/(png|jpeg)$/.test(file.type)) { toast('Bitte ein PNG- oder JPG-Bild wählen', 'error'); return; }
@@ -204,23 +206,28 @@ function Designs({ data, isAdmin, onChange }: { data: VoucherOverviewDto; isAdmi
   };
   return (
     <>
-      <section className="card">
-        <h2>Motiv hochladen</h2>
+      <section className="card vc-editorcard">
+        <div><h2>Design-Editor</h2><p className="muted small">Gutschein frei gestalten: Logo, eigene Texte, Flächen, Strichcode, Hintergrundbild oder -farbe, Farbpalette – mit der Maus an den richtigen Platz ziehen.</p></div>
+        <Button variant="primary" onClick={() => setEditor('new')}>Neues Design gestalten</Button>
+      </section>
+      <details className="card">
+        <summary><b>Nur ein Bild hochladen</b> <small className="muted">(einfaches Motiv mit festem Textfeld)</small></summary>
         <p className="muted small">Ein Bild im <b>Querformat</b> (z. B. 2100 × 1480 Pixel, DIN A5 quer), JPG oder PNG, höchstens 5 MB. Es füllt den ganzen Gutschein; Wert, Name, Gruß und Nummern stehen in einem hellen Feld darauf – lassen Sie dafür im Motiv eine ruhige Fläche frei.</p>
         <div className="formgrid">
           <Field label="Name des Motivs" hint="z. B. Weihnachten, Geburtstag, Neutral"><input value={name} onChange={(e) => setName(e.target.value)} /></Field>
           <Field label="Textfeld"><select value={pos} onChange={(e) => setPos(e.target.value as TextPos)}>{TEXT_POS.map((p) => <option key={p} value={p}>{TEXT_POS_LABEL[p]}</option>)}</select></Field>
           <label className="btn wide vc-upload">{busy ? 'Wird hochgeladen …' : 'Bild auswählen und hochladen'}<input type="file" accept="image/png,image/jpeg" hidden disabled={busy} onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ''; }} /></label>
         </div>
-      </section>
+      </details>
       {data.designs.length === 0 ? <p className="muted">Noch keine Motive – ohne Motiv wird der Gutschein schlicht mit Rahmen und Logo gedruckt.</p> : (
         <div className="vc-designs">
           {data.designs.map((d) => (
             <section key={d.id} className="card vc-design">
-              <img src={`/api/v1/voucher-designs/${d.id}/image`} alt={`Motiv ${d.name}`} loading="lazy" />
-              <b>{d.name}</b>
-              <select value={d.textPos} aria-label="Lage des Textfelds" onChange={(e) => void setDesignPos(d.id, e.target.value as TextPos)}>{TEXT_POS.map((p) => <option key={p} value={p}>{TEXT_POS_LABEL[p]}</option>)}</select>
+              <iframe className="vc-thumb" src={`/api/v1/voucher-designs/${d.id}/preview#toolbar=0&navpanes=0&view=Fit`} title={`Design ${d.name}`} loading="lazy" tabIndex={-1} />
+              <b>{d.name}{d.hasLayout && <small className="muted inl"> · im Editor gestaltet</small>}</b>
+              {!d.hasLayout && <select value={d.textPos} aria-label="Lage des Textfelds" onChange={(e) => void setDesignPos(d.id, e.target.value as TextPos)}>{TEXT_POS.map((p) => <option key={p} value={p}>{TEXT_POS_LABEL[p]}</option>)}</select>}
               <div className="vc-design-actions">
+                <Button onClick={() => setEditor(d.id)}>Im Editor bearbeiten</Button>
                 <a className="btn" href={`/api/v1/voucher-designs/${d.id}/preview`} target="_blank" rel="noopener">Vorschau</a>
                 {isAdmin && <Button variant="danger" onClick={() => void remove(d.id, d.name)}>Löschen</Button>}
               </div>
@@ -228,6 +235,7 @@ function Designs({ data, isAdmin, onChange }: { data: VoucherOverviewDto; isAdmi
           ))}
         </div>
       )}
+      {editor && <VoucherDesignEditor designId={editor === 'new' ? null : editor} onClose={() => setEditor(null)} onSaved={onChange} />}
     </>
   );
 }

@@ -1120,3 +1120,41 @@ a.linkcard.attention b { color: var(--warn); }
 .vc-design { margin: 0; display: flex; flex-direction: column; gap: 8px; }
 .vc-design img { width: 100%; aspect-ratio: 210 / 148; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
 .vc-design-actions { display: flex; gap: 8px; }
+/* Gutschein-Design-Editor */
+.vc-editorcard { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.vc-editorcard h2 { margin: 0 0 4px; }
+.vc-thumb { width: 100%; aspect-ratio: 210 / 148; border: 1px solid var(--line); border-radius: 8px; background: #fff; pointer-events: none; }
+.vde-top { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-end; margin-bottom: 12px; }
+.vde-top .field { min-width: 220px; }
+.vde-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.vde { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+@media (max-width: 1000px) { .vde { grid-template-columns: 1fr; } }
+.vde-stage { background: repeating-conic-gradient(var(--surface-2) 0% 25%, var(--surface) 0% 50%) 50% / 20px 20px; padding: 14px; border-radius: 10px; border: 1px solid var(--line); }
+.vde-page { position: relative; width: 100%; overflow: hidden; box-shadow: 0 4px 18px rgba(0, 0, 0, .18); touch-action: none; user-select: none; outline: none; }
+.vde-bg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.vde-el { position: absolute; box-sizing: border-box; cursor: move; touch-action: none; }
+.vde-el:hover { outline: 1px dashed rgba(36, 86, 200, .6); }
+.vde-el.on { outline: 2px solid var(--accent); z-index: 5; }
+.vde-text span { display: block; width: 100%; white-space: pre-wrap; word-wrap: break-word; }
+.vde-logo img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.vde-ph { display: grid; place-items: center; width: 100%; height: 100%; border: 1px dashed #999; color: #777; font-size: 11px; background: rgba(255,255,255,.6); }
+.vde-barcode { display: block; width: 100%; height: 100%; background: repeating-linear-gradient(90deg, #000 0 2px, #fff 2px 3px, #000 3px 4px, #fff 4px 7px, #000 7px 10px, #fff 10px 11px); border: 3px solid #fff; box-sizing: border-box; }
+.vde-handle { position: absolute; right: -6px; bottom: -6px; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); border: 2px solid #fff; cursor: nwse-resize; touch-action: none; }
+.vde-side { display: grid; gap: 10px; align-content: start; max-height: 70vh; overflow: auto; padding-right: 4px; }
+.vde-side h3 { margin: 6px 0 0; }
+.vde-panelhead { display: flex; justify-content: space-between; align-items: baseline; }
+.vde-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+.vde-row .field { flex: 1; min-width: 110px; }
+.vde-nums .vde-num { display: flex; flex-direction: column; flex: 1; min-width: 60px; } .vde-num input { width: 100%; }
+.vde-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.vde-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.vde-swatch { position: relative; width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line-strong); padding: 0; cursor: pointer; display: inline-grid; place-items: center; }
+.vde-swatch.on { outline: 2px solid var(--accent); outline-offset: 2px; }
+.vde-swatch button { position: absolute; top: -7px; right: -7px; width: 16px; height: 16px; border-radius: 50%; border: 0; background: var(--surface); color: var(--ink-2); font-size: 11px; line-height: 1; cursor: pointer; box-shadow: 0 0 0 1px var(--line-strong); display: none; }
+.vde-swatch:hover button { display: block; }
+.vde-addcolor { background: var(--surface); font-weight: 700; color: var(--ink-2); overflow: hidden; }
+.vde-addcolor input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.vde-upload { cursor: pointer; }
+.vde-layers { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.vde-layers button { width: 100%; text-align: left; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: inherit; font: inherit; cursor: pointer; }
+.vde-layers button.off { opacity: .55; }
