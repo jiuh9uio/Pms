@@ -26,7 +26,7 @@ export function Requests() {
   reqs.sort((a, b) => (a.optionUntil ?? '9999').localeCompare(b.optionUntil ?? '9999') || a.from.localeCompare(b.from));
   return (
     <>
-      <PageHeader title="Anfragen" sub="Vorgemerkte Zimmer – zurückrufen, Bestätigung per E-Mail senden, dann zusagen oder absagen"
+      <PageHeader title="Anfragen" sub="Vorgemerkte Zimmer – Anfrage öffnen, Gast anrufen, dann zusagen oder absagen"
         actions={<Button variant="primary" onClick={() => newBooking()}>Neue Anfrage oder Reservierung</Button>} />
       <LoadState error={error} loading={!data} />
       {data && reqs.length === 0 && <p className="muted">Zurzeit keine offenen Anfragen.</p>}
@@ -43,9 +43,9 @@ export function Requests() {
               <p className="reqdates">{deDate(q.from)} – {deDate(q.to)} · {q.nights} {q.nights === 1 ? 'Nacht' : 'Nächte'} · Zimmer {q.rooms.map((r) => `${r.roomNumber} (${persons(r.adults, r.children)})`).join(', ')} · {formatMoney(q.lodgingCents)}</p>
               {q.notes && <p className="reqnotes">{q.notes}</p>}
               <div className="reqcontact">
-                {q.phone ? <a className="btn" href={`tel:${q.phone.replace(/[^\d+]/g, '')}`}>Anrufen: {q.phone}</a> : <span className="muted small">kein Telefon gespeichert</span>}
-                {q.email ? <Button onClick={() => setMail(q)}>Bestätigungs-E-Mail an {q.email}</Button> : <span className="muted small">keine E-Mail gespeichert</span>}
-                <Button variant="primary" onClick={() => openBooking(q.bookingId)}>Öffnen – zusagen oder absagen</Button>
+                <Button variant="primary" onClick={() => openBooking(q.bookingId)}>Anfrage öffnen</Button>
+                {q.phone && <a className="btn" href={`tel:${q.phone.replace(/[^\d+]/g, '')}`}>Anrufen: {q.phone}</a>}
+                {q.email && <Button onClick={() => setMail(q)}>E-Mail „vorgemerkt“</Button>}
               </div>
             </section>
           );

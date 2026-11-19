@@ -13,6 +13,7 @@ import { SettleDialog } from '../billing/SettleDialog.tsx';
 import { CompanySelect } from './CompanySelect.tsx';
 import { GuestFormDialog } from './GuestFormDialog.tsx';
 import { MailDialog } from './MailDialog.tsx';
+import { RequestView } from './RequestView.tsx';
 import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { Badge, Button, Dialog, Field, LoadState, fmtDateTime, useLoad, useSubmit, useToast } from '../ui.tsx';
@@ -32,6 +33,8 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
   const [request, setRequest] = useState(false);
   const [flow, setFlow] = useState<{ kind: FlowKind; roomIds: string[] } | null>(null);
   const [revive, setRevive] = useState<BookingRoomDto | null>(null);
+  /** reine Anfrage: zuerst das vereinfachte Fenster, „Alle Details“ zeigt alles */
+  const [full, setFull] = useState(false);
 
   const setStatus = async (room: BookingRoomDto, status: RoomStatus, confirmText?: string) => {
     if (confirmText && !window.confirm(confirmText)) return;
@@ -69,6 +72,7 @@ export function BookingDialog({ id, onClose }: { id: string; onClose: () => void
     : active.every((r) => r.status === 'checked_out') ? (needsPay ? 'Abgereist – noch offen' : 'Abgeschlossen')
     : inHouse ? (needsPay ? 'Im Haus' : `Im Haus · bezahlt${to ? ` – Check-out am ${deDate(to)} automatisch` : ''}`)
     : active.some((r) => r.status === 'tentative') ? 'Vorläufig' : (from && from > today ? 'Anreise erwartet' : 'Anreise heute');
+  if (b && !full && active.length > 0 && active.every((r) => r.status === 'tentative')) return <RequestView booking={b} onClose={onClose} onFull={() => setFull(true)} />;
   return (
     <Dialog title={b ? <>Reservierung {b.number}</> : 'Reservierung'} onClose={onClose} size="xl"
       footer={<>{b && <a className="btn" href={`/meldeschein/${b.id}`} target="_blank" rel="noopener">Meldeschein drucken</a>}{b && <Button onClick={() => setQr(true)}>Meldeschein per QR</Button>}{b && <Button onClick={() => setMail(true)}>Bestätigung per E-Mail</Button>}<Button onClick={onClose}>Schließen</Button></>}>

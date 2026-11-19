@@ -3,6 +3,15 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.98.0
+
+- **Anfrage-Fenster vereinfacht:** Wer eine offene Anfrage öffnet (aus dem Anfragen-Ordner, der Übersicht oder den Reservierungen), sieht jetzt ein schlankes Fenster statt der vollen Reservierung:
+  - oben vier Kästchen: **Wann · Zimmer · Preis · Vorgemerkt bis** (abgelaufen = rot),
+  - **1. Gast erreichen:** großer Knopf **Anrufen** mit Nummer, ggf. E-Mail „Zimmer ist vorgemerkt“, darunter „+ Notiz zum Rückruf“ (mit Schnellwahl „nicht erreicht“, „ruft zurück“ … und auf Wunsch 3 Tage länger vormerken),
+  - **2. Entscheiden:** zwei große Felder – grün **Zusagen** (fest buchen) und rot **Absagen** (Zimmer wieder frei).
+  - Alles andere (Rechnungen, Meldeschein, Zimmer ändern …) unter „Alle Details der Reservierung“.
+- Anfragen-Ordner: Knöpfe aufgeräumt („Anfrage öffnen“ zuerst, Hinweise „kein Telefon/keine E-Mail“ entfernt).
+
 ## 1.97.1
 
 - **Neue Reservierung:** Beim Wählen der Anreise wird die Abreise automatisch eingetragen – mit derselben Anzahl Nächte wie gerade gewählt (z. B. „2 Nächte“), sonst 1 Nacht. Mit den Knöpfen „1/2/3/7 Nächte“ lässt sie sich mit einem Tipp ändern.
