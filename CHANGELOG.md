@@ -3,6 +3,16 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.92.0
+
+- **Neu unter Einkauf → Warenzugang:** eintragen, was gekommen ist (z. B. die Brauerei bringt 4 Fässer Pils und 1 Fass Hefe). Lieferant (wird beim nächsten Mal vorgeschlagen), Datum, Lieferschein-Nr. des Lieferanten, Artikel mit + / −, weitere Artikel frei. Leergut, das der Lieferant gleich mitnimmt, wird im selben Schritt eingetragen.
+- **Neu unter Einkauf → Leergut:** Übersicht in zwei Teilen:
+  - **Bei Kunden draußen** – kommt automatisch aus jedem gedruckten Lieferschein. „zurückbekommen“ tippen, wenn die Fässer wieder da sind (auch teilweise).
+  - **Beim Lieferanten noch zurückzugeben** – aus dem Warenzugang. „zurückgegeben“ tippen, wenn die Brauerei das Leergut abholt.
+- Es kann nicht mehr Leergut zurück eingetragen werden, als offen ist. Fehleinträge werden **storniert** (bleiben durchgestrichen im Verlauf sichtbar), nicht gelöscht.
+- Nur Stückzahlen, noch kein Pfand in Euro. Die Hygiene-Kontrolle beim Wareneingang bleibt unverändert unter Kontrollen.
+- Neue Datenbank-Tabelle „Warenbewegungen“ (mit Freigabe); bestehende Daten bleiben unverändert.
+
 ## 1.91.0
 
 - **Neuer Bereich „Einkauf“** im Menü (unter „Büro“). Er ist für alles rund um Einkauf und Lieferungen gedacht und wird nach und nach erweitert.

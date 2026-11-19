@@ -283,3 +283,22 @@ export const deliveryArticlesInput = z.object({ articles: z.array(required(60)).
 export type DeliveryNoteInput = z.infer<typeof deliveryNoteInput>;
 export type DeliveryNoteDto = DeliveryNoteInput & { auditId: number; number: string; userName: string; printedAt: string };
 export type DeliveryOverviewDto = { articles: string[]; recent: DeliveryNoteDto[]; preview: string };
+
+// ---------- Einkauf: Warenzugang und Leergut ----------
+export const STOCK_KINDS = ['in', 'out', 'empty_back', 'empty_return'] as const;
+export type StockKind = (typeof STOCK_KINDS)[number];
+export const STOCK_KIND_LABEL: Record<StockKind, string> = { in: 'Warenzugang', out: 'Geliefert (Lieferschein)', empty_back: 'Leergut vom Kunden zurück', empty_return: 'Leergut an Lieferant zurück' };
+const stockLines = z.array(deliveryLineInput).max(30);
+export const stockReceiptInput = z.object({
+  date: isoDay, supplier: required(80), ref: text(40), note: text(400),
+  lines: stockLines,
+  /** Leergut, das der Lieferant gleich wieder mitgenommen hat */
+  empties: stockLines,
+}).refine((v) => v.lines.length + v.empties.length > 0, { path: ['lines'], message: 'Bitte mindestens eine Position eintragen' });
+export const stockEmptiesInput = z.object({
+  kind: z.enum(['empty_back', 'empty_return']), date: isoDay, partner: required(80), note: text(400),
+  lines: stockLines.min(1, 'Bitte mindestens eine Position eintragen'),
+});
+export type StockMoveDto = { id: string; date: string; kind: StockKind; partner: string; article: string; qty: number; ref: string; note: string; userName: string; voided: boolean; voidedBy: string | null };
+export type StockOpenDto = { partner: string; article: string; qty: number; since: string };
+export type StockOverviewDto = { articles: string[]; suppliers: string[]; customers: StockOpenDto[]; atSuppliers: StockOpenDto[]; recent: StockMoveDto[] };

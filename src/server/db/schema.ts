@@ -817,3 +817,28 @@ export const offerLines = pgTable('offer_lines', {
   taxRatePercent: numeric('tax_rate_percent', { precision: 5, scale: 2, mode: 'number' }).notNull(),
   totalCents: integer('total_cents').notNull(),
 }, (t) => [index('offer_lines_offer_idx').on(t.offerId)]);
+
+// =====================================================================================
+// Einkauf: Warenbewegungen (Warenzugang, Lieferschein-Ausgang, Leergut)
+// =====================================================================================
+
+/**
+ * Eine Zeile je Artikel und Vorgang. kind: in = Warenzugang vom Lieferanten, out = an Kunden geliefert (Lieferschein),
+ * empty_back = Leergut vom Kunden zurück, empty_return = Leergut an den Lieferanten zurückgegeben.
+ * Wird nie gelöscht – Fehleinträge werden storniert (voided_at), damit nachvollziehbar bleibt, was war.
+ */
+export const stockMoves = pgTable('stock_moves', {
+  id: id(),
+  date: date('date', { mode: 'string' }).notNull(),
+  kind: text('kind').notNull(),
+  partner: text('partner').notNull(),
+  article: text('article').notNull(),
+  qty: integer('qty').notNull(),
+  /** Belegnummer: eigener Lieferschein (LS-…) oder Lieferschein-Nr. des Lieferanten */
+  ref: text('ref').notNull().default(''),
+  note: text('note').notNull().default(''),
+  userName: text('user_name').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  voidedAt: ts('voided_at'),
+  voidedBy: text('voided_by'),
+}, (t) => [index('stock_moves_partner_idx').on(t.partner), index('stock_moves_date_idx').on(t.date)]);

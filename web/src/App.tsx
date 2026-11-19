@@ -87,6 +87,8 @@ const NAV: NavItem[] = [
   { to: '/einstellungen', tab: 'steuern', label: 'Steuern & Nummern', short: 'Steuern', icon: '％', module: 'rechnungen', admin: true, more: true, group: 'Einrichtung', jump: true },
   // Einkauf: vorerst mit der Freigabe „Schnelldruck“ (Lieferschein kommt aus dem Bondrucker)
   { to: '/einkauf', label: 'Lieferscheine', short: 'Lieferung', icon: 'truck', module: 'einkauf', need: 'schnelldruck', group: 'Lieferungen' },
+  { to: '/einkauf', tab: 'warenzugang', label: 'Warenzugang', short: 'Zugang', icon: 'box', module: 'einkauf', need: 'schnelldruck', group: 'Lieferungen' },
+  { to: '/einkauf', tab: 'leergut', label: 'Leergut', icon: 'keg', module: 'einkauf', need: 'schnelldruck', group: 'Lieferungen' },
   { to: '/schnelldruck', label: 'Schnelldruck', short: 'Druck', icon: '⎙', module: 'schnelldruck' },
   { to: '/kontrollen', label: 'Kontrollen', icon: '✓', module: 'kontrollen' },
   { to: '/internet', label: 'Internet', short: 'Netz', icon: '⌁', module: 'internet' },

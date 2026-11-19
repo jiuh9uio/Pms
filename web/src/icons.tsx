@@ -35,6 +35,10 @@ const P: Record<string, string> = {
   cart: 'M3 4h2.2l2.3 11h10.8l2-7.5H6.4 M9 19.5a1 1 0 1 1 0 .01 M17 19.5a1 1 0 1 1 0 .01',
   /** Lieferung (Lieferwagen) */
   truck: 'M3 6h11v10H3z M14 9.5h3.8L21 13v3h-7 M7 18.5a1.5 1.5 0 1 1 0-.01 M17.5 18.5a1.5 1.5 0 1 1 0-.01',
+  /** Warenzugang (Paket) */
+  box: 'M12 3l8 4.5v9L12 21l-8-4.5v-9z M4 7.5l8 4.5 8-4.5 M12 12v9',
+  /** Leergut (Fass) */
+  keg: 'M7 3h10c1 2.5 1.5 5.5 1.5 9s-.5 6.5-1.5 9H7c-1-2.5-1.5-5.5-1.5-9S6 5.5 7 3z M5.8 8h12.4 M5.8 16h12.4',
   '←': 'M19 12H5 M11 6l-6 6 6 6',
 };
 

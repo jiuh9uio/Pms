@@ -7,6 +7,7 @@ import { columns, wrap, type Line } from '../lib/escpos.js';
 import { record, type Actor } from './audit.js';
 import { bonTarget, preview, printJobs } from './quickprint.js';
 import { getHotel } from './settings.js';
+import { recordDelivery } from './stock.js';
 
 /**
  * Lieferschein auf dem Bondrucker – z. B. für Fassbier, das zu einer Feier geliefert wird.
@@ -91,6 +92,8 @@ export async function create(db: Db, actor: Actor, v: DeliveryNoteInput) {
     const note = { ...v, number };
     await printJobs(tx, await Promise.all(copiesFor(v.copies).map((c) => makeLines(tx, note, c))));
     await record(tx, actor, { action: 'print', entity: 'delivery_note', entityId: number, after: note });
+    // Ware ist jetzt beim Kunden – erscheint unter Einkauf → Leergut als offen
+    await recordDelivery(tx, actor, { date: v.date, recipient: v.recipient, number, note: v.note, lines: v.lines });
     return { number };
   });
 }

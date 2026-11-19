@@ -281,6 +281,13 @@
       "when": 1794941798409,
       "tag": "0039_angebot_fragen",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1795093249974,
+      "tag": "0040_warenbewegungen",
+      "breakpoints": true
     }
   ]
 }

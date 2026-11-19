@@ -442,3 +442,47 @@ describe('Lieferschein auf dem Bondrucker', () => {
     printer.close();
   });
 });
+
+describe('Einkauf: Warenzugang und Leergut', () => {
+  it('rechnet offene Fässer bei Kunden und Lieferanten, prüft Rückgaben und storniert ohne Löschen', async () => {
+    const { createServer } = await import('node:net');
+    const printer = createServer({ allowHalfOpen: true }, (sock) => { sock.on('data', () => {}); });
+    await new Promise<void>((r) => printer.listen(0, '127.0.0.1', () => r()));
+    await ok('PUT', '/settings/front-printer', admin, { enabled: true, host: '127.0.0.1', port: (printer.address() as { port: number }).port, width: 42 });
+    // Lieferschein → beim Kunden offen
+    await ok('POST', '/delivery-notes', admin, { recipient: 'Kegelclub Test', address: '', date: '2031-07-01', returnBy: '', note: '', copies: 1,
+      lines: [{ qty: 3, article: 'Pils – Fass 50 l' }, { qty: 1, article: 'Kupfer – Fass 30 l' }] });
+    let o = await ok('GET', '/stock', admin);
+    const at = (list: { partner: string; article: string; qty: number }[], p: string, a: string) => list.find((x) => x.partner === p && x.article === a)?.qty ?? 0;
+    expect(at(o.customers, 'Kegelclub Test', 'Pils – Fass 50 l')).toBe(3);
+    expect(at(o.customers, 'Kegelclub Test', 'Kupfer – Fass 30 l')).toBe(1);
+    // mehr zurück als offen → abgelehnt
+    const tooMuch = await call('POST', '/stock/empties', admin, { kind: 'empty_back', date: '2031-07-03', partner: 'Kegelclub Test', note: '', lines: [{ qty: 4, article: 'Pils – Fass 50 l' }] });
+    expect(tooMuch.json().error.code).toBe('stock_not_open');
+    await ok('POST', '/stock/empties', admin, { kind: 'empty_back', date: '2031-07-03', partner: 'kegelclub test ', note: '', lines: [{ qty: 2, article: 'Pils – Fass 50 l' }, { qty: 1, article: 'Kupfer – Fass 30 l' }] });
+    o = await ok('GET', '/stock', admin);
+    expect(at(o.customers, 'Kegelclub Test', 'Pils – Fass 50 l')).toBe(1);
+    expect(at(o.customers, 'Kegelclub Test', 'Kupfer – Fass 30 l')).toBe(0);
+    // Warenzugang: 5 volle, 2 Leergut gleich mitgegeben (nur wenn offen – hier aus derselben Lieferung)
+    await ok('POST', '/stock/receipts', admin, { date: '2031-07-02', supplier: 'Brauerei Beispiel', ref: 'B-77', note: '',
+      lines: [{ qty: 5, article: 'Pils – Fass 50 l' }, { qty: 2, article: 'Pils – Fass 50 l' }], empties: [{ qty: 2, article: 'Pils – Fass 50 l' }] });
+    o = await ok('GET', '/stock', admin);
+    expect(at(o.atSuppliers, 'Brauerei Beispiel', 'Pils – Fass 50 l')).toBe(5);
+    expect(o.suppliers).toContain('Brauerei Beispiel');
+    expect((await call('POST', '/stock/receipts', admin, { date: '2031-07-02', supplier: 'Brauerei Beispiel', ref: '', note: '', lines: [], empties: [] })).statusCode).toBe(400);
+    expect((await call('POST', '/stock/empties', admin, { kind: 'empty_return', date: '2031-07-04', partner: 'Andere Brauerei', note: '', lines: [{ qty: 1, article: 'Pils – Fass 50 l' }] })).json().error.code).toBe('stock_not_open');
+    // Stornieren: Eintrag bleibt, zählt aber nicht mehr
+    const recv = o.recent.find((m: { kind: string; partner: string }) => m.kind === 'in' && m.partner === 'Brauerei Beispiel');
+    expect(recv.qty).toBe(7); // gleiche Artikel zusammengefasst
+    expect((await call('POST', `/stock/moves/${recv.id}/void`, admin, {})).json().error.code).toBe('stock_in_use');
+    const back = o.recent.find((m: { kind: string; partner: string }) => m.kind === 'empty_return' && m.partner === 'Brauerei Beispiel');
+    await ok('POST', `/stock/moves/${back.id}/void`, admin, {});
+    await ok('POST', `/stock/moves/${recv.id}/void`, admin, {});
+    expect((await call('POST', `/stock/moves/${recv.id}/void`, admin, {})).json().error.code).toBe('already_voided');
+    o = await ok('GET', '/stock', admin);
+    expect(at(o.atSuppliers, 'Brauerei Beispiel', 'Pils – Fass 50 l')).toBe(0);
+    expect(o.recent.find((m: { id: string }) => m.id === recv.id).voided).toBe(true);
+    await ok('PUT', '/settings/front-printer', admin, { enabled: false, host: '', port: 9100, width: 48 });
+    printer.close();
+  });
+});
