@@ -1047,3 +1047,21 @@ a.linkcard.attention b { color: var(--warn); }
 .deliveryrecent { margin-top: 14px; } .deliveryrecent summary { cursor: pointer; font-weight: 600; }
 /* Betragsfeld mit €-Zeichen (Einkauf: Pfand) */
 .moneyin { display: inline-flex; align-items: center; gap: 6px; } .moneyin input { max-width: 140px; }
+/* Neue Reservierung: Schritt-Leiste und Zusammenfassung */
+.nbsteps { display: flex; gap: 6px; list-style: none; margin: 0 0 18px; padding: 0; flex-wrap: wrap; }
+.nbsteps li { flex: 1 1 0; min-width: 96px; }
+.nbsteps button { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink-2); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
+.nbsteps button:disabled { cursor: default; opacity: .55; }
+.nbsteps .nbnum { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--surface-2); font-size: 13px; flex: none; }
+.nbsteps li.now button { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); }
+.nbsteps li.now .nbnum { background: var(--accent); color: var(--accent-ink); }
+.nbsteps li.done .nbnum { background: var(--accent-soft); color: var(--accent-text); }
+.nbstep { max-width: 760px; }
+.nbchips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 10px; }
+.nbchip { padding: 7px 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: inherit; font: inherit; cursor: pointer; }
+.nbchip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+.nbsum { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; margin: 0 0 16px; }
+.nbsum dt { color: var(--ink-2); } .nbsum dd { margin: 0; }
+.nbchoice { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.nbchoice > div { border: 1px solid var(--line); border-radius: 8px; padding: 12px; } .nbchoice p { margin: 4px 0 8px; }
+@media (max-width: 700px) { .nbchoice { grid-template-columns: 1fr; } .nbsteps li { min-width: 0; flex: none; } .nbsteps li.now { flex: 1; } .nbsteps li:not(.now) .nblabel { display: none; } .nbsteps button { padding: 6px; gap: 6px; } }

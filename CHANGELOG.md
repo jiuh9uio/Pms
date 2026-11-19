@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.95.0
+
+- **Neue Reservierung jetzt Schritt für Schritt:** Statt allem auf einer Seite gibt es fünf Schritte – ① Zeitraum ② Zimmer ③ Gast ④ Extras ⑤ Prüfen. Oben sieht man, wo man ist; erledigte Schritte haben einen Haken und lassen sich jederzeit wieder antippen.
+- ① Zeitraum mit Schnellwahl „heute“, „morgen“ und „1/2/3/7 Nächte“; es wird gleich angezeigt, wie viele Zimmer frei sind.
+- „Weiter“ geht erst, wenn der Schritt vollständig ist (Zimmer gewählt, Gast gewählt oder Nachname eingetragen). Die Enter-Taste führt zum nächsten Schritt.
+- ⑤ Prüfen zeigt alles auf einen Blick mit „ändern“-Links und erklärt den Unterschied zwischen „Fest buchen“ und „Als Anfrage anlegen“ (mit „Option bis“).
+- Aus dem Belegungsplan mit vorgewähltem Zimmer geht es direkt bei ② Zimmer los. Was gebucht wird, ist unverändert – nur die Bedienung ist neu.
+
 ## 1.94.0
 
 - **Pfand beim Warenzugang und beim Leergut eintragen:** Felder „Pfand für die erhaltene Ware“ und „Pfand fürs mitgegebene Leergut“ (Warenzugang) bzw. „Pfand (Gutschrift)“ (Leergut). Der Betrag steht auf dem Bon, mit Pfand-Saldo.

@@ -14,8 +14,8 @@ import { catColorIndex, groupByFloor } from './roomgroups.ts';
 interface Pick { adults: string; children: string; price: string }
 
 /**
- * Neue Reservierung: Zeitraum → freies Zimmer antippen (nach Etage, Farbe je Kategorie) → Gast wählen oder eintragen →
- * „Als Anfrage anlegen“ (vorläufig, Zimmer wird bis „Option bis“ freigehalten) oder „Fest buchen“ (bestätigt).
+ * Neue Reservierung Schritt für Schritt: 1 Zeitraum → 2 freies Zimmer antippen (nach Etage, Farbe je Kategorie) → 3 Gast wählen oder eintragen →
+ * 4 Extras (Frühstück, Quelle, Zahlung, Firma, Notiz) → 5 Prüfen: „Als Anfrage anlegen“ (Zimmer bis „Option bis“ freigehalten) oder „Fest buchen“.
  */
 export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: () => void }) {
   const { bump } = useData();
@@ -35,6 +35,8 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
   const [companyId, setCompanyId] = useState(preset.companyId ?? '');
   const [breakfast, setBreakfast] = useState(false);
   const [dropped, setDropped] = useState<string[]>([]);
+  // Schritt für Schritt: 1 Zeitraum · 2 Zimmer · 3 Gast · 4 Extras · 5 Prüfen (aus dem Belegungsplan mit Zimmer: gleich Schritt 2)
+  const [step, setStep] = useState(preset.roomId ? 2 : 1);
 
   const valid = isIsoDate(from) && isIsoDate(to) && from < to;
   const nights = valid ? diffDays(from, to) : 0;
@@ -98,6 +100,12 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
     await f.submit(payload(status));
     setSending(null);
   };
+  // Fehler vom Server: zum Schritt springen, in dem das Feld steht
+  useEffect(() => {
+    const keys = Object.keys(f.errors);
+    if (keys.some((k) => k.startsWith('guest'))) setStep(3);
+    else if (keys.some((k) => k.startsWith('rooms'))) setStep(2);
+  }, [f.errors]);
   const payload = (status: 'confirmed' | 'tentative') => ({
     ...(guest ? { guestId: guest.id } : draft.lastName.trim() ? { guest: draft } : {}),
     ...meta, breakfast, ...(companyId ? { companyId } : {}), ...(status === 'tentative' ? { optionUntil: option } : {}),
@@ -114,22 +122,65 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
   }); };
   const setPick = (id: string, patch: Partial<Pick>) => setPicks((cur) => ({ ...cur, [id]: { ...cur[id]!, ...patch } }));
 
+  const guestName = guest ? [guest.firstName, guest.lastName].filter(Boolean).join(' ') : [draft.firstName, draft.lastName].filter((x) => x.trim()).join(' ');
+  const hasGuest = !!guest || draft.lastName.trim() !== '';
+  /** bis zu welchem Schritt man vorspringen darf */
+  const reachable = !valid ? 1 : selected.length === 0 ? 2 : !hasGuest ? 3 : 5;
+  const STEPS = ['Zeitraum', 'Zimmer', 'Gast', 'Extras', 'Prüfen'];
+  const next = () => { if (step < reachable || (step === 4 && reachable >= 5)) setStep(step + 1); };
+  const blockReason = step === 1 && !valid ? 'Bitte Anreise und Abreise wählen' : step === 2 && selected.length === 0 ? 'Bitte mindestens ein Zimmer antippen' : step === 3 && !hasGuest ? 'Bitte einen Gast wählen oder mindestens den Nachnamen eintragen' : '';
+  const setDates = (a: string, n: number) => { setFrom(a); setTo(addDays(a, n)); };
+  const chip = (label: string, on: boolean, click: () => void) => <button type="button" className={`nbchip${on ? ' on' : ''}`} aria-pressed={on} onClick={click}>{label}</button>;
+  const sourceAndPay = [meta.source, meta.paymentMethod ? `Zahlung: ${meta.paymentMethod}` : 'Zahlung offen'].join(' · ');
+
   return (
     <Dialog title="Neue Reservierung" onClose={onClose} size="xl"
       footer={<><span className="left total">{selected.length > 0 && <>{selected.length} Zimmer · {nights} {nights === 1 ? 'Nacht' : 'Nächte'} · <b>{formatMoney(total)}</b> Logis</>}</span>
-        <span className="nb-actions"><Button onClick={onClose}>Abbrechen</Button>
-          <Button busy={sending === 'tentative'} disabled={!!sending} onClick={() => void submit('tentative')} title={`Zimmer wird bis ${deDate(option)} freigehalten; später bestätigen oder stornieren`}>Als Anfrage anlegen</Button>
-          <Button variant="primary" busy={sending === 'confirmed'} disabled={!!sending} onClick={() => void submit('confirmed')}>Fest buchen</Button></span></>}>
-      {/* Enter löst absichtlich nichts aus: ob Anfrage oder feste Buchung, entscheidet der Knopf */}
-      <form onSubmit={(e) => e.preventDefault()} noValidate>
-      <div className="formgrid cols3 nb-dates">
-        <Field label="Anreise"><input type="date" value={from} onChange={(e) => { setFrom(e.target.value); if (isIsoDate(e.target.value) && e.target.value >= to) setTo(addDays(e.target.value, 1)); }} /></Field>
-        <Field label="Abreise" error={!valid ? 'Muss nach der Anreise liegen' : undefined} hint={valid ? `${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}` : undefined}><input type="date" value={to} min={isIsoDate(from) ? addDays(from, 1) : undefined} onChange={(e) => setTo(e.target.value)} /></Field>
-        <Field label="Bei Anfrage: Option bis" hint="so lange bleibt das Zimmer freigehalten – danach erinnert die Übersicht"><input type="date" value={option} min={today} max={isIsoDate(from) && from >= today ? from : undefined} onChange={(e) => setOptionUntil(e.target.value)} /></Field>
-      </div>
+        <span className="nb-actions">
+          {step === 1 ? <Button onClick={onClose}>Abbrechen</Button> : <Button onClick={() => setStep(step - 1)}>← Zurück</Button>}
+          {step < 5 && <Button variant="primary" disabled={!!blockReason} title={blockReason || undefined} onClick={next}>Weiter →</Button>}
+          {step === 5 && <>
+            <Button busy={sending === 'tentative'} disabled={!!sending} onClick={() => void submit('tentative')} title={`Zimmer wird bis ${deDate(option)} freigehalten; später bestätigen oder stornieren`}>Als Anfrage anlegen</Button>
+            <Button variant="primary" busy={sending === 'confirmed'} disabled={!!sending} onClick={() => void submit('confirmed')}>Fest buchen</Button>
+          </>}
+        </span></>}>
+      <ol className="nbsteps" aria-label="Schritte">
+        {STEPS.map((label, i) => {
+          const n = i + 1;
+          return (
+            <li key={label} className={n === step ? 'now' : n < step ? 'done' : ''}>
+              <button type="button" disabled={n > reachable && n > step} aria-current={n === step ? 'step' : undefined} onClick={() => setStep(n)}>
+                <span className="nbnum">{n < step ? '✓' : n}</span><span className="nblabel">{label}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+      {/* Enter = Weiter (im letzten Schritt bewusst nichts: ob Anfrage oder feste Buchung, entscheidet der Knopf) */}
+      <form onSubmit={(e) => { e.preventDefault(); if (step < 5 && !blockReason) next(); }} noValidate>
+
+      {step === 1 && (
+        <section className="nbstep">
+          <h3 className="first">Wann kommt der Gast?</h3>
+          <div className="formgrid cols3 nb-dates">
+            <Field label="Anreise"><input type="date" value={from} autoFocus onChange={(e) => { setFrom(e.target.value); if (isIsoDate(e.target.value) && e.target.value >= to) setTo(addDays(e.target.value, 1)); }} /></Field>
+            <Field label="Abreise" error={!valid ? 'Muss nach der Anreise liegen' : undefined} hint={valid ? `${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}` : undefined}><input type="date" value={to} min={isIsoDate(from) ? addDays(from, 1) : undefined} onChange={(e) => setTo(e.target.value)} /></Field>
+          </div>
+          <div className="nbchips"><span className="muted small">Anreise:</span>
+            {chip('heute', from === today, () => setDates(today, Math.max(1, nights)))}
+            {chip('morgen', from === addDays(today, 1), () => setDates(addDays(today, 1), Math.max(1, nights)))}
+          </div>
+          <div className="nbchips"><span className="muted small">Dauer:</span>
+            {[1, 2, 3, 7].map((n) => chip(`${n} ${n === 1 ? 'Nacht' : 'Nächte'}`, valid && nights === n, () => isIsoDate(from) && setTo(addDays(from, n))))}
+          </div>
+          {valid && free.data && <p className="muted">{free.data.length === 0 ? 'In diesem Zeitraum ist kein Zimmer frei.' : `${free.data.length} ${free.data.length === 1 ? 'Zimmer ist' : 'Zimmer sind'} frei.`}</p>}
+        </section>
+      )}
+
+      {step === 2 && (<>
       <section className="roomboard" aria-label="Zimmer wählen">
         <div className="roomboard-head">
-          <h3 className="first">Zimmer wählen{valid && free.data ? <small className="inl"> · {free.data.length} frei {deDate(from)} – {deDate(to)}</small> : null}</h3>
+          <h3 className="first">Welches Zimmer?{valid && free.data ? <small className="inl"> · {free.data.length} frei {deDate(from)} – {deDate(to)}</small> : null}</h3>
           <div className="catlegend">{[...(base.data?.cats ?? [])].sort((a, b) => a.sort - b.sort).filter((c) => base.data?.rooms.some((r) => r.categoryId === c.id)).map((c) => (
             <span key={c.id} className={`cat-${catColorIndex(base.data?.cats, c.id)}`}><i className="catdot" />{c.name}</span>))}</div>
         </div>
@@ -157,36 +208,38 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
           </div>
         ))}
       </section>
-      <div className="split">
-        <div>
-          <h3 className="first">Gewählte Zimmer</h3>
-          {selected.length === 0 && <p className="muted">Noch kein Zimmer gewählt – oben ein freies Zimmer antippen.</p>}
-          <div className="roompick">
-            {selected.map((r) => {
-              const p = picks[r.id]!;
-              return (
-                <div key={r.id} className={`pickrow on cat-${catColorIndex(base.data?.cats, r.categoryId)}`}>
-                  <span className="pickname"><i className="catdot" /><b>Zimmer {r.number}</b> <small className="inl">{r.categoryName}</small></span>
-                  <div className="pickedit">
-                    <label><small>Erw.</small><input type="number" min={1} value={p.adults} onChange={(e) => setPick(r.id, { adults: e.target.value })} /></label>
-                    <label><small>Kinder</small><input type="number" min={0} value={p.children} onChange={(e) => setPick(r.id, { children: e.target.value })} /></label>
-                    <label><small>Preis/Nacht</small><input inputMode="decimal" value={p.price} placeholder={nights ? (quoteFor(r, p) / nights / 100).toFixed(2).replace('.', ',') : ''} onChange={(e) => setPick(r.id, { price: e.target.value })} /></label>
-                  </div>
-                  <button type="button" className="iconbtn" aria-label={`Zimmer ${r.number} abwählen`} title="abwählen" onClick={() => toggle(r)}>✕</button>
-                </div>
-              );
-            })}
-          </div>
-          {selected.length > 0 && <p className="muted small">Preis/Nacht leer lassen = Preis nach Preisregeln und Personenzahl. Ein eingetragener Betrag gilt als Sonderpreis für alle Nächte.</p>}
-        </div>
-        <aside>
-          <h3 className="first">Gast</h3>
+      <h3>Gewählte Zimmer</h3>
+      {selected.length === 0 && <p className="muted">Noch kein Zimmer gewählt – oben ein freies Zimmer antippen. Mehrere Zimmer sind möglich.</p>}
+      <div className="roompick">
+        {selected.map((r) => {
+          const p = picks[r.id]!;
+          return (
+            <div key={r.id} className={`pickrow on cat-${catColorIndex(base.data?.cats, r.categoryId)}`}>
+              <span className="pickname"><i className="catdot" /><b>Zimmer {r.number}</b> <small className="inl">{r.categoryName}</small></span>
+              <div className="pickedit">
+                <label><small>Erw.</small><input type="number" min={1} value={p.adults} onChange={(e) => setPick(r.id, { adults: e.target.value })} /></label>
+                <label><small>Kinder</small><input type="number" min={0} value={p.children} onChange={(e) => setPick(r.id, { children: e.target.value })} /></label>
+                <label><small>Preis/Nacht</small><input inputMode="decimal" value={p.price} placeholder={nights ? (quoteFor(r, p) / nights / 100).toFixed(2).replace('.', ',') : ''} onChange={(e) => setPick(r.id, { price: e.target.value })} /></label>
+              </div>
+              <button type="button" className="iconbtn" aria-label={`Zimmer ${r.number} abwählen`} title="abwählen" onClick={() => toggle(r)}>✕</button>
+            </div>
+          );
+        })}
+      </div>
+      {selected.length > 0 && <p className="muted small">Preis/Nacht leer lassen = Preis nach Preisregeln und Personenzahl. Ein eingetragener Betrag gilt als Sonderpreis für alle Nächte.</p>}
+      </>)}
+
+      {step === 3 && (
+        <section className="nbstep">
+          <h3 className="first">Wer kommt?</h3>
           {guest ? (
-            <div className="chosen"><span><b>{[guest.firstName, guest.lastName].filter(Boolean).join(' ')}</b><br /><small>{[guest.company, guest.city, guest.email].filter(Boolean).join(' · ') || 'aus der Gästekartei'}</small></span>
-              <Button onClick={() => setGuest(null)}>Ändern</Button></div>
+            <div className="chosen"><span><b>{guestName}</b><br /><small>{[guest.company, guest.city, guest.email].filter(Boolean).join(' · ') || 'aus der Gästekartei'}</small></span>
+              <Button onClick={() => setGuest(null)}>Anderen Gast</Button></div>
           ) : (
             <>
-              <input type="search" placeholder="Gast oder Firma suchen …" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Gast suchen" />
+              <Field label="Schon einmal da gewesen? In der Gästekartei suchen" wide>
+                <input type="search" placeholder="Name, Firma oder Ort …" value={q} autoFocus onChange={(e) => setQ(e.target.value)} />
+              </Field>
               {hits.length > 0 && (
                 <div className="hits">
                   {hits.map((g) => (
@@ -196,26 +249,51 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
                   ))}
                 </div>
               )}
-              <p className="muted small">oder neuen Gast eintragen:</p>
+              <h3>Oder neuen Gast eintragen</h3>
               <GuestFields value={draft} onChange={setDraft} errors={f.errors} prefix="guest." compact />
               {f.errors.guest && <p className="error">{f.errors.guest}</p>}
             </>
           )}
-          <h3>Angaben</h3>
-          <CompanySelect value={companyId} onChange={(cid) => { setCompanyId(cid); if (cid) setMeta({ ...meta, source: 'Firma', paymentMethod: 'Rechnung an Firma' }); }} />
+        </section>
+      )}
+
+      {step === 4 && (
+        <section className="nbstep">
+          <h3 className="first">Extras und Angaben</h3>
           <div className="formgrid">
-            <Field label="Buchungsquelle"><select value={meta.source} onChange={(e) => setMeta({ ...meta, source: e.target.value })}>{SOURCES.map((s) => <option key={s}>{s}</option>)}</select></Field>
-            <Field label="Zahlungsart"><select value={meta.paymentMethod} onChange={(e) => setMeta({ ...meta, paymentMethod: e.target.value })}><option value="">offen</option>{PAYMENT_METHODS.map((s) => <option key={s}>{s}</option>)}</select></Field>
-            {selected.length > 1 && <Field label="Gruppenname" wide><input value={meta.groupName} onChange={(e) => setMeta({ ...meta, groupName: e.target.value })} placeholder="z. B. Hochzeit Müller" /></Field>}
             {base.data?.breakfast && (
               <label className="check wide"><input type="checkbox" checked={breakfast} onChange={(e) => setBreakfast(e.target.checked)} />
                 <span>Mit Frühstück <small className="inl">{formatMoney(base.data.breakfast.priceCents)} pro Person und Nacht</small></span></label>
             )}
+            <Field label="Buchungsquelle"><select value={meta.source} onChange={(e) => setMeta({ ...meta, source: e.target.value })}>{SOURCES.map((s) => <option key={s}>{s}</option>)}</select></Field>
+            <Field label="Zahlungsart"><select value={meta.paymentMethod} onChange={(e) => setMeta({ ...meta, paymentMethod: e.target.value })}><option value="">offen</option>{PAYMENT_METHODS.map((s) => <option key={s}>{s}</option>)}</select></Field>
+            {selected.length > 1 && <Field label="Gruppenname" wide><input value={meta.groupName} onChange={(e) => setMeta({ ...meta, groupName: e.target.value })} placeholder="z. B. Hochzeit Müller" /></Field>}
             <Field label="Notiz (intern)" wide hint="bei Anfragen z. B. „ruft Freitag zurück“ – steht dann in der Anfrageliste"><textarea rows={2} placeholder="z. B. ruft Freitag zurück, möchte ruhiges Zimmer" value={meta.notes} onChange={(e) => setMeta({ ...meta, notes: e.target.value })} /></Field>
           </div>
+          <h3>Firma (nur bei Firmenbuchung)</h3>
+          <CompanySelect value={companyId} onChange={(cid) => { setCompanyId(cid); if (cid) setMeta({ ...meta, source: 'Firma', paymentMethod: 'Rechnung an Firma' }); }} />
+          <p className="muted small">Alles hier ist freiwillig – einfach „Weiter“.</p>
+        </section>
+      )}
+
+      {step === 5 && (
+        <section className="nbstep">
+          <h3 className="first">Alles richtig?</h3>
+          <dl className="nbsum">
+            <dt>Gast</dt><dd>{guestName || '–'} <button type="button" className="linkbtn" onClick={() => setStep(3)}>ändern</button></dd>
+            <dt>Zeitraum</dt><dd>{deDate(from)} – {deDate(to)} · {nights} {nights === 1 ? 'Nacht' : 'Nächte'} <button type="button" className="linkbtn" onClick={() => setStep(1)}>ändern</button></dd>
+            <dt>Zimmer</dt><dd>{selected.map((r) => `${r.number} (${picks[r.id]!.adults} Erw.${Number(picks[r.id]!.children) ? `, ${picks[r.id]!.children} Ki.` : ''})`).join(', ')} <button type="button" className="linkbtn" onClick={() => setStep(2)}>ändern</button></dd>
+            <dt>Logis</dt><dd><b>{formatMoney(total)}</b>{breakfast && base.data?.breakfast ? ' · mit Frühstück' : ''}</dd>
+            <dt>Angaben</dt><dd>{sourceAndPay}{meta.notes ? ` · ${meta.notes}` : ''} <button type="button" className="linkbtn" onClick={() => setStep(4)}>ändern</button></dd>
+          </dl>
+          <div className="nbchoice">
+            <div><b>Fest buchen</b><p className="muted small">Der Gast hat zugesagt – das Zimmer ist verbindlich gebucht.</p></div>
+            <div><b>Als Anfrage anlegen</b><p className="muted small">Noch nicht sicher – das Zimmer wird freigehalten bis:</p>
+              <input type="date" aria-label="Option bis" value={option} min={today} max={isIsoDate(from) && from >= today ? from : undefined} onChange={(e) => setOptionUntil(e.target.value)} /></div>
+          </div>
           {otherErrors.length > 0 && <p className="notice danger" role="alert">{[...new Set(otherErrors)].join(' · ')}</p>}
-        </aside>
-      </div>
+        </section>
+      )}
       </form>
     </Dialog>
   );
