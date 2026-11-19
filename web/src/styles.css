@@ -1071,22 +1071,6 @@ a.linkcard.attention b { color: var(--warn); }
 .nbkinds button b { font-size: 18px; } .nbkinds button span { color: var(--ink-2); font-size: 14px; }
 .nbkinds button:hover, .nbkinds button.on { border-color: var(--accent); background: var(--accent-soft); }
 .nbhint { margin: -8px 0 10px; }
-.nbplanbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 6px; }
-.nbplanwrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; }
-table.nbplan { border-collapse: collapse; width: 100%; min-width: 760px; table-layout: fixed; font-size: 12px; }
-table.nbplan th, table.nbplan td { border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); padding: 0; text-align: center; background: none; }
-table.nbplan thead th { padding: 4px 2px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
-table.nbplan thead th.we { background: var(--surface-2); } table.nbplan thead th.today { color: var(--accent-text); }
-table.nbplan th.nbroom { width: 110px; text-align: left; padding: 4px 8px; border-left: 0; white-space: nowrap; overflow: hidden; }
-table.nbplan th.nbroom b { margin-right: 4px; } table.nbplan th.nbroom small { color: var(--ink-2); font-weight: 400; }
-table.nbplan tbody th.nbroom { display: table-cell; }
-table.nbplan td button { width: 100%; height: 38px; border: 0; background: none; color: inherit; font: inherit; font-size: 11px; cursor: pointer; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding: 0 2px; }
-table.nbplan td:not(.sel) button:hover:not(:disabled) { background: var(--accent-soft); }
-table.nbplan td.busy button { background: var(--surface-2); color: var(--ink-2); cursor: not-allowed; }
-table.nbplan td.blk button { background: repeating-linear-gradient(45deg, var(--surface-2), var(--surface-2) 4px, transparent 4px, transparent 8px); cursor: not-allowed; }
-table.nbplan td.past button { opacity: .4; cursor: default; }
-table.nbplan td.sel button { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
-table.nbplan tr.picked th.nbroom { color: var(--accent-text); }
 .nbmore { margin: 12px 0 6px; } .nbmore summary { cursor: pointer; font-weight: 600; }
 @media (max-width: 700px) { .nbkinds { grid-template-columns: 1fr; } }
 /* Anfragen-Ordner */
@@ -1097,4 +1081,16 @@ table.nbplan tr.picked th.nbroom { color: var(--accent-text); }
 .reqopt { font-size: 13px; font-weight: 600; color: var(--ink-2); } .reqopt.late { color: var(--danger); } .reqopt.due { color: var(--warn); }
 .reqdates { margin: 6px 0; } .reqnotes { margin: 6px 0; padding: 8px 10px; background: var(--surface-2); border-radius: 6px; white-space: pre-wrap; }
 .reqcontact { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
-table.nbplan th.nbroom { position: sticky; left: 0; z-index: 1; background: var(--surface); }
+/* Neue Reservierung: Zimmer grün = frei, rot = belegt, blau = gewählt */
+.nbrooms .roomtile.free { background: var(--ok-soft); border-color: var(--ok); }
+.nbrooms .roomtile.free .rt-price { color: var(--ok); font-weight: 600; }
+.nbrooms .roomtile.taken { opacity: 1; background: var(--danger-soft); border-color: var(--danger); }
+.nbrooms .roomtile.taken b, .nbrooms .roomtile.taken small, .nbrooms .roomtile.taken .rt-price { color: var(--danger); }
+.nbrooms .roomtile.on { background: var(--accent-soft); border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+.nbrooms .roomtile.on .rt-price { color: var(--accent-text); }
+.nbrooms .roomtile.on .rt-check { background: var(--accent); }
+.nblegend { display: flex; gap: 12px; font-size: 13px; }
+.nblegend span::before { content: ''; display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; border: 1px solid; }
+.nblegend .lg-free::before { background: var(--ok-soft); border-color: var(--ok); }
+.nblegend .lg-taken::before { background: var(--danger-soft); border-color: var(--danger); }
+.nblegend .lg-on::before { background: var(--accent-soft); border-color: var(--accent); }

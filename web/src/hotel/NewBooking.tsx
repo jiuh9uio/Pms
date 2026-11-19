@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  PAYMENT_METHODS, SOURCES, addDays, bookingCreateInput, diffDays, formatMoney, isIsoDate, parseMoney, personAdjust, todayBerlin, weekdayOf,
-  type CalendarDto, type CategoryDto, type FreeRoomDto, type GuestDto, type RoomDto, type ServiceDto,
+  PAYMENT_METHODS, SOURCES, addDays, bookingCreateInput, diffDays, formatMoney, isIsoDate, parseMoney, personAdjust, todayBerlin,
+  type CategoryDto, type FreeRoomDto, type GuestDto, type RoomDto, type ServiceDto,
 } from '../../../src/shared/hotel.js';
 import type { HotelSettings } from '../../../src/shared/schemas.js';
 import { api } from '../api.ts';
 import { useData, type NewPreset } from '../data.tsx';
 import { Button, Dialog, Field, useLoad, useSubmit, useToast } from '../ui.tsx';
-import { GuestFields, WD, deDate, deShort, toDraft, type GuestDraft } from './common.tsx';
+import { GuestFields, deDate, toDraft, type GuestDraft } from './common.tsx';
 import { CompanySelect } from './CompanySelect.tsx';
 import { catColorIndex, groupByFloor } from './roomgroups.ts';
 
@@ -15,7 +15,7 @@ interface Pick { adults: string; children: string; price: string }
 
 /**
  * Neue Reservierung Schritt für Schritt:
- * 1 Art: feste Reservierung oder Anfrage → 2 Zimmer im Belegungsplan antippen (Anreisetag, dann letzte Nacht) →
+ * 1 Art: feste Reservierung oder Anfrage → 2 Zeitraum wählen und Zimmer antippen (nach Etagen; grün = frei, rot = belegt) →
  * 3 Gast (bei Anfragen mit Telefon oder E-Mail für Rückruf/Bestätigung) → 4 Fertig: Extras, Übersicht, ein Knopf.
  * Anfragen landen im Anfragen-Ordner (vorläufig, Zimmer bis „Option bis“ freigehalten).
  */
@@ -40,10 +40,6 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
   // Schritt für Schritt: 1 Art · 2 Zimmer (Plan) · 3 Gast · 4 Fertig
   const [step, setStep] = useState(1);
   const [kind, setKind] = useState<'confirmed' | 'tentative' | null>(null);
-  /** Plan: erster Tag der angezeigten zwei Wochen; pending = Anreise angetippt, letzte Nacht noch offen */
-  const [planStart, setPlanStart] = useState(() => addDays(preset.from ?? todayBerlin(), -1) < todayBerlin() ? todayBerlin() : addDays(preset.from ?? todayBerlin(), -1));
-  const [pending, setPending] = useState(false);
-  const [planMsg, setPlanMsg] = useState('');
 
   const valid = isIsoDate(from) && isIsoDate(to) && from < to;
   const nights = valid ? diffDays(from, to) : 0;
@@ -113,8 +109,7 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
     if (keys.some((k) => k.startsWith('guest'))) setStep(3);
     else if (keys.some((k) => k.startsWith('rooms'))) setStep(2);
   }, [f.errors]);
-  const PLAN_DAYS = 14;
-  const plan = useLoad(() => api<CalendarDto>('GET', `/calendar?from=${planStart}&days=${PLAN_DAYS}`), [planStart]);
+
   const payload = (status: 'confirmed' | 'tentative') => ({
     ...(guest ? { guestId: guest.id } : draft.lastName.trim() ? { guest: draft } : {}),
     ...meta, breakfast, ...(companyId ? { companyId } : {}), ...(status === 'tentative' ? { optionUntil: option } : {}),
@@ -136,46 +131,20 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
   const phone = guest ? guest.phone ?? '' : draft.phone;
   const email = guest ? guest.email ?? '' : draft.email;
   const contactOk = kind !== 'tentative' || !!(phone?.trim() || email?.trim());
-  const roomsOk = valid && selected.length > 0 && !pending;
+  const roomsOk = valid && selected.length > 0;
   /** bis zu welchem Schritt man vorspringen darf */
   const reachable = !kind ? 1 : !roomsOk ? 2 : !hasGuest || !contactOk ? 3 : 4;
   const STEPS = ['Art', 'Zimmer', 'Gast', 'Fertig'];
   const blockReason = step === 1 && !kind ? 'Bitte „Feste Reservierung“ oder „Anfrage“ wählen'
-    : step === 2 && !roomsOk ? (pending ? 'Bitte noch die letzte Nacht im Plan antippen' : 'Bitte im Plan ein freies Zimmer antippen')
+    : step === 2 && !roomsOk ? (!valid ? 'Bitte Anreise und Abreise wählen' : 'Bitte ein grünes (freies) Zimmer antippen')
     : step === 3 && !hasGuest ? 'Bitte einen Gast wählen oder mindestens den Nachnamen eintragen'
     : step === 3 && !contactOk ? 'Für den Rückruf bzw. die Bestätigung bitte Telefon oder E-Mail eintragen' : '';
   const next = () => { if (!blockReason && step < 4) setStep(step + 1); };
   const sourceAndPay = [meta.source, meta.paymentMethod ? `Zahlung: ${meta.paymentMethod}` : 'Zahlung offen'].join(' · ');
   const isTentative = kind === 'tentative';
 
-  // ---------- Plan ----------
-  const planDays = Array.from({ length: PLAN_DAYS }, (_, i) => addDays(planStart, i));
-  const busyOn = (roomId: string, d: string) => plan.data?.entries.find((e) => e.roomId === roomId && e.from <= d && d < e.to);
-  const freeRange = (roomId: string, a: string, b: string) => { for (let d = a; d < b; d = addDays(d, 1)) if (busyOn(roomId, d)) return d; return null; };
-  const roomOf = (id: string) => base.data?.rooms.find((r) => r.id === id);
-  const pickRoom = (id: string) => { const cat = base.data?.cats.find((c) => c.id === roomOf(id)?.categoryId); return { adults: String(cat?.stdOccupancy ?? 2), children: '0', price: '' }; };
-  const clickCell = (roomId: string, d: string) => {
-    setPlanMsg(''); setDropped([]);
-    if (d < today) return;
-    const on = !!picks[roomId];
-    // Ende festlegen: gleiches Zimmer, Tag ab Anreise
-    if (pending && on && d >= from) {
-      const clash = freeRange(roomId, from, addDays(d, 1));
-      if (clash) { setPlanMsg(`Zimmer ${roomOf(roomId)?.number} ist am ${deDate(clash)} belegt – bitte eine frühere letzte Nacht wählen.`); return; }
-      setTo(addDays(d, 1)); setPending(false); return;
-    }
-    // weiteres Zimmer für denselben Zeitraum
-    if (!pending && selected.length > 0 && d >= from && d < to) {
-      if (on) { setPicks((cur) => { const n = { ...cur }; delete n[roomId]; return n; }); return; }
-      const clash = freeRange(roomId, from, to);
-      if (clash) { setPlanMsg(`Zimmer ${roomOf(roomId)?.number} ist am ${deDate(clash)} belegt und passt nicht in den Zeitraum.`); return; }
-      setPicks((cur) => ({ ...cur, [roomId]: pickRoom(roomId) })); return;
-    }
-    // neu anfangen: Anreise in diesem Zimmer
-    if (busyOn(roomId, d)) return;
-    setFrom(d); setTo(addDays(d, 1)); setPicks({ [roomId]: pickRoom(roomId) }); setPending(true);
-  };
-  const inSel = (roomId: string, d: string) => !!picks[roomId] && d >= from && d < to;
+  const setDates = (a: string, n: number) => { setFrom(a); setTo(addDays(a, n)); };
+  const chip = (label: string, on: boolean, click: () => void) => <button type="button" className={`nbchip${on ? ' on' : ''}`} aria-pressed={on} onClick={click}>{label}</button>;
 
   return (
     <Dialog title={kind === 'tentative' ? 'Neue Anfrage' : kind === 'confirmed' ? 'Neue feste Reservierung' : 'Neue Reservierung'} onClose={onClose} size="xl"
@@ -215,46 +184,51 @@ export function NewBooking({ preset, onClose }: { preset: NewPreset; onClose: ()
       )}
 
       {step === 2 && (<>
-        <div className="nbplanbar">
-          <div className="stepper">
-            <Button onClick={() => setPlanStart(addDays(planStart, -7))} aria-label="Eine Woche zurück">‹</Button>
-            <Button onClick={() => setPlanStart(today)}>Heute</Button>
-            <Button onClick={() => setPlanStart(addDays(planStart, 7))} aria-label="Eine Woche weiter">›</Button>
+        <section className="nbstep">
+          <h3 className="first">Wann?</h3>
+          <div className="formgrid cols3 nb-dates">
+            <Field label="Anreise"><input type="date" value={from} min={today} onChange={(e) => { setFrom(e.target.value); if (isIsoDate(e.target.value) && e.target.value >= to) setTo(addDays(e.target.value, 1)); }} /></Field>
+            <Field label="Abreise" error={!valid ? 'Muss nach der Anreise liegen' : undefined} hint={valid ? `${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}` : undefined}><input type="date" value={to} min={isIsoDate(from) ? addDays(from, 1) : undefined} onChange={(e) => setTo(e.target.value)} /></Field>
           </div>
-          <label className="inlinelabel">Anreise <input type="date" value={from} min={today} onChange={(e) => { const v = e.target.value; if (!isIsoDate(v)) return; setFrom(v); if (v >= to) setTo(addDays(v, 1)); setPending(false); if (v < planStart || v >= addDays(planStart, PLAN_DAYS)) setPlanStart(v); }} /></label>
-          <label className="inlinelabel">Abreise <input type="date" value={to} min={isIsoDate(from) ? addDays(from, 1) : undefined} onChange={(e) => { if (isIsoDate(e.target.value)) { setTo(e.target.value); setPending(false); } }} /></label>
-          {valid && <span className="muted small">{nights} {nights === 1 ? 'Nacht' : 'Nächte'}</span>}
-        </div>
-        <p className="muted small">Im Plan auf den <b>Anreisetag</b> im gewünschten Zimmer tippen, dann auf die <b>letzte Nacht</b>. Weitere Zimmer für denselben Zeitraum: in deren Zeile innerhalb des Zeitraums antippen. Grau = belegt.</p>
-        {planMsg && <p className="notice warn">{planMsg}</p>}
-        {dropped.length > 0 && <p className="notice warn">Im neuen Zeitraum belegt und deshalb abgewählt: Zimmer {dropped.join(', ')}.</p>}
-        {plan.error && <p className="notice danger">{plan.error}</p>}
-        <div className="nbplanwrap">
-          <table className="nbplan">
-            <thead><tr><th className="nbroom">Zimmer</th>{planDays.map((d) => <th key={d} className={[d === today ? 'today' : '', weekdayOf(d) === 0 || weekdayOf(d) === 6 ? 'we' : ''].join(' ')}><small>{WD[weekdayOf(d)]}</small><br />{deShort(d)}</th>)}</tr></thead>
-            <tbody>
-              {groupByFloor(base.data?.rooms ?? []).flatMap((g) => g.rooms).map((room) => (
-                <tr key={room.id} className={picks[room.id] ? 'picked' : ''}>
-                  <th className={`nbroom cat-${catColorIndex(base.data?.cats, room.categoryId)}`}><i className="catdot" /><b>{room.number}</b><small>{room.categoryName}</small></th>
-                  {planDays.map((d) => {
-                    const busy = busyOn(room.id, d);
-                    const sel = inSel(room.id, d);
-                    const past = d < today;
-                    const label = busy ? (busy.kind === 'block' ? 'gesperrt' : busy.guestName ?? 'belegt') : sel ? (d === from ? 'Anreise' : '') : '';
-                    return (
-                      <td key={d} className={[busy ? (busy.kind === 'block' ? 'blk' : 'busy') : '', sel ? 'sel' : '', past ? 'past' : ''].join(' ')}>
-                        <button type="button" disabled={(!!busy && !sel) || past} title={busy ? `${room.number}: ${busy.kind === 'block' ? 'gesperrt' : `belegt (${busy.guestName ?? ''})`}` : `Zimmer ${room.number}, ${deDate(d)}`}
-                          aria-label={`Zimmer ${room.number} ${deDate(d)}${busy ? ' belegt' : sel ? ' gewählt' : ' frei'}`} onClick={() => clickCell(room.id, d)}>{label}</button>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {selected.length > 0 && !pending && (<>
-          <h3>Gewählte Zimmer · {deDate(from)} – {deDate(to)}</h3>
+          <div className="nbchips"><span className="muted small">Anreise:</span>
+            {chip('heute', from === today, () => setDates(today, Math.max(1, nights)))}
+            {chip('morgen', from === addDays(today, 1), () => setDates(addDays(today, 1), Math.max(1, nights)))}
+            <span className="muted small">Dauer:</span>
+            {[1, 2, 3, 7].map((n) => chip(`${n} ${n === 1 ? 'Nacht' : 'Nächte'}`, valid && nights === n, () => isIsoDate(from) && setTo(addDays(from, n))))}
+          </div>
+        </section>
+        <section className="roomboard nbrooms" aria-label="Zimmer wählen">
+          <div className="roomboard-head">
+            <h3 className="first">Welches Zimmer?{valid && free.data ? <small className="inl"> · {deDate(from)} – {deDate(to)} · {free.data.length} frei</small> : null}</h3>
+            <div className="nblegend"><span className="lg-free">frei</span><span className="lg-taken">belegt</span><span className="lg-on">gewählt</span></div>
+          </div>
+          {free.error && <p className="notice danger">{free.error}</p>}
+          {dropped.length > 0 && <p className="notice warn">Im neuen Zeitraum belegt und deshalb abgewählt: Zimmer {dropped.join(', ')}.</p>}
+          {valid && free.data?.length === 0 && <p className="notice warn">In diesem Zeitraum ist kein Zimmer frei.</p>}
+          {groupByFloor(base.data?.rooms ?? []).map((g) => (
+            <div key={g.floor} className="floorrow">
+              <div className="floorlabel">{g.label}</div>
+              <div className="roomtiles">
+                {g.rooms.map((room) => {
+                  const fr = free.data?.find((x) => x.id === room.id);
+                  const on = !!picks[room.id];
+                  const loading = valid && !free.data;
+                  return (
+                    <button key={room.id} type="button" disabled={!fr} aria-pressed={on} onClick={() => fr && toggle(fr)}
+                      className={`roomtile cat-${catColorIndex(base.data?.cats, room.categoryId)}${on ? ' on' : ''}${loading ? '' : fr ? ' free' : ' taken'}`}
+                      title={fr ? `${room.categoryName} – frei, ${formatMoney(fr.quoteCents)} für ${nights} ${nights === 1 ? 'Nacht' : 'Nächte'}` : `${room.categoryName} – im Zeitraum belegt`}>
+                      <b>{room.number}</b><small>{room.categoryName}</small>
+                      <span className="rt-price">{!valid ? '' : loading ? '…' : fr ? `frei · ${formatMoney(Math.round(fr.quoteCents / Math.max(1, nights)))}/Nacht` : 'belegt'}</span>
+                      {on && <i className="rt-check" aria-hidden>✓</i>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </section>
+        {selected.length > 0 && (<>
+          <h3>Gewählte Zimmer</h3>
           <div className="roompick">
             {selected.map((r) => {
               const p = picks[r.id]!;

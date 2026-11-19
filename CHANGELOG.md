@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.97.0
+
+- **Neue Reservierung, Schritt „Zimmer“:** wieder Anreise/Abreise (mit Schnellwahl) und darunter die Zimmer nach Etagen – jetzt farbig: **grün = frei**, **rot = belegt**, **blau mit Haken = gewählt**. Der Belegungsplan im Schritt ist wieder herausgenommen.
+
 ## 1.96.0
 
 - **Neue Reservierung nach Ihrem Ablauf:** ① Zuerst wählen: **Feste Reservierung** oder **Anfrage**. ② Dann öffnet sich der **Belegungsplan** (2 Wochen, blättern mit ‹ ›): im gewünschten Zimmer auf den Anreisetag tippen, dann auf die letzte Nacht – belegte Tage sind grau. Weitere Zimmer für denselben Zeitraum in deren Zeile antippen. ③ Gast suchen oder eintragen. ④ Fertig: Übersicht, Extras (Frühstück, Quelle, Zahlung, Notiz, Firma) und ein Knopf – „Fest buchen“ bzw. „Anfrage speichern“.
