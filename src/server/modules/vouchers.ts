@@ -1,6 +1,6 @@
 import { desc, eq, sql } from 'drizzle-orm';
 import {
-  VOUCHER_NUMBERING_DEFAULT, type TextPos, type VoucherDesignDto, type VoucherDto, type VoucherInput, type VoucherDesignDetailDto, type VoucherLayout, type VoucherNumbering, type VoucherOverviewDto, type VoucherStatus,
+  VOUCHER_NUMBERING_DEFAULT, yearlyNumber, type TextPos, type VoucherDesignDto, type VoucherDto, type VoucherInput, type VoucherDesignDetailDto, type VoucherLayout, type VoucherNumbering, type VoucherOverviewDto, type VoucherStatus,
 } from '../../shared/vouchers.js';
 import type { Db, Exec } from '../db/client.js';
 import { invoices, settings, voucherDesigns, vouchers } from '../db/schema.js';
@@ -32,9 +32,16 @@ export async function saveNumbering(db: Db, actor: Actor, v: VoucherNumbering) {
 }
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** nächste freie Nummer: höchste vergebene Zahl mit diesem Kürzel + 1, mindestens der Startwert */
-export async function nextNumber(db: Exec): Promise<string> {
+export async function nextNumber(db: Exec, date = new Date().toISOString().slice(0, 10)): Promise<string> {
   const n = await getNumbering(db);
   const rows = await db.select({ number: vouchers.number }).from(vouchers);
+  if (n.format === 'yearly') {
+    // laufende Nummer je Jahr: „7/26“ – höchste vergebene Nummer dieses Jahres + 1
+    const year = Number(date.slice(0, 4));
+    const re = new RegExp(`^(\\d+)/${String(year % 100).padStart(2, '0')}$`);
+    const max = rows.reduce((m, r) => { const x = re.exec(r.number.trim()); return x ? Math.max(m, Number(x[1])) : m; }, 0);
+    return yearlyNumber(Math.max(n.yearStartYear === year ? n.yearStart : 1, max + 1), year);
+  }
   const re = new RegExp(`^${escapeRe(n.prefix)}(\\d+)$`);
   const max = rows.reduce((m, r) => { const x = re.exec(r.number); return x ? Math.max(m, Number(x[1])) : m; }, 0);
   return `${n.prefix}${String(Math.max(n.start, max + 1)).padStart(n.digits, '0')}`;
@@ -64,7 +71,7 @@ export async function overview(db: Exec, today: string): Promise<VoucherOverview
     cashiers: cashiers.map((c) => c.cashier),
     vouchers: rows.map((r) => dto(r.v, r.invNumber !== undefined && r.v.invoiceId ? { number: r.invNumber, status: r.invStatus ?? '' } : null)),
     designs: designs.map((d): VoucherDesignDto => ({ id: d.id, name: d.name, textPos: d.textPos as TextPos, createdAt: d.createdAt.toISOString(), hasImage: d.hasImage, hasLayout: d.hasLayout })),
-    numbering, nextNumber: await nextNumber(db), suggestedValidUntil: suggestValidUntil(today, numbering.validYears),
+    numbering, nextNumber: await nextNumber(db, today), suggestedValidUntil: suggestValidUntil(today, numbering.validYears),
   };
 }
 

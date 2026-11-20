@@ -18,6 +18,11 @@ export const TEXT_POS_LABEL: Record<TextPos, string> = { right: 'Text rechts', l
 
 /** Nummernkreis: Kürzel + fortlaufende Zahl; nächste Nummer = höchste vergebene + 1, mindestens Startwert */
 export const voucherNumberingInput = z.object({
+  /** yearly = laufende Nummer / Jahr (1/26, 2/26 … ab Januar wieder 1/27); prefix = Kürzel + fortlaufende Zahl */
+  format: z.enum(['yearly', 'prefix']).default('yearly'),
+  /** nur „yearly“: für dieses Jahr erst ab dieser Nummer zählen (z. B. wenn im Papierbuch schon Gutscheine stehen) */
+  yearStart: z.number().int().min(1).max(99_999).default(1),
+  yearStartYear: z.number().int().min(2000).max(2100).default(2026),
   prefix: text(12).regex(/^[A-Za-z0-9-_/]*$/, 'Nur Buchstaben, Ziffern, - _ /'),
   start: z.number('Bitte eine Zahl eingeben').int('Ganze Zahl').min(1, 'Mindestens 1').max(99_999_999),
   digits: z.number().int().min(1).max(8),
@@ -29,7 +34,9 @@ export const voucherNumberingInput = z.object({
   barcode: z.boolean().default(true),
 });
 export type VoucherNumbering = z.infer<typeof voucherNumberingInput>;
-export const VOUCHER_NUMBERING_DEFAULT: VoucherNumbering = { prefix: 'SH-', start: 1001, digits: 4, validYears: 3, postageCents: 0, barcode: true };
+export const VOUCHER_NUMBERING_DEFAULT: VoucherNumbering = { format: 'yearly', yearStart: 1, yearStartYear: 2026, prefix: 'SH-', start: 1001, digits: 4, validYears: 3, postageCents: 0, barcode: true };
+/** Beispiel bzw. Nummer im Jahresformat: 7/26 */
+export const yearlyNumber = (n: number, year: number) => `${n}/${String(year % 100).padStart(2, '0')}`;
 
 export const voucherInput = z.object({
   number: required(40),

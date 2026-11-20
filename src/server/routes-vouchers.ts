@@ -21,6 +21,7 @@ export function registerVoucherRoutes(api: FastifyInstance, { db, requireUser, r
   const admin = { preHandler: requireAdmin };
 
   api.get('/vouchers', user, () => vouchers.overview(db, todayBerlin()));
+  api.get('/vouchers/next-number', user, async (req) => ({ number: await vouchers.nextNumber(db, z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).parse(req.query).date) }));
   api.post('/vouchers', user, (req) => vouchers.create(db, actor(req), V.voucherInput.parse(req.body)));
   api.put('/vouchers/:id', user, (req) => vouchers.update(db, actor(req), idOf(req), V.voucherInput.parse(req.body), versionOf(req)));
   api.post('/vouchers/:id/status', user, (req) => { const v = V.voucherStatusInput.parse(req.body); return vouchers.setStatus(db, actor(req), idOf(req), v.status, v.version); });

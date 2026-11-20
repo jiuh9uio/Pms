@@ -483,7 +483,7 @@ describe('Einkauf: alte Protokolleinträge aus Version 1.92.0', () => {
 
 describe('Gutscheine', () => {
   it('vergibt Nummern, verschlüsselt den PIN, erzeugt PDF, Rechnungsentwurf mit Porto und storniert ohne Löschen', async () => {
-    await ok('PUT', '/voucher-numbering', admin, { prefix: 'SH-', start: 1001, digits: 4, validYears: 3, postageCents: 250 });
+    await ok('PUT', '/voucher-numbering', admin, { format: 'prefix', prefix: 'SH-', start: 1001, digits: 4, validYears: 3, postageCents: 250 });
     let o = await ok('GET', '/vouchers', admin);
     expect(o.nextNumber).toBe('SH-1001');
     expect(o.suggestedValidUntil).toBe(`${Number(today.slice(0, 4)) + 3}-12-31`);
@@ -604,5 +604,18 @@ describe('Gutscheinbuch: Kassennummer', () => {
     await ok('POST', '/vouchers', admin, { ...base, number: o.nextNumber, posCardNo: 'K-DOPPELT' });
     const r = await call('POST', '/vouchers', admin, { ...base, number: (await ok('GET', '/vouchers', admin)).nextNumber, posCardNo: 'k-doppelt' });
     expect(r.json().error.fields.posCardNo).toMatch(/schon bei Gutschein/);
+  });
+});
+
+describe('Gutscheinnummer Nummer/Jahr', () => {
+  it('zählt je Jahr ab 1 (bzw. ab Startnummer) und beginnt im neuen Jahr wieder bei 1', async () => {
+    const y = Number(today.slice(0, 4)), yy = String(y % 100).padStart(2, '0'), ny = String((y + 1) % 100).padStart(2, '0');
+    await ok('PUT', '/voucher-numbering', admin, { format: 'yearly', yearStart: 38, yearStartYear: y, prefix: '', start: 1, digits: 1, validYears: 3, postageCents: 0 });
+    expect((await ok('GET', '/vouchers', admin)).nextNumber).toBe(`38/${yy}`);
+    const base = { pin: '', posCardNo: '', valueCents: 1000, issuedOn: today, validUntil: '', buyerName: '', buyerCompany: '', buyerStreet: '', buyerZip: '', buyerCity: '', buyerCountry: '', buyerEmail: '', recipientName: '', message: '', designId: '', note: '', payMethod: 'Bar', cashier: '' };
+    await ok('POST', '/vouchers', admin, { ...base, number: `38/${yy}` });
+    expect((await ok('GET', '/vouchers', admin)).nextNumber).toBe(`39/${yy}`);
+    expect((await ok('GET', `/vouchers/next-number?date=${y + 1}-01-05`, admin)).number).toBe(`1/${ny}`);
+    await ok('PUT', '/voucher-numbering', admin, { format: 'prefix', prefix: 'SH-', start: 1001, digits: 4, validYears: 3, postageCents: 0 });
   });
 });

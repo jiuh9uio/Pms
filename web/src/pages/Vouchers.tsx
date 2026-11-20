@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { formatMoney, moneyInput, parseMoney, todayBerlin } from '../../../src/shared/hotel.js';
 import {
-  PAY_METHODS, TEXT_POS, TEXT_POS_LABEL, VOUCHER_STATUS_LABEL, voucherInput, voucherInvoiceInput, voucherNumberingInput,
+  yearlyNumber, PAY_METHODS, TEXT_POS, TEXT_POS_LABEL, VOUCHER_STATUS_LABEL, voucherInput, voucherInvoiceInput, voucherNumberingInput,
   type TextPos, type VoucherDto, type VoucherOverviewDto,
 } from '../../../src/shared/vouchers.js';
 import { api } from '../api.ts';
@@ -94,6 +94,7 @@ function VoucherDialog({ voucher: v, data, isAdmin, onClose, onChanged }: { vouc
   const today = todayBerlin();
   const { user } = useAuth();
   const [more, setMore] = useState(!!v);
+  const [numberTouched, setNumberTouched] = useState(false);
   const [f, setF] = useState<Form>(() => ({
     payMethod: v?.payMethod ?? 'Bar', cashier: v ? v.cashier : user.name,
     number: v?.number ?? data.nextNumber, pin: '', posCardNo: v?.posCardNo ?? '', value: v ? moneyInput(v.valueCents) : '',
@@ -153,13 +154,18 @@ function VoucherDialog({ voucher: v, data, isAdmin, onClose, onChanged }: { vouc
       {v?.status === 'redeemed' && <p className="notice">Als eingelöst markiert.</p>}
       <form className="formgrid" onSubmit={(e) => { e.preventDefault(); save(); }} noValidate>
         <h3 className="wide first">Eintrag ins Gutscheinbuch</h3>
-        <Field label="Gutscheinnummer intern" error={s.errors.number} hint={v ? undefined : 'wird automatisch weitergezählt'}><input value={f.number} onChange={set('number')} disabled={locked} /></Field>
+        <Field label="Gutscheinnummer intern" error={s.errors.number} hint={v ? undefined : 'wird automatisch weitergezählt'}><input value={f.number} onChange={(e) => { setNumberTouched(true); set('number')(e); }} disabled={locked} /></Field>
         <Field label="Kassennummer" error={s.errors.posCardNo} hint="Nummer der Geschenkkarte aus der Kasse"><input value={f.posCardNo} onChange={set('posCardNo')} disabled={locked} autoFocus={!v} /></Field>
         <Field label="Wert" error={s.errors.valueCents}><span className="moneyin"><input inputMode="decimal" value={f.value} onChange={set('value')} placeholder="50,00" disabled={locked} /><span>€</span></span></Field>
         <Field label="Bezahlt mit" error={s.errors.payMethod}><select value={PAY_METHODS.includes(f.payMethod) || !f.payMethod ? f.payMethod : 'sonstiges'} onChange={set('payMethod')} disabled={locked}>{!v?.payMethod && v && <option value="">–</option>}{PAY_METHODS.map((m) => <option key={m}>{m}</option>)}</select></Field>
         <Field label="Kassiert von" error={s.errors.cashier}><input value={f.cashier} list="vc-cashiers" onChange={set('cashier')} disabled={locked} /></Field>
         <datalist id="vc-cashiers">{data.cashiers.map((c) => <option key={c} value={c} />)}</datalist>
-        <Field label="Datum" error={s.errors.issuedOn}><input type="date" value={f.issuedOn} onChange={set('issuedOn')} disabled={locked} /></Field>
+        <Field label="Datum" error={s.errors.issuedOn}><input type="date" value={f.issuedOn} disabled={locked} onChange={(e) => {
+          const d = e.target.value; const yearChanged = d.slice(0, 4) !== f.issuedOn.slice(0, 4);
+          setF({ ...f, issuedOn: d });
+          // anderes Jahr: Nummer im Jahresformat neu vorschlagen (z. B. Nachtrag aus dem Vorjahr)
+          if (!v && !numberTouched && yearChanged && /^\d{4}-\d{2}-\d{2}$/.test(d)) void api<{ number: string }>('GET', `/vouchers/next-number?date=${d}`).then((r) => setF((cur) => ({ ...cur, number: r.number }))).catch(() => {});
+        }} /></Field>
         {v?.status === 'redeemed' && v.redeemedAt && <p className="wide muted small">Eingelöst am {deDate(v.redeemedAt.slice(0, 10))}{v.redeemedBy ? ` – eingetragen von ${v.redeemedBy}` : ''}.</p>}
         {!v && <label className="check wide"><input type="checkbox" checked={inv.create} onChange={(e) => { setInv({ ...inv, create: e.target.checked }); if (e.target.checked) setMore(true); }} />
           <span>Rechnung gewünscht<small>z. B. für Firmen oder bei Postversand – dann entsteht ein Rechnungsentwurf (Gutschein 0 %, ggf. Versandkosten). Käufer bitte unten eintragen.</small></span></label>}
@@ -329,17 +335,27 @@ function Designs({ data, isAdmin, onChange }: { data: VoucherOverviewDto; isAdmi
 function NumberingCard({ data, onSaved }: { data: VoucherOverviewDto; onSaved: () => void }) {
   const toast = useToast();
   const n = data.numbering;
-  const [v, setV] = useState({ prefix: n.prefix, start: String(n.start), digits: String(n.digits), validYears: String(n.validYears), postage: n.postageCents ? moneyInput(n.postageCents) : '', barcode: n.barcode });
+  const [v, setV] = useState({ prefix: n.prefix, start: String(n.start), digits: String(n.digits), validYears: String(n.validYears), postage: n.postageCents ? moneyInput(n.postageCents) : '', barcode: n.barcode, format: n.format,
+    yearStart: String(n.yearStartYear === Number(todayBerlin().slice(0, 4)) ? n.yearStart : 1) });
+  const year = Number(todayBerlin().slice(0, 4));
   const s = useSubmit(voucherNumberingInput, async (d) => { await api('PUT', '/voucher-numbering', d); toast('Gespeichert'); onSaved(); });
   const example = `${v.prefix}${String(Number(v.start) || 1).padStart(Number(v.digits) || 1, '0')}`;
   return (
     <section className="card">
       <h2>Gutscheinnummern, Gültigkeit und Porto</h2>
-      <p className="muted small">Die nächste Nummer ist immer die höchste schon vergebene + 1 (mindestens der Startwert). Nächste Nummer zurzeit: <b>{data.nextNumber}</b>.</p>
-      <form className="formgrid" onSubmit={(e) => { e.preventDefault(); void s.submit({ prefix: v.prefix, start: Number(v.start), digits: Number(v.digits), validYears: Number(v.validYears), postageCents: v.postage.trim() === '' ? 0 : parseMoney(v.postage), barcode: v.barcode }); }} noValidate>
+      <p className="muted small">Die nächste Nummer ist immer die höchste schon vergebene + 1. Nächste Nummer zurzeit: <b>{data.nextNumber}</b>.</p>
+      <form className="formgrid" onSubmit={(e) => { e.preventDefault(); void s.submit({ format: v.format, yearStart: Number(v.yearStart) || 1, yearStartYear: year, prefix: v.prefix, start: Number(v.start), digits: Number(v.digits), validYears: Number(v.validYears), postageCents: v.postage.trim() === '' ? 0 : parseMoney(v.postage), barcode: v.barcode }); }} noValidate>
+        <div className="wide vc-ship">
+          <label className="check"><input type="radio" name="fmt" checked={v.format === 'yearly'} onChange={() => setV({ ...v, format: 'yearly' })} /><span>Nummer / Jahr<small>{yearlyNumber(1, year)}, {yearlyNumber(2, year)}, {yearlyNumber(3, year)} … – ab Januar automatisch wieder {yearlyNumber(1, year + 1)}</small></span></label>
+          <label className="check"><input type="radio" name="fmt" checked={v.format === 'prefix'} onChange={() => setV({ ...v, format: 'prefix' })} /><span>Kürzel + fortlaufende Zahl<small>z. B. SH-1001, SH-1002 … über alle Jahre</small></span></label>
+        </div>
+        {v.format === 'yearly' ? (
+          <Field label={`In ${year} ab Nummer`} error={s.errors.yearStart} hint={`falls im Papierbuch für ${year} schon Gutscheine stehen – z. B. 38, dann geht es mit ${yearlyNumber(38, year)} weiter`}><input inputMode="numeric" value={v.yearStart} onChange={(e) => setV({ ...v, yearStart: e.target.value })} /></Field>
+        ) : <>
         <Field label="Kürzel" error={s.errors.prefix} hint="z. B. SH- (darf leer sein)"><input value={v.prefix} onChange={(e) => setV({ ...v, prefix: e.target.value })} /></Field>
         <Field label="Startwert" error={s.errors.start} hint={`Beispiel: ${example}`}><input inputMode="numeric" value={v.start} onChange={(e) => setV({ ...v, start: e.target.value })} /></Field>
         <Field label="Stellen" error={s.errors.digits} hint="mit führenden Nullen auffüllen"><select value={v.digits} onChange={(e) => setV({ ...v, digits: e.target.value })}>{[1, 2, 3, 4, 5, 6].map((d) => <option key={d} value={d}>{d}</option>)}</select></Field>
+        </>}
         <Field label="Gültigkeit vorschlagen" error={s.errors.validYears} hint="bis zum Jahresende nach … Jahren (eigene Vorgabe, rechtlich bitte selbst prüfen)">
           <select value={v.validYears} onChange={(e) => setV({ ...v, validYears: e.target.value })}><option value="0">kein Datum</option>{[1, 2, 3, 4, 5].map((y) => <option key={y} value={y}>{y} {y === 1 ? 'Jahr' : 'Jahre'}</option>)}</select>
         </Field>

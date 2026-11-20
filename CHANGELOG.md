@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.106.0
+
+- **Gutscheinnummer wie im Papierbuch: Nummer / Jahr** – 1/26, 2/26, 3/26 … und ab Januar automatisch wieder 1/27. Das ist jetzt die Vorgabe (Gutscheine → Nummern & Porto). Falls im Papierbuch für dieses Jahr schon Gutscheine stehen: „In 2026 ab Nummer“ eintragen (z. B. 38 → es geht mit 38/26 weiter).
+- Beim Nachtragen mit einem Datum aus einem anderen Jahr schlägt das Fenster die passende Nummer dieses Jahres vor.
+- Die bisherige Art „Kürzel + fortlaufende Zahl“ (SH-1001 …) bleibt wählbar.
+
 ## 1.105.0
 
 - **Digitales Gutscheinbuch:** Der Reiter heißt jetzt „Gutscheinbuch“ – eine Liste aller Gutscheine mit **Nr. · Datum · Kassennummer · Wert · Zahlung · kassiert von · für/Käufer · Status (mit „eingelöst am … von …“) · Rechnung**. Filter nach Status und Monat, Suche (auch nach Kassierer oder Zahlungsart), Summe der angezeigten Gutscheine und **„Liste als Excel (CSV)“** zum Ablegen oder für den Steuerberater.
