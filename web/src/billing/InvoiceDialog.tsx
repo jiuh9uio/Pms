@@ -4,6 +4,7 @@ import {
   type InvoiceDto, type PaymentDto,
 } from '../../../src/shared/billing.js';
 import { formatMoney, moneyInput, parseMoney, todayBerlin, type ServiceDto } from '../../../src/shared/hotel.js';
+import type { OfferItemDto } from '../../../src/shared/offers.js';
 import type { TaxRateDto } from '../../../src/shared/schemas.js';
 import { useNavigate } from 'react-router-dom';
 import { hasModule } from '../../../src/shared/schemas.js';
@@ -159,15 +160,18 @@ function Lines({ inv }: { inv: InvoiceDto }) {
   const draft = inv.status === 'draft';
   const base = useLoad(async () => {
     if (!draft) return null;
-    const [services, rates] = await Promise.all([api<ServiceDto[]>('GET', '/services'), api<TaxRateDto[]>('GET', '/tax-rates')]);
-    return { services: services.filter((s) => s.active), rates: rates.filter((r) => r.active) };
+    // eigene Artikel: die Leistungen aus dem Bereich Angebote (falls freigegeben) stehen hier ebenfalls zur Auswahl
+    const [services, rates, items] = await Promise.all([api<ServiceDto[]>('GET', '/services'), api<TaxRateDto[]>('GET', '/tax-rates'), api<OfferItemDto[]>('GET', '/offer-items').catch(() => [] as OfferItemDto[])]);
+    return { services: services.filter((s) => s.active), rates: rates.filter((r) => r.active), items: items.filter((i) => i.active) };
   }, [draft]);
   const [v, setV] = useState({ description: '', detail: '', quantity: '1', price: '', rate: '' });
   const f = useSubmit(invoiceLineInput, async (d) => { await api('POST', `/invoices/${inv.id}/lines`, d); setV({ description: '', detail: '', quantity: '1', price: '', rate: v.rate }); bump(); });
   const remove = async (lineId: string) => { try { await api('POST', `/invoice-lines/${lineId}/remove`); bump(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); } };
   const pickService = (sid: string) => {
     const s = base.data?.services.find((x) => x.id === sid);
-    if (s) setV({ ...v, description: s.name, price: moneyInput(s.priceCents), rate: String(s.taxRatePercent) });
+    if (s) { setV({ ...v, description: s.name, price: moneyInput(s.priceCents), rate: String(s.taxRatePercent) }); return; }
+    const it = base.data?.items.find((x) => x.id === sid);
+    if (it) setV({ ...v, description: it.name, detail: it.description, price: moneyInput(it.priceCents), rate: String(it.taxRatePercent) });
   };
   const defaultRate = v.rate || String(base.data?.rates.find((r) => r.defaultFor === 'services')?.ratePercent ?? 19);
   const errs = [...new Set(Object.values(f.errors))];
@@ -188,15 +192,18 @@ function Lines({ inv }: { inv: InvoiceDto }) {
           ))}</tbody>
         </table></div>
       )}
+      {draft && <p className="muted small">Eigene Position: Bezeichnung, Menge und Preis frei eintragen – oder einen gespeicherten Artikel übernehmen und anpassen.</p>}
       {draft && (
         <form className="addcharge" noValidate onSubmit={(e) => void f.submit({
           description: v.description, detail: v.detail, quantity: Number(v.quantity.replace(',', '.')), unitPriceCents: parseMoney(v.price), taxRatePercent: Number(defaultRate),
         }, e)}>
           <select value="" onChange={(e) => pickService(e.target.value)} aria-label="Leistung übernehmen">
-            <option value="">Leistung übernehmen …</option>
-            {base.data?.services.map((s) => <option key={s.id} value={s.id}>{s.name} ({formatMoney(s.priceCents)})</option>)}
+            <option value="">Artikel übernehmen …</option>
+            {!!base.data?.services.length && <optgroup label="Hotel-Leistungen">{base.data.services.map((s) => <option key={s.id} value={s.id}>{s.name} ({formatMoney(s.priceCents)})</option>)}</optgroup>}
+            {!!base.data?.items.length && <optgroup label="Eigene Artikel (Angebote → Leistungen)">{base.data.items.map((s) => <option key={s.id} value={s.id}>{s.name} ({formatMoney(s.priceCents)})</option>)}</optgroup>}
           </select>
-          <input placeholder="Bezeichnung" value={v.description} onChange={(e) => setV({ ...v, description: e.target.value })} aria-label="Bezeichnung" />
+          <input placeholder="Bezeichnung (frei)" value={v.description} onChange={(e) => setV({ ...v, description: e.target.value })} aria-label="Bezeichnung" />
+          <input placeholder="Beschreibung (optional)" value={v.detail} onChange={(e) => setV({ ...v, detail: e.target.value })} aria-label="Beschreibung" />
           <input className="short" placeholder="Menge" inputMode="decimal" value={v.quantity} onChange={(e) => setV({ ...v, quantity: e.target.value })} aria-label="Menge" />
           <input className="short" placeholder="Preis brutto" inputMode="decimal" value={v.price} onChange={(e) => setV({ ...v, price: e.target.value })} aria-label="Einzelpreis brutto" />
           <select className="short" value={defaultRate} onChange={(e) => setV({ ...v, rate: e.target.value })} aria-label="Steuersatz">

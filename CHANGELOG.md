@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.116.0
+
+- **Freie Rechnung und Kostenvoranschlag: eigene Artikel und eigene Positionen.** In der Auswahl „Artikel übernehmen …“ stehen jetzt neben den Hotel-Leistungen auch Ihre **eigenen Artikel** (die Leistungen aus Angebote → Leistungen) – mit Preis, Steuersatz und Beschreibung, alles danach anpassbar.
+- Für freie Positionen gibt es zusätzlich das Feld **„Beschreibung (optional)“** (zweite Zeile unter der Bezeichnung im PDF).
+- Versand per E-Mail als PDF gibt es bereits: beim Kostenvoranschlag „Kostenvoranschlag senden“, bei der ausgestellten Rechnung „Per E-Mail senden“.
+
 ## 1.115.0
 
 - **Rechnungen: freier Kostenvoranschlag.** Neben „Freie Rechnung“ gibt es **„Kostenvoranschlag“**: Empfänger und Positionen frei eintragen, als PDF mit der Überschrift „Kostenvoranschlag“ ansehen, drucken oder per E-Mail senden. Er bekommt eine **eigene Nummer** (KV-Jahr-Nr., z. B. KV-2026-0001), keine Rechnungsnummer, und ist keine Rechnung.
