@@ -10,6 +10,7 @@ import { inboxMails, restaurantTables, settings, tableReservations } from '../db
 import { clientKey } from '../lib/clientkey.js';
 import { AppError, conflict, notFound } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
+import { linkInboxMail, offerOfInboxMail } from './offerthread.js';
 import { bookingMailDraft, ready as mailReady, signature } from './hotelmail.js';
 import { decrypt, encrypt, sendMail } from './mail.js';
 import { getHotel } from './settings.js';
@@ -175,6 +176,8 @@ export async function fetchInbox(db: Db, actor: Actor | null): Promise<{ added: 
         uidValidity: got.uidValidity, uid: raw.uid, messageId: (p.messageId ?? '').slice(0, 300), fromName: (from?.name ?? '').slice(0, 200), fromAddr: (from?.address ?? '').slice(0, 200),
         subject, receivedAt: date, body, kind: ex.kind, extract: ex, ...(hidden ? { status: 'ignored' as const, handledBy: BY_RULE } : {}),
       }).onConflictDoNothing().returning({ id: inboxMails.id });
+      // Antwort auf ein Angebot (Kennzeichen „AN-Jahr-Nr.“ im Betreff oder Text) dem Verlauf zuordnen – ein Fehler dabei stört den Abruf nicht
+      if (rows[0]) await linkInboxMail(db, { id: rows[0].id, subject, body, fromName: from?.name ?? '', fromAddr: from?.address ?? '', receivedAt: date }).catch(() => false);
       added += rows.length;
       lastUid = Math.max(lastUid, raw.uid);
     }
@@ -236,7 +239,7 @@ export async function inboxCounts(db: Exec, f: { status: InboxStatus | 'all'; q:
 export async function getInboxMail(db: Exec, id: string): Promise<InboxMailDto> {
   const [r] = await db.select().from(inboxMails).where(eq(inboxMails.id, id));
   if (!r) throw notFound('E-Mail');
-  return dto(r, true);
+  return { ...dto(r, true), offer: await offerOfInboxMail(db, id) };
 }
 export async function updateInboxMail(db: Db, actor: Actor, id: string, v: { status?: InboxStatus; kind?: MailKind; linkKind?: 'booking' | 'table' | null; linkId?: string | null }) {
   const [before] = await db.select().from(inboxMails).where(eq(inboxMails.id, id));

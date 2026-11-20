@@ -131,6 +131,7 @@ function MailDetail({ id, onGone }: { id: string; onGone: () => void }) {
         {data.repliedAt && <p className="muted small">Beantwortet am {fmtDateTime(data.repliedAt)}{data.repliedBy && ` von ${data.repliedBy}`}.</p>}
         {mail && <MailDialog path={`/inbox/${id}/mail?template=${mail}`} title={mail === 'confirm' ? 'Bestätigung senden' : mail === 'decline' ? 'Absage senden' : 'Antworten'} onClose={() => setMail(null)}
           onSent={() => { if (mail !== 'reply' && data.status === 'new') void patch({ status: 'done' }); else { bump(); reload(); } }} />}
+        {data.offer && <p className="notice">Gehört zum Verlauf von <a href={`/angebote?angebot=${data.offer.id}`}>Angebot {data.offer.number}</a>.</p>}
         {data.linkKind && <p className="notice">Daraus angelegt: {data.linkKind === 'booking'
           ? <button type="button" className="linkbtn" onClick={() => data.linkId && openBooking(data.linkId)}>Zimmerreservierung öffnen</button> : 'eine Tischreservierung (im Modul Restaurant zu finden)'}{data.handledBy && ` · bearbeitet von ${data.handledBy}`}</p>}
       </section>

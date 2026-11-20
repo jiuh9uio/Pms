@@ -135,6 +135,20 @@ export interface OfferDto extends OfferListRow {
   /** Absprache am Tisch (falls das Angebot daraus entstand) */
   talk: OfferTalk | null;
 }
+/** Verlauf eines Angebots (wie ein Chat): gesendete und empfangene E-Mails, Absprache, Antworten, Annahme */
+export interface OfferTimelineEntry {
+  id: string; at: string; dir: 'out' | 'in' | 'event'; title: string; by: string; subject: string; text: string;
+  /** nur bei Antworten des Kunden: klingt nach Zusage/Absage – nur ein Hinweis, entschieden wird von Hand */
+  hint: 'accept' | 'decline' | null;
+  /** zugeordnete Posteingangs-Mail lässt sich wieder lösen */
+  removable: boolean;
+}
+export interface OfferTimeline {
+  /** Kennzeichen im Betreff, an dem Antworten erkannt werden */
+  code: string; entries: OfferTimelineEntry[];
+  /** E-Mails derselben Adresse im Posteingang, die noch keinem Angebot zugeordnet sind */
+  candidates: { inboxMailId: string; at: string; from: string; subject: string }[];
+}
 /** Öffentliche Ansicht über den Link (ohne interne Notizen) */
 export interface PublicOffer {
   hotelName: string; hotelPhone: string; number: string; title: string; customer: string; eventDate: string | null; eventEnd: string | null; persons: number;

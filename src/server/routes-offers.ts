@@ -8,6 +8,7 @@ import { AppError } from './lib/errors.js';
 import type { Actor } from './modules/audit.js';
 import * as deposits from './modules/deposits.js';
 import * as offers from './modules/offers.js';
+import * as thread from './modules/offerthread.js';
 import { guestBaseUrl } from './routes-hotel.js';
 
 interface Ctx { db: Db; requireUser: (req: FastifyRequest) => Promise<void>; requireAdmin: (req: FastifyRequest) => Promise<void>; actor: (req: FastifyRequest) => Actor; publicLimit: (req: FastifyRequest) => Promise<void> }
@@ -75,6 +76,10 @@ export function registerOfferRoutes(api: FastifyInstance, { db, requireUser, req
     return offers.readCatalog(db, idOf(req), req.body);
   });
   api.post('/offers/:id/talk', user, (req) => offers.saveTalk(db, actor(req), idOf(req), O.talkInput.parse(req.body)));
+  // Verlauf: gesendete E-Mails, zugeordnete Antworten aus dem Posteingang, Absprache, Annahme
+  api.get('/offers/:id/timeline', user, (req) => thread.timeline(db, idOf(req)));
+  api.post('/offers/:id/timeline/assign', user, (req) => thread.assignInboxMail(db, actor(req), idOf(req), z.object({ inboxMailId: z.uuid() }).parse(req.body).inboxMailId));
+  api.post('/offers/:id/timeline/remove', user, (req) => thread.removeInboxMail(db, actor(req), idOf(req), z.object({ eventId: z.uuid() }).parse(req.body).eventId));
   api.get('/offers/:id/link', user, (req) => offers.offerLink(db, idOf(req), guestBaseUrl(req).url));
   api.post('/offers/:id/accept', user, (req) => offers.acceptOffer(db, actor(req), idOf(req), O.offerAcceptInput.parse(req.body)));
   api.post('/offers/:id/decline', user, (req) => offers.declineOffer(db, actor(req), idOf(req)));

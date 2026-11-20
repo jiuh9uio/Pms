@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { addDays, formatMoney, moneyInput, parseMoney, todayBerlin } from '../../../src/shared/hotel.js';
 import {
   AREA_LABEL, OFFER_AREAS, OFFER_STATE_LABEL, OFFER_UNITS, TALK_KINDS, TALK_KIND_LABEL, UNIT_LABEL, groupItems, lineTotal, offerItemInput, offerTemplateInput, quantityFor,
-  type CatalogReturn, type OfferArea, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferListRow, type OfferState, type OfferTalk, type OfferTemplateDto, type OfferUnit, type TalkKind, type TalkStep,
+  type CatalogReturn, type OfferArea, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferListRow, type OfferState, type OfferTalk, type OfferTemplateDto, type OfferTimeline, type OfferUnit, type TalkKind, type TalkStep,
 } from '../../../src/shared/offers.js';
 import { api } from '../api.ts';
 import { useAuth } from '../App.tsx';
@@ -246,6 +246,7 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
           <dl>{o.answers.items.map((x, i) => <div key={i}><dt>{x.q}</dt><dd>{x.a || <span className="muted">– keine Angabe –</span>}</dd></div>)}</dl>
         </section>
       )}
+      <OfferThread offer={o} onAccept={!locked && !q && o.status === 'sent' ? () => void startAccept() : undefined} />
       {o.talk && (
         <section className="card answers">
           <h3 className="first">Absprache{o.talk.template ? ` – ${o.talk.template}` : ''} <small className="muted">– am {new Date(o.talk.at).toLocaleString('de-DE')} von {o.talk.by}</small></h3>
@@ -349,6 +350,52 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
         onApply={(lines) => { ch({ lines }); toast('Leistungen übernommen – bitte prüfen und speichern'); }} onClose={() => setConfig(false)} />}
       {accepting && <AcceptDialog offer={o} onClose={() => setAccepting(false)} />}
     </Dialog>
+  );
+}
+
+/** Verlauf wie ein Chat: oben die Kurzinfo (Stand), darunter gesendete E-Mails (rechts), Antworten des Kunden (links) und Ereignisse */
+function OfferThread({ offer: o, onAccept }: { offer: OfferDto; onAccept?: () => void }) {
+  const { rev, bump } = useData();
+  const toast = useToast();
+  const { data } = useLoad(() => api<OfferTimeline>('GET', `/offers/${o.id}/timeline`), [o.id, rev]);
+  const [open, setOpen] = useState(false);
+  if (!data) return null;
+  const when = (iso: string) => new Date(iso).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
+  const day = (iso: string) => new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+  const outs = data.entries.filter((e) => e.dir === 'out'), ins = data.entries.filter((e) => e.dir === 'in');
+  const lastOut = outs[outs.length - 1], lastIn = ins[ins.length - 1];
+  const waiting = !!lastOut && (!lastIn || lastIn.at < lastOut.at) && o.status !== 'accepted' && o.status !== 'declined';
+  const hint = o.status === 'accepted' || o.status === 'declined' ? null : lastIn?.hint ?? null;
+  const act = async (path: string, body: unknown, msg: string) => { try { await api('POST', `/offers/${o.id}/timeline/${path}`, body); toast(msg); bump(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); } };
+  return (
+    <section className="card ot-card">
+      <div className="ot-info">
+        <Badge tone={TONE[o.state]}>{o.status === 'accepted' ? 'bestätigt' : o.status === 'declined' ? 'abgelehnt' : 'noch nicht bestätigt'}</Badge>
+        {lastOut && <span>{lastOut.title} am {day(lastOut.at)}</span>}
+        {lastIn && <span>Antwort vom Kunden am {day(lastIn.at)}</span>}
+        {waiting && <span className="muted">wartet auf Antwort</span>}
+        {!lastOut && !lastIn && <span className="muted">noch nichts gesendet</span>}
+        <span className="ot-code" title="Dieses Kennzeichen steht im Betreff jeder E-Mail zu diesem Angebot. Antwortet der Kunde darauf, wird die Antwort hier automatisch zugeordnet.">Kennzeichen {data.code}</span>
+        <button type="button" className="linkbtn" onClick={() => setOpen(!open)}>{open ? 'Verlauf ausblenden' : `Verlauf zeigen (${data.entries.length})`}</button>
+      </div>
+      {hint === 'accept' && <p className="notice small">Die letzte Antwort <b>klingt nach einer Zusage</b> – bitte lesen und prüfen. {onAccept && <Button onClick={onAccept}>Als angenommen vermerken …</Button>}</p>}
+      {hint === 'decline' && <p className="notice warn small">Die letzte Antwort <b>klingt nach einer Absage</b> – bitte lesen und prüfen.</p>}
+      {data.candidates.length > 0 && <div className="ot-cand">
+        <span className="muted small">Im Posteingang von dieser Adresse, noch nicht zugeordnet:</span>
+        {data.candidates.map((c) => <div key={c.inboxMailId}><span>{when(c.at)} · {c.subject || '(ohne Betreff)'}</span><Button onClick={() => void act('assign', { inboxMailId: c.inboxMailId }, 'E-Mail zugeordnet')}>Zuordnen</Button></div>)}
+      </div>}
+      {open && <ol className="ot-list">{data.entries.map((e) => (
+        <li key={e.id} className={`ot-${e.dir}`}>
+          <div className="ot-bubble">
+            <div className="ot-head"><b>{e.title}</b><small>{when(e.at)}{e.by ? ` · ${e.by}` : ''}</small></div>
+            {e.subject && <div className="ot-subject">{e.subject}</div>}
+            {e.hint && <div className="ot-hint">{e.hint === 'accept' ? 'klingt nach Zusage – bitte prüfen' : 'klingt nach Absage – bitte prüfen'}</div>}
+            {e.text && (e.text.length > 280 ? <details><summary>{e.text.slice(0, 200).trim()} … <u>ganz lesen</u></summary><div className="ot-text">{e.text}</div></details> : <div className="ot-text">{e.text}</div>)}
+            {e.removable && <button type="button" className="linkbtn small" onClick={() => { if (window.confirm('Diese E-Mail gehört nicht zu diesem Angebot? Die Zuordnung wird gelöst; die E-Mail bleibt im Posteingang.')) void act('remove', { eventId: e.id }, 'Zuordnung gelöst'); }}>gehört nicht hierher</button>}
+          </div>
+        </li>
+      ))}</ol>}
+    </section>
   );
 }
 

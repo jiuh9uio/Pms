@@ -32,6 +32,8 @@ export interface InboxMailDto {
   repliedAt: string | null; repliedBy: string;
   /** nur in der Einzelansicht */
   body?: string;
+  /** nur in der Einzelansicht: Angebot, zu dessen Verlauf die Nachricht gehört */
+  offer?: { id: string; number: string } | null;
 }
 export const inboxUpdateInput = z.object({
   status: z.enum(INBOX_STATUSES).optional(), kind: z.enum(MAIL_KINDS).optional(),

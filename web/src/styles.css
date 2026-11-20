@@ -1219,3 +1219,28 @@ a.linkcard.attention b { color: var(--warn); }
 .tk-choice .cfg-price { grid-column: 2; text-align: left; white-space: normal; }
 .tk-choice .cfg-price:empty { display: none; }
 .tk-choice .cfg-price small { display: inline; margin-left: 6px; }
+
+/* Angebot: Verlauf (Chat) mit Kurzinfo */
+.ot-card { display: grid; gap: 8px; }
+.ot-info { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.ot-info > span:not(.badge):not(.ot-code) { font-weight: 600; }
+.ot-info > span.muted { font-weight: 400; }
+.ot-code { margin-left: auto; padding: 2px 8px; border: 1px dashed var(--line-strong); border-radius: 6px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+.ot-cand { display: grid; gap: 6px; padding: 8px 10px; border: 1px dashed var(--line-strong); border-radius: 10px; }
+.ot-cand > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ot-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 8px; max-height: 420px; overflow: auto; }
+.ot-list li { display: flex; }
+.ot-list li.ot-out { justify-content: flex-end; }
+.ot-list li.ot-event { justify-content: center; }
+.ot-bubble { max-width: min(640px, 88%); padding: 8px 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+.ot-out .ot-bubble { background: var(--accent-soft); border-color: transparent; }
+.ot-event .ot-bubble { background: none; border-style: dashed; text-align: center; font-size: 13px; }
+.ot-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.ot-event .ot-head { justify-content: center; }
+.ot-head small { color: var(--ink-2); }
+.ot-subject { font-size: 13px; color: var(--ink-2); }
+.ot-hint { display: inline-block; margin: 4px 0; padding: 1px 8px; border-radius: 999px; background: #fff3cd; color: #6b5200; font-size: 12.5px; font-weight: 600; }
+.ot-text { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; }
+.ot-event .ot-text { text-align: left; }
+.ot-bubble summary { cursor: pointer; margin-top: 4px; }
+@media (max-width: 700px) { .ot-code { margin-left: 0; } }

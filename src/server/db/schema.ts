@@ -761,6 +761,22 @@ export const offerTemplates = pgTable('offer_templates', {
   ...stamps,
 });
 
+/** Verlauf eines Angebots: gesendete E-Mails (mit Text) und zugeordnete Antworten aus dem Posteingang (Kopie des Textes) */
+export const offerEvents = pgTable('offer_events', {
+  id: id(),
+  offerId: uuid('offer_id').notNull().references((): AnyPgColumn => offers.id, { onDelete: 'cascade' }),
+  at: ts('at').notNull().defaultNow(),
+  kind: text('kind', { enum: ['mail_out', 'mail_in'] }).notNull(),
+  /** bei mail_out: questions | catalog | offer */
+  what: text('what').notNull().default(''),
+  /** bei mail_out: Mitarbeiter und Empfänger; bei mail_in: Absender */
+  who: text('who').notNull().default(''),
+  subject: text('subject').notNull().default(''),
+  body: text('body').notNull().default(''),
+  /** Nachricht im Posteingang (ohne Fremdschlüssel: der Posteingang räumt nach Frist auf, der Verlauf bleibt) */
+  inboxMailId: uuid('inbox_mail_id'),
+}, (t) => [index('offer_events_offer_idx').on(t.offerId, t.at), uniqueIndex('offer_events_inbox_idx').on(t.inboxMailId)]);
+
 export const offers = pgTable('offers', {
   id: id(),
   number: text('number').notNull().unique(),

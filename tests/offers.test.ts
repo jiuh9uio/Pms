@@ -338,3 +338,44 @@ describe('Absprache am Tisch: eigene Schritte je Vorlage', () => {
     expect((await call('POST', `/offers/00000000-0000-4000-8000-000000000000/talk`, user, { template: '', steps: [] })).statusCode).toBe(404);
   });
 });
+
+describe('Verlauf: Kennzeichen im Betreff, Antworten aus dem Posteingang zuordnen', () => {
+  it('Katalog-Betreff trägt das Kennzeichen; Antwort wird zugeordnet; Zusage nur als Hinweis; Zuordnung lösbar', async () => {
+    const { linkInboxMail, replyHint, withCode } = await import('../src/server/modules/offerthread.js');
+    const { inboxMails } = await import('../src/server/db/schema.js');
+    const list = await ok('GET', '/offers?state=all&q=Erfunden%20Test', user);
+    const o = await ok('GET', `/offers/${list[0].id}`, user);
+    const m = await ok('GET', `/offers/${o.id}/catalog/mail`, user);
+    expect(m.subject).toContain(`[${o.number}]`);
+    expect(withCode(`Angebot ${o.number} – Haus`, o.number)).toBe(`Angebot ${o.number} – Haus`);
+    // Antwort des Kunden mit Kennzeichen im Betreff
+    const mail = async (uid: number, subject: string, body: string, from = 'test@example.org') => {
+      const [r] = await db.insert(inboxMails).values({ uidValidity: 'thread-test', uid, fromName: 'Erfunden Test', fromAddr: from, subject, receivedAt: new Date(), body, kind: 'other', extract: {} }).returning();
+      return r!;
+    };
+    const a = await mail(1, `AW: Leistungskatalog [${o.number.toLowerCase()}]`, `Guten Tag,\nwir nehmen das Angebot gerne an.\n\n--- Ihre Nachricht vom 01.01. ---\n> leider nicht`);
+    expect(await linkInboxMail(db, a)).toBe(true);
+    expect(await linkInboxMail(db, a)).toBe(false); // nicht doppelt
+    expect(await linkInboxMail(db, await mail(2, 'Hallo', 'ohne Kennzeichen'))).toBe(false);
+    expect(await linkInboxMail(db, await mail(3, 'AW [AN-1999-0001]', 'unbekannte Nummer'))).toBe(false);
+    const t = await ok('GET', `/offers/${o.id}/timeline`, user);
+    expect(t.code).toBe(`[${o.number}]`);
+    const inn = t.entries.find((e: { dir: string; removable: boolean }) => e.dir === 'in' && e.removable);
+    expect(inn).toMatchObject({ title: 'Antwort des Kunden', hint: 'accept' });
+    // Das Angebot bleibt ein Entwurf – der Hinweis nimmt nichts an
+    expect((await ok('GET', `/offers/${o.id}`, user)).status).toBe('draft');
+    // E-Mail ohne Kennzeichen von derselben Adresse: als Vorschlag, von Hand zuordnen
+    expect(t.candidates.map((c: { subject: string }) => c.subject)).toContain('Hallo');
+    const cand = t.candidates.find((c: { subject: string }) => c.subject === 'Hallo');
+    await ok('POST', `/offers/${o.id}/timeline/assign`, user, { inboxMailId: cand.inboxMailId });
+    expect((await call('POST', `/offers/${o.id}/timeline/assign`, user, { inboxMailId: cand.inboxMailId })).statusCode).toBe(409);
+    expect((await ok('GET', `/inbox/${a.id}`, admin)).offer).toMatchObject({ number: o.number });
+    await ok('POST', `/offers/${o.id}/timeline/remove`, user, { eventId: inn.id });
+    expect((await ok('GET', `/offers/${o.id}/timeline`, user)).entries.some((e: { id: string }) => e.id === inn.id)).toBe(false);
+    // Hinweise: vorsichtig
+    expect(replyHint('Wir nehmen das Angebot an, wenn der Preis sinkt.')).toBeNull();
+    expect(replyHint('Leider müssen wir absagen.')).toBe('decline');
+    expect(replyHint('Vielen Dank, wir melden uns.')).toBeNull();
+    expect(replyHint('> wir nehmen das Angebot an')).toBeNull();
+  });
+});

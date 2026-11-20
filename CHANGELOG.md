@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.112.0
+
+- **Angebote: Verlauf wie ein Chat.** Oben im Angebot steht die **Kurzinfo** (bestätigt / noch nicht bestätigt, zuletzt gesendet, letzte Antwort, „wartet auf Antwort“); „Verlauf zeigen“ blendet alles zeitlich geordnet ein: Absprache am Tisch, gesendete E-Mails (Fragen, Katalog, Angebot – mit Text), Antworten des Kunden, Annahme oder Ablehnung.
+- **Kennzeichen im Betreff:** Jede E-Mail zu einem Angebot trägt die Angebotsnummer, z. B. `[AN-2026-0005]`. Antwortet der Kunde darauf, ordnet der Posteingang die Antwort automatisch dem Angebot zu. E-Mails derselben Adresse ohne Kennzeichen werden zum Zuordnen vorgeschlagen; eine falsche Zuordnung lässt sich lösen.
+- **Zusage nur als Hinweis:** Klingt eine Antwort nach Zusage oder Absage, steht das als Hinweis im Verlauf („bitte prüfen“). Angenommen wird ein Angebot weiterhin nur von Hand oder online über den Link – nie automatisch.
+- Im Posteingang steht bei zugeordneten E-Mails ein Verweis auf das Angebot.
+- Datenbank: neue Tabelle für den Verlauf; bestehende Daten bleiben unverändert. Für ältere Angebote beginnt der Verlauf mit den vorhandenen Angaben (angelegt, versendet, angenommen).
+
 ## 1.111.0
 
 - **Absprache und Katalog getrennt – Absprache frei einstellbar.** In jeder Vorlage (Angebote → Vorlagen) gibt es jetzt **„Absprache am Tisch – Schritte“**: eigene Schritte mit eigenen Antworten zum Antippen, z. B. „Essen: à la carte / kleines Menü / Buffet“. Je Schritt: eine Antwort, mehrere Antworten oder nur Text; Reihenfolge frei. Eine Antwort kann mit einer Leistung verknüpft sein (kommt mit Preis ins Angebot) oder nur eine Angabe ohne Preis sein.
