@@ -31,7 +31,7 @@ function toRow(x: Raw): InvoiceListRow {
   const gross = x.gross_cents as number;
   const paid = x.paid_cents as number;
   return {
-    id: x.id as string, number: (x.number as string) ?? null, kind: x.kind as InvoiceListRow['kind'], status,
+    id: x.id as string, number: (x.number as string) ?? null, estimateNumber: (x.estimate_number as string) ?? null, kind: x.kind as InvoiceListRow['kind'], status,
     bookingId: (x.booking_id as string) ?? null, bookingNumber: (x.booking_number as string) ?? null,
     cancelsId: (x.cancels_id as string) ?? null, cancelsNumber: (x.cancels_number as string) ?? null,
     cancelledById: (x.cancelled_by_id as string) ?? null, cancelledByNumber: (x.cancelled_by_number as string) ?? null,
@@ -62,7 +62,7 @@ export async function listInvoices(db: Exec, f: { status?: string; q?: string; f
   if (f.bookingId) c.push(sql`i.booking_id = ${f.bookingId}`);
   if (f.q) {
     const like = '%' + f.q.replace(/[%_\\]/g, '') + '%';
-    c.push(sql`(i.number ilike ${like} or i.recipient_name ilike ${like} or i.recipient_company ilike ${like} or b.number ilike ${like})`);
+    c.push(sql`(i.number ilike ${like} or i.estimate_number ilike ${like} or i.recipient_name ilike ${like} or i.recipient_company ilike ${like} or b.number ilike ${like})`);
   }
   const rows = await db.execute(sql`${LIST} where ${sql.join(c, sql` and `)} order by coalesce(i.issued_at, i.created_at) desc ${f.all ? sql`` : sql`limit ${f.status === 'open' || f.status === 'paid' ? 5000 : 500}`}`);
   const list = await applyCredits(db, Array.from(rows).map((r) => toRow(r as Raw)));
@@ -621,6 +621,35 @@ export async function invoicePdf(db: Db, id: string): Promise<{ filename: string
   await db.insert(invoiceDocuments).values({ invoiceId: id, pdf }).onConflictDoNothing();
   const [doc] = await db.select().from(invoiceDocuments).where(eq(invoiceDocuments.invoiceId, id));
   return { filename: name, pdf: doc!.pdf, archived: true };
+}
+
+// ---------- Kostenvoranschlag: ein Rechnungsentwurf mit eigener Nummer (KV-Jahr-Nr.), als PDF ohne Rechnungsnummer ----------
+/** Entwurf als Kostenvoranschlag führen: vergibt einmalig die KV-Nummer (eigener Nummernkreis, unabhängig von den Rechnungsnummern) */
+export async function makeEstimate(db: Db, actor: Actor, id: string) {
+  return db.transaction(async (tx) => {
+    const [inv] = await tx.select().from(invoices).where(eq(invoices.id, id)).for('update');
+    if (!inv) throw notFound('Rechnung');
+    if (inv.status !== 'draft' || inv.kind !== 'invoice') throw conflict('Ein Kostenvoranschlag lässt sich nur aus einem Entwurf machen.');
+    if (inv.estimateNumber) return { estimateNumber: inv.estimateNumber };
+    const year = Number(todayBerlin().slice(0, 4));
+    const [row] = await tx.insert(numberSequences).values({ key: 'estimate', year, last: 1 })
+      .onConflictDoUpdate({ target: [numberSequences.key, numberSequences.year], set: { last: sql`${numberSequences.last} + 1` } }).returning();
+    const estimateNumber = `KV-${year}-${String(row!.last).padStart(4, '0')}`;
+    await tx.update(invoices).set({ estimateNumber, updatedAt: new Date() }).where(eq(invoices.id, id));
+    await record(tx, actor, { action: 'estimate', entity: 'invoice', entityId: id, after: { estimateNumber } });
+    return { estimateNumber };
+  });
+}
+/** PDF „Kostenvoranschlag“ – nur solange es ein Entwurf ist; es wird nichts archiviert und keine Rechnungsnummer vergeben */
+export async function estimatePdf(db: Db, id: string): Promise<{ filename: string; pdf: Buffer; number: string }> {
+  const inv = await getInvoice(db, id);
+  if (!inv.estimateNumber) throw conflict('Dieser Entwurf wird nicht als Kostenvoranschlag geführt.');
+  if (inv.status !== 'draft') throw conflict(`Aus dem Kostenvoranschlag ${inv.estimateNumber} ist bereits die Rechnung ${inv.number ?? ''} geworden.`);
+  const h = await getHotel(db);
+  const issuer: IssuerDto = { name: h.name, street: h.street, zip: h.zip, city: h.city, country: h.country, phone: h.phone, email: h.email, website: h.website,
+    taxNumber: h.taxNumber, vatId: h.vatId, bankName: h.bankName, iban: h.iban, bic: h.bic, footer: h.invoiceFooter };
+  const pdf = Buffer.from(await renderInvoice(inv, issuer, await getLogo(db), await getLayout(db), { number: inv.estimateNumber, date: todayBerlin() }));
+  return { filename: `Kostenvoranschlag_${inv.estimateNumber}.pdf`, pdf, number: inv.estimateNumber };
 }
 
 // ---------- Rechnungsnummern: Startwert ----------

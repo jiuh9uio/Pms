@@ -3,7 +3,7 @@ import type { Db, Exec } from '../db/client.js';
 import { conflict } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 import { getBooking } from './bookings.js';
-import { getInvoice, invoicePdf } from './billing.js';
+import { estimatePdf, getInvoice, invoicePdf } from './billing.js';
 import { buildFromInvoice } from './einvoices.js';
 import { getMailSettings, sendMail } from './mail.js';
 import { getHotel } from './settings.js';
@@ -130,4 +130,22 @@ export async function sendInvoiceMail(db: Db, actor: Actor, invoiceId: string, v
   const pdf = await buildFromInvoice(db, invoiceId).then((r) => r.pdf, async () => (await invoicePdf(db, invoiceId)).pdf);
   await sendMail(db, actor, { ...v, attachments: [{ filename: `${safe(inv.number!)}.pdf`, content: Buffer.from(pdf), contentType: 'application/pdf' }] });
   await record(db, actor, { action: kind === 'reminder' ? 'reminder' : 'mail', entity: 'invoice', entityId: inv.id, after: { to: v.to, subject: v.subject } });
+}
+
+// ---------- Kostenvoranschlag (Rechnungsentwurf mit KV-Nummer) per E-Mail ----------
+export async function estimateMailDraft(db: Db, invoiceId: string): Promise<MailDraft> {
+  const inv = await getInvoice(db, invoiceId);
+  const f = await estimatePdf(db, invoiceId);
+  const h = await getHotel(db);
+  const guest = inv.bookingId ? (await getBooking(db, inv.bookingId)).guest : null;
+  const text = [guest ? greeting(guest) : 'Guten Tag,', '',
+    `anbei erhalten Sie unseren Kostenvoranschlag ${f.number} über ${formatMoney(inv.grossCents)} (inkl. Umsatzsteuer).`,
+    'Dies ist noch keine Rechnung – bitte überweisen Sie noch nichts. Geben Sie uns einfach Bescheid, ob wir so für Sie planen dürfen.',
+    '', signature(h)].join('\n');
+  return { to: guest?.email ?? '', subject: `Kostenvoranschlag ${f.number} – ${h.name}`, text, attachment: f.filename, ready: await ready(db) };
+}
+export async function sendEstimateMail(db: Db, actor: Actor, invoiceId: string, v: { to: string; subject: string; text: string }) {
+  const f = await estimatePdf(db, invoiceId);
+  await sendMail(db, actor, { ...v, attachments: [{ filename: f.filename, content: f.pdf, contentType: 'application/pdf' }] });
+  await record(db, actor, { action: 'mail_estimate', entity: 'invoice', entityId: invoiceId, after: { to: v.to, subject: v.subject, estimateNumber: f.number } });
 }

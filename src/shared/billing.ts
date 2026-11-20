@@ -59,6 +59,8 @@ export interface PaymentDto {
 export interface IssuerDto { name: string; street: string; zip: string; city: string; country: string; phone: string; email: string; website: string; taxNumber: string; vatId: string; bankName: string; iban: string; bic: string; footer: string }
 export interface InvoiceDto {
   id: string; number: string | null; kind: 'invoice' | 'cancellation'; status: 'draft' | 'issued' | 'cancelled';
+  /** Kostenvoranschlag (KV-Jahr-Nr.): der Entwurf wird als Kostenvoranschlag geführt bzw. die Rechnung ist daraus entstanden */
+  estimateNumber: string | null;
   bookingId: string | null; bookingNumber: string | null; cancelsId: string | null; cancelsNumber: string | null; cancelledById: string | null; cancelledByNumber: string | null;
   recipientCompany: string; recipientName: string; recipientStreet: string; recipientZip: string; recipientCity: string; recipientCountry: string; recipientVatId: string;
   serviceFrom: string | null; serviceTo: string | null; issueDate: string | null; dueDate: string | null; notes: string; cancelReason: string;

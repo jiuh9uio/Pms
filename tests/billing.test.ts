@@ -238,3 +238,39 @@ describe('Datenschutz', () => {
     expect(await refused(db.execute(sql`truncate audit_log`))).toMatch(/nicht geändert/);
   });
 });
+
+describe('Kostenvoranschlag (Rechnungsentwurf mit eigener Nummer)', () => {
+  it('eigene KV-Nummer, PDF ohne Rechnungsnummer; die Rechnungsnummern bleiben lückenlos; nach dem Ausstellen kein KV-PDF mehr', async () => {
+    const before = (await ok('GET', '/invoices?status=archive', admin)).filter((i: { number: string | null }) => i.number).length;
+    const { id } = await ok('POST', '/invoices', user, { include: 'none' });
+    const kv = await ok('POST', `/invoices/${id}/estimate`, user);
+    expect(kv.estimateNumber).toBe(`KV-${year}-0001`);
+    expect((await ok('POST', `/invoices/${id}/estimate`, user)).estimateNumber).toBe(kv.estimateNumber); // keine zweite Nummer
+    let inv = await ok('POST', `/invoices/${id}/lines`, user, { description: 'Raummiete Saal', detail: '', quantity: 1, unitPriceCents: 30000, taxRatePercent: 19 });
+    inv = await ok('PUT', `/invoices/${id}`, user, { ...inv, recipientName: 'Erika Erfunden', recipientStreet: 'Weg 1', recipientZip: '12345', recipientCity: 'Ort', version: inv.version });
+    expect(inv).toMatchObject({ status: 'draft', number: null, estimateNumber: kv.estimateNumber, openCents: 0 });
+    const pdf = await call('GET', `/invoices/${id}/estimate/pdf`, user);
+    expect(pdf.statusCode).toBe(200);
+    expect(pdf.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(pdf.headers['content-disposition']).toContain(`Kostenvoranschlag_${kv.estimateNumber}.pdf`);
+    // über die Suche auffindbar; zählt nicht als ausgestellte Rechnung
+    expect((await ok('GET', `/invoices?status=draft&q=${kv.estimateNumber}`, user)).map((i: { id: string }) => i.id)).toContain(id);
+    expect((await ok('GET', '/invoices?status=archive', admin)).filter((i: { number: string | null }) => i.number).length).toBe(before);
+    const mail = await ok('GET', `/invoices/${id}/estimate/mail`, user);
+    expect(mail.subject).toContain(`Kostenvoranschlag ${kv.estimateNumber}`);
+    expect(mail.text).toContain('noch keine Rechnung');
+    // ein zweiter Kostenvoranschlag zählt weiter
+    const second = await ok('POST', '/invoices', user, { include: 'none' });
+    expect((await ok('POST', `/invoices/${second.id}/estimate`, user)).estimateNumber).toBe(`KV-${year}-0002`);
+    // Rechnung daraus: normale, nächste Rechnungsnummer; die KV-Nummer bleibt als Herkunft stehen
+    const issued = await ok('POST', `/invoices/${id}/issue`, user, { version: inv.version });
+    expect(issued.status).toBe('issued');
+    expect(issued.number).toMatch(new RegExp(`^RE-${year}-\\d{4}$`));
+    expect(issued.estimateNumber).toBe(kv.estimateNumber);
+    expect((await call('GET', `/invoices/${id}/estimate/pdf`, user)).statusCode).toBe(409);
+    expect((await call('POST', `/invoices/${id}/estimate`, user)).statusCode).toBe(409);
+    // ohne KV-Nummer gibt es kein KV-PDF
+    const plain = await ok('POST', '/invoices', user, { include: 'none' });
+    expect((await call('GET', `/invoices/${plain.id}/estimate/pdf`, user)).statusCode).toBe(409);
+  });
+});

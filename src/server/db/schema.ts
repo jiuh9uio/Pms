@@ -473,6 +473,8 @@ export const invoices = pgTable('invoices', {
   id: id(),
   /** Rechnungsnummer – erst bei Ausstellung vergeben, lückenlos je Jahr */
   number: text('number').unique(),
+  /** Nummer des Kostenvoranschlags (KV-Jahr-Nr.), falls der Entwurf als Kostenvoranschlag geführt wird/wurde – eigener Nummernkreis, keine Rechnungsnummer */
+  estimateNumber: text('estimate_number').unique(),
   kind: text('kind', { enum: ['invoice', 'cancellation'] }).notNull().default('invoice'),
   status: text('status', { enum: ['draft', 'issued', 'cancelled'] }).notNull().default('draft'),
   bookingId: uuid('booking_id').references(() => bookings.id),

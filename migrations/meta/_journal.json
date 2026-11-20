@@ -330,6 +330,13 @@
       "when": 1795181167649,
       "tag": "0046_angebots_verlauf",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1795188683660,
+      "tag": "0047_kostenvoranschlag",
+      "breakpoints": true
     }
   ]
 }

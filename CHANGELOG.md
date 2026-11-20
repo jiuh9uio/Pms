@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.115.0
+
+- **Rechnungen: freier Kostenvoranschlag.** Neben „Freie Rechnung“ gibt es **„Kostenvoranschlag“**: Empfänger und Positionen frei eintragen, als PDF mit der Überschrift „Kostenvoranschlag“ ansehen, drucken oder per E-Mail senden. Er bekommt eine **eigene Nummer** (KV-Jahr-Nr., z. B. KV-2026-0001), keine Rechnungsnummer, und ist keine Rechnung.
+- **„Rechnung daraus ausstellen“** macht aus dem Kostenvoranschlag die Rechnung – mit der nächsten normalen Rechnungsnummer; die KV-Nummer bleibt als Herkunft an der Rechnung stehen.
+- Auch ein bestehender Rechnungsentwurf lässt sich „Als Kostenvoranschlag führen“. Kostenvoranschläge stehen unter Rechnungen → „Entwürfe“ und sind über die KV-Nummer auffindbar.
+- Am Ausstellen, Stornieren und an den Rechnungsnummern ändert sich nichts. Datenbank: ein neues Feld (KV-Nummer) bei den Rechnungen.
+
 ## 1.114.0
 
 - **Angebote sind jetzt ein eigener Bereich.** Auf der Startseite gibt es die Kachel **„Angebote“** (Tagesgeschäft). Im Bereich stehen links: Angebote & Absprachen, darunter die Einrichtung (Leistungen, Vorlagen & Absprache-Schritte, AGB & Dokumente, Gestaltung – nur Administrator) und schnelle Wechsel zu Hotel, Restaurant und Posteingang.

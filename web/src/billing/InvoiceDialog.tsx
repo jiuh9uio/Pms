@@ -34,6 +34,11 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
   const [busy, setBusy] = useState(false);
   const [cancel, setCancel] = useState(false);
   const [mail, setMail] = useState<false | 'invoice' | 'reminder'>(false);
+  const [kvMail, setKvMail] = useState(false);
+  const makeEstimate = async () => {
+    try { const r = await api<{ estimateNumber: string }>('POST', `/invoices/${id}/estimate`); toast(`Wird jetzt als Kostenvoranschlag ${r.estimateNumber} geführt`); bump(); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+  };
 
   const issue = async () => {
     if (!inv || !window.confirm('Rechnung jetzt ausstellen? Danach vergibt das Programm die Rechnungsnummer und die Rechnung kann nicht mehr geändert, nur noch storniert werden.')) return;
@@ -59,7 +64,7 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
     if (!window.confirm('Entwurf verwerfen?')) return;
     try { await api('POST', `/invoices/${id}/remove`); toast('Entwurf verworfen'); bump(); onClose(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
   };
-  const title = inv ? (inv.number ? `${inv.kind === 'cancellation' ? 'Stornobeleg' : 'Rechnung'} ${inv.number}` : 'Rechnungsentwurf') : 'Rechnung';
+  const title = inv ? (inv.number ? `${inv.kind === 'cancellation' ? 'Stornobeleg' : 'Rechnung'} ${inv.number}` : inv.estimateNumber ? `Kostenvoranschlag ${inv.estimateNumber}` : 'Rechnungsentwurf') : 'Rechnung';
 
   return (
     <Dialog title={<>{title} {inv && <InvoiceStatus inv={inv} />}</>} onClose={onClose} size="xl"
@@ -70,9 +75,12 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
         {inv.status === 'issued' && inv.kind === 'invoice' && hasModule(user, 'erechnung') && <Button busy={busy} onClick={() => void einvoice()}>E-Rechnung</Button>}
         {inv.status === 'issued' && inv.kind === 'invoice' && <Button onClick={() => setMail('invoice')}>Per E-Mail senden</Button>}
         {inv.status === 'issued' && inv.kind === 'invoice' && inv.openCents > 0 && inv.dueDate && inv.dueDate < todayBerlin() && <Button onClick={() => setMail('reminder')}>Zahlungserinnerung</Button>}
-        <a className="btn" href={`/api/v1/invoices/${id}/pdf`} target="_blank" rel="noopener">{inv.status === 'draft' ? 'Vorschau (PDF)' : 'Drucken / PDF'}</a>
+        {inv.status === 'draft' && inv.kind === 'invoice' && !inv.estimateNumber && <Button onClick={() => void makeEstimate()} title="Vergibt eine eigene Nummer (KV-Jahr-Nr.) – das PDF heißt dann „Kostenvoranschlag“ und trägt keine Rechnungsnummer">Als Kostenvoranschlag führen</Button>}
+        {inv.status === 'draft' && inv.estimateNumber && <Button onClick={() => setKvMail(true)}>Kostenvoranschlag senden</Button>}
+        {inv.status === 'draft' && inv.estimateNumber && <a className="btn" href={`/api/v1/invoices/${id}/estimate/pdf`} target="_blank" rel="noopener">Kostenvoranschlag (PDF)</a>}
+        {!(inv.status === 'draft' && inv.estimateNumber) && <a className="btn" href={`/api/v1/invoices/${id}/pdf`} target="_blank" rel="noopener">{inv.status === 'draft' ? 'Vorschau (PDF)' : 'Drucken / PDF'}</a>}
         {inv.status !== 'draft' && <a className="btn" href={`/api/v1/invoices/${id}/pdf?download=1`}>Herunterladen</a>}
-        {inv.status === 'draft' ? <Button variant="primary" busy={busy} onClick={() => void issue()}>Ausstellen</Button> : <Button onClick={onClose}>Schließen</Button>}
+        {inv.status === 'draft' ? <Button variant="primary" busy={busy} onClick={() => void issue()}>{inv.estimateNumber ? 'Rechnung daraus ausstellen' : 'Ausstellen'}</Button> : <Button onClick={onClose}>Schließen</Button>}
       </>}>
       {!inv ? <LoadState error={error} loading /> : (
         <div className="split">
@@ -100,12 +108,15 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
                 <tr className="sum"><td>Offen</td><td className="num">{formatMoney(inv.openCents)}</td></tr>
               </>}
             </tbody></table>
+            {inv.status === 'draft' && inv.estimateNumber && <p className="notice small"><b>Kostenvoranschlag {inv.estimateNumber}</b> – noch keine Rechnung: zählt nicht zum Umsatz und hat keine Rechnungsnummer. Sie können ihn weiter ändern. Mit „Rechnung daraus ausstellen“ wird daraus die Rechnung; den Kostenvoranschlag selbst gibt es dann nicht mehr als eigenes PDF.</p>}
+            {inv.status !== 'draft' && inv.estimateNumber && <p className="muted small">Entstanden aus Kostenvoranschlag {inv.estimateNumber}.</p>}
             {inv.status === 'draft' && <p className="muted small">Entwurf – noch ohne Rechnungsnummer. Beim Ausstellen werden noch nicht zugeordnete Anzahlungen der Reservierung verrechnet.</p>}
             {(inv.status === 'issued' || inv.payments.length > 0) && inv.kind === 'invoice' && <Payments inv={inv} />}
             {inv.issuedAt && <p className="muted small">Ausgestellt {fmtDateTime(inv.issuedAt)} von {inv.issuedBy}</p>}
           </aside>
         </div>
       )}
+      {inv && kvMail && <MailDialog path={`/invoices/${id}/estimate/mail`} title={`Kostenvoranschlag ${inv.estimateNumber} per E-Mail`} onClose={() => setKvMail(false)} onSent={bump} attachmentNote="(der Kostenvoranschlag als PDF – keine Rechnung)" />}
       {inv && mail && <MailDialog path={`/invoices/${id}/mail?kind=${mail}`} title={mail === 'reminder' ? `Zahlungserinnerung zur Rechnung ${inv.number}` : `Rechnung ${inv.number} per E-Mail`} onClose={() => setMail(false)} onSent={bump} />}
       {inv && cancel && <CancelDialog inv={inv} onClose={() => setCancel(false)} onDone={(newId) => { setCancel(false); openInvoice(newId); }} />}
     </Dialog>

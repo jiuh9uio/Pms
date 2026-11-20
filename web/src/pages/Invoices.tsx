@@ -27,10 +27,14 @@ export function Invoices() {
   const [creating, setCreating] = useState(false);
   const [accounts, setAccounts] = useState(false);
   const { user } = useAuth();
-  const free = async () => {
+  const free = async (estimate = false) => {
     if (creating) return;
     setCreating(true);
-    try { const r = await api<{ id: string }>('POST', '/invoices', { include: 'none' }); bump(); openInvoice(r.id); }
+    try {
+      const r = await api<{ id: string }>('POST', '/invoices', { include: 'none' });
+      if (estimate) await api('POST', `/invoices/${r.id}/estimate`);
+      bump(); openInvoice(r.id);
+    }
     catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
     setCreating(false);
   };
@@ -38,7 +42,7 @@ export function Invoices() {
   return (
     <>
       <PageHeader title="Rechnungsarchiv" sub="Alle Hotelrechnungen und Stornobelege – suchen, filtern, ansehen, drucken, versenden"
-        actions={<Button onClick={() => void free()}>Freie Rechnung</Button>} />
+        actions={<><Button onClick={() => void free(true)} title="Empfänger und Positionen frei eintragen; PDF mit der Überschrift „Kostenvoranschlag“ und eigener Nummer. Später wird daraus mit einem Klick die Rechnung.">Kostenvoranschlag</Button><Button onClick={() => void free()}>Freie Rechnung</Button></>} />
       <div className="filters">
         <div className="segmented" role="radiogroup" aria-label="Status">
           {STATUS.map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={f.status === k} className={f.status === k ? 'on' : ''} onClick={() => set({ status: k })}>{l}</button>)}
@@ -62,7 +66,7 @@ export function Invoices() {
           <thead><tr><th>Nummer</th><th>Datum</th><th>Empfänger</th><th className="hide-sm">Leistungszeitraum</th><th className="hide-sm">Reservierung</th><th>Status</th><th className="num">Betrag</th><th className="num hide-sm">Bezahlt</th><th className="num">Offen</th><th /></tr></thead>
           <tbody>{data.map((i) => (
             <tr key={i.id} className="rowlink" tabIndex={0} onClick={() => openInvoice(i.id)} onKeyDown={(e) => { if (e.key === 'Enter') openInvoice(i.id); }}>
-              <td className="strong nowrap">{i.number ?? 'Entwurf'}</td><td className="nowrap">{i.issueDate ? deDate(i.issueDate) : '–'}</td>
+              <td className="strong nowrap">{i.number ?? i.estimateNumber ?? 'Entwurf'}{!i.number && i.estimateNumber && <><br /><small className="muted">Kostenvoranschlag</small></>}</td><td className="nowrap">{i.issueDate ? deDate(i.issueDate) : '–'}</td>
               <td>{i.recipientCompany || i.recipientName}{i.recipientCompany && i.recipientName && <><br /><small>{i.recipientName}</small></>}</td>
               <td className="hide-sm nowrap">{i.serviceFrom ? `${deDate(i.serviceFrom)}${i.serviceTo && i.serviceTo !== i.serviceFrom ? ` – ${deDate(i.serviceTo)}` : ''}` : '–'}</td>
               <td className="hide-sm">{i.bookingId ? <button type="button" className="linkbtn" onClick={(e) => { e.stopPropagation(); openBooking(i.bookingId!); }}>{i.bookingNumber}</button> : '–'}</td>

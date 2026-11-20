@@ -47,7 +47,8 @@ const money = (cents: number) => new Intl.NumberFormat('de-DE', { style: 'curren
 const de = (iso: string | null) => (iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}` : '–');
 const num = (n: number) => n.toLocaleString('de-DE');
 
-export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Logo | null, layoutIn: Partial<InvoiceLayout> = DEFAULT_LAYOUT): Promise<Uint8Array> {
+/** estimate: denselben Inhalt als „Kostenvoranschlag“ ausgeben (eigene KV-Nummer, ohne Rechnungsnummer, ohne Zahlungsangaben, ohne „ENTWURF“) */
+export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Logo | null, layoutIn: Partial<InvoiceLayout> = DEFAULT_LAYOUT, estimate?: { number: string; date: string }): Promise<Uint8Array> {
   const layout: InvoiceLayout = { ...DEFAULT_LAYOUT, ...layoutIn };
   const doc = await PDFDocument.create();
   doc.registerFontkit(fontkit);
@@ -58,8 +59,8 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
   if (logo) { try { image = logo.mime === 'image/png' ? await doc.embedPng(logo.data) : await doc.embedJpg(logo.data); } catch { image = null; } }
   const cancel = inv.kind === 'cancellation';
   const draft = inv.status === 'draft';
-  const title = cancel ? 'Stornobeleg' : 'Rechnung';
-  doc.setTitle(inv.number ? `${title} ${inv.number}` : 'Rechnungsentwurf');
+  const title = estimate ? 'Kostenvoranschlag' : cancel ? 'Stornobeleg' : 'Rechnung';
+  doc.setTitle(estimate ? `Kostenvoranschlag ${estimate.number}` : inv.number ? `${title} ${inv.number}` : 'Rechnungsentwurf');
   doc.setAuthor(issuer.name);
 
   // f = Schriftgröße, g = Abstände
@@ -141,13 +142,13 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
     y -= 15.5 * f;
   }
   let my = top;
-  const meta: [string, string][] = [[cancel ? 'Stornobeleg-Nr.' : 'Rechnungsnummer', inv.number ?? '–'], ['Rechnungsdatum', de(inv.issueDate)],
+  const meta: [string, string][] = [estimate ? ['Kostenvoranschlag-Nr.', estimate.number] : [cancel ? 'Stornobeleg-Nr.' : 'Rechnungsnummer', inv.number ?? '–'], estimate ? ['Datum', de(estimate.date)] : ['Rechnungsdatum', de(inv.issueDate)],
     ['Leistungszeitraum', !inv.serviceFrom ? '–' : inv.serviceTo && inv.serviceTo !== inv.serviceFrom ? `${de(inv.serviceFrom)} – ${de(inv.serviceTo)}` : de(inv.serviceFrom)]];
   if (inv.bookingNumber) meta.push(['Buchungsnummer', inv.bookingNumber]);
   if (cancel && inv.cancelsNumber) meta.push(['Storno zu', inv.cancelsNumber]);
   for (const [k, v] of meta) { put(k, 345, my, { size: 9.5, color: grey }); put(v, R, my, { size: 9.5, right: true }); my -= 16 * f; }
   y = Math.min(y, my, top - 5 * 15.5 * f) - 34 * g;
-  const heading = inv.number && !draft ? `${title} ${inv.number}` : title;
+  const heading = estimate ? `${title} ${estimate.number}` : inv.number && !draft ? `${title} ${inv.number}` : title;
   put(elegant ? heading.toUpperCase() : heading, L, y, { size: elegant ? 14 : 16, font: bold, color: layout.style === 'classic' ? black : acc });
   y -= 24 * g;
   if (layout.intro && !cancel) { for (const t of wrap(layout.intro, R - L, 10)) { put(t, L, y); y -= 14 * f; } y -= 10 * g; }
@@ -216,7 +217,7 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
   y -= 22 * g;
   // Offener Betrag mit hinterlegter IBAN: eigener Abschnitt „Zahlung per Überweisung“ (statt nur eines Satzes im Schlusstext)
   const payBlock = !cancel && !draft && inv.openCents > 0 && !!(issuer.iban ?? '').trim();
-  const closing = [inv.notes,
+  const closing = estimate ? [inv.notes, 'Dies ist ein Kostenvoranschlag und keine Rechnung. Bitte überweisen Sie noch nichts – die Rechnung erhalten Sie gesondert.'].filter(Boolean).join('\n\n') : [inv.notes,
     !cancel && !draft && inv.openCents > 0 && inv.dueDate && !payBlock ? `Bitte überweisen Sie den Betrag bis zum ${de(inv.dueDate)} unter Angabe der Rechnungsnummer ${inv.number}.` : '',
     !cancel && inv.openCents === 0 && inv.paidCents !== 0 ? 'Der Rechnungsbetrag wurde vollständig bezahlt. Vielen Dank!' : '',
     !cancel ? layout.closing : ''].filter(Boolean).join('\n\n');
@@ -269,7 +270,7 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
       for (const [at, len] of [[105, 14], [148.5, 20], [210, 14]] as const) page.drawLine({ start: { x: 12, y: H - at * mm }, end: { x: 12 + len, y: H - at * mm }, thickness: 0.5, color: grey });
     }
     if (pages.length > 1) put(`Seite ${i + 1} von ${pages.length}`, R, 26, { size: 7.5, color: grey, right: true });
-    if (draft) page.drawText('ENTWURF', { x: 120, y: 300, size: 90, font: bold, color: rgb(0.5, 0.5, 0.5), opacity: 0.16, rotate: degrees(35) });
+    if (draft && !estimate) page.drawText('ENTWURF', { x: 120, y: 300, size: 90, font: bold, color: rgb(0.5, 0.5, 0.5), opacity: 0.16, rotate: degrees(35) });
   });
   return doc.save();
 }

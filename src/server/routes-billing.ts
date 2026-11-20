@@ -73,6 +73,12 @@ export function registerBillingRoutes(api: FastifyInstance, { db, requireUser, r
     await billing.invoicePdf(db, r.id).catch((e) => req.log.error(e));
     return r;
   });
+  // Kostenvoranschlag: Entwurf mit eigener KV-Nummer, als PDF ohne Rechnungsnummer
+  api.post('/invoices/:id/estimate', user, (req) => billing.makeEstimate(db, actor(req), idOf(req)));
+  api.get('/invoices/:id/estimate/pdf', user, async (req, reply) => {
+    const f = await billing.estimatePdf(db, idOf(req));
+    return reply.header('Content-Type', 'application/pdf').header('Content-Disposition', `inline; filename="${f.filename}"`).send(f.pdf);
+  });
   api.get('/invoices/:id/pdf', user, async (req, reply) => {
     const f = await billing.invoicePdf(db, idOf(req));
     const download = z.object({ download: z.string().optional() }).parse(req.query).download;
