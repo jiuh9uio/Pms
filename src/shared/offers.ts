@@ -46,6 +46,25 @@ export function groupItems<T extends { group: string }>(items: T[]): { name: str
   return out;
 }
 
+// ---------- Absprache (am Tisch): frei einstellbare Schritte je Vorlage ----------
+export const TALK_KINDS = ['single', 'multi', 'text'] as const;
+export type TalkKind = (typeof TALK_KINDS)[number];
+export const TALK_KIND_LABEL: Record<TalkKind, string> = { single: 'eine Antwort', multi: 'mehrere Antworten', text: 'nur Text' };
+/** Antwort zum Antippen; mit itemId kommt die Leistung (mit Preis) ins Angebot, ohne ist es nur eine Angabe (z. B. „à la carte“) */
+export const talkOption = z.object({ label: z.string().trim().min(1, 'Bitte die Antwort benennen').max(80), itemId: z.uuid().nullable().default(null) });
+export const talkStep = z.object({
+  title: z.string().trim().min(1, 'Bitte den Schritt benennen').max(80), hint: text(200), kind: z.enum(TALK_KINDS).default('single'),
+  options: z.array(talkOption).max(20).default([]),
+});
+export type TalkStep = z.infer<typeof talkStep>;
+/** Festgehaltene Absprache (Momentaufnahme: bleibt lesbar, auch wenn die Vorlage später geändert wird) */
+export const talkInput = z.object({
+  template: text(80),
+  steps: z.array(z.object({ title: z.string().trim().min(1).max(80), answers: z.array(z.string().trim().min(1).max(80)).max(20), text: text(1000) })).max(20),
+});
+export type TalkInput = z.infer<typeof talkInput>;
+export interface OfferTalk extends TalkInput { at: string; by: string }
+
 export const offerTemplateInput = z.object({
   name: z.string().trim().min(1, 'Bitte einen Namen eintragen').max(80), area: z.enum(OFFER_AREAS),
   title: text(160), intro: text(3000), closing: text(3000),
@@ -54,6 +73,8 @@ export const offerTemplateInput = z.object({
   items: z.array(z.object({ itemId: z.uuid(), quantity: z.number().positive().max(100000).nullable().default(null), preselect: z.boolean().default(true) })).max(80).default([]),
   validDays: z.number('Bitte eine Zahl eingeben').int().min(1).max(365), depositPercent: z.number('Bitte eine Zahl eingeben').int().min(0).max(100),
   documentIds: z.array(z.uuid()).max(10).default([]), sort: z.number().int().min(0).max(9999).default(0), active: z.boolean().default(true),
+  /** Schritte der Absprache am Tisch (leer = die Gruppen des Produktkatalogs dienen als Schritte) */
+  talkSteps: z.array(talkStep).max(20).default([]),
   /** Preise im Katalog-PDF für den Kunden zeigen (gespeichert in den Einstellungen, nicht in der Vorlagen-Tabelle) */
   catalogPrices: z.boolean().default(false),
 });
@@ -111,6 +132,8 @@ export interface OfferDto extends OfferListRow {
   sentTo: string; acceptedBy: string; acceptedMethod: string; acceptedHash: string; sentHash: string; declinedAt: string | null;
   lines: OfferLineDto[]; taxes: { rate: number; netCents: number; taxCents: number }[]; version: number;
   answers: OfferAnswers | null;
+  /** Absprache am Tisch (falls das Angebot daraus entstand) */
+  talk: OfferTalk | null;
 }
 /** Öffentliche Ansicht über den Link (ohne interne Notizen) */
 export interface PublicOffer {

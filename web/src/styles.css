@@ -1206,3 +1206,16 @@ a.linkcard.attention b { color: var(--warn); }
 .cfg-price { text-align: right; font-weight: 650; white-space: nowrap; }
 .cfg-qty { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px 12px; border-top: 1px solid var(--line); }
 .cfg-qty input { width: 90px; margin-left: 6px; }
+
+/* Absprache: Schritte einstellen und anzeigen */
+.tk-edit { display: grid; gap: 10px; }
+.tk-step { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 10px; }
+.tk-head { display: grid; grid-template-columns: auto 1fr auto auto auto auto; gap: 6px; align-items: center; }
+.tk-opt { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; align-items: center; padding-left: 22px; }
+.tk-text { display: block; white-space: pre-wrap; color: var(--ink-2); }
+.tk-choice { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 12px; }
+@media (max-width: 700px) { .tk-head { grid-template-columns: auto 1fr auto auto auto; } .tk-head select { grid-column: 2 / -1; grid-row: 2; } .tk-opt { grid-template-columns: 1fr auto; padding-left: 0; } .tk-opt select { grid-column: 1; grid-row: 2; } }
+.tk-choice .cfg-pick { grid-template-columns: auto 1fr; }
+.tk-choice .cfg-price { grid-column: 2; text-align: left; white-space: normal; }
+.tk-choice .cfg-price:empty { display: none; }
+.tk-choice .cfg-price small { display: inline; margin-left: 6px; }

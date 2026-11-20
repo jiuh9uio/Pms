@@ -74,6 +74,7 @@ export function registerOfferRoutes(api: FastifyInstance, { db, requireUser, req
     if (!Buffer.isBuffer(req.body)) throw new AppError(400, 'bad_file', 'Bitte eine PDF-Datei wählen');
     return offers.readCatalog(db, idOf(req), req.body);
   });
+  api.post('/offers/:id/talk', user, (req) => offers.saveTalk(db, actor(req), idOf(req), O.talkInput.parse(req.body)));
   api.get('/offers/:id/link', user, (req) => offers.offerLink(db, idOf(req), guestBaseUrl(req).url));
   api.post('/offers/:id/accept', user, (req) => offers.acceptOffer(db, actor(req), idOf(req), O.offerAcceptInput.parse(req.body)));
   api.post('/offers/:id/decline', user, (req) => offers.declineOffer(db, actor(req), idOf(req)));

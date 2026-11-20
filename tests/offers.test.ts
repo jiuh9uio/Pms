@@ -313,3 +313,28 @@ describe('Leistungskatalog zum Ankreuzen (PDF-Formular)', () => {
     expect((await call('GET', `/offers/${o.id}/catalog/pdf`, user)).statusCode).toBe(200);
   });
 });
+
+describe('Absprache am Tisch: eigene Schritte je Vorlage', () => {
+  it('Schritte speichern (mit und ohne Leistung); Absprache am Angebot festhalten, ohne Inhalt oder Status zu ändern', async () => {
+    const item = (await ok('POST', '/offer-items', admin, { name: 'Buffet Absprache', description: '', unit: 'person', priceCents: 2900, taxRatePercent: 19, area: 'both', sort: 9, active: true })).id;
+    const steps = [
+      { title: 'Essen', hint: 'nach Allergien fragen', kind: 'single', options: [{ label: 'à la carte', itemId: null }, { label: 'kleines Menü', itemId: null }, { label: 'Buffet', itemId: item }] },
+      { title: 'Sonstiges', hint: '', kind: 'text', options: [] },
+    ];
+    const tpl = await ok('POST', '/offer-templates', admin, { name: 'Feier Absprache', area: 'both', title: '', intro: '', closing: '', questions: [], validDays: 14, depositPercent: 0, items: [], talkSteps: steps });
+    expect(tpl.talkSteps).toEqual(steps);
+    expect((await call('POST', '/offer-templates', admin, { ...tpl, name: 'kaputt', talkSteps: [{ title: '', kind: 'single', options: [] }] })).statusCode).toBe(400);
+    // bestehende Vorlagen: ohne Schritte
+    expect((await ok('GET', '/offer-templates', user)).find((t: { name: string }) => t.name === 'Seminar-Katalog').talkSteps).toEqual([]);
+    const o = await ok('POST', '/offers', user, { templateId: tpl.id, customerName: 'Erfunden Absprache', persons: 8 });
+    const before = await ok('GET', `/offers/${o.id}`, user);
+    expect(before.talk).toBeNull();
+    const talk = await ok('POST', `/offers/${o.id}/talk`, user, { template: 'Feier Absprache', steps: [{ title: 'Essen', answers: ['à la carte'], text: '' }, { title: 'Sonstiges', answers: [], text: 'ein Kinderstuhl' }] });
+    expect(talk.by).toBe('Rezeption');
+    const after = await ok('GET', `/offers/${o.id}`, user);
+    expect(after.talk.steps[0]).toEqual({ title: 'Essen', answers: ['à la carte'], text: '' });
+    expect(after.talk.steps[1].text).toBe('ein Kinderstuhl');
+    expect(after).toMatchObject({ status: 'draft', version: before.version, lines: [] });
+    expect((await call('POST', `/offers/00000000-0000-4000-8000-000000000000/talk`, user, { template: '', steps: [] })).statusCode).toBe(404);
+  });
+});

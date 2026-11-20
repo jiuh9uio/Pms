@@ -3,7 +3,7 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { taxBreakdown } from '../../shared/billing.js';
 import { formatMoney, todayBerlin } from '../../shared/hotel.js';
 import {
-  type CatalogReturn, OFFER_LAYOUT_DEFAULT, type OfferAnswers, lineTotal, offerLayoutInput, quantityFor, type OfferLayout, type OfferCreateInputT, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferItemInput, type OfferLineInput, type OfferListRow,
+  type CatalogReturn, OFFER_LAYOUT_DEFAULT, type OfferAnswers, type OfferTalk, type TalkInput, lineTotal, offerLayoutInput, quantityFor, type OfferLayout, type OfferCreateInputT, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferItemInput, type OfferLineInput, type OfferListRow,
   type OfferState, type OfferTemplateDto, type OfferTemplateInput, type OfferUpdateInput, type PublicOffer,
 } from '../../shared/offers.js';
 import type { Db, Exec } from '../db/client.js';
@@ -80,7 +80,7 @@ export async function documentFile(db: Exec, id: string) {
 const tplDto = (r: typeof offerTemplates.$inferSelect, prices: Record<string, boolean> = {}): OfferTemplateDto => ({
   catalogPrices: prices[r.id] === true,
   id: r.id, name: r.name, area: r.area, title: r.title, intro: r.intro, closing: r.closing, questions: r.questions as string[],
-  items: r.items as OfferTemplateDto['items'], validDays: r.validDays, depositPercent: r.depositPercent, documentIds: r.documentIds as string[], sort: r.sort, active: r.active, version: r.version,
+  items: r.items as OfferTemplateDto['items'], talkSteps: (r.talkSteps as OfferTemplateDto['talkSteps']) ?? [], validDays: r.validDays, depositPercent: r.depositPercent, documentIds: r.documentIds as string[], sort: r.sort, active: r.active, version: r.version,
 });
 /** Beim ersten Aufruf neutrale Mustervorlagen anlegen (ohne Preise – die Leistungen und Preise legt das Haus selbst an). */
 async function ensureDefaults(db: Db) {
@@ -189,7 +189,7 @@ export async function getOffer(db: Exec, id: string): Promise<OfferDto> {
     templateId: r.templateId, customerCompany: r.customerCompany, customerName: r.customerName, phone: r.phone, street: r.street, zip: r.zip, city: r.city,
     intro: r.intro, closing: r.closing, questions: r.questions as string[], depositPercent: r.depositPercent, documentIds: r.documentIds as string[], notes: r.notes,
     sentTo: r.sentTo, acceptedBy: r.acceptedBy, acceptedMethod: r.acceptedMethod, acceptedHash: r.acceptedHash, sentHash: r.sentHash, declinedAt: r.declinedAt?.toISOString() ?? null,
-    lines, taxes: taxBreakdown(lines), version: r.version, mode: r.mode, answers: (r.answers as OfferAnswers | null) ?? null,
+    lines, taxes: taxBreakdown(lines), version: r.version, mode: r.mode, answers: (r.answers as OfferAnswers | null) ?? null, talk: (r.talk as OfferTalk | null) ?? null,
   };
 }
 
@@ -599,4 +599,14 @@ export async function readCatalog(db: Exec, id: string, data: Buffer): Promise<C
   if (r.unknown > 0) warnings.push(`${r.unknown} angekreuzte Leistung(en) gibt es nicht mehr oder sind ausgeblendet – bitte von Hand ergänzen.`);
   if (!r.itemIds.length) warnings.push('Im PDF ist keine Leistung angekreuzt.');
   return { itemIds: r.itemIds, persons: r.persons, date: r.date, name: r.name, remarks: r.remarks, offerNumber: r.offerNumber, warnings };
+}
+
+// ---------- Absprache am Tisch ----------
+/** Absprache am Angebot festhalten (Momentaufnahme der Antworten); ändert weder Inhalt noch Status des Angebots */
+export async function saveTalk(db: Db, actor: Actor, id: string, v: TalkInput) {
+  const talk: OfferTalk = { ...v, at: new Date().toISOString(), by: actor.userName };
+  const done = await db.update(offers).set({ talk, updatedAt: new Date() }).where(eq(offers.id, id)).returning({ id: offers.id });
+  if (!done.length) throw notFound('Angebot');
+  await record(db, actor, { action: 'talk', entity: 'offer', entityId: id, after: { template: v.template, steps: v.steps.length } });
+  return talk;
 }

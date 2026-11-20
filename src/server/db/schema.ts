@@ -751,6 +751,8 @@ export const offerTemplates = pgTable('offer_templates', {
   closing: text('closing').notNull().default(''),
   questions: jsonb('questions').notNull().default(sql`'[]'::jsonb`),
   items: jsonb('items').notNull().default(sql`'[]'::jsonb`),
+  /** Schritte der Absprache am Tisch: [{ title, hint, kind, options: [{ label, itemId }] }] */
+  talkSteps: jsonb('talk_steps').notNull().default(sql`'[]'::jsonb`),
   validDays: integer('valid_days').notNull().default(14),
   depositPercent: integer('deposit_percent').notNull().default(0),
   documentIds: jsonb('document_ids').notNull().default(sql`'[]'::jsonb`),
@@ -767,6 +769,8 @@ export const offers = pgTable('offers', {
   mode: text('mode', { enum: ['offer', 'questions'] }).notNull().default('offer'),
   /** Antworten des Kunden auf den Fragenkatalog (online über den Link): { at, name, items: [{ q, a }] } */
   answers: jsonb('answers'),
+  /** Absprache am Tisch: { at, by, template, steps: [{ title, answers, text }] } */
+  talk: jsonb('talk'),
   area: text('area', { enum: ['hotel', 'restaurant', 'both'] }).notNull().default('both'),
   templateId: uuid('template_id').references(() => offerTemplates.id, { onDelete: 'set null' }),
   customerCompany: text('customer_company').notNull().default(''),

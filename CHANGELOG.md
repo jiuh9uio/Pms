@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.111.0
+
+- **Absprache und Katalog getrennt – Absprache frei einstellbar.** In jeder Vorlage (Angebote → Vorlagen) gibt es jetzt **„Absprache am Tisch – Schritte“**: eigene Schritte mit eigenen Antworten zum Antippen, z. B. „Essen: à la carte / kleines Menü / Buffet“. Je Schritt: eine Antwort, mehrere Antworten oder nur Text; Reihenfolge frei. Eine Antwort kann mit einer Leistung verknüpft sein (kommt mit Preis ins Angebot) oder nur eine Angabe ohne Preis sein.
+- **„Absprache Schritt für Schritt“** nutzt diese Schritte. Am Ende entsteht ein **Absprache-Zettel** am Angebot (zum Nachlesen und Drucken) und ein Angebot als Entwurf mit den Leistungen, die einen Preis haben. Ohne eigene Schritte dienen wie bisher die Gruppen des Produktkatalogs als Schritte.
+- Der **Katalog** (PDF zum Ankreuzen für den Kunden, Konfigurator) bleibt davon unabhängig.
+- Datenbank: zwei neue Felder (Schritte bei den Vorlagen, Absprache bei den Angeboten); bestehende Daten bleiben unverändert.
+
 ## 1.110.0
 
 - **Angebote: „Absprache Schritt für Schritt“** – geführter Ablauf wie bei der Zimmerbuchung, z. B. für den Kellner direkt am Tisch (auch am Tablet): **Anlass → allgemeine Daten → Leistungen Gruppe für Gruppe → Übersicht** mit mitlaufender Summe und Feld für Wünsche. Am Ende entsteht ein Angebot als Entwurf; es wird nichts automatisch versendet.

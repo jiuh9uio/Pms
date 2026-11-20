@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { addDays, formatMoney, moneyInput, parseMoney, todayBerlin } from '../../../src/shared/hotel.js';
 import {
-  AREA_LABEL, OFFER_AREAS, OFFER_STATE_LABEL, OFFER_UNITS, UNIT_LABEL, groupItems, lineTotal, offerItemInput, offerTemplateInput, quantityFor,
-  type CatalogReturn, type OfferArea, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferListRow, type OfferState, type OfferTemplateDto, type OfferUnit,
+  AREA_LABEL, OFFER_AREAS, OFFER_STATE_LABEL, OFFER_UNITS, TALK_KINDS, TALK_KIND_LABEL, UNIT_LABEL, groupItems, lineTotal, offerItemInput, offerTemplateInput, quantityFor,
+  type CatalogReturn, type OfferArea, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferListRow, type OfferState, type OfferTalk, type OfferTemplateDto, type OfferUnit, type TalkKind, type TalkStep,
 } from '../../../src/shared/offers.js';
 import { api } from '../api.ts';
 import { useAuth } from '../App.tsx';
@@ -244,6 +244,13 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
         <section className="card answers">
           <h3 className="first">Antworten von {o.answers.name} <small className="muted">– online am {new Date(o.answers.at).toLocaleString('de-DE')}</small></h3>
           <dl>{o.answers.items.map((x, i) => <div key={i}><dt>{x.q}</dt><dd>{x.a || <span className="muted">– keine Angabe –</span>}</dd></div>)}</dl>
+        </section>
+      )}
+      {o.talk && (
+        <section className="card answers">
+          <h3 className="first">Absprache{o.talk.template ? ` – ${o.talk.template}` : ''} <small className="muted">– am {new Date(o.talk.at).toLocaleString('de-DE')} von {o.talk.by}</small></h3>
+          <dl>{o.talk.steps.map((x, i) => <div key={i}><dt>{x.title}</dt><dd>{x.answers.join(', ')}{x.text && <span className="tk-text">{x.text}</span>}{!x.answers.length && !x.text && <span className="muted">– keine Angabe –</span>}</dd></div>)}</dl>
+          <div className="btnrow"><Button onClick={() => printTalk(o, o.talk!)}>Absprache-Zettel drucken</Button></div>
         </section>
       )}
       {o.status === 'accepted' && <p className="notice small">Angenommen am {new Date(o.acceptedAt!).toLocaleString('de-DE')} von <b>{o.acceptedBy}</b> ({({ online: 'online über den Link', email: 'per E-Mail', telefon: 'telefonisch', persoenlich: 'persönlich', schriftlich: 'schriftlich' } as Record<string, string>)[o.acceptedMethod] ?? o.acceptedMethod}). Prüfwert der angenommenen Fassung: <code className="wrapcode">{o.acceptedHash.slice(0, 16)}…</code></p>}
@@ -569,6 +576,7 @@ function TemplateDialog({ tpl, onClose }: { tpl: OfferTemplateDto | null; onClos
     name: tpl?.name ?? '', area: tpl?.area ?? 'both' as OfferArea, title: tpl?.title ?? '', intro: tpl?.intro ?? '', closing: tpl?.closing ?? '',
     questions: (tpl?.questions ?? []).join('\n'), catalog: (tpl?.items ?? []).map((x) => ({ itemId: x.itemId, preselect: x.preselect !== false, quantity: x.quantity ?? null })), validDays: String(tpl?.validDays ?? 14), depositPercent: String(tpl?.depositPercent ?? 0),
     documentIds: tpl?.documentIds ?? [], sort: String(tpl?.sort ?? 0), active: tpl?.active ?? true, catalogPrices: tpl?.catalogPrices ?? false,
+    talkSteps: (tpl?.talkSteps ?? []) as TalkStep[],
   });
   const [busy, setBusy] = useState(false);
   const save = async () => {
@@ -611,10 +619,68 @@ function TemplateDialog({ tpl, onClose }: { tpl: OfferTemplateDto | null; onClos
         </div>
         <label className="check"><input type="checkbox" checked={v.catalogPrices} onChange={(e) => setV({ ...v, catalogPrices: e.target.checked })} /><span>Preise im Katalog für den Kunden zeigen<small>gilt für den Katalog zum Ankreuzen, den der Kunde per E-Mail bekommt</small></span></label>
       </Field>
+      <Field label="Absprache am Tisch – Schritte" wide hint="Eigene Schritte mit Antworten zum Antippen, z. B. „Essen: à la carte / kleines Menü / Buffet“. Mit Leistung = kommt mit Preis ins Angebot; ohne = nur eine Angabe. Ohne Schritte nutzt die Absprache die Gruppen des Produktkatalogs.">
+        <TalkStepsEditor steps={v.talkSteps} items={items} onChange={(talkSteps) => setV({ ...v, talkSteps })} />
+      </Field>
       <Field label="Anlagen" wide><div className="radiolist">{docs.filter((d) => d.active || v.documentIds.includes(d.id)).map((d) => <label key={d.id} className="check"><input type="checkbox" checked={v.documentIds.includes(d.id)} onChange={(e) => setV({ ...v, documentIds: toggle(v.documentIds, d.id, e.target.checked) })} /><span>{d.name}{!d.active && <small className="muted"> (ausgeblendet – wird nicht mehr übernommen)</small>}</span></label>)}{docs.length === 0 && <span className="muted small">Noch keine Dokumente hochgeladen.</span>}</div></Field>
       <label className="check"><input type="checkbox" checked={v.active} onChange={(e) => setV({ ...v, active: e.target.checked })} /><span>In Benutzung</span></label>
     </Dialog>
   );
+}
+
+/** Schritte der Absprache einer Vorlage bearbeiten: Titel, Art, Antworten (mit oder ohne Leistung), Reihenfolge */
+function TalkStepsEditor({ steps, items, onChange }: { steps: TalkStep[]; items: OfferItemDto[]; onChange: (s: TalkStep[]) => void }) {
+  const setStep = (i: number, p: Partial<TalkStep>) => onChange(steps.map((s, k) => (k === i ? { ...s, ...p } : s)));
+  const move = (i: number, d: number) => { const n = [...steps]; const [x] = n.splice(i, 1); n.splice(i + d, 0, x!); onChange(n); };
+  return (
+    <div className="tk-edit">
+      {steps.map((s, i) => (
+        <div key={i} className="tk-step">
+          <div className="tk-head">
+            <b>{i + 1}.</b>
+            <input value={s.title} placeholder="Schritt, z. B. Essen" onChange={(e) => setStep(i, { title: e.target.value })} aria-label={`Schritt ${i + 1} Titel`} />
+            <select value={s.kind} onChange={(e) => setStep(i, { kind: e.target.value as TalkKind })} aria-label={`Schritt ${i + 1} Art`}>{TALK_KINDS.map((k) => <option key={k} value={k}>{TALK_KIND_LABEL[k]}</option>)}</select>
+            <button type="button" className="iconbtn" disabled={i === 0} onClick={() => move(i, -1)} aria-label="nach oben">↑</button>
+            <button type="button" className="iconbtn" disabled={i === steps.length - 1} onClick={() => move(i, 1)} aria-label="nach unten">↓</button>
+            <button type="button" className="iconbtn" onClick={() => { if (window.confirm(`Schritt „${s.title || i + 1}“ entfernen?`)) onChange(steps.filter((_, k) => k !== i)); }} aria-label="Schritt entfernen">✕</button>
+          </div>
+          <input className="small" value={s.hint} placeholder="Hinweis für den Mitarbeiter (optional), z. B. „nach Allergien fragen“" onChange={(e) => setStep(i, { hint: e.target.value })} aria-label={`Schritt ${i + 1} Hinweis`} />
+          {s.kind !== 'text' && <>
+            {s.options.map((o, k) => (
+              <div key={k} className="tk-opt">
+                <input value={o.label} placeholder="Antwort, z. B. à la carte" onChange={(e) => setStep(i, { options: s.options.map((x, n) => (n === k ? { ...x, label: e.target.value } : x)) })} aria-label={`Schritt ${i + 1} Antwort ${k + 1}`} />
+                <select value={o.itemId ?? ''} aria-label={`Schritt ${i + 1} Antwort ${k + 1} Leistung`} onChange={(e) => { const it = items.find((x) => x.id === e.target.value); setStep(i, { options: s.options.map((x, n) => (n === k ? { label: x.label || it?.name || '', itemId: e.target.value || null } : x)) }); }}>
+                  <option value="">– ohne Preis (nur Angabe) –</option>
+                  {items.filter((x) => x.active || x.id === o.itemId).map((x) => <option key={x.id} value={x.id}>{x.name} · {formatMoney(x.priceCents)} {UNIT_LABEL[x.unit]}</option>)}
+                </select>
+                <button type="button" className="iconbtn" onClick={() => setStep(i, { options: s.options.filter((_, n) => n !== k) })} aria-label="Antwort entfernen">✕</button>
+              </div>
+            ))}
+            <div><Button onClick={() => setStep(i, { options: [...s.options, { label: '', itemId: null }] })}>+ Antwort</Button></div>
+          </>}
+        </div>
+      ))}
+      <div><Button onClick={() => onChange([...steps, { title: '', hint: '', kind: 'single', options: [] }])}>+ Schritt</Button></div>
+    </div>
+  );
+}
+
+/** Absprache-Zettel drucken (eigenes Fenster, A4) */
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+function printTalk(o: OfferDto, t: OfferTalk) {
+  const w = window.open('', '_blank');
+  if (!w) return;
+  const when = o.eventDate ? `${deDate(o.eventDate)}${o.eventEnd && o.eventEnd !== o.eventDate ? ` – ${deDate(o.eventEnd)}` : ''}` : 'noch offen';
+  w.document.write(`<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Absprache ${esc(o.number)}</title><style>
+    body{font:14px/1.45 Arial,Helvetica,sans-serif;color:#111;margin:18mm}h1{font-size:20px;margin:0 0 4px}p.sub{color:#555;margin:0 0 14px}
+    table{border-collapse:collapse;width:100%}td{border-top:1px solid #ccc;padding:8px 6px;vertical-align:top}td:first-child{width:32%;font-weight:bold}
+    .txt{white-space:pre-wrap;color:#333}.foot{margin-top:18px;color:#555;font-size:12px}</style></head><body>
+    <h1>Absprache${t.template ? ` – ${esc(t.template)}` : ''}</h1>
+    <p class="sub">${esc(o.customer)} · ${o.persons} ${o.persons === 1 ? 'Person' : 'Personen'} · Termin: ${esc(when)}${o.phone ? ` · Tel. ${esc(o.phone)}` : ''}</p>
+    <table>${t.steps.map((s) => `<tr><td>${esc(s.title)}</td><td>${s.answers.map(esc).join(', ') || (s.text ? '' : '–')}${s.text ? `<div class="txt">${esc(s.text)}</div>` : ''}</td></tr>`).join('')}</table>
+    <p class="foot">Aufgenommen am ${new Date(t.at).toLocaleString('de-DE')} von ${esc(t.by)} · Angebot ${esc(o.number)} (Entwurf – keine verbindliche Zusage)</p>
+    </body></html>`);
+  w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
 }
 
 function DocumentsAdmin() {
