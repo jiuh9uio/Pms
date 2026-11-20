@@ -108,6 +108,7 @@ const NAV: NavItem[] = [
   { to: '/reinigung', label: 'Reinigung (Hotel)', short: 'Reinig.', icon: '✧', module: 'team', need: 'hotel', jump: true },
   { to: '/email', label: 'Vorgänge', icon: '☷', module: 'email', group: 'Vorgänge' },
   { to: '/email', tab: 'new', label: 'Posteingang', short: 'Post', icon: '✉', module: 'email', group: 'Vorgänge' },
+  { to: '/email', tab: 'vorlagen', label: 'Antwortvorlagen', short: 'Vorlagen', icon: '▤', module: 'email', admin: true, group: 'Einrichtung' },
   { to: '/einstellungen', tab: 'email', label: 'Einrichtung', short: 'Einricht.', icon: '⚙', module: 'email', admin: true, jump: true, group: 'Einrichtung' },
   { to: '/einstellungen', label: 'Einstellungen', short: 'Einstell.', icon: '⚙', admin: true, module: 'verwaltung', group: 'Verwaltung' },
   { to: '/benutzer', label: 'Benutzer', icon: '◉', admin: true, module: 'verwaltung', group: 'Verwaltung' },

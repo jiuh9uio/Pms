@@ -79,6 +79,7 @@ export async function getCase(db: Exec, id: string): Promise<CaseDto> {
   // schon angelegt? (irgendeine Nachricht des Vorgangs wurde als Reservierung übernommen)
   const [linked] = await db.select({ k: inboxMails.linkKind }).from(inboxMails).where(and(eq(inboxMails.caseId, id), sql`${inboxMails.linkKind} is not null`)).limit(1);
   const link = (linked?.k ?? null) as 'booking' | 'table' | null;
+  const [conf] = await db.select({ at: sql<string | null>`max(${inboxMails.extract}->>'confirmedAt')` }).from(inboxMails).where(eq(inboxMails.caseId, id));
   // Vorschläge: E-Mails derselben Adresse seit Beginn des Vorgangs, die noch nirgends zugeordnet sind
   const candidates = !c.contactAddr ? [] : (await db.select({ id: inboxMails.id, at: inboxMails.receivedAt, fromName: inboxMails.fromName, fromAddr: inboxMails.fromAddr, subject: inboxMails.subject })
     .from(inboxMails).where(and(sql`lower(${inboxMails.fromAddr}) = ${c.contactAddr}`, isNull(inboxMails.caseId), gte(inboxMails.receivedAt, c.createdAt),
@@ -87,7 +88,7 @@ export async function getCase(db: Exec, id: string): Promise<CaseDto> {
     .map((m) => ({ inboxMailId: m.id, at: m.at.toISOString(), from: m.fromName || m.fromAddr, subject: m.subject }));
   return {
     id: c.id, number: c.number, kind: c.kind as MailKind, title: c.title, contactName: c.contactName, contactAddr: c.contactAddr, status: c.status as CaseStatus, turn: turnOf(messages),
-    createdAt: c.createdAt.toISOString(), createdBy: c.createdBy, messages, latestInboxMailId: latestIn?.inboxMailId ?? null, latestLinkKind: link, candidates,
+    createdAt: c.createdAt.toISOString(), createdBy: c.createdBy, messages, latestInboxMailId: latestIn?.inboxMailId ?? null, latestLinkKind: link, confirmedAt: conf?.at ?? null, candidates,
   };
 }
 
@@ -103,9 +104,10 @@ export async function listCases(db: Exec, f: { status: 'open' | 'done' | 'all'; 
     )).orderBy(desc(mailCases.updatedAt)).limit(200);
     for (const c of cases) {
       const msgs = await messagesOf(db, c.id);
+      const [flag] = await db.select({ linked: sql<boolean>`bool_or(${inboxMails.linkKind} is not null)`, confirmed: sql<boolean>`bool_or(${inboxMails.extract} ? 'confirmedAt')` }).from(inboxMails).where(eq(inboxMails.caseId, c.id));
       const last = msgs[msgs.length - 1];
       out.push({ source: 'case', id: c.id, number: c.number, kind: c.kind as MailKind, title: c.title, contact: c.contactName || c.contactAddr, status: c.status as CaseStatus, turn: turnOf(msgs),
-        lastAt: last?.at ?? c.createdAt.toISOString(), snippet: last ? snip(last.text) : '', count: msgs.length });
+        lastAt: last?.at ?? c.createdAt.toISOString(), snippet: last ? snip(last.text) : '', count: msgs.length, linked: !!flag?.linked, confirmed: !!flag?.confirmed });
     }
   }
   const hit = (...s: string[]) => !q || s.some((x) => x.toLowerCase().includes(q));

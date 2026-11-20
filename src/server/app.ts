@@ -447,8 +447,11 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.patch('/inbox/:id', email, (req) => inbox.updateInboxMail(db, actor(req), z.uuid().parse((req.params as { id: string }).id), I.inboxUpdateInput.parse(req.body)));
     api.delete('/inbox/:id', email, (req) => inbox.deleteInboxMail(db, actor(req), z.uuid().parse((req.params as { id: string }).id)));
     const tpl = (req: FastifyRequest) => z.object({ template: z.enum(I.REPLY_TEMPLATES).default('reply') }).parse(req.query).template;
-    api.get('/inbox/:id/mail', email, (req) => inbox.replyDraft(db, z.uuid().parse((req.params as { id: string }).id), tpl(req), S.hasModule(req.user!, 'hotel')));
-    api.post('/inbox/:id/mail', email, (req) => inbox.sendReply(db, actor(req), z.uuid().parse((req.params as { id: string }).id), mailSendInput.parse(req.body)));
+    const snippetOf = (req: FastifyRequest) => z.object({ vorlage: z.string().max(40).optional() }).parse(req.query).vorlage;
+    api.get('/inbox/:id/mail', email, (req) => inbox.replyDraft(db, z.uuid().parse((req.params as { id: string }).id), tpl(req), S.hasModule(req.user!, 'hotel'), snippetOf(req)));
+    api.get('/reply-snippets', email, () => inbox.getReplySnippets(db));
+    api.put('/reply-snippets', { preHandler: requireAdmin }, (req) => inbox.saveReplySnippets(db, actor(req), I.replySnippetsInput.parse(req.body).items));
+    api.post('/inbox/:id/mail', email, (req) => inbox.sendReply(db, actor(req), z.uuid().parse((req.params as { id: string }).id), mailSendInput.parse(req.body), tpl(req)));
     // Vorgänge: zusammengehörige E-Mails mit eigener Nummer
     const cid = (req: FastifyRequest) => z.uuid().parse((req.params as { id: string }).id);
     api.get('/mail-cases', email, (req) => mailcases.listCases(db, I.caseListQuery.parse(req.query)));

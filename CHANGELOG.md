@@ -3,6 +3,15 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.120.0
+
+- **Vorgänge: Antwortvorschläge.** Im Vorgang stehen unten passende **Antwortvorschläge** je Kategorie (z. B. bei Zimmeranfragen „Rückfrage: Reisedaten“, „Zimmer frei – bitte bestätigen“, „Rückfrage: Frühstück / Ankunft“). Ein Klick öffnet die fertige E-Mail mit Anrede und Grußformel – vor dem Senden änderbar.
+- **Einstellbar:** Unter Vorgänge → **Antwortvorlagen** (Administrator) lassen sich die Texte ändern, eigene anlegen, einer Kategorie zuordnen oder abschalten. Platzhalter: `{anrede}`, `{haus}`.
+- **Farbiger Stand oben im Vorgang:** gelb „Offen – wir sind dran“, blau „Angelegt – Bestätigung fehlt“, grün „Bestätigt“ bzw. „Erledigt“, grau „Wartet auf Kunde“. Darunter „Als Nächstes“ – nach einer Bestätigung z. B. „Bitte noch prüfen, ob in der Reservierung alles stimmt – dann als erledigt markieren“.
+- **Was es ist, steht vorn:** In Liste und Kopf steht zuerst die Art („Zimmeranfrage“, „Tischanfrage“, „Angebot“ …), der Name daneben. Bestätigte Vorgänge haben in der Liste einen grünen Punkt.
+- Ist eine Reservierung angelegt, steht „Bestätigung senden“ direkt unten im Vorgang.
+- Keine Änderung an der Datenbankstruktur.
+
 ## 1.119.0
 
 - **„Vorgänge“ ist jetzt ein eigener Bereich** – die Kachel „E-Mail“ auf der Startseite heißt „Vorgänge“. Links im Bereich: **Vorgänge** und **Posteingang** (die einzelnen E-Mails: Neu, Erledigt, Ignoriert, Alle), darunter die Einrichtung. Die Zahl an der Kachel zeigt, bei wie vielen Vorgängen und neuen E-Mails Sie dran sind.

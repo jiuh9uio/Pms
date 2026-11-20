@@ -92,6 +92,8 @@ export interface CaseListRow {
   source: 'case' | 'offer' | 'invoice';
   id: string; number: string; kind: MailKind | 'offer' | 'estimate'; title: string; contact: string; status: CaseStatus; turn: CaseTurn | null;
   lastAt: string; snippet: string; count: number;
+  /** Reservierung angelegt / Bestätigung gesendet (nur Vorgänge im Posteingang) */
+  linked?: boolean; confirmed?: boolean;
 }
 export interface CaseMessage { id: string; at: string; dir: 'in' | 'out'; who: string; subject: string; text: string; inboxMailId: string | null; mailStatus: InboxStatus | null }
 export interface CaseDto {
@@ -101,7 +103,29 @@ export interface CaseDto {
   latestInboxMailId: string | null;
   /** was aus der letzten Nachricht schon angelegt wurde (für „als Nächstes“) */
   latestLinkKind: 'booking' | 'table' | null;
+  /** wann die Bestätigung der Reservierung gesendet wurde */
+  confirmedAt: string | null;
   candidates: { inboxMailId: string; at: string; from: string; subject: string }[];
 }
 export const caseListQuery = z.object({ status: z.enum(['open', 'done', 'all']).default('open'), kind: z.string().max(20).default('all'), q: z.string().trim().max(80).default('') });
 export const caseUpdateInput = z.object({ kind: z.enum(MAIL_KINDS).optional(), status: z.enum(CASE_STATUSES).optional(), title: z.string().trim().max(200).optional() });
+
+// ---------- Antwortvorschläge: eigene Textbausteine je Kategorie (Vorgänge → Antwortvorlagen) ----------
+/** Platzhalter im Text: {anrede} = „Guten Tag Frau/Herr …,“ bzw. „Guten Tag,“ · {haus} = Name des Hauses. Die Grußformel mit Absender wird automatisch angehängt. */
+export const replySnippet = z.object({
+  id: z.string().min(1).max(40), kind: z.enum([...MAIL_KINDS, 'all']), title: z.string().trim().min(1, 'Bitte einen Namen eintragen').max(60),
+  text: z.string().trim().min(1, 'Bitte einen Text eintragen').max(3000), active: z.boolean().default(true),
+});
+export type ReplySnippet = z.infer<typeof replySnippet>;
+export const replySnippetsInput = z.object({ items: z.array(replySnippet).max(60) });
+export const DEFAULT_REPLY_SNIPPETS: ReplySnippet[] = [
+  { id: 'hotel-daten', kind: 'hotel', title: 'Rückfrage: Reisedaten', active: true, text: '{anrede}\n\nvielen Dank für Ihre Anfrage. Damit wir Ihnen ein passendes Zimmer anbieten können, teilen Sie uns bitte noch mit:\n\n- An- und Abreisetag\n- Anzahl der Personen (davon Kinder)\n- Einzel- oder Doppelzimmer' },
+  { id: 'hotel-frei', kind: 'hotel', title: 'Zimmer frei – bitte bestätigen', active: true, text: '{anrede}\n\nvielen Dank für Ihre Anfrage. In dem gewünschten Zeitraum haben wir ein Zimmer für Sie frei.\n\nMöchten Sie verbindlich reservieren? Dann antworten Sie uns bitte kurz – gern auch mit Ihrer Telefonnummer und der voraussichtlichen Ankunftszeit.' },
+  { id: 'hotel-fruehstueck', kind: 'hotel', title: 'Rückfrage: Frühstück / Ankunft', active: true, text: '{anrede}\n\ngern reservieren wir für Sie. Zwei kurze Fragen noch:\n\n- Möchten Sie mit Frühstück buchen?\n- Wann reisen Sie voraussichtlich an?' },
+  { id: 'tisch-daten', kind: 'table', title: 'Rückfrage: Uhrzeit und Personen', active: true, text: '{anrede}\n\nvielen Dank für Ihre Anfrage. Für die Tischreservierung brauchen wir noch:\n\n- Datum und Uhrzeit\n- Anzahl der Personen\n- eine Telefonnummer für Rückfragen' },
+  { id: 'feier-daten', kind: 'event', title: 'Rückfrage zur Feier', active: true, text: '{anrede}\n\nvielen Dank für Ihre Anfrage – wir richten Ihre Feier gern aus. Damit wir Ihnen ein Angebot machen können, teilen Sie uns bitte mit:\n\n- Termin und Uhrzeit\n- Anzahl der Personen\n- Anlass (z. B. Geburtstag, Hochzeit)\n- Wünsche zum Essen (Menü, Buffet, à la carte)' },
+  { id: 'tagung-daten', kind: 'meeting', title: 'Rückfrage zur Tagung', active: true, text: '{anrede}\n\nvielen Dank für Ihre Anfrage. Für ein Angebot brauchen wir noch:\n\n- Termin, Beginn und Ende\n- Anzahl der Teilnehmer\n- benötigte Technik (Beamer, Leinwand …)\n- Verpflegung und ggf. Übernachtungen' },
+  { id: 'gutschein-info', kind: 'voucher', title: 'Gutschein: so geht es', active: true, text: '{anrede}\n\nvielen Dank für Ihr Interesse an einem Gutschein. Bitte teilen Sie uns den gewünschten Wert mit und ob wir den Gutschein per Post oder per E-Mail schicken sollen. Sie erhalten dann alles Weitere von uns.' },
+  { id: 'alle-melden', kind: 'all', title: 'Wir melden uns', active: true, text: '{anrede}\n\nvielen Dank für Ihre Nachricht. Wir kümmern uns darum und melden uns so schnell wie möglich bei Ihnen.' },
+  { id: 'alle-anruf', kind: 'all', title: 'Bitte um Rückruf-Nummer', active: true, text: '{anrede}\n\nvielen Dank für Ihre Nachricht. Das klären wir am besten kurz am Telefon – unter welcher Nummer und wann erreichen wir Sie am besten?' },
+];

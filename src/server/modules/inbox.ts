@@ -2,7 +2,7 @@ import { and, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import type { MailDraft } from '../../shared/hotel.js';
-import { MAIL_KINDS, type InboxCounts, type InboxMailDto, type InboxSettingsDto, type InboxState, type InboxStatus, type MailRules, type ReplyTemplate, type WebRequestPublic, type WebRequestSettings } from '../../shared/inbox.js';
+import { MAIL_KINDS, type InboxCounts, type InboxMailDto, type InboxSettingsDto, type InboxState, type InboxStatus, type MailRules, DEFAULT_REPLY_SNIPPETS, type ReplySnippet, type ReplyTemplate, type WebRequestPublic, type WebRequestSettings } from '../../shared/inbox.js';
 import { extract, type MailExtract, type MailKind } from '../../shared/mailextract.js';
 import type { Db, Exec } from '../db/client.js';
 import { REQUEST_LABEL, siteFrom, type SiteRequest } from '../../shared/site.js';
@@ -285,13 +285,31 @@ const quote = (r: Row) => ['', '', `--- Ihre Nachricht vom ${r.receivedAt.toLoca
  * Vorschlag für eine Antwort: reply = leere Antwort, decline = Absage, confirm = Bestätigung der daraus angelegten Reservierung
  * (Zimmer: derselbe Text wie die Reservierungsbestätigung im Hotel; Tisch: Tag, Uhrzeit, Personen).
  */
-export async function replyDraft(db: Exec, id: string, template: ReplyTemplate, canHotel = true): Promise<MailDraft> {
+// ---------- Antwortvorschläge (eigene Textbausteine) ----------
+export async function getReplySnippets(db: Exec): Promise<ReplySnippet[]> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'reply_snippets'));
+  const v = row?.value as { items?: ReplySnippet[] } | undefined;
+  return Array.isArray(v?.items) ? v!.items! : DEFAULT_REPLY_SNIPPETS;
+}
+export async function saveReplySnippets(db: Db, actor: Actor, items: ReplySnippet[]) {
+  await write(db, 'reply_snippets', { items });
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: 'reply_snippets', after: { anzahl: items.length } });
+  return items;
+}
+
+export async function replyDraft(db: Exec, id: string, template: ReplyTemplate, canHotel = true, snippetId?: string): Promise<MailDraft> {
   const [r] = await db.select().from(inboxMails).where(eq(inboxMails.id, id));
   if (!r) throw notFound('E-Mail');
   const [h, isReady] = [await getHotel(db), await mailReady(db)];
   const re = /^(re|aw|antwort)\s*:/i.test(r.subject) ? r.subject : `Re: ${r.subject}`;
   const hello = r.fromName ? `Guten Tag ${r.fromName.replace(/["']/g, '').split(',').reverse().join(' ').trim()},` : 'Guten Tag,';
   const base = { to: r.fromAddr, attachment: null, ready: isReady };
+  if (snippetId) {
+    const sn = (await getReplySnippets(db)).find((x) => x.id === snippetId);
+    if (!sn) throw notFound('Antwortvorlage');
+    const body = sn.text.replaceAll('{anrede}', hello).replaceAll('{haus}', h.name);
+    return { ...base, subject: re, text: [body, '', signature(h)].join('\n') + quote(r) };
+  }
   if (template === 'confirm') {
     // die Bestätigung enthält Zimmer und Preise der Reservierung – nur mit Freigabe für den Bereich Hotel
     if (r.linkKind === 'booking' && !canHotel) throw new AppError(403, 'forbidden', 'Für die Bestätigung einer Zimmerreservierung fehlt die Freigabe für den Bereich „Hotel“');
@@ -318,7 +336,7 @@ export async function replyDraft(db: Exec, id: string, template: ReplyTemplate, 
 }
 
 /** Antwort über das eingerichtete Versand-Postfach schicken und an der Nachricht vermerken. */
-export async function sendReply(db: Db, actor: Actor, id: string, v: { to: string; subject: string; text: string }) {
+export async function sendReply(db: Db, actor: Actor, id: string, v: { to: string; subject: string; text: string }, template: ReplyTemplate = 'reply') {
   const [r] = await db.select().from(inboxMails).where(eq(inboxMails.id, id));
   if (!r) throw notFound('E-Mail');
   // Mit der ersten Antwort entsteht der Vorgang; seine Nummer steht im Betreff, damit die Antwort des Kunden zugeordnet wird.
@@ -328,7 +346,9 @@ export async function sendReply(db: Db, actor: Actor, id: string, v: { to: strin
   const subject = c ? withCaseCode(v.subject, c.number) : v.subject;
   await sendMail(db, actor, { ...v, subject, ...(r.messageId ? { inReplyTo: r.messageId } : {}) });
   if (c) await logCaseOut(db, c.id, actor, v.to, subject, v.text);
-  await db.update(inboxMails).set({ repliedAt: new Date(), repliedBy: actor.userName }).where(eq(inboxMails.id, id));
+  // Bestätigung gesendet: an der Nachricht vermerken (für den Stand „bestätigt“ im Vorgang)
+  const confirmed = template === 'confirm' ? { extract: { ...(r.extract as MailExtract), confirmedAt: new Date().toISOString() } as MailExtract } : {};
+  await db.update(inboxMails).set({ repliedAt: new Date(), repliedBy: actor.userName, ...confirmed }).where(eq(inboxMails.id, id));
   await record(db, actor, { action: 'mail', entity: 'inbox', entityId: id, after: { to: v.to, subject: v.subject.slice(0, 120) } });
   return { ok: true };
 }

@@ -139,9 +139,29 @@ describe('E-Mail-Posteingang', () => {
     expect(confirm.subject).toContain('Ihre Tischreservierung am 24.12.2026');
     expect(confirm.text).toContain('Donnerstag, 24.12.2026 um 18:30 Uhr');
     expect(confirm.text).toContain('6 Personen');
-    await ok('POST', `/inbox/${mail.id}/mail`, admin, { to: confirm.to, subject: confirm.subject, text: confirm.text });
+    await ok('POST', `/inbox/${mail.id}/mail?template=confirm`, admin, { to: confirm.to, subject: confirm.subject, text: confirm.text });
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ to: 'max@example.com', inReplyTo: '<m2@example.org>' });
+    // mit der Antwort entsteht der Vorgang: Nummer im Betreff, Antwort gespeichert, Stand „bestätigt“
+    const cs = (await ok('GET', `/inbox/${mail.id}`, admin));
+    expect(cs.caseNumber).toMatch(/^V-\d{4}-\d{4}$/);
+    expect(sent[0].subject).toContain(`[${cs.caseNumber}]`);
+    const kase = await ok('GET', `/mail-cases/${cs.caseId}`, admin);
+    expect(kase).toMatchObject({ turn: 'theirs', latestLinkKind: 'table' });
+    expect(kase.confirmedAt).toBeTruthy();
+    expect(kase.messages.at(-1)).toMatchObject({ dir: 'out', subject: sent[0].subject });
+    expect((await ok('GET', `/mail-cases?status=open&q=${cs.caseNumber}`, admin))[0]).toMatchObject({ linked: true, confirmed: true });
+    // Antwortvorschläge: Standardtexte je Kategorie, Platzhalter ersetzt; nur der Administrator ändert sie
+    const sn = await ok('GET', '/reply-snippets', admin);
+    expect(sn.some((x: { id: string }) => x.id === 'tisch-daten')).toBe(true);
+    const sd = await ok('GET', `/inbox/${mail.id}/mail?template=reply&vorlage=tisch-daten`, admin);
+    expect(sd.text).toContain('Guten Tag Max Muster,');
+    expect(sd.text).toContain('Anzahl der Personen');
+    expect(sd.text).not.toContain('{anrede}');
+    expect((await call('GET', `/inbox/${mail.id}/mail?template=reply&vorlage=gibtsnicht`, admin)).statusCode).toBe(404);
+    expect((await call('PUT', '/reply-snippets', user, { items: [] })).statusCode).toBe(403);
+    await ok('PUT', '/reply-snippets', admin, { items: [...sn, { id: 'eigen-1', kind: 'all', title: 'Eigener Text', text: '{anrede}\n\nWillkommen im {haus}.', active: true }] });
+    expect((await ok('GET', `/inbox/${mail.id}/mail?template=reply&vorlage=eigen-1`, admin)).text).toMatch(/Willkommen im .+\./);
     expect(await ok('GET', `/inbox/${mail.id}`, admin)).toMatchObject({ repliedBy: 'Chefin' });
     expect((await ok('GET', `/inbox/${mail.id}`, admin)).repliedAt).toBeTruthy();
     const [hotel] = await ok('GET', '/inbox?kind=hotel&q=erika', admin);

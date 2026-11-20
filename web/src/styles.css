@@ -1297,3 +1297,11 @@ a.linkcard.attention b { color: var(--warn); }
   .msg-back { display: inline-grid; } .msg-head { flex-wrap: wrap; } .msg-head select { flex: 1; }
 }
 @media (max-width: 760px) { .msg-who { flex: 1 1 calc(100% - 110px); } .msg-head select { flex: 1 1 55%; } }
+/* Vorgänge: Antwortvorschläge, Stand, Vorlagen */
+.msg-dot.ok { background: #1f9d55; }
+.msg-who b { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; white-space: normal; }
+.msg-sugg { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; flex: 1 1 100%; }
+.mc-tabs .tabs button:last-child { display: none; }
+.sn-list { display: grid; gap: 12px; } .sn-item { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 10px; } .sn-item.off { opacity: .6; }
+.sn-head { display: grid; grid-template-columns: minmax(150px, 220px) 1fr auto auto; gap: 8px; align-items: center; }
+@media (max-width: 760px) { .sn-head { grid-template-columns: 1fr auto; } .sn-head select, .sn-head input { grid-column: 1 / -1; } }

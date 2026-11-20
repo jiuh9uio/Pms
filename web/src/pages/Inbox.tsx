@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MAIL_KINDS, MAIL_KIND_LABEL, MAIL_KIND_SHORT, type CaseDto, type CaseListRow, type InboxCounts, type InboxMailDto, type InboxState, type InboxStatus } from '../../../src/shared/inbox.js';
+import { MAIL_KINDS, MAIL_KIND_LABEL, MAIL_KIND_SHORT, replySnippetsInput, type CaseDto, type CaseListRow, type ReplySnippet, type InboxCounts, type InboxMailDto, type InboxState, type InboxStatus } from '../../../src/shared/inbox.js';
 import type { MailKind } from '../../../src/shared/mailextract.js';
 import { tableReservationInput } from '../../../src/shared/restaurant.js';
 import { hasModule } from '../../../src/shared/schemas.js';
@@ -11,7 +11,7 @@ import { deDate } from '../hotel/common.tsx';
 import { MailDialog } from '../hotel/MailDialog.tsx';
 import { Badge, Button, Field, LoadState, PageHeader, fmtDateTime, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
 
-export const INBOX_TABS = [['vorgaenge', 'Vorgänge'], ['new', 'Neu'], ['done', 'Erledigt'], ['ignored', 'Ignoriert'], ['all', 'Alle']] as const;
+export const INBOX_TABS = [['vorgaenge', 'Vorgänge'], ['new', 'Neu'], ['done', 'Erledigt'], ['ignored', 'Ignoriert'], ['all', 'Alle'], ['vorlagen', 'Antwortvorlagen']] as const;
 const tone = (k: MailKind) => (k === 'hotel' || k === 'meeting' ? 'accent' : k === 'table' || k === 'event' ? 'ok' : k === 'voucher' ? 'warn' : 'neutral');
 /** „Erika Beispiel“ oder „Beispiel, Erika“ → Vor- und Nachname */
 function splitName(name: string, addr: string) {
@@ -38,20 +38,20 @@ export function Inbox() {
   const st = state.data;
   return (
     <>
-      <PageHeader title={current === 'vorgaenge' ? 'Vorgänge' : 'Posteingang'} sub={st ? `${st.newCount} offen${st.lastFetchAt ? ` · zuletzt abgerufen ${fmtDateTime(st.lastFetchAt)}` : ''}${st.autoMinutes ? ` · automatisch alle ${st.autoMinutes} Min.` : ''}` : undefined}
+      <PageHeader title={current === 'vorgaenge' ? 'Vorgänge' : current === 'vorlagen' ? 'Antwortvorlagen' : 'Posteingang'} sub={st ? `${st.newCount} offen${st.lastFetchAt ? ` · zuletzt abgerufen ${fmtDateTime(st.lastFetchAt)}` : ''}${st.autoMinutes ? ` · automatisch alle ${st.autoMinutes} Min.` : ''}` : undefined}
         actions={<Button variant="primary" busy={busy} disabled={!st?.ready} onClick={() => void fetchNow()}>Jetzt abrufen</Button>} />
       {st && !st.ready && <p className="notice">Der E-Mail-Empfang ist noch nicht eingerichtet. Das geht unter Verwaltung → Einstellungen → E-Mail (nur Administrator).</p>}
       {st?.lastError && <p className="notice danger">Letzter Abruf fehlgeschlagen: {st.lastError}</p>}
-      <div className={current === 'vorgaenge' ? 'mc-tabs-hidden' : 'mc-tabs'}>{bar}</div>
+      <div className={current === 'vorgaenge' || current === 'vorlagen' ? 'mc-tabs-hidden' : 'mc-tabs'}>{bar}</div>
       {current === 'vorgaenge' && !!st?.newWithoutCase && <p className="notice small">{st.newWithoutCase} neue {st.newWithoutCase === 1 ? 'E-Mail gehört' : 'E-Mails gehören'} noch zu keinem Vorgang – <a href="/email?ansicht=new">im Posteingang ansehen</a>.</p>}
-      {current === 'vorgaenge' ? <CasesView /> : <MailsView key={current} status={current} />}
+      {current === 'vorgaenge' ? <CasesView /> : current === 'vorlagen' ? <SnippetsAdmin /> : <MailsView key={current} status={current} />}
       <p className="muted small">Die Einordnung (Zimmer, Tisch, Feier, Tagung, Gutschein, allgemeine Frage, Sonstiges) und die erkannten Angaben sind Vorschläge des Programms nach festen Mustern – bitte vor dem Übernehmen mit dem Text vergleichen. Im Postfach selbst wird nichts verändert.</p>
     </>
   );
 }
 
 /** Einzelne Nachrichten nach Status (Neu, Erledigt, Ignoriert, Alle) */
-function MailsView({ status }: { status: Exclude<(typeof INBOX_TABS)[number][0], 'vorgaenge'> }) {
+function MailsView({ status }: { status: Exclude<(typeof INBOX_TABS)[number][0], 'vorgaenge' | 'vorlagen'> }) {
   const { rev } = useData();
   const current = status;
   const [kind, setKind] = useState<MailKind | 'all'>('all');
@@ -90,7 +90,16 @@ function MailsView({ status }: { status: Exclude<(typeof INBOX_TABS)[number][0],
   );
 }
 
-const KIND_LABEL = { ...MAIL_KIND_SHORT, offer: 'Angebot', estimate: 'Kostenvoranschlag' } as const;
+/** Was es ist – steht in Liste und Kopf vorn, der Name daneben */
+const WHAT: Record<MailKind | 'offer' | 'estimate', string> = { hotel: 'Zimmeranfrage', table: 'Tischanfrage', event: 'Feier / Veranstaltung', meeting: 'Tagung', voucher: 'Gutschein', question: 'Frage', other: 'Nachricht', offer: 'Angebot', estimate: 'Kostenvoranschlag' };
+/** Stand als farbiges Abzeichen: grün = bestätigt/erledigt, blau = angelegt, gelb = wir sind dran, grau = wartet auf Kunde */
+function stageOf(c: { status: string; turn: string | null; linked: boolean; confirmed: boolean }): { label: string; tone: 'ok' | 'accent' | 'warn' | 'neutral' } {
+  if (c.status === 'done') return { label: 'Erledigt', tone: 'ok' };
+  if (c.turn === 'ours') return { label: c.confirmed ? 'Neue Nachricht nach Bestätigung' : c.linked ? 'Angelegt – Bestätigung fehlt' : 'Offen – wir sind dran', tone: c.linked && !c.confirmed ? 'accent' : 'warn' };
+  if (c.confirmed) return { label: 'Bestätigt', tone: 'ok' };
+  if (c.linked) return { label: 'Angelegt – Bestätigung fehlt', tone: 'accent' };
+  return { label: 'Wartet auf Kunde', tone: 'neutral' };
+}
 const initials = (name: string) => (name.replace(/<.*>/, '').trim().split(/[\s,.@]+/).filter(Boolean).slice(0, 2).map((x) => x[0]!.toUpperCase()).join('') || '?');
 const shortTime = (iso: string) => { const d = new Date(iso), now = new Date(); return d.toDateString() === now.toDateString() ? d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); };
 const daysSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
@@ -129,11 +138,11 @@ function CasesView() {
               <button key={`${r.source}-${r.id}`} type="button" className={`msg-item${r.source === 'case' && r.id === openId ? ' on' : ''}${waiting ? ' ours' : ''}${r.status === 'done' ? ' done' : ''}`} onClick={() => open(r)}>
                 <span className={`msg-avatar k-${r.kind}`} aria-hidden>{initials(r.contact)}</span>
                 <span className="msg-main">
-                  <span className="msg-top"><b>{r.contact || r.title}</b><small>{shortTime(r.lastAt)}</small></span>
-                  <span className="msg-sub">{KIND_LABEL[r.kind]} · {r.number}{r.source !== 'case' && ' ›'}</span>
+                  <span className="msg-top"><b>{WHAT[r.kind]}</b><small>{shortTime(r.lastAt)}</small></span>
+                  <span className="msg-sub">{r.contact || r.title} · {r.number}{r.source !== 'case' && ' ›'}</span>
                   <span className="msg-snip">{r.turn === 'theirs' && 'Sie: '}{r.snippet || r.title}</span>
                 </span>
-                {waiting && <span className="msg-dot" title="Wir sind dran" aria-label="wir sind dran" />}
+                {r.source === 'case' && r.status === 'open' && r.confirmed && !waiting ? <span className="msg-dot ok" title="Bestätigt" aria-label="bestätigt" /> : waiting && <span className="msg-dot" title="Wir sind dran" aria-label="wir sind dran" />}
               </button>
             );
           })}
@@ -148,6 +157,8 @@ function CasesView() {
 function nextStep(c: CaseDto): { text: string; tone: 'warn' | 'neutral' | 'ok' } {
   if (c.status === 'done') return { text: 'Erledigt – nichts zu tun.', tone: 'ok' };
   const last = c.messages[c.messages.length - 1];
+  if (c.confirmedAt && c.turn === 'theirs') return { text: `Bestätigung gesendet am ${new Date(c.confirmedAt).toLocaleDateString('de-DE')}. Bitte noch prüfen, ob in der Reservierung alles stimmt – dann als erledigt markieren.`, tone: 'ok' };
+  if (c.confirmedAt && c.turn === 'ours') return { text: 'Der Kunde hat nach der Bestätigung noch einmal geschrieben – bitte lesen und antworten.', tone: 'warn' };
   if (c.turn === 'theirs') { const d = last ? daysSince(last.at) : 0; return { text: `Warten auf die Antwort des Kunden${d >= 1 ? ` – seit ${d} ${d === 1 ? 'Tag' : 'Tagen'}` : ''}.${d >= 3 ? ' Vielleicht nachfragen?' : ''}`, tone: 'neutral' }; }
   if (c.latestLinkKind === 'booking') return { text: 'Die Zimmerreservierung ist angelegt – jetzt die Bestätigung senden oder antworten.', tone: 'warn' };
   if (c.latestLinkKind === 'table') return { text: 'Die Tischreservierung ist angelegt – jetzt die Bestätigung senden oder antworten.', tone: 'warn' };
@@ -163,11 +174,14 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const { rev, bump } = useData();
   const toast = useToast();
   const { data, error, reload } = useLoad(() => api<CaseDto>('GET', `/mail-cases/${id}`), [id, rev]);
-  const [reply, setReply] = useState(false);
+  const [reply, setReply] = useState<false | string>(false);
   const [more, setMore] = useState(false);
+  const snippets = useLoad(() => api<ReplySnippet[]>('GET', '/reply-snippets')).data ?? [];
   if (!data) return <LoadState error={error} loading />;
   const act = async (method: 'PATCH' | 'POST', path: string, body: unknown, msg: string) => { try { await api(method, `/mail-cases/${id}${path}`, body); toast(msg); bump(); reload(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); } };
   const next = nextStep(data);
+  const stage = stageOf({ status: data.status, turn: data.turn, linked: !!data.latestLinkKind, confirmed: !!data.confirmedAt });
+  const fit = snippets.filter((x) => x.active && (x.kind === data.kind || x.kind === 'all'));
   const ins = data.messages.filter((x) => x.dir === 'in').length;
   return (
     <>
@@ -175,8 +189,8 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
         <button type="button" className="iconbtn msg-back" onClick={onBack} aria-label="Zurück zur Liste">‹</button>
         <span className={`msg-avatar k-${data.kind}`} aria-hidden>{initials(data.contactName || data.contactAddr)}</span>
         <div className="msg-who">
-          <b>{data.contactName || data.contactAddr}</b>
-          <small>{data.contactAddr} · {data.number} · {data.title}</small>
+          <b>{WHAT[data.kind]} <Badge tone={stage.tone}>{stage.label}</Badge></b>
+          <small>{data.contactName ? `${data.contactName} · ` : ''}{data.contactAddr} · {data.number}</small>
         </div>
         <select value={data.kind} onChange={(e) => void act('PATCH', '', { kind: e.target.value }, 'Kategorie geändert')} aria-label="Kategorie des Vorgangs">{MAIL_KINDS.map((k) => <option key={k} value={k}>{MAIL_KIND_LABEL[k]}</option>)}</select>
         {data.status === 'open' ? <Button onClick={() => void act('PATCH', '', { status: 'done' }, 'Vorgang erledigt')}>Erledigt</Button> : <Button onClick={() => void act('PATCH', '', { status: 'open' }, 'Vorgang wieder offen')}>Wieder öffnen</Button>}
@@ -196,14 +210,58 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
       ))}</ol>
       {data.latestInboxMailId && (
         <footer className="msg-foot">
-          <Button variant="primary" onClick={() => setReply(true)}>Antworten</Button>
-          <Button onClick={() => setMore(!more)}>{more ? 'Weniger' : 'Mehr: übernehmen, bestätigen, absagen …'}</Button>
+          {fit.length > 0 && <div className="msg-sugg"><span className="muted small">Antwortvorschläge:</span>{fit.map((x) => <button key={x.id} type="button" className="chip" onClick={() => setReply(`reply&vorlage=${encodeURIComponent(x.id)}`)}>{x.title}</button>)}</div>}
+          {data.latestLinkKind && !data.confirmedAt && <Button variant="primary" onClick={() => setReply('confirm')}>Bestätigung senden</Button>}
+          <Button variant={data.latestLinkKind && !data.confirmedAt ? undefined : 'primary'} onClick={() => setReply('reply')}>Frei antworten</Button>
+          <Button onClick={() => setMore(!more)}>{more ? 'Weniger' : 'Mehr: übernehmen, absagen …'}</Button>
         </footer>
       )}
-      {reply && data.latestInboxMailId && <MailDialog path={`/inbox/${data.latestInboxMailId}/mail?template=reply`} title={`Antworten – ${data.number}`} onClose={() => setReply(false)} onSent={() => { bump(); reload(); }}
+      {reply && data.latestInboxMailId && <MailDialog path={`/inbox/${data.latestInboxMailId}/mail?template=${reply}`} title={`${reply === 'confirm' ? 'Bestätigung senden' : 'Antworten'} – ${data.number}`} onClose={() => setReply(false)} onSent={() => { bump(); reload(); }}
         intro={<p className="muted small">Die Vorgangsnummer {data.number} wird beim Senden automatisch in den Betreff gesetzt.</p>} />}
       {more && data.latestInboxMailId && <div className="msg-more"><MailDetail key={data.latestInboxMailId} id={data.latestInboxMailId} onGone={() => { bump(); reload(); }} /></div>}
     </>
+  );
+}
+
+/** Antwortvorlagen (Administrator): eigene Textbausteine je Kategorie – erscheinen im Vorgang als Antwortvorschläge */
+function SnippetsAdmin() {
+  const { user } = useAuth();
+  const toast = useToast();
+  const { data, error, reload } = useLoad(() => api<ReplySnippet[]>('GET', '/reply-snippets'));
+  const [items, setItems] = useState<ReplySnippet[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (data) setItems(data); }, [data]);
+  if (user.role !== 'admin') return <p className="notice">Antwortvorlagen pflegt der Administrator.</p>;
+  if (!items) return <LoadState error={error} loading />;
+  const set = (i: number, p: Partial<ReplySnippet>) => setItems(items.map((x, k) => (k === i ? { ...x, ...p } : x)));
+  const save = async () => {
+    const p = replySnippetsInput.safeParse({ items });
+    if (!p.success) { toast(p.error.issues[0]?.message ?? 'Bitte Eingaben prüfen', 'error'); return; }
+    setBusy(true);
+    try { await api('PUT', '/reply-snippets', p.data); toast('Antwortvorlagen gespeichert'); reload(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+    setBusy(false);
+  };
+  return (
+    <section className="card">
+      <p className="muted small">Diese Texte schlägt das Programm im Vorgang als Antwort vor – passend zur Kategorie. <code>{'{anrede}'}</code> wird zu „Guten Tag Frau/Herr …,“ und <code>{'{haus}'}</code> zum Namen Ihres Hauses. Die Grußformel mit Ihrer Anschrift hängt das Programm automatisch an. Vor dem Senden lässt sich jeder Text noch ändern.</p>
+      <div className="sn-list">{items.map((x, i) => (
+        <div key={x.id} className={`sn-item${x.active ? '' : ' off'}`}>
+          <div className="sn-head">
+            <select value={x.kind} onChange={(e) => set(i, { kind: e.target.value as ReplySnippet['kind'] })} aria-label={`Vorlage ${i + 1} Kategorie`}>
+              <option value="all">Alle Kategorien</option>{MAIL_KINDS.map((k) => <option key={k} value={k}>{MAIL_KIND_LABEL[k]}</option>)}
+            </select>
+            <input value={x.title} placeholder="Name des Vorschlags" onChange={(e) => set(i, { title: e.target.value })} aria-label={`Vorlage ${i + 1} Name`} />
+            <label className="check"><input type="checkbox" checked={x.active} onChange={(e) => set(i, { active: e.target.checked })} /><span>anbieten</span></label>
+            <button type="button" className="iconbtn" aria-label="Vorlage entfernen" onClick={() => { if (window.confirm(`Vorlage „${x.title}“ entfernen?`)) setItems(items.filter((_, k) => k !== i)); }}>✕</button>
+          </div>
+          <textarea rows={5} value={x.text} onChange={(e) => set(i, { text: e.target.value })} aria-label={`Vorlage ${i + 1} Text`} />
+        </div>
+      ))}</div>
+      <div className="formactions">
+        <Button onClick={() => setItems([...items, { id: `eigen-${Date.now().toString(36)}`, kind: 'all', title: '', text: '{anrede}\n\n', active: true }])}>+ Vorlage</Button>
+        <Button variant="primary" busy={busy} onClick={() => void save()}>Speichern</Button>
+      </div>
+    </section>
   );
 }
 
