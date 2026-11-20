@@ -5,6 +5,7 @@ import {
   type TextPos, type VoucherDto, type VoucherOverviewDto,
 } from '../../../src/shared/vouchers.js';
 import { api } from '../api.ts';
+import { CustomerPicker } from '../CustomerPicker.tsx';
 import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
@@ -182,6 +183,7 @@ function VoucherDialog({ voucher: v, data, isAdmin, onClose, onChanged }: { vouc
         <Field label="Gruß auf dem Gutschein" error={s.errors.message} wide hint="freiwillig, z. B. „Alles Gute zum Geburtstag!“"><textarea rows={2} value={f.message} onChange={set('message')} disabled={locked} /></Field>
 
         <h3 className="wide">Käufer <small className="muted inl">für Rechnung und E-Mail</small></h3>
+        <div className="wide"><CustomerPicker disabled={locked} onPick={(c) => setF((x) => ({ ...x, buyerName: c.name, buyerCompany: c.company, buyerStreet: c.street, buyerZip: c.zip, buyerCity: c.city, buyerCountry: c.country, buyerEmail: c.email }))} /></div>
         <Field label="Name" error={s.errors.buyerName}><input value={f.buyerName} onChange={set('buyerName')} disabled={locked} /></Field>
         <Field label="Firma" error={s.errors.buyerCompany}><input value={f.buyerCompany} onChange={set('buyerCompany')} disabled={locked} /></Field>
         <Field label="Straße" error={s.errors.buyerStreet} wide><input value={f.buyerStreet} onChange={set('buyerStreet')} disabled={locked} /></Field>

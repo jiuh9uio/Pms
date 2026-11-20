@@ -6,6 +6,7 @@ import {
   type CatalogReturn, type OfferArea, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferListRow, type OfferState, type OfferTalk, type OfferTemplateDto, type OfferTimeline, type OfferUnit, type TalkKind, type TalkStep,
 } from '../../../src/shared/offers.js';
 import { api } from '../api.ts';
+import { CustomerPicker } from '../CustomerPicker.tsx';
 import { useAuth } from '../App.tsx';
 import { DepositPanel } from '../billing/DepositPanel.tsx';
 import { useData } from '../data.tsx';
@@ -108,6 +109,7 @@ function NewOfferDialog({ prefill, onClose, onCreated }: { prefill: { customerNa
       </div>
       <Field label="Anlass (Vorlage)" hint={mode === 'questions' ? 'übernimmt den Fragenkatalog; Leistungen stehen schon bereit, wenn Sie später das Angebot erstellen' : 'z. B. Tagung – bestimmt Texte, Fragen und den passenden Produktkatalog'}><select value={v.templateId} onChange={(e) => set('templateId', e.target.value)}>
         <option value="">ohne Vorlage (leer)</option>{(tpls ?? []).filter((t) => t.active).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
+      <CustomerPicker onPick={(c) => setV({ ...v, customerCompany: c.company, customerName: c.name, email: c.email, phone: c.phone })} />
       <div className="formgrid">
         <Field label="Firma"><input value={v.customerCompany} onChange={(e) => set('customerCompany', e.target.value)} /></Field>
         <Field label="Name (Ansprechpartner)"><input value={v.customerName} onChange={(e) => set('customerName', e.target.value)} /></Field>
@@ -272,6 +274,7 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
           <DepositPanel kind="offer" refId={o.id} base={`/offers/${o.id}`} suggestCents={Math.round((o.totalCents * o.depositPercent) / 100)} latestDue={o.eventDate ?? ''} />
         </section>
       )}
+      <CustomerPicker disabled={locked} onPick={(c) => ch({ customerCompany: c.company, customerName: c.name, email: c.email, phone: c.phone, street: c.street, zip: c.zip, city: c.city })} />
       <div className="formgrid cols3">
         {f('customerCompany', 'Firma')}{f('customerName', 'Ansprechpartner')}{f('email', 'E-Mail', 'email')}
         {f('phone', 'Telefon')}{f('street', 'Straße')}

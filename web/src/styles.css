@@ -1310,3 +1310,5 @@ a.linkcard.attention b { color: var(--warn); }
 .rt-box.ok { background: #e3f6ea; border-color: #9fd9b6; color: #17603a; display: block; } .rt-box.warn { background: #fff6dd; border-color: #ecd58a; }
 .rt-top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; } .rt-time { font-variant-numeric: tabular-nums; font-size: 20px; font-weight: 700; }
 .rt-bar { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; } .rt-bar > span { display: block; height: 100%; background: var(--accent); transition: width 1s linear; }
+/* Suche in der Kundendatenbank */
+.cpick { display: grid; gap: 4px; margin: 0 0 10px; } .cpick input { border-style: dashed; } .cpick-hits { margin-top: 0; max-height: 260px; overflow: auto; }

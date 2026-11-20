@@ -6,6 +6,7 @@ import {
   type RestaurantTableDto, type TableReservationDto, type TableStatus,
 } from '../../../src/shared/restaurant.js';
 import { api } from '../api.ts';
+import { CustomerPicker } from '../CustomerPicker.tsx';
 import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
@@ -158,6 +159,7 @@ function ReservationDialog({ date, tables, list, res, onClose }: { date: string;
     <Dialog title={res ? `Reservierung ${res.name}` : 'Neue Tischreservierung'} onClose={onClose}
       footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={f.busy} onClick={() => send()}>{res ? 'Speichern' : 'Reservieren'}</Button></>}>
       <form className="formgrid" onSubmit={send} noValidate>
+        <div className="wide"><CustomerPicker label="Stammgast? Aus der Kundendatenbank übernehmen" onPick={(c) => setV({ ...v, name: c.name || c.company, phone: c.phone || v.phone })} /></div>
         {input('name', 'Name', { wide: true })}
         {input('date', 'Datum', { type: 'date' })}{input('time', 'Uhrzeit', { type: 'time' })}
         {input('persons', 'Personen', { type: 'number' })}{input('durationMin', 'Dauer in Minuten', { type: 'number' })}

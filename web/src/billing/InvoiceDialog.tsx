@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { hasModule } from '../../../src/shared/schemas.js';
 import { MailDialog } from '../hotel/MailDialog.tsx';
 import { api } from '../api.ts';
+import { CustomerPicker } from '../CustomerPicker.tsx';
 import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
@@ -143,6 +144,7 @@ function Recipient({ inv }: { inv: InvoiceDto }) {
   return (
     <form onSubmit={(e) => void f.submit({ ...v, serviceFrom: v.serviceFrom || null, serviceTo: v.serviceTo || null, version: inv.version }, e)} noValidate>
       <h3 className="first">Rechnungsempfänger</h3>
+      <CustomerPicker onPick={(c) => setV({ ...v, recipientCompany: c.company, recipientName: c.name, recipientStreet: c.street, recipientZip: c.zip, recipientCity: c.city, recipientCountry: c.country, recipientVatId: c.vatId || v.recipientVatId })} />
       <div className="formgrid">
         {input('recipientCompany', 'Firma', { hint: 'leer bei Privatrechnung' })}{input('recipientName', 'Name / z. Hd.')}
         {input('recipientStreet', 'Straße und Hausnummer', { wide: true })}{input('recipientZip', 'PLZ')}{input('recipientCity', 'Ort')}

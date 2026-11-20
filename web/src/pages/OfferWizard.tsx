@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { formatMoney } from '../../../src/shared/hotel.js';
 import { UNIT_LABEL, groupItems, lineTotal, quantityFor, spanOf, type OfferDto, type OfferItemDto, type OfferTemplateDto, type TalkStep } from '../../../src/shared/offers.js';
 import { api } from '../api.ts';
+import { CustomerPicker } from '../CustomerPicker.tsx';
 import { useData } from '../data.tsx';
 import { Button, Dialog, Field, LoadState, useLoad, useToast } from '../ui.tsx';
 
@@ -136,6 +137,7 @@ export function OfferWizard({ onClose, onCreated }: { onClose: () => void; onCre
 
       {step === 1 && <>
         <h3 className="first">Allgemeine Daten</h3>
+        <CustomerPicker label="Schon Kunde? Aus der Kundendatenbank übernehmen" onPick={(c) => setV({ ...v, customerCompany: c.company, customerName: c.name, email: c.email, phone: c.phone })} />
         <div className="formgrid">
           <Field label="Name (Ansprechpartner)"><input value={v.customerName} onChange={(e) => set('customerName', e.target.value)} autoFocus /></Field>
           <Field label="Firma / Verein (falls vorhanden)"><input value={v.customerCompany} onChange={(e) => set('customerCompany', e.target.value)} /></Field>

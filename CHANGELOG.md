@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.122.0
+
+- **Kundendatenbank überall nutzbar.** Wo Empfänger- oder Kundendaten eingetragen werden, gibt es jetzt oben das Suchfeld **„Aus der Kundendatenbank übernehmen“**: Name, Firma oder Ort tippen, Treffer anklicken – Name, Firma, Anschrift, E-Mail und Telefon werden eingetragen und bleiben danach änderbar. Gesucht wird in der Gästekartei und bei den Firmen.
+- Eingebaut bei: **Rechnungsempfänger** (freie Rechnung, Kostenvoranschlag, Rechnungsentwurf), **Neues Angebot**, **Absprache Schritt für Schritt**, **Angebot bearbeiten**, **Gutschein (Käufer)** und **Tischreservierung**.
+- Die Berechtigungen bleiben, wie sie sind: Wer die Gästekartei nicht sehen darf, bekommt das Suchfeld nicht angezeigt.
+
 ## 1.121.0
 
 - **Internet: Timer beim Zurücksetzen der FRITZ!Box.** Nach „FRITZ!Box neu starten“ oder „Internetverbindung neu aufbauen“ zeigt die Seite einen **Countdown** („noch etwa 3:10“) mit Balken. Das Programm prüft alle paar Sekunden, ob das Internet wieder da ist, und meldet es („Das Internet ist wieder da. Es hat 3:42 Minuten gedauert.“).
