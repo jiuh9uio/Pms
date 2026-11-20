@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.120.3
+
+- **Behoben:** Nach „Tisch reservieren“ bzw. dem Anlegen einer Zimmerreservierung aus einem Vorgang sprang der Vorgang sofort auf „Erledigt“ – obwohl die Bestätigung an den Kunden noch fehlte. Jetzt bleibt er offen mit dem Stand „Angelegt – Bestätigung fehlt“ und dem Knopf „Bestätigung senden“.
+- Im Browser durchgeklickt und in Ordnung: Tischanfrage → Reservierung → Bestätigungstext; Zimmeranfrage → Reservierungsmaske mit Zeitraum, Name und E-Mail; angenommenes Angebot → Tischreservierung (Termin, Personen, Name, Hinweis aufs Angebot).
+
 ## 1.120.2
 
 Durchsicht aller Übergaben zwischen den Schritten (Anfrage → Reservierung → Bestätigung, Fragen → Angebot, Angebot → Reservierung, Kostenvoranschlag → Rechnung):

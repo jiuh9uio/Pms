@@ -263,7 +263,8 @@ export async function updateInboxMail(db: Db, actor: Actor, id: string, v: { sta
   const [r] = await db.update(inboxMails).set(set).where(eq(inboxMails.id, id)).returning();
   if (v.kind && r!.caseId) await db.execute(sql`update mail_cases set kind = ${v.kind} where id = ${r!.caseId}`);
   // Vorgang mitführen: sind alle Nachrichten erledigt/ignoriert, ist auch der Vorgang erledigt; wird eine wieder geöffnet, ist er wieder offen
-  if (v.status && r!.caseId) await db.execute(sql`update mail_cases set status = case when exists (select 1 from inbox_mails m where m.case_id = ${r!.caseId} and m.status = 'new') then 'open' else 'done' end where id = ${r!.caseId}`);
+  // Ausnahme: wird gerade eine Reservierung daraus angelegt, bleibt der Vorgang offen – die Bestätigung an den Kunden steht noch aus
+  if (v.status && r!.caseId && !v.linkKind) await db.execute(sql`update mail_cases set status = case when exists (select 1 from inbox_mails m where m.case_id = ${r!.caseId} and m.status = 'new') then 'open' else 'done' end where id = ${r!.caseId}`);
   await record(db, actor, { action: 'update', entity: 'inbox', entityId: id, before: { status: before.status, kind: before.kind }, after: { status: r!.status, kind: r!.kind, subject: r!.subject.slice(0, 80) } });
   return dto(r!, true);
 }

@@ -339,7 +339,9 @@ describe('Übergaben zwischen den Schritten', () => {
     const first = await mail(10, 'Tisch am Freitag');
     const c = await ok('POST', `/inbox/${first.id}/case`, admin);
     const res = await ok('POST', '/restaurant/reservations', admin, { date: '2026-12-18', time: '19:00', durationMin: 120, persons: 2, name: 'Tina Tisch', phone: '', note: '', tableId: null });
-    await ok('PATCH', `/inbox/${first.id}`, admin, { linkKind: 'table', linkId: res.id });
+    // Übernehmen (erledigt + verknüpft) schließt den Vorgang nicht: die Bestätigung steht noch aus
+    await ok('PATCH', `/inbox/${first.id}`, admin, { status: 'done', linkKind: 'table', linkId: res.id });
+    expect(await ok('GET', `/mail-cases/${c.id}`, admin)).toMatchObject({ status: 'open', latestLinkKind: 'table', confirmedAt: null });
     const second = await mail(11, `AW: Tisch am Freitag [${c.number}]`);
     expect(await linkInboxMailToCase(db, second)).toBe(true);
     const d = await ok('GET', `/mail-cases/${c.id}`, admin);
