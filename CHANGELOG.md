@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.109.0
+
+- **Angebote: Konfigurator.** Im Angebot unter „Produktkatalog“ → **„Konfigurator öffnen“**: Schritt für Schritt durch die Gruppen des Katalogs (z. B. Raum → Verpflegung → Technik), Leistungen anklicken, Menge anpassen – die Summe läuft unten mit. Am Ende eine Übersicht und „Ins Angebot übernehmen“. Was schon im Angebot steht, ist vorausgewählt; freie Zeilen bleiben unverändert.
+- **Gruppe je Leistung:** Unter Angebote → Leistungen hat jede Leistung das neue Feld „Gruppe“ – sie bestimmt die Schritte im Konfigurator und die Überschriften im Katalog-PDF für den Kunden. Ohne Gruppen zeigt der Konfigurator alle Leistungen in einem Schritt.
+- Datenbank: ein neues Feld (Gruppe) bei den Leistungen; bestehende Daten bleiben unverändert.
+
 ## 1.108.0
 
 - **Angebote: Leistungskatalog an den Kunden schicken.** Im Angebot unter „Produktkatalog“: **„Katalog an Kunden schicken“** – der Kunde bekommt per E-Mail ein PDF mit allen Leistungen des Anlasses zum **Ankreuzen**, dazu Felder für Personen, Wunschtermin und Wünsche. Das Angebot bleibt dabei ein Entwurf.

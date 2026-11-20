@@ -1,6 +1,6 @@
 import fontkit from '@pdf-lib/fontkit';
 import { PDFCheckBox, PDFDocument, PDFTextField, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
-import { UNIT_LABEL, type CatalogReturn, type OfferItemDto } from '../../shared/offers.js';
+import { UNIT_LABEL, groupItems, type CatalogReturn, type OfferItemDto } from '../../shared/offers.js';
 import type { HotelSettings } from '../../shared/schemas.js';
 import { asset } from './pdf.js';
 
@@ -89,7 +89,10 @@ export async function renderCatalog(d: CatalogData, h: HotelSettings): Promise<U
   put('Leistung', L + 24, y, { size: 9, font: bold });
   if (d.showPrices) put('Preis', R, y, { size: 9, font: bold, right: true });
   y -= 6; page.drawLine({ start: { x: L, y }, end: { x: R, y }, thickness: 0.8, color: black }); y -= 18;
-  for (const it of d.items) {
+  const groups = groupItems(d.items);
+  for (const grp of groups) {
+  if (groups.length > 1) { if (y - 60 < bottom) newPage(); y -= 4; put(grp.name, L, y, { size: 11, font: bold, color: grey }); y -= 20; }
+  for (const it of grp.items) {
     const priceText = d.showPrices ? `${money(it.priceCents)} ${UNIT_LABEL[it.unit]}` : '';
     const nameW = R - (L + 24) - (priceText ? regular.widthOfTextAtSize(priceText, 9.5) + 14 : 0);
     const nameLines = wrap(it.name, nameW, 10.5, bold), descLines = it.description ? wrap(it.description, R - (L + 24), 9) : [];
@@ -105,6 +108,7 @@ export async function renderCatalog(d: CatalogData, h: HotelSettings): Promise<U
     y = yy - 6;
     page.drawLine({ start: { x: L + 24, y: y + 6 }, end: { x: R, y: y + 6 }, thickness: 0.4, color: hair });
     y -= 6;
+  }
   }
   if (d.showPrices) { put('Preise inkl. Umsatzsteuer. Die endgültigen Preise stehen im Angebot.', L, y, { size: 8.5, color: grey }); y -= 14; }
 

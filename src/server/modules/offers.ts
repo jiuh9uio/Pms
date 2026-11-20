@@ -32,9 +32,11 @@ const stateOf = (r: { status: Row['status']; validUntil: string | null; mode?: s
   : r.status === 'sent' && r.validUntil && r.validUntil < todayBerlin() ? 'expired' : r.status;
 
 // ---------- Katalog ----------
-const itemDto = (r: typeof offerItems.$inferSelect): OfferItemDto => ({ id: r.id, name: r.name, description: r.description, unit: r.unit, priceCents: r.priceCents, taxRatePercent: Number(r.taxRatePercent), area: r.area, sort: r.sort, active: r.active, version: r.version });
+const itemDto = (r: typeof offerItems.$inferSelect): OfferItemDto => ({ id: r.id, name: r.name, description: r.description, unit: r.unit, priceCents: r.priceCents, taxRatePercent: Number(r.taxRatePercent), area: r.area, group: r.itemGroup, sort: r.sort, active: r.active, version: r.version });
 export const listItems = async (db: Exec) => (await db.select().from(offerItems).orderBy(asc(offerItems.sort), asc(offerItems.name))).map(itemDto);
-export async function saveItem(db: Db, actor: Actor, id: string | null, v: OfferItemInput, version?: number) {
+export async function saveItem(db: Db, actor: Actor, id: string | null, input: OfferItemInput, version?: number) {
+  const { group, ...rest } = input;
+  const v = { ...rest, itemGroup: group };
   return db.transaction(async (tx) => {
     if (!id) {
       const [r] = await tx.insert(offerItems).values(v).returning();

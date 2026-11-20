@@ -1,0 +1,1 @@
+ALTER TABLE "offer_items" ADD COLUMN "item_group" text DEFAULT '' NOT NULL;

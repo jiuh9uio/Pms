@@ -28,10 +28,23 @@ const rate = z.number('Bitte eine Zahl eingeben').min(0).max(100);
 
 export const offerItemInput = z.object({
   name: z.string().trim().min(1, 'Bitte einen Namen eintragen').max(120), description: text(500),
-  unit: z.enum(OFFER_UNITS), priceCents: cents, taxRatePercent: rate, area: z.enum(OFFER_AREAS), sort: z.number().int().min(0).max(9999).default(0), active: z.boolean().default(true),
+  unit: z.enum(OFFER_UNITS), priceCents: cents, taxRatePercent: rate, area: z.enum(OFFER_AREAS), group: text(60), sort: z.number().int().min(0).max(9999).default(0), active: z.boolean().default(true),
 });
 export type OfferItemInput = z.infer<typeof offerItemInput>;
 export interface OfferItemDto extends OfferItemInput { id: string; version: number }
+/** Leistungen nach Gruppe ordnen (Reihenfolge: erstes Vorkommen; ohne Gruppe zuletzt als „Weitere Leistungen“) */
+export function groupItems<T extends { group: string }>(items: T[]): { name: string; items: T[] }[] {
+  const out: { name: string; items: T[] }[] = [];
+  for (const it of items) {
+    const name = it.group.trim();
+    if (!name) continue;
+    const g = out.find((x) => x.name.toLowerCase() === name.toLowerCase());
+    if (g) g.items.push(it); else out.push({ name, items: [it] });
+  }
+  const rest = items.filter((x) => !x.group.trim());
+  if (rest.length) out.push({ name: out.length ? 'Weitere Leistungen' : 'Leistungen', items: rest });
+  return out;
+}
 
 export const offerTemplateInput = z.object({
   name: z.string().trim().min(1, 'Bitte einen Namen eintragen').max(80), area: z.enum(OFFER_AREAS),

@@ -722,6 +722,8 @@ export const offerItems = pgTable('offer_items', {
   priceCents: integer('price_cents').notNull(),
   taxRatePercent: numeric('tax_rate_percent', { precision: 5, scale: 2, mode: 'number' }).notNull(),
   area: text('area', { enum: ['hotel', 'restaurant', 'both'] }).notNull().default('both'),
+  /** Gruppe für den Konfigurator und den Katalog (z. B. Raum, Verpflegung, Technik); leer = „Weitere Leistungen“ */
+  itemGroup: text('item_group').notNull().default(''),
   sort: integer('sort').notNull().default(0),
   active: boolean('active').notNull().default(true),
   ...stamps,

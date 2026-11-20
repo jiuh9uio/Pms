@@ -270,6 +270,11 @@ describe('Leistungskatalog zum Ankreuzen (PDF-Formular)', () => {
     const base = { description: '', taxRatePercent: 19, area: 'both', sort: 5, active: true };
     const a = (await ok('POST', '/offer-items', admin, { ...base, name: 'Kaffeepause Katalog', unit: 'person', priceCents: 650 })).id;
     const b = (await ok('POST', '/offer-items', admin, { ...base, name: 'Beamer Katalog', unit: 'day', priceCents: 4000, description: 'mit Leinwand' })).id;
+    // Gruppe für den Konfigurator: wird gespeichert und zurückgegeben; ohne Angabe leer
+    const all = await ok('GET', '/offer-items', user);
+    const bi = all.find((x: { id: string }) => x.id === b);
+    expect(bi.group).toBe('');
+    expect((await ok('PUT', `/offer-items/${b}`, admin, { ...bi, group: 'Technik' })).group).toBe('Technik');
     const tpl = await ok('POST', '/offer-templates', admin, { name: 'Seminar-Katalog', area: 'both', title: 'Seminar', intro: '', closing: '', questions: [], validDays: 14, depositPercent: 0,
       items: [{ itemId: a, quantity: null, preselect: false }, { itemId: b, quantity: null, preselect: false }], catalogPrices: true });
     expect(tpl.catalogPrices).toBe(true);

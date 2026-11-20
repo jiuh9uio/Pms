@@ -309,6 +309,13 @@
       "when": 1795135708313,
       "tag": "0043_gutscheinbuch",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1795177807776,
+      "tag": "0044_angebot_leistungsgruppe",
+      "breakpoints": true
     }
   ]
 }

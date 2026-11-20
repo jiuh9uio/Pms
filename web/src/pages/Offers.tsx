@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { addDays, formatMoney, moneyInput, parseMoney, todayBerlin } from '../../../src/shared/hotel.js';
 import {
-  AREA_LABEL, OFFER_AREAS, OFFER_STATE_LABEL, OFFER_UNITS, UNIT_LABEL, lineTotal, offerItemInput, offerTemplateInput, quantityFor,
+  AREA_LABEL, OFFER_AREAS, OFFER_STATE_LABEL, OFFER_UNITS, UNIT_LABEL, groupItems, lineTotal, offerItemInput, offerTemplateInput, quantityFor,
   type CatalogReturn, type OfferArea, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferListRow, type OfferState, type OfferTemplateDto, type OfferUnit,
 } from '../../../src/shared/offers.js';
 import { api } from '../api.ts';
@@ -140,6 +140,7 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const [askAlso, setAskAlso] = useState(false);
   const [catMail, setCatMail] = useState(false);
   const [catReturn, setCatReturn] = useState(false);
+  const [config, setConfig] = useState(false);
   useEffect(() => { if (o) { setV({ ...o, lines: o.lines.map(toDraftLine), questionsText: o.questions.join('\n') }); setDirty(false); } }, [o]);
   if (!o || !v) return <Dialog title="Angebot" onClose={onClose}><LoadState error={error} loading /></Dialog>;
   const locked = o.status === 'accepted' || o.status === 'declined';
@@ -294,6 +295,10 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
             <button type="button" key={x.id} className={`chip${v.lines.some((l) => l.itemId === x.id) ? ' on' : ''}`} title={v.lines.some((l) => l.itemId === x.id) ? 'steht schon im Angebot – noch einmal hinzufügen' : x.description || undefined} onClick={() => addItem(x.id)}>{v.lines.some((l) => l.itemId === x.id) ? '✓' : '+'} {x.name} <small className="muted">{formatMoney(x.priceCents)} {UNIT_LABEL[x.unit]}</small></button>
           ))}</div>}
           {catTpl && catItems.length > 0 && <div className="oc-send">
+            <span className="muted small">Wie beim Auto: Schritt für Schritt anklicken, die Summe läuft mit.</span>
+            <Button variant="primary" onClick={() => setConfig(true)}>Konfigurator öffnen</Button>
+          </div>}
+          {catTpl && catItems.length > 0 && <div className="oc-send">
             <span className="muted small">Erst den Katalog schicken? Der Kunde kreuzt im PDF an und schickt es zurück.</span>
             <Button onClick={() => void startCatMail()}>Katalog an Kunden schicken</Button>
             <Button onClick={() => void openCatalog()}>Katalog ansehen</Button>
@@ -329,7 +334,80 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
         intro={<p className="muted small">Das Angebot bleibt ein Entwurf. Was schon im Angebot steht, ist im Katalog bereits angekreuzt.{catTpl.catalogPrices ? ' Preise werden gezeigt.' : ' Ohne Preise (einstellbar in der Vorlage).'}</p>} />}
       {catReturn && catTpl && <CatalogReturnDialog offerId={id} offerNumber={o.number} catalogName={catTpl.name} items={catItems} persons={v.persons} inOffer={v.lines.map((l) => l.itemId).filter((x): x is string => !!x)}
         onApply={applyReturn} onClose={() => setCatReturn(false)} />}
+      {config && catTpl && <ConfiguratorDialog catalogName={catTpl.name} items={catItems} lines={v.lines} persons={v.persons} from={v.eventDate} to={v.eventEnd}
+        onApply={(lines) => { ch({ lines }); toast('Leistungen übernommen – bitte prüfen und speichern'); }} onClose={() => setConfig(false)} />}
       {accepting && <AcceptDialog offer={o} onClose={() => setAccepting(false)} />}
+    </Dialog>
+  );
+}
+
+/** Konfigurator: Leistungen des Katalogs Schritt für Schritt (je Gruppe) anklicken, Menge anpassen, Summe läuft mit */
+function ConfiguratorDialog({ catalogName, items, lines, persons, from, to, onApply, onClose }: {
+  catalogName: string; items: OfferItemDto[]; lines: LineDraft[]; persons: number; from: string | null; to: string | null;
+  onApply: (lines: LineDraft[]) => void; onClose: () => void;
+}) {
+  const groups = groupItems(items);
+  const suggest = (it: OfferItemDto) => String(quantityFor(it.unit, persons, from, to)).replace('.', ',');
+  // Auswahl: Leistungs-ID → Menge (Text); Vorgabe: was schon im Angebot steht
+  const [sel, setSel] = useState<Record<string, string>>(() => Object.fromEntries(items.flatMap((it) => { const l = lines.find((x) => x.itemId === it.id); return l ? [[it.id, l.quantity]] : []; })));
+  const [step, setStep] = useState(0);
+  const last = step === groups.length;
+  // Preis: der im Angebot schon angepasste Preis gilt weiter, sonst der Katalogpreis
+  const priceOf = (it: OfferItemDto) => { const l = lines.find((x) => x.itemId === it.id); const c = l ? parseMoney(l.price) : NaN; return Number.isFinite(c) ? c : it.priceCents; };
+  const sumOf = (it: OfferItemDto) => { const n = qty(sel[it.id] ?? ''); return Number.isFinite(n) ? lineTotal(n, priceOf(it)) : 0; };
+  const chosen = items.filter((it) => it.id in sel);
+  const total = chosen.reduce((s, it) => s + sumOf(it), 0);
+  const other = lines.filter((l) => !l.itemId || !items.some((it) => it.id === l.itemId));
+  const otherTotal = other.reduce((s, l) => { const n = qty(l.quantity), c = parseMoney(l.price); return s + (Number.isFinite(n) && Number.isFinite(c) ? lineTotal(n, c) : 0); }, 0);
+  const toggle = (it: OfferItemDto) => setSel((s) => { const n = { ...s }; if (it.id in n) delete n[it.id]; else n[it.id] = suggest(it); return n; });
+  const apply = () => {
+    const bad = chosen.find((it) => { const n = qty(sel[it.id] ?? ''); return !Number.isFinite(n) || n < 0; });
+    if (bad) { window.alert(`Bitte bei „${bad.name}“ eine Menge eintragen.`); return; }
+    const used = new Set<string>();
+    // bestehende Zeilen behalten (mit angepasstem Text/Preis), Menge übernehmen; abgewählte Katalog-Leistungen entfernen; neue anhängen
+    const kept = lines.flatMap((l): LineDraft[] => {
+      const it = l.itemId ? items.find((x) => x.id === l.itemId) : undefined;
+      if (!it) return [l];
+      if (!(it.id in sel) || used.has(it.id)) return [];
+      used.add(it.id);
+      return [{ ...l, quantity: sel[it.id]! }];
+    });
+    const added = chosen.filter((it) => !used.has(it.id)).map((it): LineDraft => ({ itemId: it.id, description: it.name, detail: it.description, unit: it.unit, quantity: sel[it.id]!, price: moneyInput(it.priceCents), tax: String(it.taxRatePercent) }));
+    onApply([...kept, ...added]);
+    onClose();
+  };
+  const g = groups[step];
+  return (
+    <Dialog title={`Konfigurator – ${catalogName}`} onClose={onClose} size="xl"
+      footer={<>
+        <span className="left total">Summe <b>{formatMoney(total + otherTotal)}</b>{otherTotal !== 0 && <small className="muted"> (davon {formatMoney(otherTotal)} weitere Zeilen im Angebot)</small>}</span>
+        {step > 0 && <Button onClick={() => setStep(step - 1)}>Zurück</Button>}
+        {!last ? <Button variant="primary" onClick={() => setStep(step + 1)}>Weiter</Button> : <Button variant="primary" onClick={apply}>Ins Angebot übernehmen</Button>}
+      </>}>
+      <ol className="cfg-steps">
+        {groups.map((x, i) => { const n = x.items.filter((it) => it.id in sel).length; return (
+          <li key={x.name}><button type="button" className={i === step ? 'on' : n ? 'done' : ''} onClick={() => setStep(i)}><span>{i + 1}</span>{x.name}{n > 0 && <small>{n}</small>}</button></li>
+        ); })}
+        <li><button type="button" className={last ? 'on' : ''} onClick={() => setStep(groups.length)}><span>✓</span>Übersicht</button></li>
+      </ol>
+      <p className="muted small">Für {persons} {persons === 1 ? 'Person' : 'Personen'}{from ? `, ${new Date(`${from}T12:00:00`).toLocaleDateString('de-DE')}${to && to !== from ? ` bis ${new Date(`${to}T12:00:00`).toLocaleDateString('de-DE')}` : ''}` : ''}. Die Menge wird vorgeschlagen und lässt sich ändern.</p>
+      {g && <div className="cfg-grid">{g.items.map((it) => { const on = it.id in sel; return (
+        <div key={it.id} className={`cfg-card${on ? ' on' : ''}`}>
+          <button type="button" className="cfg-pick" aria-pressed={on} onClick={() => toggle(it)}>
+            <span className="cfg-box" aria-hidden="true">{on ? '✓' : ''}</span>
+            <span className="cfg-name">{it.name}{it.description && <small>{it.description}</small>}</span>
+            <span className="cfg-price">{formatMoney(priceOf(it))}<small>{UNIT_LABEL[it.unit]}</small></span>
+          </button>
+          {on && <div className="cfg-qty"><label>Menge <input inputMode="decimal" className="numinput" value={sel[it.id]} onChange={(e) => setSel({ ...sel, [it.id]: e.target.value })} aria-label={`Menge ${it.name}`} /></label><b>{formatMoney(sumOf(it))}</b></div>}
+        </div>
+      ); })}</div>}
+      {last && (chosen.length === 0 ? <p className="muted">Noch nichts ausgewählt.</p> : (
+        <div className="tablewrap"><table><thead><tr><th>Leistung</th><th className="num">Menge</th><th className="num">Einzelpreis</th><th className="num">Gesamt</th></tr></thead>
+          <tbody>
+            {groups.map((x) => x.items.filter((it) => it.id in sel).map((it) => <tr key={it.id}><td><b>{it.name}</b> <small className="muted">{x.name}</small></td><td className="num">{sel[it.id]}</td><td className="num">{formatMoney(priceOf(it))} <small className="muted">{UNIT_LABEL[it.unit]}</small></td><td className="num">{formatMoney(sumOf(it))}</td></tr>))}
+            {other.length > 0 && <tr><td colSpan={3} className="muted">Weitere Zeilen im Angebot ({other.length}) – bleiben unverändert</td><td className="num">{formatMoney(otherTotal)}</td></tr>}
+          </tbody></table></div>
+      ))}
     </Dialog>
   );
 }
@@ -427,17 +505,17 @@ function ItemsAdmin() {
       <p className="muted small">Preise sind Bruttopreise (inkl. Umsatzsteuer). Bitte den passenden Steuersatz je Leistung eintragen (z. B. 7 % Übernachtung, 19 % Getränke) – im Zweifel mit dem Steuerberater klären.</p>
       <LoadState error={error} loading={!data} />
       {data && (data.length === 0 ? <p className="muted">Noch keine Leistungen.</p> : (
-        <div className="tablewrap"><table><thead><tr><th>Leistung</th><th>Abrechnung</th><th className="num">Preis</th><th className="num">USt</th><th>Bereich</th></tr></thead>
-          <tbody>{data.map((i) => <tr key={i.id} className={`rowlink${i.active ? '' : ' faded'}`} onClick={() => setEdit(i)}><td><b>{i.name}</b>{i.description && <><br /><small className="muted">{i.description}</small></>}</td><td>{UNIT_LABEL[i.unit]}</td><td className="num">{formatMoney(i.priceCents)}</td><td className="num">{i.taxRatePercent} %</td><td>{AREA_LABEL[i.area]}</td></tr>)}</tbody></table></div>
+        <div className="tablewrap"><table><thead><tr><th>Leistung</th><th>Gruppe</th><th>Abrechnung</th><th className="num">Preis</th><th className="num">USt</th><th>Bereich</th></tr></thead>
+          <tbody>{data.map((i) => <tr key={i.id} className={`rowlink${i.active ? '' : ' faded'}`} onClick={() => setEdit(i)}><td><b>{i.name}</b>{i.description && <><br /><small className="muted">{i.description}</small></>}</td><td>{i.group || <span className="muted">–</span>}</td><td>{UNIT_LABEL[i.unit]}</td><td className="num">{formatMoney(i.priceCents)}</td><td className="num">{i.taxRatePercent} %</td><td>{AREA_LABEL[i.area]}</td></tr>)}</tbody></table></div>
       ))}
-      {edit && <ItemDialog item={edit === 'new' ? null : edit} onClose={() => setEdit(null)} />}
+      {edit && <ItemDialog item={edit === 'new' ? null : edit} groups={[...new Set((data ?? []).map((i) => i.group).filter(Boolean))]} onClose={() => setEdit(null)} />}
     </section>
   );
 }
-function ItemDialog({ item, onClose }: { item: OfferItemDto | null; onClose: () => void }) {
+function ItemDialog({ item, groups, onClose }: { item: OfferItemDto | null; groups: string[]; onClose: () => void }) {
   const { bump } = useData();
   const toast = useToast();
-  const [v, setV] = useState({ name: item?.name ?? '', description: item?.description ?? '', unit: item?.unit ?? 'person' as OfferUnit, price: item ? moneyInput(item.priceCents) : '', tax: String(item?.taxRatePercent ?? 19), area: item?.area ?? 'both' as OfferArea, sort: String(item?.sort ?? 0), active: item?.active ?? true });
+  const [v, setV] = useState({ name: item?.name ?? '', description: item?.description ?? '', unit: item?.unit ?? 'person' as OfferUnit, price: item ? moneyInput(item.priceCents) : '', tax: String(item?.taxRatePercent ?? 19), area: item?.area ?? 'both' as OfferArea, group: item?.group ?? '', sort: String(item?.sort ?? 0), active: item?.active ?? true });
   const [busy, setBusy] = useState(false);
   const save = async () => {
     const p = offerItemInput.safeParse({ ...v, priceCents: parseMoney(v.price), taxRatePercent: Number(v.tax.replace(',', '.')), sort: Number(v.sort) || 0 });
@@ -456,6 +534,7 @@ function ItemDialog({ item, onClose }: { item: OfferItemDto | null; onClose: () 
         <Field label="Preis (brutto)"><input inputMode="decimal" value={v.price} onChange={(e) => setV({ ...v, price: e.target.value })} /></Field>
         <Field label="USt %"><input inputMode="decimal" value={v.tax} onChange={(e) => setV({ ...v, tax: e.target.value })} /></Field>
         <Field label="Bereich"><select value={v.area} onChange={(e) => setV({ ...v, area: e.target.value as OfferArea })}>{OFFER_AREAS.map((a) => <option key={a} value={a}>{AREA_LABEL[a]}</option>)}</select></Field>
+        <Field label="Gruppe (Schritt im Konfigurator)" hint="z. B. Raum, Verpflegung, Technik, Extras"><input list="oc-groups" value={v.group} onChange={(e) => setV({ ...v, group: e.target.value })} /><datalist id="oc-groups">{groups.map((g) => <option key={g} value={g} />)}</datalist></Field>
         <Field label="Reihenfolge"><input inputMode="numeric" value={v.sort} onChange={(e) => setV({ ...v, sort: e.target.value })} /></Field>
         <label className="check"><input type="checkbox" checked={v.active} onChange={(e) => setV({ ...v, active: e.target.checked })} /><span>In Benutzung</span></label>
       </div>
