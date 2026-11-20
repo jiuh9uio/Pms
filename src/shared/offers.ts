@@ -41,9 +41,18 @@ export const offerTemplateInput = z.object({
   items: z.array(z.object({ itemId: z.uuid(), quantity: z.number().positive().max(100000).nullable().default(null), preselect: z.boolean().default(true) })).max(80).default([]),
   validDays: z.number('Bitte eine Zahl eingeben').int().min(1).max(365), depositPercent: z.number('Bitte eine Zahl eingeben').int().min(0).max(100),
   documentIds: z.array(z.uuid()).max(10).default([]), sort: z.number().int().min(0).max(9999).default(0), active: z.boolean().default(true),
+  /** Preise im Katalog-PDF für den Kunden zeigen (gespeichert in den Einstellungen, nicht in der Vorlagen-Tabelle) */
+  catalogPrices: z.boolean().default(false),
 });
 export type OfferTemplateInput = z.infer<typeof offerTemplateInput>;
 export interface OfferTemplateDto extends OfferTemplateInput { id: string; version: number }
+
+/** Rückmeldung des Kunden aus dem ausgefüllten Katalog-PDF */
+export interface CatalogReturn {
+  itemIds: string[]; persons: number | null; date: string; name: string; remarks: string;
+  /** Nummer, die im PDF steht – weicht sie vom geöffneten Angebot ab, gibt es einen Hinweis */
+  offerNumber: string; warnings: string[];
+}
 
 export interface OfferDocumentDto { id: string; name: string; fileName: string; sizeBytes: number; active: boolean; uploadedBy: string; createdAt: string }
 

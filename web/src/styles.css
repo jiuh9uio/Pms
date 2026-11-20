@@ -1177,4 +1177,12 @@ a.linkcard.attention b { color: var(--warn); }
 .oc-cat > div.on { border-color: var(--accent); background: var(--accent-soft); }
 .oc-quick { display: grid; gap: 8px; margin: 10px 0 6px; padding: 10px 12px; border: 1px dashed var(--line-strong); border-radius: 10px; }
 .oc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.oc-send { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.oc-send > span { flex: 1 1 220px; }
+.oc-ret-file { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
+.oc-ret-file > span { flex: 1 1 220px; }
+.oc-ret-info dl { display: grid; gap: 4px; margin: 6px 0; }
+.oc-ret-info dl > div { display: flex; gap: 10px; }
+.oc-ret-info dt { min-width: 120px; color: var(--muted); }
+.oc-ret-info dd { margin: 0; white-space: pre-wrap; }
 @media (max-width: 700px) { .oc-cat > div { grid-template-columns: 1fr; gap: 4px; } }

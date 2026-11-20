@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.108.0
+
+- **Angebote: Leistungskatalog an den Kunden schicken.** Im Angebot unter „Produktkatalog“: **„Katalog an Kunden schicken“** – der Kunde bekommt per E-Mail ein PDF mit allen Leistungen des Anlasses zum **Ankreuzen**, dazu Felder für Personen, Wunschtermin und Wünsche. Das Angebot bleibt dabei ein Entwurf.
+- **„Antwort des Kunden übernehmen …“**: das zurückgeschickte PDF einlesen – die angekreuzten Leistungen kommen ins Angebot, Personen und Wünsche in die interne Notiz (Personenzahl auf Wunsch übernehmen). Hat der Kunde ausgedruckt oder einfach geschrieben, kreuzen Sie im selben Fenster von Hand an. Gespeichert wird erst mit „Speichern“.
+- In der Vorlage: **„Preise im Katalog für den Kunden zeigen“** – je Anlass einstellbar (Vorgabe: ohne Preise).
+
 ## 1.107.0
 
 - **Angebote: fester Produktkatalog je Anlass.** Jede Vorlage (Tagung, Familienfeier, Weihnachtsfeier, Gruppenübernachtung, eigene) hat jetzt ihren eigenen **Produktkatalog**: In der Vorlage je Leistung „im Katalog“ (wird angeboten) und „gleich ins Angebot“ (steht beim Anlegen schon drin) ankreuzen – z. B. bei „Tagung“: Tagungspauschale gleich ins Angebot, Kaffeepause extra und Technik zur Auswahl.

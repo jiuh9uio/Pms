@@ -62,6 +62,18 @@ export function registerOfferRoutes(api: FastifyInstance, { db, requireUser, req
   });
   api.get('/offers/:id/mail', user, (req) => offers.mailDraft(db, idOf(req), guestBaseUrl(req).url));
   api.post('/offers/:id/mail', user, (req) => offers.sendOffer(db, actor(req), idOf(req), O.offerSendInput.parse(req.body)));
+  // Leistungskatalog zum Ankreuzen: ansehen, per E-Mail senden, ausgefülltes PDF einlesen (?katalog=<Vorlagen-ID>, sonst Vorlage des Angebots)
+  const katalogOf = (req: FastifyRequest) => z.object({ katalog: z.uuid().optional() }).parse(req.query).katalog ?? null;
+  api.get('/offers/:id/catalog/pdf', user, async (req, reply) => {
+    const f = await offers.catalogPdf(db, idOf(req), katalogOf(req));
+    return reply.header('Content-Type', 'application/pdf').header('Content-Disposition', `inline; filename="${encodeURIComponent(f.fileName)}"`).send(f.pdf);
+  });
+  api.get('/offers/:id/catalog/mail', user, (req) => offers.catalogMailDraft(db, idOf(req), katalogOf(req)));
+  api.post('/offers/:id/catalog/mail', user, (req) => offers.sendCatalog(db, actor(req), idOf(req), katalogOf(req), O.offerSendInput.parse(req.body)));
+  api.post('/offers/:id/catalog/read', { ...user, bodyLimit: 11 * 1024 * 1024 }, (req) => {
+    if (!Buffer.isBuffer(req.body)) throw new AppError(400, 'bad_file', 'Bitte eine PDF-Datei wählen');
+    return offers.readCatalog(db, idOf(req), req.body);
+  });
   api.get('/offers/:id/link', user, (req) => offers.offerLink(db, idOf(req), guestBaseUrl(req).url));
   api.post('/offers/:id/accept', user, (req) => offers.acceptOffer(db, actor(req), idOf(req), O.offerAcceptInput.parse(req.body)));
   api.post('/offers/:id/decline', user, (req) => offers.declineOffer(db, actor(req), idOf(req)));

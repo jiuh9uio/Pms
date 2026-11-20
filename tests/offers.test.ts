@@ -263,3 +263,48 @@ describe('Fragenkatalog zum Anklicken', () => {
     expect(removed).not.toContain('Wird ein Sektempfang gewünscht?');
   });
 });
+
+describe('Leistungskatalog zum Ankreuzen (PDF-Formular)', () => {
+  it('Katalog-PDF mit Ankreuzfeldern; ausgefülltes PDF einlesen; ohne Felder → Hinweis; Preise je Vorlage', async () => {
+    const { PDFDocument } = await import('pdf-lib');
+    const base = { description: '', taxRatePercent: 19, area: 'both', sort: 5, active: true };
+    const a = (await ok('POST', '/offer-items', admin, { ...base, name: 'Kaffeepause Katalog', unit: 'person', priceCents: 650 })).id;
+    const b = (await ok('POST', '/offer-items', admin, { ...base, name: 'Beamer Katalog', unit: 'day', priceCents: 4000, description: 'mit Leinwand' })).id;
+    const tpl = await ok('POST', '/offer-templates', admin, { name: 'Seminar-Katalog', area: 'both', title: 'Seminar', intro: '', closing: '', questions: [], validDays: 14, depositPercent: 0,
+      items: [{ itemId: a, quantity: null, preselect: false }, { itemId: b, quantity: null, preselect: false }], catalogPrices: true });
+    expect(tpl.catalogPrices).toBe(true);
+    expect((await ok('GET', '/offer-templates', user)).find((t: { id: string }) => t.id === tpl.id).catalogPrices).toBe(true);
+    const o = await ok('POST', '/offers', user, { templateId: tpl.id, customerName: 'Erfunden Test', email: 'test@example.org', persons: 12, eventDate: addDays(today, 40) });
+    const m = await ok('GET', `/offers/${o.id}/catalog/mail`, user);
+    expect(m.subject).toContain('Leistungskatalog Seminar-Katalog');
+    expect(m.text).toContain('ankreuzen');
+    const res = await call('GET', `/offers/${o.id}/catalog/pdf`, user);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('application/pdf');
+    // der Kunde kreuzt „Beamer“ an, ändert die Personenzahl und schreibt einen Wunsch
+    const doc = await PDFDocument.load(res.rawPayload);
+    const form = doc.getForm();
+    expect(form.getTextField('angebot').getText()).toBe(o.number);
+    expect(form.getTextField('personen').getText()).toBe('12');
+    form.getCheckBox(`pos_${b}`).check();
+    form.getTextField('personen').setText('15');
+    form.getTextField('bemerkungen').setText('Bitte vegetarisch, Beginn 9 Uhr');
+    const filled = Buffer.from(await doc.save());
+    const read = (body: Buffer) => app.inject({ method: 'POST', url: `/api/v1/offers/${o.id}/catalog/read`, headers: { 'content-type': 'application/octet-stream', cookie: `pms_session=${user.pms_session}` }, payload: body });
+    const r = await read(filled);
+    expect(r.statusCode, r.body).toBe(200);
+    expect(r.json()).toMatchObject({ itemIds: [b], persons: 15, remarks: 'Bitte vegetarisch, Beginn 9 Uhr', offerNumber: o.number, warnings: [] });
+    // Einlesen ändert am Angebot nichts
+    expect((await ok('GET', `/offers/${o.id}`, user)).persons).toBe(12);
+    // ausgedruckt/„als PDF gedruckt“: keine Felder mehr → verständlicher Hinweis
+    const flat = await PDFDocument.create(); flat.addPage();
+    const r2 = await read(Buffer.from(await flat.save()));
+    expect(r2.statusCode).toBe(422);
+    expect(r2.json().error.message).toContain('von Hand');
+    expect((await read(Buffer.from('kein pdf'))).statusCode).toBe(400);
+    // Preise ausschalten → Vorlage meldet es so zurück
+    const t2 = await ok('PUT', `/offer-templates/${tpl.id}`, admin, { ...tpl, catalogPrices: false });
+    expect(t2.catalogPrices).toBe(false);
+    expect((await call('GET', `/offers/${o.id}/catalog/pdf`, user)).statusCode).toBe(200);
+  });
+});

@@ -3,11 +3,12 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { taxBreakdown } from '../../shared/billing.js';
 import { formatMoney, todayBerlin } from '../../shared/hotel.js';
 import {
-  OFFER_LAYOUT_DEFAULT, type OfferAnswers, lineTotal, offerLayoutInput, quantityFor, type OfferLayout, type OfferCreateInputT, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferItemInput, type OfferLineInput, type OfferListRow,
+  type CatalogReturn, OFFER_LAYOUT_DEFAULT, type OfferAnswers, lineTotal, offerLayoutInput, quantityFor, type OfferLayout, type OfferCreateInputT, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferItemInput, type OfferLineInput, type OfferListRow,
   type OfferState, type OfferTemplateDto, type OfferTemplateInput, type OfferUpdateInput, type PublicOffer,
 } from '../../shared/offers.js';
 import type { Db, Exec } from '../db/client.js';
 import { numberSequences, offerDocuments, offerItems, offerLines, offers, offerTemplates, settings, teamNotes } from '../db/schema.js';
+import { readCatalogPdf, renderCatalog } from '../einvoice/catalogpdf.js';
 import { renderOffer } from '../einvoice/offerpdf.js';
 import { AppError, conflict, notFound, stale } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
@@ -74,7 +75,8 @@ export async function documentFile(db: Exec, id: string) {
 }
 
 // ---------- Vorlagen ----------
-const tplDto = (r: typeof offerTemplates.$inferSelect): OfferTemplateDto => ({
+const tplDto = (r: typeof offerTemplates.$inferSelect, prices: Record<string, boolean> = {}): OfferTemplateDto => ({
+  catalogPrices: prices[r.id] === true,
   id: r.id, name: r.name, area: r.area, title: r.title, intro: r.intro, closing: r.closing, questions: r.questions as string[],
   items: r.items as OfferTemplateDto['items'], validDays: r.validDays, depositPercent: r.depositPercent, documentIds: r.documentIds as string[], sort: r.sort, active: r.active, version: r.version,
 });
@@ -103,21 +105,37 @@ async function ensureDefaults(db: Db) {
 }
 export async function listTemplates(db: Db) {
   await ensureDefaults(db);
-  return (await db.select().from(offerTemplates).orderBy(asc(offerTemplates.sort), asc(offerTemplates.name))).map(tplDto);
+  const prices = await catalogPrices(db);
+  return (await db.select().from(offerTemplates).orderBy(asc(offerTemplates.sort), asc(offerTemplates.name))).map((r) => tplDto(r, prices));
 }
-export async function saveTemplate(db: Db, actor: Actor, id: string | null, v: OfferTemplateInput, version?: number) {
+/** Je Vorlage: Preise im Katalog-PDF zeigen? (Einstellung „offer_catalog_prices“: { [Vorlagen-ID]: true }) */
+async function catalogPrices(db: Exec): Promise<Record<string, boolean>> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'offer_catalog_prices'));
+  const v = row?.value;
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, boolean>) : {};
+}
+async function setCatalogPrices(db: Exec, id: string, on: boolean) {
+  const cur = await catalogPrices(db);
+  const next = { ...cur, [id]: on };
+  if (!on) delete next[id];
+  await db.insert(settings).values({ key: 'offer_catalog_prices', value: next }).onConflictDoUpdate({ target: settings.key, set: { value: next, updatedAt: new Date() } });
+}
+export async function saveTemplate(db: Db, actor: Actor, id: string | null, input: OfferTemplateInput, version?: number) {
+  const { catalogPrices: prices, ...v } = input;
   return db.transaction(async (tx) => {
     if (!id) {
       const [r] = await tx.insert(offerTemplates).values(v).returning();
-      await record(tx, actor, { action: 'create', entity: 'offer_template', entityId: r!.id, after: { name: v.name } });
-      return tplDto(r!);
+      await setCatalogPrices(tx, r!.id, prices);
+      await record(tx, actor, { action: 'create', entity: 'offer_template', entityId: r!.id, after: { name: v.name, catalogPrices: prices } });
+      return tplDto(r!, { [r!.id]: prices });
     }
     const [b] = await tx.select().from(offerTemplates).where(eq(offerTemplates.id, id)).for('update');
     if (!b) throw notFound('Vorlage');
     if (b.version !== version) throw stale();
     const [r] = await tx.update(offerTemplates).set({ ...v, version: b.version + 1, updatedAt: new Date() }).where(eq(offerTemplates.id, id)).returning();
-    await record(tx, actor, { action: 'update', entity: 'offer_template', entityId: id, after: { name: v.name } });
-    return tplDto(r!);
+    await setCatalogPrices(tx, id, prices);
+    await record(tx, actor, { action: 'update', entity: 'offer_template', entityId: id, after: { name: v.name, catalogPrices: prices } });
+    return tplDto(r!, { [id]: prices });
   });
 }
 
@@ -519,4 +537,64 @@ export async function removeQuestion(db: Db, actor: Actor, q: string) {
   await saveBank(db, next);
   await record(db, actor, { action: 'question_remove', entity: 'offer', before: { question: q } });
   return next;
+}
+
+// ---------- Leistungskatalog zum Ankreuzen (PDF-Formular) ----------
+/** Katalog der gewählten Vorlage (sonst der Vorlage des Angebots) mit den aktiven Leistungen */
+async function catalogOf(db: Exec, id: string, templateId: string | null) {
+  const o = await getOffer(db, id);
+  const tid = templateId ?? o.templateId;
+  if (!tid) throw conflict('Bitte zuerst einen Produktkatalog (Vorlage) wählen.');
+  const [tpl] = await db.select().from(offerTemplates).where(eq(offerTemplates.id, tid));
+  if (!tpl) throw notFound('Vorlage');
+  const all = await db.select().from(offerItems);
+  const items = (tpl.items as OfferTemplateDto['items']).map((t) => all.find((x) => x.id === t.itemId && x.active)).filter((x): x is typeof all[number] => !!x).map(itemDto);
+  if (!items.length) throw conflict(`Der Katalog „${tpl.name}“ enthält noch keine Leistungen (Angebote → Vorlagen).`);
+  const prices = await catalogPrices(db);
+  return { o, tpl, items, showPrices: prices[tpl.id] === true };
+}
+const whenText = (o: OfferDto) => (o.eventDate ? (o.eventEnd && o.eventEnd !== o.eventDate ? `${de(o.eventDate)} – ${de(o.eventEnd)}` : de(o.eventDate)) : '');
+export async function catalogPdf(db: Exec, id: string, templateId: string | null) {
+  const { o, tpl, items, showPrices } = await catalogOf(db, id, templateId);
+  const pdf = await renderCatalog({
+    offerNumber: o.number, catalogName: tpl.name, customer: [o.customerCompany, o.customerName].filter(Boolean).join(', '), date: whenText(o), persons: o.persons,
+    items, checked: o.lines.map((l) => l.itemId).filter((x): x is string => !!x), showPrices,
+  }, await getHotel(db));
+  return { fileName: `Leistungskatalog_${tpl.name.replace(/[^A-Za-z0-9ÄÖÜäöüß-]+/g, '_')}_${o.number}.pdf`, pdf: Buffer.from(pdf), tpl, o };
+}
+export async function catalogMailDraft(db: Exec, id: string, templateId: string | null) {
+  const { o, tpl } = await catalogOf(db, id, templateId);
+  const h = await getHotel(db);
+  const when = whenText(o);
+  const text = [o.customerName ? `Guten Tag ${o.customerName},` : 'Guten Tag,', '',
+    `vielen Dank für Ihre Anfrage${o.title ? ` (${o.title})` : ''}${when ? ` für ${when}` : ''}. Anbei erhalten Sie unseren Leistungskatalog „${tpl.name}“.`, '',
+    'So einfach geht es:',
+    '1. PDF öffnen und die gewünschten Leistungen ankreuzen',
+    '2. Personenzahl, Wunschtermin und Ihre Wünsche ergänzen',
+    '3. PDF speichern und als Antwort auf diese E-Mail an uns zurückschicken', '',
+    'Sie können uns natürlich auch einfach schreiben oder anrufen. Danach erhalten Sie von uns ein verbindliches Angebot.', '',
+    signature(h)].join('\n');
+  return { to: o.email, subject: `Leistungskatalog ${tpl.name}${o.title ? ` – ${o.title}` : ''} – ${h.name}`, text, attachment: `Leistungskatalog ${tpl.name} (PDF zum Ankreuzen)`, ready: await ready(db) };
+}
+/** Katalog senden – das Angebot bleibt ein Entwurf (Status unverändert); vermerkt im Protokoll */
+export async function sendCatalog(db: Db, actor: Actor, id: string, templateId: string | null, v: { to: string; subject: string; text: string }) {
+  const { fileName, pdf, tpl, o } = await catalogPdf(db, id, templateId);
+  if (o.status === 'accepted' || o.status === 'declined') throw conflict('Das Angebot ist bereits abgeschlossen.');
+  await sendMail(db, actor, { to: v.to, subject: v.subject, text: v.text, attachments: [{ filename: fileName, content: pdf, contentType: 'application/pdf' }] });
+  await record(db, actor, { action: 'send_catalog', entity: 'offer', entityId: id, after: { to: v.to, number: o.number, catalog: tpl.name } });
+  return { ok: true };
+}
+/** Zurückgeschicktes, ausgefülltes Katalog-PDF lesen – ändert nichts; übernommen wird erst im Angebot (Speichern) */
+export async function readCatalog(db: Exec, id: string, data: Buffer): Promise<CatalogReturn> {
+  const o = await getOffer(db, id);
+  const all = (await db.select({ id: offerItems.id, active: offerItems.active }).from(offerItems)).filter((x) => x.active).map((x) => x.id);
+  let r: Awaited<ReturnType<typeof readCatalogPdf>>;
+  try { r = await readCatalogPdf(data, all); }
+  catch { throw new AppError(400, 'bad_pdf', 'Die Datei lässt sich nicht als PDF lesen.'); }
+  if (!r.found) throw new AppError(422, 'no_form', 'In diesem PDF sind keine Ankreuzfelder (mehr). Wurde es ausgedruckt, eingescannt oder „als PDF gedruckt“? Dann bitte die Leistungen hier von Hand ankreuzen.');
+  const warnings: string[] = [];
+  if (r.offerNumber && r.offerNumber !== o.number) warnings.push(`Das PDF gehört zu ${r.offerNumber}, geöffnet ist ${o.number}. Bitte prüfen, ob es der richtige Kunde ist.`);
+  if (r.unknown > 0) warnings.push(`${r.unknown} angekreuzte Leistung(en) gibt es nicht mehr oder sind ausgeblendet – bitte von Hand ergänzen.`);
+  if (!r.itemIds.length) warnings.push('Im PDF ist keine Leistung angekreuzt.');
+  return { itemIds: r.itemIds, persons: r.persons, date: r.date, name: r.name, remarks: r.remarks, offerNumber: r.offerNumber, warnings };
 }

@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { addDays, formatMoney, moneyInput, parseMoney, todayBerlin } from '../../../src/shared/hotel.js';
 import {
   AREA_LABEL, OFFER_AREAS, OFFER_STATE_LABEL, OFFER_UNITS, UNIT_LABEL, lineTotal, offerItemInput, offerTemplateInput, quantityFor,
-  type OfferArea, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferListRow, type OfferState, type OfferTemplateDto, type OfferUnit,
+  type CatalogReturn, type OfferArea, type OfferDocumentDto, type OfferDto, type OfferItemDto, type OfferListRow, type OfferState, type OfferTemplateDto, type OfferUnit,
 } from '../../../src/shared/offers.js';
 import { api } from '../api.ts';
 import { useAuth } from '../App.tsx';
@@ -138,6 +138,8 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const [mail, setMail] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const [askAlso, setAskAlso] = useState(false);
+  const [catMail, setCatMail] = useState(false);
+  const [catReturn, setCatReturn] = useState(false);
   useEffect(() => { if (o) { setV({ ...o, lines: o.lines.map(toDraftLine), questionsText: o.questions.join('\n') }); setDirty(false); } }, [o]);
   if (!o || !v) return <Dialog title="Angebot" onClose={onClose}><LoadState error={error} loading /></Dialog>;
   const locked = o.status === 'accepted' || o.status === 'declined';
@@ -155,6 +157,7 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
     ch({ lines: [...v.lines, { itemId: it.id, description: it.name, detail: it.description, unit: it.unit, quantity: String(quantityFor(it.unit, v.persons, v.eventDate, v.eventEnd)).replace('.', ','), price: moneyInput(it.priceCents), tax: String(it.taxRatePercent) }] });
   };
   const catTpl = tpls.find((t) => t.id === (catalogId ?? o.templateId ?? ''));
+  const catQuery = catTpl ? `?katalog=${catTpl.id}` : '';
   const catItems = (catTpl?.items ?? []).map((c) => items.find((x) => x.id === c.itemId && x.active)).filter((x): x is OfferItemDto => !!x);
   const recalc = () => ch({ lines: v.lines.map((l) => (l.unit === 'flat' ? l : { ...l, quantity: String(quantityFor(l.unit, v.persons, v.eventDate, v.eventEnd)) })) });
   const save = async (quiet = false) => {
@@ -180,6 +183,16 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
     if (dirty && !(await save(true))) return;
     if (!window.confirm('Jetzt aus den Fragen ein Angebot mit Leistungen machen? Die Antworten bleiben sichtbar; der bisherige Link zum Beantworten gilt dann nicht mehr.')) return;
     try { await api('POST', `/offers/${id}/to-offer`); toast('Jetzt Leistungen eintragen und das Angebot senden'); bump(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+  };
+  const openCatalog = async () => { if (dirty && !(await save(true))) return; window.open(`/api/v1/offers/${id}/catalog/pdf${catQuery}`, '_blank', 'noopener'); };
+  const startCatMail = async () => { if (dirty && !(await save(true))) return; setCatMail(true); };
+  /** Rückmeldung aus dem Katalog übernehmen: angekreuzte Leistungen als Zeilen (noch nicht gespeichert), Personen, Notiz */
+  const applyReturn = (r: { itemIds: string[]; persons: number | null; note: string }) => {
+    const persons = r.persons ?? v.persons;
+    const add = r.itemIds.filter((iid) => !v.lines.some((l) => l.itemId === iid)).map((iid) => items.find((x) => x.id === iid)).filter((x): x is OfferItemDto => !!x)
+      .map((it): LineDraft => ({ itemId: it.id, description: it.name, detail: it.description, unit: it.unit, quantity: String(quantityFor(it.unit, persons, v.eventDate, v.eventEnd)).replace('.', ','), price: moneyInput(it.priceCents), tax: String(it.taxRatePercent) }));
+    ch({ persons, lines: [...v.lines, ...add], notes: r.note ? [v.notes, r.note].filter(Boolean).join('\n\n') : v.notes });
+    toast(`${add.length} Leistung(en) übernommen${r.persons && r.persons !== v.persons ? ' – Personenzahl geändert: bei Bedarf „Mengen neu berechnen“' : ''} – bitte prüfen und speichern`);
   };
   const openPdf = async () => { if (dirty && !(await save(true))) return; window.open(`/api/v1/offers/${id}/pdf`, '_blank', 'noopener'); };
   const startMail = async () => { if (dirty && !(await save(true))) return; setMail(true); };
@@ -280,6 +293,12 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
           {catItems.length > 0 && <div className="oc-chips">{catItems.map((x) => (
             <button type="button" key={x.id} className={`chip${v.lines.some((l) => l.itemId === x.id) ? ' on' : ''}`} title={v.lines.some((l) => l.itemId === x.id) ? 'steht schon im Angebot – noch einmal hinzufügen' : x.description || undefined} onClick={() => addItem(x.id)}>{v.lines.some((l) => l.itemId === x.id) ? '✓' : '+'} {x.name} <small className="muted">{formatMoney(x.priceCents)} {UNIT_LABEL[x.unit]}</small></button>
           ))}</div>}
+          {catTpl && catItems.length > 0 && <div className="oc-send">
+            <span className="muted small">Erst den Katalog schicken? Der Kunde kreuzt im PDF an und schickt es zurück.</span>
+            <Button onClick={() => void startCatMail()}>Katalog an Kunden schicken</Button>
+            <Button onClick={() => void openCatalog()}>Katalog ansehen</Button>
+            <Button onClick={() => setCatReturn(true)}>Antwort des Kunden übernehmen …</Button>
+          </div>}
         </div>
       )}
       {!locked && <div className="btnrow">
@@ -305,7 +324,70 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
       <Field label="Interne Notiz (erscheint nicht im Angebot)" wide><textarea rows={2} value={v.notes} onChange={(e) => ch({ notes: e.target.value })} /></Field>
       {mail && <MailDialog path={`/offers/${id}/mail`} title={q ? `Fragen zu ${o.number} senden` : `Angebot ${o.number} senden`} sendLabel="Senden" onClose={() => setMail(false)} onSent={bump}
         intro={<p className="muted small">{q ? 'Die E-Mail enthält Ihre Fragen und einen Link zum Beantworten – ohne Anhang.' : 'Angehängt werden das Angebot als PDF und die gewählten Anlagen. Danach gilt das Angebot als versendet.'}</p>} />}
+      {catMail && catTpl && <MailDialog path={`/offers/${id}/catalog/mail${catQuery}`} title={`Leistungskatalog „${catTpl.name}“ senden`} sendLabel="Katalog senden" onClose={() => setCatMail(false)}
+        attachmentNote="– der Kunde kreuzt darin an und schickt es zurück"
+        intro={<p className="muted small">Das Angebot bleibt ein Entwurf. Was schon im Angebot steht, ist im Katalog bereits angekreuzt.{catTpl.catalogPrices ? ' Preise werden gezeigt.' : ' Ohne Preise (einstellbar in der Vorlage).'}</p>} />}
+      {catReturn && catTpl && <CatalogReturnDialog offerId={id} offerNumber={o.number} catalogName={catTpl.name} items={catItems} persons={v.persons} inOffer={v.lines.map((l) => l.itemId).filter((x): x is string => !!x)}
+        onApply={applyReturn} onClose={() => setCatReturn(false)} />}
       {accepting && <AcceptDialog offer={o} onClose={() => setAccepting(false)} />}
+    </Dialog>
+  );
+}
+
+/** Rückmeldung zum Katalog: zurückgeschicktes PDF einlesen oder von Hand ankreuzen (bei Ausdruck, E-Mail-Text, Telefon) */
+function CatalogReturnDialog({ offerId, offerNumber, catalogName, items, persons, inOffer, onApply, onClose }: {
+  offerId: string; offerNumber: string; catalogName: string; items: OfferItemDto[]; persons: number; inOffer: string[];
+  onApply: (r: { itemIds: string[]; persons: number | null; note: string }) => void; onClose: () => void;
+}) {
+  const toast = useToast();
+  const [picked, setPicked] = useState<string[]>([]);
+  const [read, setRead] = useState<CatalogReturn | null>(null);
+  const [takePersons, setTakePersons] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const upload = async (file: File) => {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/v1/offers/${offerId}/catalog/read`, { method: 'POST', credentials: 'same-origin', body: file, headers: { 'Content-Type': 'application/octet-stream' } });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(j?.error?.message ?? `Fehler ${res.status}`);
+      const r = j as CatalogReturn;
+      setRead(r); setPicked(r.itemIds.filter((x) => items.some((i) => i.id === x)));
+      toast(`${r.itemIds.length} angekreuzte Leistung(en) gefunden`);
+    } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+    setBusy(false);
+  };
+  const newPersons = read?.persons && read.persons !== persons ? read.persons : null;
+  const apply = () => {
+    const parts = read ? [
+      `Rückmeldung zum Katalog „${catalogName}“ (${new Date().toLocaleDateString('de-DE')})`,
+      read.name && `Name: ${read.name}`, read.date && `Wunschtermin: ${read.date}`, read.persons && `Personen: ${read.persons}`, read.remarks && `Wünsche: ${read.remarks}`,
+    ].filter(Boolean) : [];
+    onApply({ itemIds: picked, persons: newPersons && takePersons ? newPersons : null, note: parts.join('\n') });
+    onClose();
+  };
+  return (
+    <Dialog title={`Antwort zum Katalog „${catalogName}“`} onClose={onClose} size="lg"
+      footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" disabled={!picked.length && !read} onClick={apply}>Ins Angebot übernehmen</Button></>}>
+      <div className="oc-ret-file">
+        <label className={`btn${busy ? ' disabled' : ''}`}>Zurückgeschicktes PDF einlesen …<input type="file" accept="application/pdf,.pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ''; }} /></label>
+        <span className="muted small">Hat der Kunde ausgedruckt, per Hand angekreuzt oder einfach geschrieben? Dann unten selbst ankreuzen.</span>
+      </div>
+      {read && <div className="oc-ret-info">
+        {read.warnings.map((w) => <p key={w} className="notice warn small">{w}</p>)}
+        <dl>
+          {read.name && <div><dt>Name</dt><dd>{read.name}</dd></div>}
+          {read.date && <div><dt>Wunschtermin</dt><dd>{read.date} <small className="muted">(bitte im Angebot selbst eintragen)</small></dd></div>}
+          {read.persons && <div><dt>Personen</dt><dd>{read.persons}</dd></div>}
+          {read.remarks && <div><dt>Wünsche</dt><dd className="prewrap">{read.remarks}</dd></div>}
+        </dl>
+        {newPersons && <label className="check"><input type="checkbox" checked={takePersons} onChange={(e) => setTakePersons(e.target.checked)} /><span>Personenzahl auf {newPersons} ändern (bisher {persons})</span></label>}
+        <p className="muted small">Die Angaben kommen in die interne Notiz{read.itemIds.length ? ', die angekreuzten Leistungen ins Angebot' : ''}. Bei {offerNumber} wird erst mit „Speichern“ etwas geändert.</p>
+      </div>}
+      <h3>Leistungen{read ? ' – vom Kunden angekreuzt' : ''}</h3>
+      <div className="radiolist">{items.map((it) => (
+        <label key={it.id} className="check"><input type="checkbox" checked={picked.includes(it.id)} onChange={(e) => setPicked(e.target.checked ? [...picked, it.id] : picked.filter((x) => x !== it.id))} />
+          <span>{it.name} <small className="muted">{formatMoney(it.priceCents)} {UNIT_LABEL[it.unit]}{inOffer.includes(it.id) ? ' · steht schon im Angebot' : ''}</small></span></label>
+      ))}</div>
     </Dialog>
   );
 }
@@ -403,7 +485,7 @@ function TemplateDialog({ tpl, onClose }: { tpl: OfferTemplateDto | null; onClos
   const [v, setV] = useState({
     name: tpl?.name ?? '', area: tpl?.area ?? 'both' as OfferArea, title: tpl?.title ?? '', intro: tpl?.intro ?? '', closing: tpl?.closing ?? '',
     questions: (tpl?.questions ?? []).join('\n'), catalog: (tpl?.items ?? []).map((x) => ({ itemId: x.itemId, preselect: x.preselect !== false, quantity: x.quantity ?? null })), validDays: String(tpl?.validDays ?? 14), depositPercent: String(tpl?.depositPercent ?? 0),
-    documentIds: tpl?.documentIds ?? [], sort: String(tpl?.sort ?? 0), active: tpl?.active ?? true,
+    documentIds: tpl?.documentIds ?? [], sort: String(tpl?.sort ?? 0), active: tpl?.active ?? true, catalogPrices: tpl?.catalogPrices ?? false,
   });
   const [busy, setBusy] = useState(false);
   const save = async () => {
@@ -444,6 +526,7 @@ function TemplateDialog({ tpl, onClose }: { tpl: OfferTemplateDto | null; onClos
           })}
           {items.length === 0 && <span className="muted small">Erst unter „Leistungen“ Leistungen anlegen.</span>}
         </div>
+        <label className="check"><input type="checkbox" checked={v.catalogPrices} onChange={(e) => setV({ ...v, catalogPrices: e.target.checked })} /><span>Preise im Katalog für den Kunden zeigen<small>gilt für den Katalog zum Ankreuzen, den der Kunde per E-Mail bekommt</small></span></label>
       </Field>
       <Field label="Anlagen" wide><div className="radiolist">{docs.filter((d) => d.active || v.documentIds.includes(d.id)).map((d) => <label key={d.id} className="check"><input type="checkbox" checked={v.documentIds.includes(d.id)} onChange={(e) => setV({ ...v, documentIds: toggle(v.documentIds, d.id, e.target.checked) })} /><span>{d.name}{!d.active && <small className="muted"> (ausgeblendet – wird nicht mehr übernommen)</small>}</span></label>)}{docs.length === 0 && <span className="muted small">Noch keine Dokumente hochgeladen.</span>}</div></Field>
       <label className="check"><input type="checkbox" checked={v.active} onChange={(e) => setV({ ...v, active: e.target.checked })} /><span>In Benutzung</span></label>
