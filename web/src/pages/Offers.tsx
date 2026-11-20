@@ -206,7 +206,8 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const startAccept = async () => { if (dirty && !(await save(true))) return; setAccepting(true); };
   const expired = !locked && !!v.validUntil && v.validUntil < todayBerlin();
   const hotelBooking = () => {
-    const [first, ...rest] = (o.customerName || o.customerCompany).split(' ');
+    // nur eine Firma, kein Ansprechpartner: den Firmennamen nicht in Vor- und Nachname zerlegen
+    const [first, ...rest] = o.customerName ? o.customerName.split(' ') : [o.customerCompany];
     newBooking({ from: o.eventDate ?? undefined, to: o.eventEnd && o.eventEnd !== o.eventDate ? o.eventEnd : o.eventDate ? addDays(o.eventDate, 1) : undefined, source: 'E-Mail',
       draft: { firstName: rest.length ? first : '', lastName: rest.length ? rest.join(' ') : first ?? '', email: o.email, phone: o.phone }, notes: `Aus Angebot ${o.number}${o.title ? ` (${o.title})` : ''}`,
       onCreated: (bid) => { void api('POST', `/offers/${id}/link-reservation`, { bookingId: bid }).then(bump); } });

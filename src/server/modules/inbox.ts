@@ -10,9 +10,9 @@ import { inboxMails, restaurantTables, settings, tableReservations } from '../db
 import { clientKey } from '../lib/clientkey.js';
 import { AppError, conflict, notFound } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
-import { invoiceOfInboxMail, linkInboxMailToInvoice } from './invoicethread.js';
+import { invoiceOfInboxMail, linkInboxMailToInvoice, logInvoiceMailOut, withKvCode } from './invoicethread.js';
 import { caseRef, ensureCaseForMail, linkInboxMailToCase, logCaseOut, withCaseCode } from './mailcases.js';
-import { linkInboxMail, offerOfInboxMail } from './offerthread.js';
+import { linkInboxMail, logMailOut, offerOfInboxMail, withCode } from './offerthread.js';
 import { bookingMailDraft, ready as mailReady, signature } from './hotelmail.js';
 import { decrypt, encrypt, sendMail } from './mail.js';
 import { getHotel } from './settings.js';
@@ -249,7 +249,7 @@ export async function inboxCounts(db: Exec, f: { status: InboxStatus | 'all'; q:
 export async function getInboxMail(db: Exec, id: string): Promise<InboxMailDto> {
   const [r] = await db.select().from(inboxMails).where(eq(inboxMails.id, id));
   if (!r) throw notFound('E-Mail');
-  return { ...dto(r, true), caseNumber: await caseRef(db, r.caseId), offer: await offerOfInboxMail(db, id), invoice: await invoiceOfInboxMail(db, id) };
+  return { ...dto(r, true), caseNumber: await caseRef(db, r.caseId), offer: await offerOfInboxMail(db, id), invoice: await invoiceOfInboxMail(db, id).then((x) => (x ? { id: x.id, label: x.label } : null)) };
 }
 export async function updateInboxMail(db: Db, actor: Actor, id: string, v: { status?: InboxStatus; kind?: MailKind; linkKind?: 'booking' | 'table' | null; linkId?: string | null }) {
   const [before] = await db.select().from(inboxMails).where(eq(inboxMails.id, id));
@@ -341,11 +341,16 @@ export async function sendReply(db: Db, actor: Actor, id: string, v: { to: strin
   if (!r) throw notFound('E-Mail');
   // Mit der ersten Antwort entsteht der Vorgang; seine Nummer steht im Betreff, damit die Antwort des Kunden zugeordnet wird.
   // Gehört die Nachricht schon zum Verlauf eines Angebots oder Kostenvoranschlags, bleibt es bei deren Nummer.
-  const other = r.caseId ? null : (await offerOfInboxMail(db, id)) ?? (await invoiceOfInboxMail(db, id));
-  const c = other ? null : await ensureCaseForMail(db, actor, id);
-  const subject = c ? withCaseCode(v.subject, c.number) : v.subject;
+  const offer = r.caseId ? null : await offerOfInboxMail(db, id);
+  const invoice = r.caseId || offer ? null : await invoiceOfInboxMail(db, id);
+  const c = offer || invoice ? null : await ensureCaseForMail(db, actor, id);
+  // die jeweilige Nummer bleibt im Betreff, damit auch die nächste Antwort des Kunden zugeordnet wird
+  const subject = c ? withCaseCode(v.subject, c.number) : offer ? withCode(v.subject, offer.number) : invoice?.estimateNumber ? withKvCode(v.subject, invoice.estimateNumber) : v.subject;
   await sendMail(db, actor, { ...v, subject, ...(r.messageId ? { inReplyTo: r.messageId } : {}) });
   if (c) await logCaseOut(db, c.id, actor, v.to, subject, v.text);
+  // Antwort auf eine E-Mail aus dem Verlauf eines Angebots / Kostenvoranschlags: dort festhalten, sonst fehlt sie im Verlauf
+  if (offer) await logMailOut(db, offer.id, 'reply', actor, v.to, subject, v.text);
+  if (invoice) await logInvoiceMailOut(db, invoice.id, 'reply', actor, v.to, subject, v.text);
   // Bestätigung gesendet: an der Nachricht vermerken (für den Stand „bestätigt“ im Vorgang)
   const confirmed = template === 'confirm' ? { extract: { ...(r.extract as MailExtract), confirmedAt: new Date().toISOString() } as MailExtract } : {};
   await db.update(inboxMails).set({ repliedAt: new Date(), repliedBy: actor.userName, ...confirmed }).where(eq(inboxMails.id, id));

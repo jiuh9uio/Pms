@@ -3,6 +3,15 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.120.2
+
+Durchsicht aller Übergaben zwischen den Schritten (Anfrage → Reservierung → Bestätigung, Fragen → Angebot, Angebot → Reservierung, Kostenvoranschlag → Rechnung):
+
+- **Behoben:** Antworten Sie im Posteingang auf eine E-Mail, die zu einem Angebot oder Kostenvoranschlag gehört, fehlte Ihre Antwort bisher in deren Verlauf, und die Nummer stand nicht im Betreff. Jetzt steht die Antwort im Verlauf, und die Angebots- bzw. KV-Nummer bleibt im Betreff.
+- **Behoben:** „Bestätigung senden“ im Vorgang schlug fehl, wenn der Kunde nach dem Anlegen der Reservierung noch einmal geschrieben hatte. Die Bestätigung bezieht sich jetzt auf die Nachricht, aus der die Reservierung angelegt wurde.
+- **Behoben:** „Hotelreservierung anlegen“ aus einem angenommenen Angebot ohne Ansprechpartner zerlegte den Firmennamen in Vor- und Nachname.
+- Geprüft und in Ordnung: Fragen → Angebot übernimmt die vorausgewählten Leistungen; Kostenvoranschlag → Rechnung übernimmt Positionen, Empfänger und Hinweis.
+
 ## 1.120.1
 
 - Kostenvoranschlag ohne Positionen: „Kostenvoranschlag senden“ meldet jetzt verständlich, dass erst eine Position fehlt (bisher wäre ein leerer Kostenvoranschlag verschickt worden). Eine Rechnung ohne Positionen ließ sich schon bisher nicht ausstellen.

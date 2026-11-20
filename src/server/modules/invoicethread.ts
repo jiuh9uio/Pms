@@ -16,7 +16,7 @@ const MAX = 20_000;
 
 export const withKvCode = (subject: string, number: string) => (subject.toUpperCase().includes(number.toUpperCase()) ? subject : `${subject.slice(0, 190 - number.length)} [${number}]`);
 
-export async function logInvoiceMailOut(db: Exec, invoiceId: string, what: 'estimate' | 'invoice' | 'reminder', actor: Actor, to: string, subject: string, body: string) {
+export async function logInvoiceMailOut(db: Exec, invoiceId: string, what: 'estimate' | 'invoice' | 'reminder' | 'reply', actor: Actor, to: string, subject: string, body: string) {
   await db.insert(invoiceEvents).values({ invoiceId, kind: 'mail_out', what, who: `${actor.userName} → ${to}`, toAddr: to, subject: subject.slice(0, 300), body: body.slice(0, MAX) });
 }
 /** letzte Adresse, an die zu diesem Vorgang etwas gesendet wurde (Vorbelegung, z. B. für die Rechnung nach dem Kostenvoranschlag) */
@@ -57,7 +57,7 @@ export async function removeInboxMailFromInvoice(db: Db, actor: Actor, invoiceId
 export async function invoiceOfInboxMail(db: Exec, inboxMailId: string) {
   const [r] = await db.select({ id: invoices.id, number: invoices.number, estimateNumber: invoices.estimateNumber, status: invoices.status }).from(invoiceEvents)
     .innerJoin(invoices, eq(invoices.id, invoiceEvents.invoiceId)).where(eq(invoiceEvents.inboxMailId, inboxMailId));
-  return r ? { id: r.id, label: r.status === 'draft' || !r.number ? `Kostenvoranschlag ${r.estimateNumber ?? ''}`.trim() : `Rechnung ${r.number}` } : null;
+  return r ? { id: r.id, estimateNumber: r.estimateNumber, label: r.status === 'draft' || !r.number ? `Kostenvoranschlag ${r.estimateNumber ?? ''}`.trim() : `Rechnung ${r.number}` } : null;
 }
 
 /**
@@ -77,7 +77,7 @@ export function yesNo(body: string): 'yes' | 'no' | 'unclear' | null {
   return h === 'accept' ? 'yes' : h === 'decline' ? 'no' : 'unclear';
 }
 
-const WHAT: Record<string, string> = { estimate: 'Kostenvoranschlag gesendet', invoice: 'Rechnung gesendet', reminder: 'Zahlungserinnerung gesendet' };
+const WHAT: Record<string, string> = { reply: 'Unsere Antwort', estimate: 'Kostenvoranschlag gesendet', invoice: 'Rechnung gesendet', reminder: 'Zahlungserinnerung gesendet' };
 
 export async function invoiceTimeline(db: Exec, invoiceId: string): Promise<InvoiceTimeline> {
   const [inv] = await db.select().from(invoices).where(eq(invoices.id, invoiceId));

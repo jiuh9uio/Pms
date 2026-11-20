@@ -301,3 +301,61 @@ describe('Vorgänge: Nummer bei der ersten Antwort, Zuordnung über die Nummer',
     expect((await ok('GET', '/inbox/state', admin)).newWithoutCase).toBeGreaterThanOrEqual(1); // „Noch etwas“ ist neu und ohne Vorgang
   });
 });
+
+describe('Übergaben zwischen den Schritten', () => {
+  it('Antwort aus dem Posteingang auf eine Angebots- bzw. Kostenvoranschlags-E-Mail landet in deren Verlauf (kein eigener Vorgang)', async () => {
+    const { inboxMails } = await import('../src/server/db/schema.js');
+    const { linkInboxMail } = await import('../src/server/modules/offerthread.js');
+    const { linkInboxMailToInvoice } = await import('../src/server/modules/invoicethread.js');
+    const { setMailSender } = await import('../src/server/modules/mail.js');
+    const sent: { to: string; subject: string }[] = [];
+    setMailSender(async (_c, mail) => { sent.push(mail); });
+    const mail = async (uid: number, subject: string) => (await db.insert(inboxMails).values({ uidValidity: 'handoff', uid, fromName: 'Kunde Erfunden', fromAddr: 'kunde@example.org', subject, receivedAt: new Date(), body: 'Eine Rückfrage.', kind: 'other', extract: {} }).returning())[0]!;
+    // Angebot
+    const o = await ok('POST', '/offers', admin, { customerName: 'Kunde Erfunden', email: 'kunde@example.org', persons: 10 });
+    const m1 = await mail(1, `AW: Angebot ${o.number}`);
+    expect(await linkInboxMail(db, m1)).toBe(true);
+    const d1 = await ok('GET', `/inbox/${m1.id}/mail?template=reply`, admin);
+    await ok('POST', `/inbox/${m1.id}/mail?template=reply`, admin, { to: d1.to, subject: 'Re: Ihre Frage', text: 'Gern, hier die Antwort.' });
+    expect(sent.at(-1)!.subject).toBe(`Re: Ihre Frage [${o.number}]`); // Nummer bleibt im Betreff
+    expect((await ok('GET', `/inbox/${m1.id}`, admin)).caseId).toBeNull();
+    const t1 = await ok('GET', `/offers/${o.id}/timeline`, admin);
+    expect(t1.entries.map((e: { title: string }) => e.title)).toContain('Unsere Antwort');
+    expect(t1.entries.find((e: { title: string }) => e.title === 'Unsere Antwort').text).toBe('Gern, hier die Antwort.');
+    // Kostenvoranschlag
+    const inv = await ok('POST', '/invoices', admin, { include: 'none' });
+    const kv = (await ok('POST', `/invoices/${inv.id}/estimate`, admin)).estimateNumber as string;
+    const m2 = await mail(2, `AW: Kostenvoranschlag ${kv}`);
+    expect(await linkInboxMailToInvoice(db, m2)).toBe(true);
+    await ok('POST', `/inbox/${m2.id}/mail?template=reply`, admin, { to: 'kunde@example.org', subject: `Re: Kostenvoranschlag ${kv}`, text: 'Danke für Ihre Rückmeldung.' });
+    expect((await ok('GET', `/invoices/${inv.id}/timeline`, admin)).entries.map((e: { title: string }) => e.title)).toContain('Unsere Antwort');
+    expect((await ok('GET', `/inbox/${m2.id}`, admin)).caseId).toBeNull();
+  });
+
+  it('Bestätigung im Vorgang bezieht sich auf die Nachricht, aus der die Reservierung angelegt wurde – auch wenn der Kunde danach noch einmal schrieb', async () => {
+    const { inboxMails } = await import('../src/server/db/schema.js');
+    const { linkInboxMailToCase } = await import('../src/server/modules/mailcases.js');
+    const mail = async (uid: number, subject: string) => (await db.insert(inboxMails).values({ uidValidity: 'handoff', uid, fromName: 'Tina Tisch', fromAddr: 'tina@example.org', subject, receivedAt: new Date(Date.now() - 100_000 + uid * 1000), body: 'Tisch bitte.', kind: 'table', extract: {} }).returning())[0]!;
+    const first = await mail(10, 'Tisch am Freitag');
+    const c = await ok('POST', `/inbox/${first.id}/case`, admin);
+    const res = await ok('POST', '/restaurant/reservations', admin, { date: '2026-12-18', time: '19:00', durationMin: 120, persons: 2, name: 'Tina Tisch', phone: '', note: '', tableId: null });
+    await ok('PATCH', `/inbox/${first.id}`, admin, { linkKind: 'table', linkId: res.id });
+    const second = await mail(11, `AW: Tisch am Freitag [${c.number}]`);
+    expect(await linkInboxMailToCase(db, second)).toBe(true);
+    const d = await ok('GET', `/mail-cases/${c.id}`, admin);
+    expect(d).toMatchObject({ latestInboxMailId: second.id, linkedInboxMailId: first.id, latestLinkKind: 'table' });
+    expect((await call('GET', `/inbox/${second.id}/mail?template=confirm`, admin)).statusCode).toBe(409); // an der neuen Nachricht hängt keine Reservierung
+    expect((await ok('GET', `/inbox/${d.linkedInboxMailId}/mail?template=confirm`, admin)).subject).toContain('Ihre Tischreservierung am 18.12.2026');
+  });
+
+  it('Fragen → Angebot: die vorausgewählten Leistungen der Vorlage stehen im Angebot', async () => {
+    const item = (await ok('POST', '/offer-items', admin, { name: 'Pauschale Übergabe', description: '', unit: 'person', priceCents: 1000, taxRatePercent: 19, area: 'both', group: '', sort: 1, active: true })).id;
+    const tpl = await ok('POST', '/offer-templates', admin, { name: 'Übergabe-Vorlage', area: 'both', title: '', intro: '', closing: '', questions: ['Wann?'], validDays: 14, depositPercent: 0, items: [{ itemId: item, quantity: null, preselect: true }] });
+    const o = await ok('POST', '/offers', admin, { templateId: tpl.id, mode: 'questions', customerName: 'Frage Erfunden', email: 'f@example.org', persons: 5 });
+    await ok('POST', `/offers/${o.id}/mail`, admin, { to: 'f@example.org', subject: 'Ihre Anfrage', text: 'Bitte beantworten.' });
+    await ok('POST', `/offers/${o.id}/to-offer`, admin);
+    const d = await ok('GET', `/offers/${o.id}`, admin);
+    expect(d).toMatchObject({ mode: 'offer', status: 'draft', totalCents: 5000 });
+    expect(d.lines.map((l: { description: string }) => l.description)).toEqual(['Pauschale Übergabe']);
+  });
+});

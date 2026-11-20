@@ -16,7 +16,7 @@ const MAX = 20_000;
 /** Kennzeichen an den Betreff hängen, falls die Nummer nicht schon darin steht */
 export const withCode = (subject: string, number: string) => (subject.toUpperCase().includes(number.toUpperCase()) ? subject : `${subject.slice(0, 190 - number.length)} [${number}]`);
 
-export async function logMailOut(db: Exec, offerId: string, what: 'questions' | 'catalog' | 'offer', actor: Actor, to: string, subject: string, body: string) {
+export async function logMailOut(db: Exec, offerId: string, what: 'questions' | 'catalog' | 'offer' | 'reply', actor: Actor, to: string, subject: string, body: string) {
   await db.insert(offerEvents).values({ offerId, kind: 'mail_out', what, who: `${actor.userName} → ${to}`, subject: subject.slice(0, 300), body: body.slice(0, MAX) });
 }
 
@@ -79,7 +79,7 @@ export function replyHint(body: string): 'accept' | 'decline' | null {
   return has('(?:aber|jedoch|allerdings|wenn|falls|sofern|vorausgesetzt|unter der bedingung|nur noch|statt|anstelle|änder|rückfrage|frage)') ? null : 'accept';
 }
 
-const WHAT: Record<string, string> = { questions: 'Fragen gesendet', catalog: 'Katalog gesendet', offer: 'Angebot gesendet' };
+const WHAT: Record<string, string> = { reply: 'Unsere Antwort', questions: 'Fragen gesendet', catalog: 'Katalog gesendet', offer: 'Angebot gesendet' };
 const METHOD: Record<string, string> = { online: 'online über den Link', email: 'per E-Mail', telefon: 'telefonisch', persoenlich: 'persönlich', schriftlich: 'schriftlich' };
 
 export async function timeline(db: Exec, offerId: string): Promise<OfferTimeline> {

@@ -103,6 +103,8 @@ export interface CaseDto {
   latestInboxMailId: string | null;
   /** was aus der letzten Nachricht schon angelegt wurde (für „als Nächstes“) */
   latestLinkKind: 'booking' | 'table' | null;
+  /** die Nachricht, aus der die Reservierung angelegt wurde – auf sie bezieht sich die Bestätigung */
+  linkedInboxMailId: string | null;
   /** wann die Bestätigung der Reservierung gesendet wurde */
   confirmedAt: string | null;
   candidates: { inboxMailId: string; at: string; from: string; subject: string }[];
