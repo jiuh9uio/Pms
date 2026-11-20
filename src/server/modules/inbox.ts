@@ -52,7 +52,10 @@ export async function inboxState(db: Exec): Promise<InboxState> {
   const [s, st] = [await read(db, 'inbox', DEFAULTS), await read(db, 'inbox_state', STATE0)];
   const [n] = await db.select({ n: sql<number>`count(*)::int` }).from(inboxMails).where(eq(inboxMails.status, 'new'));
   const [u] = await db.select({ n: sql<number>`count(*)::int` }).from(inboxMails).where(sql`${inboxMails.status} = 'new' and ${inboxMails.caseId} is null`);
-  return { lastFetchAt: st.lastFetchAt, lastError: st.lastError, ready: ready(s), autoMinutes: s.autoMinutes, newCount: n!.n, newWithoutCase: u!.n };
+  return { lastFetchAt: st.lastFetchAt, lastError: st.lastError, ready: ready(s), autoMinutes: s.autoMinutes, newCount: n!.n, newWithoutCase: u!.n,
+    // „wir sind dran“: offene Vorgänge, in denen zuletzt der Kunde geschrieben hat, plus neue Nachrichten ohne Vorgang
+    attention: u!.n + Number((await db.execute(sql`select count(*)::int as n from mail_cases c where c.status = 'open'
+      and (select max(m.received_at) from inbox_mails m where m.case_id = c.id) > coalesce((select max(o.at) from mail_case_out o where o.case_id = c.id), '-infinity'::timestamptz)`))[0]!.n) };
 }
 
 // ---------- Regeln ----------

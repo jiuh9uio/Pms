@@ -22,7 +22,7 @@ export const inboxSettingsInput = z.object({
   keepDays: z.number().int().min(0).max(3650).default(0),
 });
 export interface InboxSettingsDto { enabled: boolean; host: string; port: number; user: string; folder: string; autoMinutes: number; keepDays: number; hasPassword: boolean }
-export interface InboxState { lastFetchAt: string | null; lastError: string | null; ready: boolean; autoMinutes: number; newCount: number; /** neue Nachrichten, die noch zu keinem Vorgang gehören */ newWithoutCase: number }
+export interface InboxState { lastFetchAt: string | null; lastError: string | null; ready: boolean; autoMinutes: number; newCount: number; /** neue Nachrichten, die noch zu keinem Vorgang gehören */ newWithoutCase: number; /** Vorgänge, bei denen wir dran sind, plus neue Nachrichten ohne Vorgang */ attention: number }
 
 export interface InboxMailDto {
   id: string; fromName: string; fromAddr: string; subject: string; receivedAt: string; snippet: string;
@@ -99,6 +99,8 @@ export interface CaseDto {
   messages: CaseMessage[];
   /** letzte eingegangene Nachricht – auf sie beziehen sich Antwort, Übernahme und Bestätigung */
   latestInboxMailId: string | null;
+  /** was aus der letzten Nachricht schon angelegt wurde (für „als Nächstes“) */
+  latestLinkKind: 'booking' | 'table' | null;
   candidates: { inboxMailId: string; at: string; from: string; subject: string }[];
 }
 export const caseListQuery = z.object({ status: z.enum(['open', 'done', 'all']).default('open'), kind: z.string().max(20).default('all'), q: z.string().trim().max(80).default('') });

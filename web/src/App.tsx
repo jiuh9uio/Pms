@@ -99,14 +99,15 @@ const NAV: NavItem[] = [
   { to: '/angebote', tab: 'gestaltung', label: 'Gestaltung', short: 'Gestalt.', icon: '◐', module: 'angebote', admin: true, more: true, group: 'Einrichtung' },
   { to: '/hotel', label: 'Hotel', icon: '▦', module: 'angebote', need: 'hotel', jump: true, group: 'Wechseln' },
   { to: '/restaurant', label: 'Restaurant', icon: '◍', module: 'angebote', need: 'restaurant', jump: true, group: 'Wechseln' },
-  { to: '/email', label: 'Posteingang', short: 'E-Mail', icon: '✉', module: 'angebote', need: 'email', jump: true, more: true, group: 'Wechseln' },
+  { to: '/email', label: 'Vorgänge', icon: '☷', module: 'angebote', need: 'email', jump: true, more: true, group: 'Wechseln' },
   { to: '/gutscheine', label: 'Gutscheine', icon: 'gift', module: 'gutscheine', group: 'Gutscheine' },
   { to: '/schnelldruck', label: 'Schnelldruck', short: 'Druck', icon: '⎙', module: 'schnelldruck' },
   { to: '/kontrollen', label: 'Kontrollen', icon: '✓', module: 'kontrollen' },
   { to: '/internet', label: 'Internet', short: 'Netz', icon: '⌁', module: 'internet' },
   { to: '/team', label: 'Übergabebuch', short: 'Team', icon: '✎', module: 'team' },
   { to: '/reinigung', label: 'Reinigung (Hotel)', short: 'Reinig.', icon: '✧', module: 'team', need: 'hotel', jump: true },
-  { to: '/email', label: 'Posteingang', short: 'E-Mail', icon: '✉', module: 'email' },
+  { to: '/email', label: 'Vorgänge', icon: '☷', module: 'email', group: 'Vorgänge' },
+  { to: '/email', tab: 'new', label: 'Posteingang', short: 'Post', icon: '✉', module: 'email', group: 'Vorgänge' },
   { to: '/einstellungen', tab: 'email', label: 'Einrichtung', short: 'Einricht.', icon: '⚙', module: 'email', admin: true, jump: true, group: 'Einrichtung' },
   { to: '/einstellungen', label: 'Einstellungen', short: 'Einstell.', icon: '⚙', admin: true, module: 'verwaltung', group: 'Verwaltung' },
   { to: '/benutzer', label: 'Benutzer', icon: '◉', admin: true, module: 'verwaltung', group: 'Verwaltung' },
@@ -115,7 +116,7 @@ const NAV: NavItem[] = [
   { to: '/kurzanleitung', label: 'Kurzanleitung', short: 'Hilfe', icon: '✍', module: 'verwaltung', group: 'Hilfe' },
   { to: '/als-programm', label: 'Als Programm öffnen', short: 'Programm', icon: '▣', module: 'verwaltung', group: 'Hilfe' },
 ];
-const MODULE_TITLE: Record<string, string> = { hotel: 'Hotel', restaurant: 'Restaurant', schnelldruck: 'Schnelldruck', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet', email: 'E-Mail', team: 'Team', einkauf: 'Einkauf', angebote: 'Angebote', gutscheine: 'Gutscheine', verwaltung: 'Verwaltung', rechnungen: 'Rechnungen' };
+const MODULE_TITLE: Record<string, string> = { hotel: 'Hotel', restaurant: 'Restaurant', schnelldruck: 'Schnelldruck', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet', email: 'Vorgänge', team: 'Team', einkauf: 'Einkauf', angebote: 'Angebote', gutscheine: 'Gutscheine', verwaltung: 'Verwaltung', rechnungen: 'Rechnungen' };
 
 export function App() {
   const [state, setState] = useState<AuthState | null>(null);

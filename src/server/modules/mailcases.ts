@@ -76,6 +76,9 @@ export async function getCase(db: Exec, id: string): Promise<CaseDto> {
   if (!c) throw notFound('Vorgang');
   const messages = await messagesOf(db, id);
   const latestIn = [...messages].reverse().find((m) => m.dir === 'in');
+  // schon angelegt? (irgendeine Nachricht des Vorgangs wurde als Reservierung übernommen)
+  const [linked] = await db.select({ k: inboxMails.linkKind }).from(inboxMails).where(and(eq(inboxMails.caseId, id), sql`${inboxMails.linkKind} is not null`)).limit(1);
+  const link = (linked?.k ?? null) as 'booking' | 'table' | null;
   // Vorschläge: E-Mails derselben Adresse seit Beginn des Vorgangs, die noch nirgends zugeordnet sind
   const candidates = !c.contactAddr ? [] : (await db.select({ id: inboxMails.id, at: inboxMails.receivedAt, fromName: inboxMails.fromName, fromAddr: inboxMails.fromAddr, subject: inboxMails.subject })
     .from(inboxMails).where(and(sql`lower(${inboxMails.fromAddr}) = ${c.contactAddr}`, isNull(inboxMails.caseId), gte(inboxMails.receivedAt, c.createdAt),
@@ -84,7 +87,7 @@ export async function getCase(db: Exec, id: string): Promise<CaseDto> {
     .map((m) => ({ inboxMailId: m.id, at: m.at.toISOString(), from: m.fromName || m.fromAddr, subject: m.subject }));
   return {
     id: c.id, number: c.number, kind: c.kind as MailKind, title: c.title, contactName: c.contactName, contactAddr: c.contactAddr, status: c.status as CaseStatus, turn: turnOf(messages),
-    createdAt: c.createdAt.toISOString(), createdBy: c.createdBy, messages, latestInboxMailId: latestIn?.inboxMailId ?? null, candidates,
+    createdAt: c.createdAt.toISOString(), createdBy: c.createdBy, messages, latestInboxMailId: latestIn?.inboxMailId ?? null, latestLinkKind: link, candidates,
   };
 }
 

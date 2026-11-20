@@ -17,7 +17,7 @@ const TILES: Tile[] = [
   { group: 'tag', to: '/hotel', title: 'Hotel', text: 'Übersicht, Belegungsplan, Reservierungen, Gäste, Frühstück, Reinigung', icon: '▦', module: 'hotel' },
   { group: 'tag', to: '/restaurant', title: 'Restaurant', text: 'Tischreservierungen je Tag, Tische verwalten', icon: '◍', module: 'restaurant' },
   { group: 'tag', to: '/angebote', title: 'Angebote', text: 'Tagungen und Feiern: Absprache am Tisch, Katalog zum Ankreuzen, Angebot, Verlauf mit dem Kunden', icon: '✍', module: ['hotel', 'restaurant'] },
-  { group: 'tag', to: '/email', title: 'E-Mail', text: 'Geschäftspostfach lesen, Zimmer- und Tischanfragen übernehmen und beantworten', icon: '✉', module: 'email' },
+  { group: 'tag', to: '/email', title: 'Vorgänge', text: 'Alle Anfragen und E-Mail-Wechsel mit Kunden an einer Stelle – mit Nummer, Stand und nächstem Schritt', icon: '✉', module: 'email' },
   { group: 'tag', to: '/team', title: 'Team', text: 'Übergabebuch, Aufgaben und Reparaturen für alle Schichten', icon: '✎' },
   { group: 'buero', to: '/rechnungen', alt: '/erechnung', title: 'Rechnungen', text: 'Hotelrechnungen, Tagesabschluss, E-Rechnung und Archiv', icon: '€', module: ['hotel', 'erechnung'] },
   { group: 'buero', to: '/auswertung', title: 'Auswertung', text: 'Belegungsvorschau, Jahresvergleich, Herkunft der Gäste, Buchungsquellen', icon: '◔', module: 'hotel' },
@@ -47,7 +47,7 @@ export function Launcher() {
   const [logo, setLogo] = useState(false);
   useEffect(() => { if (hasModule(user, 'hotel')) api<{ present: boolean }>('GET', '/settings/logo-info').then((r) => setLogo(r.present)).catch(() => setLogo(false)); }, [user]);
   // offene Anfragen im E-Mail-Posteingang als Zähler an der Kachel
-  const mailNew = useLoad(() => (hasModule(user, 'email') ? api<{ newCount: number; ready: boolean }>('GET', '/inbox/state') : Promise.resolve(null))).data;
+  const mailNew = useLoad(() => (hasModule(user, 'email') ? api<{ newCount: number; attention: number; ready: boolean }>('GET', '/inbox/state') : Promise.resolve(null))).data;
   // Start-Checkliste: Hinweis für den Administrator, solange Grundlagen fehlen
   const setup = useLoad(() => (user.role === 'admin' ? api<{ ready: boolean; open: number }>('GET', '/setup/checklist') : Promise.resolve(null))).data;
   const notices = useNotices();
@@ -83,7 +83,7 @@ export function Launcher() {
                 <Link key={t.to} to={t.to} className="tile">
                   <span className="tile-icon" aria-hidden><Icon g={t.icon} /></span>
                   <span className="tile-body">
-                    <span className="tile-title">{t.title}{t.to === '/email' && notices?.mailCount && mailNew && mailNew.newCount > 0 && <span className="tile-count" aria-label={`${mailNew.newCount} offen`}>{mailNew.newCount}</span>}{t.to === '/team' && notices?.teamCount && teamNew && teamNew.unread > 0 && <span className="tile-count" aria-label={`${teamNew.unread} ungelesen`}>{teamNew.unread}</span>}</span>
+                    <span className="tile-title">{t.title}{t.to === '/email' && notices?.mailCount && mailNew && mailNew.attention > 0 && <span className="tile-count" aria-label={`${mailNew.attention} warten auf uns`}>{mailNew.attention}</span>}{t.to === '/team' && notices?.teamCount && teamNew && teamNew.unread > 0 && <span className="tile-count" aria-label={`${teamNew.unread} ungelesen`}>{teamNew.unread}</span>}</span>
                     <span className="tile-text">{t.text}</span>
                   </span>
                 </Link>

@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.119.0
+
+- **„Vorgänge“ ist jetzt ein eigener Bereich** – die Kachel „E-Mail“ auf der Startseite heißt „Vorgänge“. Links im Bereich: **Vorgänge** und **Posteingang** (die einzelnen E-Mails: Neu, Erledigt, Ignoriert, Alle), darunter die Einrichtung. Die Zahl an der Kachel zeigt, bei wie vielen Vorgängen und neuen E-Mails Sie dran sind.
+- **Vorgänge wie ein Messenger:** links die Unterhaltungen (Name, Art, Nummer, letzte Nachricht; blauer Punkt = wir sind dran), rechts der geöffnete Vorgang als Chat.
+- **Oben im Vorgang:** Name, Adresse, Nummer, Kategorie – und **„Als Nächstes“**: was gerade ansteht (z. B. „Zimmeranfrage: Verfügbarkeit prüfen, dann Reservierung anlegen oder antworten“, „Bestätigung senden“, „Warten auf die Antwort des Kunden – seit 3 Tagen“).
+- **Unten:** „Antworten“ und „Mehr: übernehmen, bestätigen, absagen …“ (Zimmer übernehmen, Tisch reservieren, Bestätigung, Absage). Am Handy öffnet ein Vorgang bildschirmfüllend, mit Zurück-Pfeil zur Liste.
+- An Berechtigungen und Daten ändert sich nichts.
+
 ## 1.118.0
 
 - **E-Mail: Vorgänge.** Jeder E-Mail-Wechsel wird ein **Vorgang mit eigener Nummer** (z. B. `V-2026-0001`). Die Nummer entsteht mit Ihrer ersten Antwort (oder über „Vorgang anlegen“) und steht im Betreff Ihrer Antworten. Antwortet der Kunde, landet seine E-Mail automatisch im selben Vorgang; die Adresse des Kunden ist am Vorgang gespeichert.
