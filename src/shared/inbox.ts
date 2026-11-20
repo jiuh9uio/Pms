@@ -97,6 +97,8 @@ export interface CaseListRow {
   unread: number;
   /** Reservierung angelegt / Bestätigung gesendet (nur Vorgänge im Posteingang) */
   linked?: boolean; confirmed?: boolean;
+  /** zuständiger Mitarbeiter (nur Vorgänge im Posteingang) */
+  assignee?: string;
 }
 export interface CaseMessage { id: string; at: string; dir: 'in' | 'out'; who: string; subject: string; text: string; inboxMailId: string | null; mailStatus: InboxStatus | null; attachments: MailAttachment[] }
 export interface CaseDto {
@@ -111,11 +113,34 @@ export interface CaseDto {
   /** wann die Bestätigung der Reservierung gesendet wurde */
   confirmedAt: string | null;
   candidates: { inboxMailId: string; at: string; from: string; subject: string }[];
+  /** zuständiger Mitarbeiter (leer = niemand) */
+  assignee: string;
+  /** Zimmerreservierung, zu der der Vorgang gehört (E-Mail aus dem Hotelbereich gesendet) */
+  bookingId: string | null; bookingNumber: string | null;
 }
 const caseDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional();
-export const caseListQuery = z.object({ status: z.enum(['open', 'done', 'archived', 'all']).default('open'), kind: z.string().max(20).default('all'), q: z.string().trim().max(80).default(''), from: caseDay, to: caseDay });
+export const caseListQuery = z.object({ status: z.enum(['open', 'done', 'archived', 'all']).default('open'), kind: z.string().max(20).default('all'), q: z.string().trim().max(80).default(''), from: caseDay, to: caseDay, assignee: z.string().trim().max(120).default('') });
 export const caseNumberInput = z.object({ number: z.string().trim().regex(/^[Vv]-\d{4}-\d{4,6}$/, 'Bitte eine Vorgangsnummer wie V-2026-0001 eintragen') });
-export const caseUpdateInput = z.object({ kind: z.enum(MAIL_KINDS).optional(), status: z.enum(CASE_STATUSES).optional(), title: z.string().trim().max(200).optional() });
+export const caseUpdateInput = z.object({ kind: z.enum(MAIL_KINDS).optional(), status: z.enum(CASE_STATUSES).optional(), title: z.string().trim().max(200).optional(), assignee: z.string().trim().max(120).optional() });
+
+// ---------- Hinweis „Als Nächstes“ im Vorgang: je Kategorie einstellbar (Vorgänge → Antwortvorlagen) ----------
+const nextText = z.string().trim().min(1, 'Bitte einen Text eintragen').max(300);
+export const nextTextsInput = z.object({
+  hotel: nextText, table: nextText, event: nextText, meeting: nextText, voucher: nextText, question: nextText, other: nextText,
+  /** Zimmer- bzw. Tischreservierung ist angelegt, die Bestätigung fehlt noch */
+  bookingMade: nextText, tableMade: nextText,
+});
+export type NextTexts = z.infer<typeof nextTextsInput>;
+export const NEXT_TEXT_LABEL: Record<keyof NextTexts, string> = {
+  hotel: 'Zimmeranfrage', table: 'Tischanfrage', event: 'Feier', meeting: 'Tagung', voucher: 'Gutschein', question: 'Frage', other: 'Sonstiges',
+  bookingMade: 'Zimmerreservierung angelegt', tableMade: 'Tischreservierung angelegt',
+};
+export const DEFAULT_NEXT_TEXTS: NextTexts = {
+  hotel: 'Zimmeranfrage: Verfügbarkeit prüfen, dann Reservierung anlegen oder antworten.', table: 'Tischanfrage: Tisch reservieren oder antworten.',
+  event: 'Anfrage für eine Feier: antworten – oder im Bereich Angebote eine Absprache / ein Angebot anlegen.', meeting: 'Tagungsanfrage: antworten – oder im Bereich Angebote ein Angebot anlegen.',
+  voucher: 'Gutschein-Anfrage: antworten – der Gutschein wird im Bereich Gutscheine ausgestellt.', question: 'Frage des Kunden beantworten.', other: 'Nachricht lesen und antworten – oder als erledigt markieren.',
+  bookingMade: 'Die Zimmerreservierung ist angelegt – jetzt die Bestätigung senden oder antworten.', tableMade: 'Die Tischreservierung ist angelegt – jetzt die Bestätigung senden oder antworten.',
+};
 
 // ---------- Antwortvorschläge: eigene Textbausteine je Kategorie (Vorgänge → Antwortvorlagen) ----------
 /** Platzhalter im Text: {anrede} = „Guten Tag Frau/Herr …,“ bzw. „Guten Tag,“ · {haus} = Name des Hauses. Die Grußformel mit Absender wird automatisch angehängt. */

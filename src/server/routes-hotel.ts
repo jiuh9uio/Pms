@@ -227,7 +227,8 @@ export function registerHotelRoutes(api: FastifyInstance, { db, requireUser, req
     return hotelmail.statusMailDraft(db, idOf(req), q.as, ids);
   });
   api.post('/bookings/:id/mail', user, async (req) => {
-    await hotelmail.sendBookingMail(db, actor(req), idOf(req), H.mailSendInput.parse(req.body));
+    const as = z.object({ as: z.string().max(20).optional() }).parse(req.query).as;
+    await hotelmail.sendBookingMail(db, actor(req), idOf(req), H.mailSendInput.parse(req.body), as === 'question');
     return { ok: true };
   });
   const mailKind = (req: FastifyRequest) => z.object({ kind: z.enum(['invoice', 'reminder']).default('invoice') }).parse(req.query).kind;

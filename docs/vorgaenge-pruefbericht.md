@@ -37,10 +37,14 @@ Keine rechtliche Prüfung: Aussagen zum Datenschutz sind technische Feststellung
 - **Anhänge** werden gespeichert (Tabelle `inbox_attachments`, je Datei bis 10 MB, höchstens 10 je E-Mail) und nur als Download ausgeliefert (`application/octet-stream`, `nosniff`).
 - Ein ausgefüllter Katalog lässt sich direkt aus dem Verlauf des Angebots einlesen; über ein Angebot sind nur Anhänge aus dessen eigenem Verlauf erreichbar.
 
+## Stand 1.125.0
+
+- **E-Mails aus dem Hotelbereich** (Bestätigung, Absage, Storno, Rückfrage, Gäste-Link) werden einem Vorgang zur Reservierung zugeordnet (Feld `booking_id`); schlägt der Versand fehl, bleibt kein leerer Vorgang zurück.
+- **Zuständigkeit je Mitarbeiter** (Feld `assignee`) mit Filter in der Liste.
+- **Hinweis „Als Nächstes“** je Kategorie einstellbar (Einstellung `case_next_texts`).
+
 ## Weiterhin offen
 
 - **Geringes Restrisiko:** Wer Angebote bearbeiten darf, kann über die Vorschläge im Angebot E-Mails derselben Absenderadresse sehen, auch ohne Modul „E-Mail“.
-- **Bestätigungen aus dem Hotelbereich** (nicht aus dem Posteingang) erzeugen keinen Vorgang.
-- **Zuständigkeit je Mitarbeiter** („wer bearbeitet gerade“) gibt es nicht; nur den Stand „In Bearbeitung“.
 - **Anhänge** werden nicht auf Schadsoftware geprüft; die Datensicherung wird durch gespeicherte Anhänge größer.
 - **Nicht getestet:** echter IMAP-/SMTP-Betrieb (kein Postfach in der Testumgebung), Verhalten realer E-Mail-Programme bei den Verweisen, sehr große Postfächer (keine Lastmessung).

@@ -1,9 +1,9 @@
 import { and, asc, desc, eq, gte, ilike, isNull, or, sql } from 'drizzle-orm';
-import type { CaseDto, CaseListRow, CaseMessage, CaseStatus, CaseTurn, InboxStatus } from '../../shared/inbox.js';
+import { DEFAULT_NEXT_TEXTS, type CaseDto, type CaseListRow, type CaseMessage, type CaseStatus, type CaseTurn, type InboxStatus, type NextTexts } from '../../shared/inbox.js';
 import type { MailExtract, MailKind } from '../../shared/mailextract.js';
 import { todayBerlin } from '../../shared/hotel.js';
 import type { Db, Exec } from '../db/client.js';
-import { inboxMails, invoiceEvents, invoices, mailCaseOut, mailCases, numberSequences, offerEvents, offers } from '../db/schema.js';
+import { bookings, inboxMails, invoiceEvents, mailCaseOut, mailCases, numberSequences, offerEvents, settings, users } from '../db/schema.js';
 import { conflict, notFound } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 
@@ -40,6 +40,50 @@ export async function ensureCaseForMail(db: Db, actor: Actor, inboxMailId: strin
     return c!;
   });
 }
+/**
+ * Vorgang zu einer Zimmerreservierung (E-Mail aus dem Hotelbereich): der Vorgang der Reservierung, sonst der Vorgang der Anfrage,
+ * aus der die Reservierung angelegt wurde, sonst ein neuer. `created` = neu angelegt (wird bei fehlgeschlagenem Versand wieder entfernt).
+ */
+export async function ensureCaseForBooking(db: Db, actor: Actor, b: { id: string; number: string; name: string }, to: string, subject: string): Promise<{ c: Case; created: boolean }> {
+  return db.transaction(async (tx) => {
+    const [own] = await tx.select().from(mailCases).where(eq(mailCases.bookingId, b.id)).orderBy(desc(mailCases.createdAt)).limit(1);
+    if (own) return { c: own, created: false };
+    const [viaMail] = await tx.select({ c: mailCases }).from(inboxMails).innerJoin(mailCases, eq(mailCases.id, inboxMails.caseId))
+      .where(and(eq(inboxMails.linkKind, 'booking'), eq(inboxMails.linkId, b.id))).limit(1);
+    if (viaMail) {
+      await tx.update(mailCases).set({ bookingId: b.id }).where(eq(mailCases.id, viaMail.c.id));
+      return { c: viaMail.c, created: false };
+    }
+    const number = await nextNumber(tx);
+    const [c] = await tx.insert(mailCases).values({ number, kind: 'hotel', title: cleanTitle(subject) || `Reservierung ${b.number}`, contactName: b.name, contactAddr: to.trim().toLowerCase(), createdBy: actor.userName, bookingId: b.id }).returning();
+    await record(tx, actor, { action: 'create', entity: 'mail_case', entityId: c!.id, after: { number, booking: b.number } });
+    return { c: c!, created: true };
+  });
+}
+/** leeren, gerade angelegten Vorgang wieder entfernen (Versand ist fehlgeschlagen) – nur wenn wirklich keine Nachricht daran hängt */
+export async function dropEmptyCase(db: Exec, caseId: string) {
+  await db.execute(sql`delete from mail_cases c where c.id = ${caseId} and not exists (select 1 from inbox_mails m where m.case_id = c.id) and not exists (select 1 from mail_case_out o where o.case_id = c.id)`);
+}
+/** Stand nach einer E-Mail aus dem Hotelbereich: Rückfrage = offen (wartet auf den Gast); sonst erledigt, solange der Gast nicht zuletzt geschrieben hat */
+export async function settleBookingCase(db: Exec, caseId: string, expectReply: boolean) {
+  if (expectReply) { await db.update(mailCases).set({ status: 'open', updatedAt: new Date() }).where(and(eq(mailCases.id, caseId), sql`${mailCases.status} <> 'working'`)); return; }
+  await db.execute(sql`update mail_cases c set status = 'done', updated_at = now() where c.id = ${caseId} and not exists (select 1 from inbox_mails m where m.case_id = c.id and m.status = 'new')`);
+}
+/** Mitarbeiter, die als zuständig gewählt werden können: aktive Benutzer mit Zugriff auf die Vorgänge */
+export async function assignees(db: Exec): Promise<string[]> {
+  return (await db.select({ name: users.name }).from(users).where(and(eq(users.active, true), sql`(${users.role} = 'admin' or 'email' = any(${users.modules}))`)).orderBy(asc(users.name))).map((u) => u.name);
+}
+// ---------- Hinweis „Als Nächstes“ (einstellbar) ----------
+export async function getNextTexts(db: Exec): Promise<NextTexts> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'case_next_texts'));
+  return { ...DEFAULT_NEXT_TEXTS, ...((row?.value ?? {}) as Partial<NextTexts>) };
+}
+export async function saveNextTexts(db: Db, actor: Actor, v: NextTexts) {
+  await db.insert(settings).values({ key: 'case_next_texts', value: v }).onConflictDoUpdate({ target: settings.key, set: { value: v, updatedAt: new Date() } });
+  await record(db, actor, { action: 'update', entity: 'settings', entityId: 'case_next_texts', after: {} });
+  return v;
+}
+
 /** Gesendete Antwort am Vorgang festhalten; der Vorgang ist damit (wieder) offen und „wartet auf den Kunden“ */
 export async function logCaseOut(db: Exec, caseId: string, actor: Actor, to: string, subject: string, body: string) {
   await db.insert(mailCaseOut).values({ caseId, by: actor.userName, toAddr: to, subject: subject.slice(0, 300), body: body.slice(0, MAX) });
@@ -100,14 +144,16 @@ export async function getCase(db: Exec, id: string): Promise<CaseDto> {
       sql`not exists (select 1 from ${offerEvents} where ${offerEvents.inboxMailId} = ${inboxMails.id})`,
       sql`not exists (select 1 from ${invoiceEvents} where ${invoiceEvents.inboxMailId} = ${inboxMails.id})`)).orderBy(desc(inboxMails.receivedAt)).limit(5))
     .map((m) => ({ inboxMailId: m.id, at: m.at.toISOString(), from: m.fromName || m.fromAddr, subject: m.subject }));
+  const [bk] = c.bookingId ? await db.select({ number: bookings.number }).from(bookings).where(eq(bookings.id, c.bookingId)) : [];
   return {
+    assignee: c.assignee, bookingId: bk ? c.bookingId : null, bookingNumber: bk?.number ?? null,
     id: c.id, number: c.number, kind: c.kind as MailKind, title: c.title, contactName: c.contactName, contactAddr: c.contactAddr, status: c.status as CaseStatus, turn: turnOf(messages),
     createdAt: c.createdAt.toISOString(), createdBy: c.createdBy, messages, latestInboxMailId: latestIn?.inboxMailId ?? null, latestLinkKind: link, linkedInboxMailId: linked?.id ?? null, confirmedAt: conf?.at ?? null, candidates,
   };
 }
 
 const snip = (s: string) => s.replace(/\s+/g, ' ').slice(0, 140);
-type ListFilter = { status: 'open' | 'done' | 'archived' | 'all'; kind: string; q: string; from?: string; to?: string };
+type ListFilter = { status: 'open' | 'done' | 'archived' | 'all'; kind: string; q: string; from?: string; to?: string; assignee?: string };
 /**
  * Liste aller Vorgänge – dazu die Verläufe von Angeboten und Kostenvoranschlägen, zu denen schon E-Mails gesendet oder empfangen wurden.
  * Je Quelle genau eine Abfrage (letzte Nachricht, Anzahl, Ungelesene per Unterabfrage) – auch bei mehreren Tausend E-Mails.
@@ -121,7 +167,7 @@ export async function listCases(db: Exec, f: ListFilter, mods: { offers: boolean
   if (f.kind !== 'offer' && f.kind !== 'estimate') {
     const statusSql = f.status === 'all' ? sql`true` : f.status === 'open' ? sql`c.status in ('open', 'working')` : sql`c.status = ${f.status}`;
     const rows = await db.execute(sql`
-      select c.id, c.number, c.kind, c.title, c.status, c.contact_name, c.contact_addr, c.created_at,
+      select c.id, c.number, c.kind, c.title, c.status, c.assignee, c.contact_name, c.contact_addr, c.created_at,
         li.received_at as in_at, li.body as in_body, lo.at as out_at, lo.body as out_body,
         (select count(*)::int from inbox_mails m where m.case_id = c.id) + (select count(*)::int from mail_case_out o where o.case_id = c.id) as n,
         (select count(*)::int from inbox_mails m where m.case_id = c.id and m.status = 'new') as unread,
@@ -130,21 +176,21 @@ export async function listCases(db: Exec, f: ListFilter, mods: { offers: boolean
       from mail_cases c
         left join lateral (select received_at, left(body, 300) as body from inbox_mails m where m.case_id = c.id order by received_at desc limit 1) li on true
         left join lateral (select at, left(body, 300) as body from mail_case_out o where o.case_id = c.id order by at desc limit 1) lo on true
-      where ${statusSql} and ${f.kind === 'all' ? sql`true` : sql`c.kind = ${f.kind}`}
+      where ${statusSql} and ${f.kind === 'all' ? sql`true` : sql`c.kind = ${f.kind}`} and ${f.assignee ? sql`c.assignee = ${f.assignee}` : sql`true`}
         and ${q ? sql`(lower(c.number) like ${like} or lower(c.title) like ${like} or lower(c.contact_name) like ${like} or c.contact_addr like ${like})` : sql`true`}
       order by greatest(coalesce(li.received_at, c.created_at), coalesce(lo.at, c.created_at)) desc limit 300`);
-    for (const r of rows as unknown as { id: string; number: string; kind: MailKind; title: string; status: CaseStatus; contact_name: string; contact_addr: string; created_at: Date | string;
+    for (const r of rows as unknown as { id: string; number: string; kind: MailKind; title: string; status: CaseStatus; assignee: string; contact_name: string; contact_addr: string; created_at: Date | string;
       in_at: Date | string | null; in_body: string | null; out_at: Date | string | null; out_body: string | null; n: number; unread: number; linked: boolean; confirmed: boolean }[]) {
       const inAt = r.in_at ? new Date(r.in_at) : null, outAt = r.out_at ? new Date(r.out_at) : null;
       const lastIn = !!inAt && (!outAt || inAt >= outAt);
       const lastAt = (lastIn ? inAt : outAt ?? new Date(r.created_at))!.toISOString();
       if (!inRange(lastAt)) continue;
       out.push({ source: 'case', id: r.id, number: r.number, kind: r.kind, title: r.title, contact: r.contact_name || r.contact_addr, status: r.status,
-        turn: inAt || outAt ? (lastIn ? 'ours' : 'theirs') : null, lastAt, snippet: snip((lastIn ? r.in_body : r.out_body) ?? ''), count: r.n, unread: r.unread, linked: r.linked, confirmed: r.confirmed });
+        turn: inAt || outAt ? (lastIn ? 'ours' : 'theirs') : null, lastAt, snippet: snip((lastIn ? r.in_body : r.out_body) ?? ''), count: r.n, unread: r.unread, linked: r.linked, confirmed: r.confirmed, assignee: r.assignee });
     }
   }
   const wantOpen = f.status === 'open', wantDone = f.status === 'done';
-  if (f.status !== 'archived' && mods.offers && (f.kind === 'all' || f.kind === 'offer')) {
+  if (!f.assignee && f.status !== 'archived' && mods.offers && (f.kind === 'all' || f.kind === 'offer')) {
     const rows = await db.execute(sql`
       select o.id, o.number, o.title, o.status, o.customer_company, o.customer_name, o.email, le.at, le.kind, le.body, (select count(*)::int from offer_events e where e.offer_id = o.id) as n
       from offers o join lateral (select at, kind, left(body, 300) as body from offer_events e where e.offer_id = o.id order by at desc limit 1) le on true
@@ -158,7 +204,7 @@ export async function listCases(db: Exec, f: ListFilter, mods: { offers: boolean
         turn: r.kind === 'mail_in' ? 'ours' : 'theirs', lastAt, snippet: snip(r.body), count: r.n, unread: 0 });
     }
   }
-  if (f.status !== 'archived' && (f.kind === 'all' || f.kind === 'estimate')) {
+  if (!f.assignee && f.status !== 'archived' && (f.kind === 'all' || f.kind === 'estimate')) {
     const rows = await db.execute(sql`
       select i.id, i.number, i.estimate_number, i.status, i.recipient_company, i.recipient_name, le.at, le.kind, le.body,
         (select count(*)::int from invoice_events e where e.invoice_id = i.id) as n, (select to_addr from invoice_events e where e.invoice_id = i.id and e.to_addr <> '' order by at desc limit 1) as to_addr
@@ -177,15 +223,16 @@ export async function listCases(db: Exec, f: ListFilter, mods: { offers: boolean
   return out.sort((a, b) => b.lastAt.localeCompare(a.lastAt));
 }
 
-export async function updateCase(db: Db, actor: Actor, id: string, v: { kind?: MailKind; status?: CaseStatus; title?: string }) {
+export async function updateCase(db: Db, actor: Actor, id: string, v: { kind?: MailKind; status?: CaseStatus; title?: string; assignee?: string }) {
   const [before] = await db.select().from(mailCases).where(eq(mailCases.id, id));
   if (!before) throw notFound('Vorgang');
-  await db.update(mailCases).set({ ...(v.kind ? { kind: v.kind } : {}), ...(v.status ? { status: v.status, updatedAt: new Date() } : {}), ...(v.title !== undefined ? { title: v.title || before.title } : {}) }).where(eq(mailCases.id, id));
+  if (v.assignee && !(await assignees(db)).includes(v.assignee)) throw conflict('Diesen Mitarbeiter gibt es nicht (mehr) oder er hat keinen Zugriff auf die Vorgänge');
+  await db.update(mailCases).set({ ...(v.assignee !== undefined ? { assignee: v.assignee } : {}), ...(v.kind ? { kind: v.kind } : {}), ...(v.status ? { status: v.status, updatedAt: new Date() } : {}), ...(v.title !== undefined ? { title: v.title || before.title } : {}) }).where(eq(mailCases.id, id));
   // die Kategorie gilt für den ganzen Vorgang – so passen auch die Aktionen an der Nachricht (Zimmer übernehmen, Tisch reservieren …)
   if (v.kind) await db.update(inboxMails).set({ kind: v.kind }).where(eq(inboxMails.caseId, id));
   // „erledigt“ gilt auch für die noch offenen Nachrichten des Vorgangs
   if (v.status === 'done' || v.status === 'archived') await db.update(inboxMails).set({ status: 'done', handledBy: actor.userName }).where(and(eq(inboxMails.caseId, id), eq(inboxMails.status, 'new')));
-  await record(db, actor, { action: 'update', entity: 'mail_case', entityId: id, before: { kind: before.kind, status: before.status }, after: { number: before.number, ...v } });
+  await record(db, actor, { action: 'update', entity: 'mail_case', entityId: id, before: { kind: before.kind, status: before.status, assignee: before.assignee }, after: { number: before.number, ...v } });
   return getCase(db, id);
 }
 /** Nachricht von Hand einem Vorgang zuordnen */

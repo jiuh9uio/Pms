@@ -648,9 +648,13 @@ export const mailCases = pgTable('mail_cases', {
   /** open = offen, working = in Bearbeitung, done = erledigt, archived = archiviert (Textspalte ohne Datenbank-Einschränkung) */
   status: text('status', { enum: ['open', 'working', 'done', 'archived'] }).notNull().default('open'),
   createdBy: text('created_by').notNull().default(''),
+  /** zuständiger Mitarbeiter (Anzeigename; leer = niemand) */
+  assignee: text('assignee').notNull().default(''),
+  /** Zimmerreservierung, zu der der Vorgang gehört (E-Mails aus dem Hotelbereich) */
+  bookingId: uuid('booking_id').references(() => bookings.id, { onDelete: 'set null' }),
   createdAt: ts('created_at').notNull().defaultNow(),
   updatedAt: ts('updated_at').notNull().defaultNow(),
-}, (t) => [index('mail_cases_addr_idx').on(t.contactAddr)]);
+}, (t) => [index('mail_cases_addr_idx').on(t.contactAddr), index('mail_cases_booking_idx').on(t.bookingId)]);
 /** Gesendete Antworten eines Vorgangs (mit Text) */
 export const mailCaseOut = pgTable('mail_case_out', {
   id: id(),

@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.125.0
+
+- **E-Mails aus dem Hotelbereich gehören jetzt zu einem Vorgang.** Bestätigung, Absage, Stornobestätigung, Rückfrage und Gäste-Link, die aus einer Reservierung gesendet werden, erscheinen unter „Vorgänge“; die Vorgangsnummer steht im Betreff. Antwortet der Gast, landet seine E-Mail in diesem Vorgang. Der Vorgang gilt als erledigt, solange der Gast nicht antwortet – nur bei einer Rückfrage bleibt er offen. Wurde die Reservierung aus einer E-Mail-Anfrage angelegt, wird deren Vorgang weitergeführt. Aus dem Vorgang lässt sich die Reservierung öffnen.
+- **Zuständigkeit:** Je Vorgang lässt sich ein Mitarbeiter als zuständig eintragen („Ich übernehme“ oder Auswahl im Kopf). Der Name steht in der Liste; die Liste lässt sich auf „Meine“ oder einen Mitarbeiter einschränken. Wählbar sind aktive Benutzer mit Zugriff auf die Vorgänge.
+- **Hinweis „Als Nächstes“ einstellbar:** Unter Vorgänge → Antwortvorlagen kann der Administrator den Hinweis je Kategorie (Zimmer, Tisch, Feier, Tagung, Gutschein, Frage, Sonstiges, Reservierung angelegt) selbst formulieren.
+- Datenbank: zwei neue Felder an den Vorgängen (zuständig, Reservierung); bestehende Daten bleiben unverändert.
+
 ## 1.124.0
 
 - **Anhänge werden gespeichert.** Anhänge eingehender E-Mails liegen jetzt im Programm und lassen sich im Vorgang, in der Nachricht und im Verlauf eines Angebots **herunterladen** (je Datei bis 10 MB, höchstens 10 je E-Mail; größere werden nur benannt). Sie werden immer als Download ausgeliefert, nie im Browser ausgeführt, und zusammen mit der E-Mail gelöscht. Gilt für neu abgerufene E-Mails.

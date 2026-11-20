@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CASE_STATUSES, CASE_STATUS_LABEL, MAIL_KINDS, MAIL_KIND_LABEL, MAIL_KIND_SHORT, replySnippetsInput, type CaseDto, type CaseListRow, type CaseStatus, type ReplySnippet, type InboxCounts, type InboxMailDto, type InboxState, type InboxStatus } from '../../../src/shared/inbox.js';
+import { CASE_STATUSES, CASE_STATUS_LABEL, MAIL_KINDS, MAIL_KIND_LABEL, MAIL_KIND_SHORT, DEFAULT_NEXT_TEXTS, NEXT_TEXT_LABEL, nextTextsInput, replySnippetsInput, type NextTexts, type CaseDto, type CaseListRow, type CaseStatus, type ReplySnippet, type InboxCounts, type InboxMailDto, type InboxState, type InboxStatus } from '../../../src/shared/inbox.js';
 import type { MailKind } from '../../../src/shared/mailextract.js';
 import { tableReservationInput } from '../../../src/shared/restaurant.js';
 import { hasModule } from '../../../src/shared/schemas.js';
@@ -44,7 +44,7 @@ export function Inbox() {
       {st?.lastError && <p className="notice danger">Letzter Abruf fehlgeschlagen: {st.lastError}</p>}
       <div className={current === 'vorgaenge' || current === 'vorlagen' ? 'mc-tabs-hidden' : 'mc-tabs'}>{bar}</div>
       {current === 'vorgaenge' && !!st?.newWithoutCase && <p className="notice small">{st.newWithoutCase} neue {st.newWithoutCase === 1 ? 'E-Mail gehört' : 'E-Mails gehören'} noch zu keinem Vorgang – <a href="/email?ansicht=new">im Posteingang ansehen</a>.</p>}
-      {current === 'vorgaenge' ? <CasesView /> : current === 'vorlagen' ? <SnippetsAdmin /> : <MailsView key={current} status={current} />}
+      {current === 'vorgaenge' ? <CasesView /> : current === 'vorlagen' ? <><SnippetsAdmin /><NextTextsAdmin /></> : <MailsView key={current} status={current} />}
       <p className="muted small">Die Einordnung (Zimmer, Tisch, Feier, Tagung, Gutschein, allgemeine Frage, Sonstiges) und die erkannten Angaben sind Vorschläge des Programms nach festen Mustern – bitte vor dem Übernehmen mit dem Text vergleichen. Im Postfach selbst wird nichts verändert.</p>
     </>
   );
@@ -120,7 +120,10 @@ function CasesView() {
   const [q, setQ] = useState('');
   const [from, setFrom] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
-  const list = useLoad(() => api<CaseListRow[]>('GET', `/mail-cases?status=${status}&kind=${kind}&q=${encodeURIComponent(q)}${from ? `&from=${from}` : ''}`), [status, kind, q, from, rev]);
+  const [who, setWho] = useState('');
+  const { user } = useAuth();
+  const staff = useLoad(() => api<string[]>('GET', '/mail-cases/assignees')).data ?? [];
+  const list = useLoad(() => api<CaseListRow[]>('GET', `/mail-cases?status=${status}&kind=${kind}&q=${encodeURIComponent(q)}${from ? `&from=${from}` : ''}${who ? `&assignee=${encodeURIComponent(who)}` : ''}`), [status, kind, q, from, who, rev]);
   const open = (r: CaseListRow) => { if (r.source === 'case') setOpenId(r.id); else if (r.source === 'offer') go(`/angebote?angebot=${r.id}`); else openInvoice(r.id); };
   const ours = (list.data ?? []).filter((r) => r.status === 'open' && r.turn === 'ours').length;
   return (
@@ -135,6 +138,9 @@ function CasesView() {
               {MAIL_KINDS.map((k) => <option key={k} value={k}>{MAIL_KIND_LABEL[k]}</option>)}
               <option value="offer">Angebot</option><option value="estimate">Kostenvoranschlag</option>
             </select>
+            <select value={who} onChange={(e) => setWho(e.target.value)} aria-label="Zuständig" title="Nur Vorgänge eines Mitarbeiters zeigen (Angebote und Kostenvoranschläge haben keine Zuständigkeit)">
+              <option value="">Alle Mitarbeiter</option>{staff.includes(user.name) && <option value={user.name}>Meine</option>}{staff.filter((n) => n !== user.name).map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
             <label className="msg-from" title="Nur Vorgänge mit Aktivität seit diesem Tag">seit <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Aktivität seit" /></label>
           </div>
         </div>
@@ -148,7 +154,7 @@ function CasesView() {
                 <span className={`msg-avatar k-${r.kind}`} aria-hidden>{initials(r.contact)}</span>
                 <span className="msg-main">
                   <span className="msg-top"><b>{WHAT[r.kind]}</b><small>{shortTime(r.lastAt)}</small></span>
-                  <span className="msg-sub">{r.contact || r.title} · {r.number}{r.source !== 'case' && ' ›'}</span>
+                  <span className="msg-sub">{r.contact || r.title} · {r.number}{r.source !== 'case' && ' ›'}{r.assignee && <span className="msg-asg" title={`Zuständig: ${r.assignee}`}> · {r.assignee}</span>}</span>
                   <span className="msg-snip">{r.turn === 'theirs' && 'Sie: '}{r.snippet || r.title}</span>
                 </span>
                 {r.unread > 0 ? <span className="msg-unread" title={`${r.unread} neue ${r.unread === 1 ? 'Nachricht' : 'Nachrichten'}`} aria-label={`${r.unread} neu`}>{r.unread}</span> : r.source === 'case' && r.status === 'open' && r.confirmed && !waiting ? <span className="msg-dot ok" title="Bestätigt" aria-label="bestätigt" /> : waiting && <span className="msg-dot" title="Wir sind dran" aria-label="wir sind dran" />}
@@ -163,19 +169,15 @@ function CasesView() {
 }
 
 /** Was steht als Nächstes an? – aus Stand, Kategorie und dem, was schon angelegt wurde */
-function nextStep(c: CaseDto): { text: string; tone: 'warn' | 'neutral' | 'ok' } {
+function nextStep(c: CaseDto, by: NextTexts): { text: string; tone: 'warn' | 'neutral' | 'ok' } {
   if (c.status === 'done' || c.status === 'archived') return { text: c.status === 'archived' ? 'Archiviert – nichts zu tun.' : 'Erledigt – nichts zu tun.', tone: 'ok' };
   const last = c.messages[c.messages.length - 1];
+  if (c.bookingId && !c.latestInboxMailId) return { text: `E-Mail zur Reservierung ${c.bookingNumber ?? ''} aus dem Hotelbereich gesendet. Antwortet der Gast, erscheint seine Nachricht hier.`, tone: 'neutral' };
   if (c.confirmedAt && c.turn === 'theirs') return { text: `Bestätigung gesendet am ${new Date(c.confirmedAt).toLocaleDateString('de-DE')}. Bitte noch prüfen, ob in der Reservierung alles stimmt – dann als erledigt markieren.`, tone: 'ok' };
   if (c.confirmedAt && c.turn === 'ours') return { text: 'Der Kunde hat nach der Bestätigung noch einmal geschrieben – bitte lesen und antworten.', tone: 'warn' };
   if (c.turn === 'theirs') { const d = last ? daysSince(last.at) : 0; return { text: `Warten auf die Antwort des Kunden${d >= 1 ? ` – seit ${d} ${d === 1 ? 'Tag' : 'Tagen'}` : ''}.${d >= 3 ? ' Vielleicht nachfragen?' : ''}`, tone: 'neutral' }; }
-  if (c.latestLinkKind === 'booking') return { text: 'Die Zimmerreservierung ist angelegt – jetzt die Bestätigung senden oder antworten.', tone: 'warn' };
-  if (c.latestLinkKind === 'table') return { text: 'Die Tischreservierung ist angelegt – jetzt die Bestätigung senden oder antworten.', tone: 'warn' };
-  const by: Record<MailKind, string> = {
-    hotel: 'Zimmeranfrage: Verfügbarkeit prüfen, dann Reservierung anlegen oder antworten.', table: 'Tischanfrage: Tisch reservieren oder antworten.',
-    event: 'Anfrage für eine Feier: antworten – oder im Bereich Angebote eine Absprache / ein Angebot anlegen.', meeting: 'Tagungsanfrage: antworten – oder im Bereich Angebote ein Angebot anlegen.',
-    voucher: 'Gutschein-Anfrage: antworten – der Gutschein wird im Bereich Gutscheine ausgestellt.', question: 'Frage des Kunden beantworten.', other: 'Nachricht lesen und antworten – oder als erledigt markieren.',
-  };
+  if (c.latestLinkKind === 'booking') return { text: by.bookingMade, tone: 'warn' };
+  if (c.latestLinkKind === 'table') return { text: by.tableMade, tone: 'warn' };
   return { text: by[c.kind], tone: 'warn' };
 }
 
@@ -186,9 +188,14 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const [reply, setReply] = useState<false | string>(false);
   const [more, setMore] = useState(false);
   const snippets = useLoad(() => api<ReplySnippet[]>('GET', '/reply-snippets')).data ?? [];
+  const texts = useLoad(() => api<NextTexts>('GET', '/case-next-texts')).data ?? DEFAULT_NEXT_TEXTS;
+  const staff = useLoad(() => api<string[]>('GET', '/mail-cases/assignees')).data ?? [];
+  const { user } = useAuth();
+  const { openBooking } = useData();
   if (!data) return <LoadState error={error} loading />;
   const act = async (method: 'PATCH' | 'POST', path: string, body: unknown, msg: string) => { try { await api(method, `/mail-cases/${id}${path}`, body); toast(msg); bump(); reload(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); } };
-  const next = nextStep(data);
+  const next = nextStep(data, texts);
+  const people = data.assignee && !staff.includes(data.assignee) ? [data.assignee, ...staff] : staff;
   /** Nachricht gehört nicht hierher: lösen, in einen anderen Vorgang verschieben oder als eigenen Vorgang abtrennen */
   const relocate = async (inboxMailId: string) => {
     const a = window.prompt('Diese E-Mail gehört nicht zu diesem Vorgang?\n\n• Vorgangsnummer eintippen (z. B. V-2026-0007) = dorthin verschieben\n• „neu“ = eigener, neuer Vorgang\n• leer lassen = nur aus diesem Vorgang lösen (bleibt im Posteingang)', '');
@@ -217,9 +224,15 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
         </div>
         <select value={data.kind} onChange={(e) => void act('PATCH', '', { kind: e.target.value }, 'Kategorie geändert')} aria-label="Kategorie des Vorgangs">{MAIL_KINDS.map((k) => <option key={k} value={k}>{MAIL_KIND_LABEL[k]}</option>)}</select>
         <select value={data.status} onChange={(e) => void act('PATCH', '', { status: e.target.value }, `Stand: ${CASE_STATUS_LABEL[e.target.value as CaseStatus]}`)} aria-label="Stand des Vorgangs">{CASE_STATUSES.map((k) => <option key={k} value={k}>{CASE_STATUS_LABEL[k]}</option>)}</select>
+        <select value={data.assignee} onChange={(e) => void act('PATCH', '', { assignee: e.target.value }, e.target.value ? `Zuständig: ${e.target.value}` : 'Niemand zuständig')} aria-label="Zuständiger Mitarbeiter" title="Wer kümmert sich um diesen Vorgang?">
+          <option value="">Zuständig: niemand</option>{people.map((n) => <option key={n} value={n}>Zuständig: {n}</option>)}
+        </select>
         {data.status !== 'done' && data.status !== 'archived' && <Button onClick={() => void act('PATCH', '', { status: 'done' }, 'Vorgang erledigt')}>Erledigt</Button>}
       </header>
-      <div className={`msg-next t-${next.tone}`}><b>Als Nächstes:</b> {next.text}</div>
+      <div className={`msg-next t-${next.tone}`}><span><b>Als Nächstes:</b> {next.text}</span>
+        {data.bookingId && <button type="button" className="linkbtn" onClick={() => openBooking(data.bookingId!)}>Reservierung {data.bookingNumber} öffnen</button>}
+        {data.status !== 'done' && data.status !== 'archived' && data.assignee !== user.name && staff.includes(user.name) && <button type="button" className="linkbtn" onClick={() => void act('PATCH', '', { assignee: user.name, ...(data.status === 'open' ? { status: 'working' } : {}) }, 'Sie sind jetzt zuständig')}>Ich übernehme</button>}
+      </div>
       {data.candidates.length > 0 && <div className="ot-cand msg-cand">
         <span className="muted small">Im Posteingang von dieser Adresse, noch keinem Vorgang zugeordnet:</span>
         {data.candidates.map((c) => <div key={c.inboxMailId}><span>{fmtDateTime(c.at)} · {c.subject || '(ohne Betreff)'}</span><Button onClick={() => void act('POST', '/assign', { inboxMailId: c.inboxMailId }, 'E-Mail zugeordnet')}>Zuordnen</Button></div>)}
@@ -242,6 +255,7 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
           <button type="button" className="linkbtn msg-merge" onClick={() => void merge()}>Zusammenführen …</button>
         </footer>
       )}
+      {!data.latestInboxMailId && data.bookingId && <footer className="msg-foot"><span className="muted small">Weitere E-Mails an den Gast senden Sie aus der Reservierung – sie erscheinen dann hier. Antwortet der Gast, können Sie auch von hier aus antworten.</span></footer>}
       {reply && data.latestInboxMailId && <MailDialog path={`/inbox/${reply === 'confirm' && data.linkedInboxMailId ? data.linkedInboxMailId : data.latestInboxMailId}/mail?template=${reply}`} title={`${reply === 'confirm' ? 'Bestätigung senden' : 'Antworten'} – ${data.number}`} onClose={() => setReply(false)} onSent={() => { bump(); reload(); }}
         intro={<p className="muted small">Die Vorgangsnummer {data.number} wird beim Senden automatisch in den Betreff gesetzt.</p>} />}
       {more && data.latestInboxMailId && <div className="msg-more"><MailDetail key={data.latestInboxMailId} id={data.latestInboxMailId} onGone={() => { bump(); reload(); }} /></div>}
@@ -285,6 +299,39 @@ function SnippetsAdmin() {
       ))}</div>
       <div className="formactions">
         <Button onClick={() => setItems([...items, { id: `eigen-${Date.now().toString(36)}`, kind: 'all', title: '', text: '{anrede}\n\n', active: true }])}>+ Vorlage</Button>
+        <Button variant="primary" busy={busy} onClick={() => void save()}>Speichern</Button>
+      </div>
+    </section>
+  );
+}
+
+/** Hinweis „Als Nächstes“ im Vorgang (Administrator): je Kategorie ein eigener Text */
+function NextTextsAdmin() {
+  const { user } = useAuth();
+  const toast = useToast();
+  const { data, error, reload } = useLoad(() => api<NextTexts>('GET', '/case-next-texts'));
+  const [v, setV] = useState<NextTexts | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (data) setV(data); }, [data]);
+  if (user.role !== 'admin') return null;
+  if (!v) return <LoadState error={error} loading />;
+  const save = async () => {
+    const p = nextTextsInput.safeParse(v);
+    if (!p.success) { toast(p.error.issues[0]?.message ?? 'Bitte Eingaben prüfen', 'error'); return; }
+    setBusy(true);
+    try { await api('PUT', '/case-next-texts', p.data); toast('Hinweise gespeichert'); reload(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+    setBusy(false);
+  };
+  return (
+    <section className="card">
+      <h2>Hinweis „Als Nächstes“</h2>
+      <p className="muted small">Dieser Satz steht im Vorgang oben, solange Sie am Zug sind – je nach Kategorie. So können Sie Ihren Mitarbeitern den Ablauf in Ihrem Haus vorgeben. Die übrigen Hinweise (z. B. „Warten auf die Antwort des Kunden“) ergeben sich aus dem Stand und sind fest.</p>
+      <div className="nx-list">{(Object.keys(NEXT_TEXT_LABEL) as (keyof NextTexts)[]).map((k) => (
+        <label key={k} className="nx-row"><span>{NEXT_TEXT_LABEL[k]}</span>
+          <textarea rows={2} maxLength={300} value={v[k]} onChange={(e) => setV({ ...v, [k]: e.target.value })} /></label>
+      ))}</div>
+      <div className="formactions">
+        <Button onClick={() => { if (window.confirm('Alle Hinweise auf die mitgelieferten Texte zurücksetzen? (Gilt erst nach „Speichern“.)')) setV(DEFAULT_NEXT_TEXTS); }}>Vorgabe wiederherstellen</Button>
         <Button variant="primary" busy={busy} onClick={() => void save()}>Speichern</Button>
       </div>
     </section>

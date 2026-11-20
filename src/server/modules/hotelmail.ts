@@ -7,6 +7,7 @@ import { estimatePdf, getInvoice, invoicePdf } from './billing.js';
 import { buildFromInvoice } from './einvoices.js';
 import { lastRecipient, logInvoiceMailOut, withKvCode } from './invoicethread.js';
 import { getMailSettings, sendMail } from './mail.js';
+import { dropEmptyCase, ensureCaseForBooking, logCaseOut, settleBookingCase, withCaseCode } from './mailcases.js';
 import { getHotel } from './settings.js';
 
 /** E-Mails aus dem Bereich „Hotel“: Buchungsbestätigung und Rechnung an den Gast. Der Text ist vor dem Senden änderbar. */
@@ -89,10 +90,20 @@ export async function statusMailDraft(db: Exec, bookingId: string, kind: 'declin
   return { to: b.guest.email, subject: `${subject} – ${h.name}`, text: [greeting(b.guest), '', ...body, '', signature(h)].join('\n'), attachment: null, ready: await ready(db) };
 }
 
-export async function sendBookingMail(db: Db, actor: Actor, bookingId: string, v: { to: string; subject: string; text: string }) {
+/**
+ * E-Mail zu einer Reservierung senden. Sie gehört zu einem Vorgang (Bereich Vorgänge): die Nummer steht im Betreff,
+ * eine Antwort des Gastes landet dort. expectReply = Rückfrage (Vorgang bleibt offen); sonst gilt er als erledigt, bis der Gast antwortet.
+ */
+export async function sendBookingMail(db: Db, actor: Actor, bookingId: string, v: { to: string; subject: string; text: string }, expectReply = false) {
   const b = await getBooking(db, bookingId);
-  await sendMail(db, actor, v);
-  await record(db, actor, { action: 'mail', entity: 'booking', entityId: b.id, after: { to: v.to, subject: v.subject } });
+  const { c, created } = await ensureCaseForBooking(db, actor, { id: b.id, number: b.number, name: [b.guest.firstName, b.guest.lastName].filter(Boolean).join(' ') }, v.to, v.subject);
+  const subject = withCaseCode(v.subject, c.number);
+  try { await sendMail(db, actor, { ...v, subject, threadCode: c.number }); }
+  catch (e) { if (created) await dropEmptyCase(db, c.id); throw e; }
+  // die E-Mail ist gesendet: ein Fehler beim Vermerken darf nicht wie ein Versandfehler aussehen (sonst wird doppelt gesendet)
+  let logged = true;
+  try { await logCaseOut(db, c.id, actor, v.to, subject, v.text); await settleBookingCase(db, c.id, expectReply); } catch { logged = false; }
+  await record(db, actor, { action: 'mail', entity: 'booking', entityId: b.id, after: { to: v.to, subject, vorgang: c.number, ...(logged ? {} : { hinweis: 'gesendet, aber nicht im Vorgang vermerkt' }) } });
 }
 
 export type InvoiceMailKind = 'invoice' | 'reminder';

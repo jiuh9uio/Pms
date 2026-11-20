@@ -454,6 +454,9 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.post('/inbox/:id/mail', email, (req) => inbox.sendReply(db, actor(req), z.uuid().parse((req.params as { id: string }).id), mailSendInput.parse(req.body), tpl(req)));
     // Vorgänge: zusammengehörige E-Mails mit eigener Nummer
     const cid = (req: FastifyRequest) => z.uuid().parse((req.params as { id: string }).id);
+    api.get('/mail-cases/assignees', email, () => mailcases.assignees(db));
+    api.get('/case-next-texts', email, () => mailcases.getNextTexts(db));
+    api.put('/case-next-texts', { preHandler: requireAdmin }, (req) => mailcases.saveNextTexts(db, actor(req), I.nextTextsInput.parse(req.body)));
     api.get('/mail-cases', email, (req) => mailcases.listCases(db, I.caseListQuery.parse(req.query), { offers: S.hasModule(req.user!, 'hotel') || S.hasModule(req.user!, 'restaurant') }));
     api.get('/mail-cases/:id', email, (req) => mailcases.getCase(db, cid(req)));
     api.patch('/mail-cases/:id', email, (req) => mailcases.updateCase(db, actor(req), cid(req), I.caseUpdateInput.parse(req.body)));

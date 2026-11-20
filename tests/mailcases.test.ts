@@ -376,3 +376,72 @@ describe('Anhänge, Löschregeln, Rechnung aus Angebot', () => {
     expect(c.number > highest).toBe(true);
   });
 });
+
+describe('Hotelbereich, Zuständigkeit, einstellbare Hinweise', () => {
+  let bookingId = '';
+  beforeAll(async () => {
+    const cat = await ok('POST', '/categories', admin, { name: 'Doppelzimmer', description: '', stdOccupancy: 2, maxPersons: 2, basePriceCents: 9900, sort: 1 });
+    await ok('POST', '/rooms/bulk', admin, { categoryId: cat.id, count: 1, firstNumber: 101, floor: '1' });
+    const room = (await ok('GET', '/rooms', admin))[0];
+    const guest = { salutation: 'Frau', firstName: 'Erika', lastName: 'Beispiel', company: '', email: 'erika@example.com', phone: '', street: 'Weg 1', zip: '11111', city: 'Ort', country: 'Deutschland', birthdate: '', nationality: '', idNumber: '', notes: '' };
+    bookingId = (await ok('POST', '/bookings', admin, { guest, groupName: '', source: 'Telefon', paymentMethod: '', notes: '', breakfast: false,
+      rooms: [{ roomId: room.id, from: '2031-05-08', to: '2031-05-10', adults: 2, children: 0, status: 'confirmed', pricePerNightCents: null }] })).id;
+  });
+
+  it('Bestätigung aus dem Hotelbereich: ein Vorgang zur Reservierung (erledigt), Nummer im Betreff; die Antwort des Gastes landet dort und öffnet ihn wieder', async () => {
+    const before = sent.length;
+    const draft = await ok('GET', `/bookings/${bookingId}/mail`, admin);
+    await ok('POST', `/bookings/${bookingId}/mail`, admin, { to: draft.to, subject: draft.subject, text: draft.text });
+    const [c] = await db.execute(sql`select id, number, status, kind, contact_addr, booking_id from mail_cases where booking_id = ${bookingId}`) as unknown as { id: string; number: string; status: string; kind: string; contact_addr: string; booking_id: string }[];
+    expect(c).toMatchObject({ status: 'done', kind: 'hotel', contact_addr: 'erika@example.com' });
+    expect(sent.length).toBe(before + 1);
+    expect(sent.at(-1)!.subject).toContain(`[${c!.number}]`);
+    expect(threadCodesOf([sent.at(-1)!.messageId!])).toEqual([c!.number]);
+    // zweite E-Mail (Rückfrage): derselbe Vorgang, jetzt offen
+    await ok('POST', `/bookings/${bookingId}/mail?as=question`, admin, { to: draft.to, subject: 'Rückfrage', text: 'Wann reisen Sie an?' });
+    expect((await db.execute(sql`select count(*)::int as n from mail_cases where booking_id = ${bookingId}`))[0]!.n).toBe(1);
+    const dto = await ok('GET', `/mail-cases/${c!.id}`, admin);
+    expect(dto).toMatchObject({ status: 'open', bookingId, turn: 'theirs', latestInboxMailId: null });
+    expect(dto.bookingNumber).toBeTruthy();
+    expect(dto.messages).toHaveLength(2);
+    // Antwort des Gastes mit geändertem Betreff: über den technischen Verweis in denselben Vorgang
+    validity = 'hotel1';
+    box = [raw(1, 'Erika Beispiel <erika@example.com>', 'Ankunft', 'Wir kommen gegen 18 Uhr.', { headers: [`In-Reply-To: ${sent.at(-1)!.messageId}`] })];
+    await fetchNow();
+    expect((await byUid(1))!.case_id).toBe(c!.id);
+    expect((await ok('GET', `/mail-cases/${c!.id}`, admin)).turn).toBe('ours');
+  });
+
+  it('schlägt der Versand fehl, bleibt kein leerer Vorgang zurück', async () => {
+    const room = (await ok('GET', '/rooms', admin))[0];
+    const guest = { salutation: 'Herr', firstName: 'Paul', lastName: 'Fehler', company: '', email: 'paul@example.com', phone: '', street: '', zip: '', city: '', country: 'Deutschland', birthdate: '', nationality: '', idNumber: '', notes: '' };
+    const id = (await ok('POST', '/bookings', admin, { guest, groupName: '', source: 'Telefon', paymentMethod: '', notes: '', breakfast: false,
+      rooms: [{ roomId: room.id, from: '2031-06-08', to: '2031-06-10', adults: 2, children: 0, status: 'confirmed', pricePerNightCents: null }] })).id;
+    setMailSender(async () => { throw new Error('SMTP nicht erreichbar'); });
+    const res = await call('POST', `/bookings/${id}/mail`, admin, { to: 'paul@example.com', subject: 'Bestätigung', text: 'Text' });
+    setMailSender(async (_c, mail) => { sent.push(mail); });
+    expect(res.statusCode).not.toBe(200);
+    expect((await db.execute(sql`select count(*)::int as n from mail_cases where booking_id = ${id}`))[0]!.n).toBe(0);
+  });
+
+  it('Zuständigkeit: nur Mitarbeiter mit Zugriff wählbar; Filter „nur dieser Mitarbeiter“', async () => {
+    expect(await ok('GET', '/mail-cases/assignees', mailOnly)).toEqual(['Chefin', 'Nur Post']);
+    const [c] = await db.execute(sql`select id from mail_cases where booking_id = ${bookingId}`) as unknown as { id: string }[];
+    expect((await ok('PATCH', `/mail-cases/${c!.id}`, mailOnly, { assignee: 'Nur Post' })).assignee).toBe('Nur Post');
+    expect((await call('PATCH', `/mail-cases/${c!.id}`, admin, { assignee: 'Gibt Esnicht' })).statusCode).toBe(409);
+    const mine = await ok('GET', `/mail-cases?status=all&assignee=${encodeURIComponent('Nur Post')}`, admin);
+    expect(mine.map((r: { id: string }) => r.id)).toEqual([c!.id]);
+    expect(mine[0].assignee).toBe('Nur Post');
+    expect(await ok('GET', `/mail-cases?status=all&assignee=Chefin`, admin)).toEqual([]);
+    expect((await ok('PATCH', `/mail-cases/${c!.id}`, admin, { assignee: '' })).assignee).toBe('');
+  });
+
+  it('Hinweis „Als Nächstes“: Vorgabe, Speichern nur durch den Administrator', async () => {
+    const d = await ok('GET', '/case-next-texts', mailOnly);
+    expect(d.hotel).toContain('Verfügbarkeit');
+    expect((await call('PUT', '/case-next-texts', mailOnly, { ...d, hotel: 'Erst anrufen.' })).statusCode).toBe(403);
+    await ok('PUT', '/case-next-texts', admin, { ...d, hotel: 'Erst anrufen.' });
+    expect((await ok('GET', '/case-next-texts', mailOnly)).hotel).toBe('Erst anrufen.');
+    expect((await call('PUT', '/case-next-texts', admin, { ...d, hotel: '' })).statusCode).toBe(400);
+  });
+});

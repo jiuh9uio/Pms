@@ -1319,3 +1319,10 @@ a.linkcard.attention b { color: var(--warn); }
 .msg-merge { margin-left: auto; align-self: center; }
 .msg-attlink, .ot-att a { padding: 2px 8px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); text-decoration: none; color: var(--accent-text); }
 .ot-att { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* Vorgänge: Zuständigkeit, Hinweis-Zeile mit Aktionen, einstellbare Hinweise */
+.msg-asg { font-weight: 600; }
+.msg-next { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; } .msg-next > span { flex: 1 1 260px; }
+.nx-list { display: grid; gap: 10px; margin: 10px 0; } .nx-row { display: grid; grid-template-columns: 210px 1fr; gap: 10px; align-items: start; } .nx-row > span { font-weight: 600; padding-top: 6px; }
+@media (max-width: 700px) { .nx-row { grid-template-columns: 1fr; gap: 4px; } }
+.msg-head { flex-wrap: wrap; } .msg-who { flex: 1 1 230px; min-width: 200px; }
