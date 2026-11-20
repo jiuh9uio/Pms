@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.121.0
+
+- **Internet: Timer beim Zurücksetzen der FRITZ!Box.** Nach „FRITZ!Box neu starten“ oder „Internetverbindung neu aufbauen“ zeigt die Seite einen **Countdown** („noch etwa 3:10“) mit Balken. Das Programm prüft alle paar Sekunden, ob das Internet wieder da ist, und meldet es („Das Internet ist wieder da. Es hat 3:42 Minuten gedauert.“).
+- Die erste Schätzung ist grob (Neustart 4 Minuten, Verbindung neu aufbauen 45 Sekunden); danach merkt sich der Browser, wie lange es bei Ihnen wirklich gedauert hat, und schätzt beim nächsten Mal genauer.
+- Dauert es deutlich länger als üblich, steht ein Hinweis da (an der Box nachsehen bzw. Störung beim Anbieter). Der Timer läuft weiter, wenn Sie die Seite wechseln und zurückkommen.
+
 ## 1.120.3
 
 - **Behoben:** Nach „Tisch reservieren“ bzw. dem Anlegen einer Zimmerreservierung aus einem Vorgang sprang der Vorgang sofort auf „Erledigt“ – obwohl die Bestätigung an den Kunden noch fehlte. Jetzt bleibt er offen mit dem Stand „Angelegt – Bestätigung fehlt“ und dem Knopf „Bestätigung senden“.

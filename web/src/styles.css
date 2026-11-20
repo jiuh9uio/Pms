@@ -1305,3 +1305,8 @@ a.linkcard.attention b { color: var(--warn); }
 .sn-list { display: grid; gap: 12px; } .sn-item { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 10px; } .sn-item.off { opacity: .6; }
 .sn-head { display: grid; grid-template-columns: minmax(150px, 220px) 1fr auto auto; gap: 8px; align-items: center; }
 @media (max-width: 760px) { .sn-head { grid-template-columns: 1fr auto; } .sn-head select, .sn-head input { grid-column: 1 / -1; } }
+/* Internet: Timer nach dem Zurücksetzen der FRITZ!Box */
+.rt-box { display: grid; gap: 6px; margin: 10px 0; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-2); }
+.rt-box.ok { background: #e3f6ea; border-color: #9fd9b6; color: #17603a; display: block; } .rt-box.warn { background: #fff6dd; border-color: #ecd58a; }
+.rt-top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; } .rt-time { font-variant-numeric: tabular-nums; font-size: 20px; font-weight: 700; }
+.rt-bar { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; } .rt-bar > span { display: block; height: 100%; background: var(--accent); transition: width 1s linear; }

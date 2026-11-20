@@ -14,6 +14,66 @@ const duration = (a: string, b: string) => {
 
 const uptime = (sec: number) => { const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60); return d ? `${d} Tg. ${h} Std.` : h ? `${h} Std. ${m} Min.` : `${m} Min.`; };
 
+// ---------- Timer nach „neu aufbauen“ / „neu starten“: wie lange dauert es noch? ----------
+type RestartKind = 'reconnect' | 'reboot';
+const RESTART_KEY = 'pms-fritz-neustart', LEARN_KEY = 'pms-fritz-dauer';
+/** Ausgangswerte (grobe Schätzung); nach jedem Durchlauf merkt sich dieser Browser, wie lange es wirklich gedauert hat */
+const DEFAULT_SEC: Record<RestartKind, number> = { reconnect: 45, reboot: 240 };
+const store = { get: (k: string) => { try { return JSON.parse(localStorage.getItem(k) ?? 'null') as unknown; } catch { return null; } }, set: (k: string, v: unknown) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch { /* ohne Speicher läuft der Timer nur, solange die Seite offen ist */ } } };
+const estimateSec = (kind: RestartKind) => { const l = store.get(LEARN_KEY) as Partial<Record<RestartKind, number>> | null; const v = l?.[kind]; return typeof v === 'number' && v >= 10 && v <= 1800 ? v : DEFAULT_SEC[kind]; };
+function startRestart(kind: RestartKind) { store.set(RESTART_KEY, { kind, startedAt: Date.now() }); }
+const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
+
+/** Zeigt nach dem Zurücksetzen einen Countdown und prüft alle paar Sekunden, ob das Internet wieder da ist. */
+function RestartTimer() {
+  const [run, setRun] = useState(() => { const r = store.get(RESTART_KEY) as { kind: RestartKind; startedAt: number } | null; return r && Date.now() - r.startedAt < 30 * 60_000 ? r : null; });
+  const [now, setNow] = useState(Date.now());
+  const [sawOffline, setSawOffline] = useState(false);
+  const [doneAfter, setDoneAfter] = useState<number | null>(null);
+  useEffect(() => {
+    if (!run || doneAfter != null) return;
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, [run, doneAfter]);
+  useEffect(() => {
+    if (!run || doneAfter != null) return;
+    const est = estimateSec(run.kind);
+    let off = sawOffline;
+    const check = async () => {
+      const elapsed = (Date.now() - run.startedAt) / 1000;
+      let online = false;
+      try { online = (await api<InternetStatusDto>('GET', '/network/status')).online; } catch { online = false; } // Programm selbst nicht erreichbar (WLAN weg) zählt als „weg“
+      if (!online) { off = true; setSawOffline(true); return; }
+      // fertig, wenn das Internet nach einer Unterbrechung wieder da ist – oder nie weg war und die übliche Zeit um ist
+      if (off || elapsed >= est) {
+        if (off) { const l = (store.get(LEARN_KEY) as Partial<Record<RestartKind, number>> | null) ?? {}; store.set(LEARN_KEY, { ...l, [run.kind]: Math.round(((l[run.kind] ?? elapsed) + elapsed) / 2) }); }
+        store.set(RESTART_KEY, null); setDoneAfter(elapsed);
+      }
+    };
+    const first = setTimeout(() => void check(), 4000);
+    const poll = setInterval(() => void check(), 5000);
+    return () => { clearTimeout(first); clearInterval(poll); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run, doneAfter]);
+  if (!run) return null;
+  const what = run.kind === 'reboot' ? 'Die FRITZ!Box startet neu' : 'Die Internetverbindung wird neu aufgebaut';
+  if (doneAfter != null) return <div className="rt-box ok" role="status"><b>Das Internet ist wieder da.</b> {sawOffline ? `Es hat ${mmss(doneAfter)} Minuten gedauert.` : 'Eine Unterbrechung war von hier aus nicht zu sehen.'} <button type="button" className="linkbtn" onClick={() => setRun(null)}>ausblenden</button></div>;
+  const est = estimateSec(run.kind), elapsed = Math.max(0, (now - run.startedAt) / 1000), left = est - elapsed;
+  const late = left <= 0, veryLate = elapsed > est * 3;
+  return (
+    <div className={`rt-box${veryLate ? ' warn' : ''}`} role="status" aria-live="polite">
+      <div className="rt-top"><b>{what} …</b><span className="rt-time">{late ? `läuft seit ${mmss(elapsed)}` : `noch etwa ${mmss(left)}`}</span></div>
+      <div className="rt-bar"><span style={{ width: `${Math.min(100, (elapsed / est) * 100)}%` }} /></div>
+      <small className="muted">
+        {veryLate ? 'Das dauert deutlich länger als üblich. Bitte an der FRITZ!Box nachsehen (Lampen) – oder es liegt eine Störung beim Anbieter vor.'
+          : late ? 'Gleich geschafft – es dauert etwas länger als geschätzt.'
+          : `Geschätzt ${mmss(est)} Minuten${sawOffline ? ' · Internet ist gerade weg' : ''}. Das Programm prüft alle paar Sekunden und meldet, sobald das Internet wieder da ist.`}
+        {' '}<button type="button" className="linkbtn" onClick={() => { store.set(RESTART_KEY, null); setRun(null); }}>Timer ausblenden</button>
+      </small>
+    </div>
+  );
+}
+
 /** FRITZ!Box: Internetverbindung neu aufbauen oder die Box neu starten – direkt aus dem Programm. */
 function FritzCard() {
   const { user } = useAuth();
@@ -26,6 +86,7 @@ function FritzCard() {
   const [info, setInfo] = useState<FritzInfoDto | null>(null);
   const [busy, setBusy] = useState<'' | 'info' | 'reconnect' | 'reboot'>('');
   const [fail, setFail] = useState<string | null>(null);
+  const [timer, setTimer] = useState(0);
   useEffect(() => { if (data) setV({ host: data.host, port: String(data.port), user: data.user, password: '', auto: data.auto, autoAfterMin: String(data.autoAfterMin) }); }, [data]);
   const f = useSubmit(fritzSettingsInput, async (d) => { await api('PUT', '/network/fritz', d); toast('FRITZ!Box gespeichert'); setEdit(false); setRev(rev + 1); });
   const ready = !!data && data.enabled && !!data.host && data.hasPassword;
@@ -35,7 +96,7 @@ function FritzCard() {
     setBusy(what); setFail(null);
     try {
       if (what === 'info') setInfo(await api<FritzInfoDto>('GET', '/network/fritz/info'));
-      else { await api('POST', '/network/fritz/action', { action: what }); toast(what === 'reboot' ? 'Die FRITZ!Box startet neu – das dauert einige Minuten' : 'Die Verbindung wird neu aufgebaut'); setInfo(null); }
+      else { await api('POST', '/network/fritz/action', { action: what }); toast(what === 'reboot' ? 'Die FRITZ!Box startet neu – das dauert einige Minuten' : 'Die Verbindung wird neu aufgebaut'); setInfo(null); startRestart(what); setTimer(timer + 1); }
     } catch (e) { setFail(e instanceof Error ? e.message : 'Fehler'); }
     setBusy('');
   };
@@ -67,6 +128,7 @@ function FritzCard() {
           </div>
           <p>{data.auto ? <><Badge tone="ok">Automatik ein</Badge> Nach {data.autoAfterMin} Minuten ohne Internet baut das Programm die Verbindung neu auf, nach weiteren {data.autoAfterMin} Minuten startet es die Box einmal neu.</> : <><Badge>Automatik aus</Badge> Zurückgesetzt wird nur auf Knopfdruck.</>}</p>
           {fail && <p className="notice danger" role="alert">{fail}</p>}
+          <RestartTimer key={timer} />
           {info && <p>{info.model || 'FRITZ!Box'}{info.version && ` · Version ${info.version}`}{info.uptimeSec != null && ` · läuft seit ${uptime(info.uptimeSec)}`}
             {info.connection && <> · Internet: {info.connection === 'Connected' ? <Badge tone="ok">verbunden</Badge> : <Badge tone="danger">{info.connection}</Badge>}</>}{info.externalIp && ` · Adresse im Internet ${info.externalIp}`}</p>}
           <p className="muted small">„Neu aufbauen“ trennt nur die Internetverbindung; die Box wählt sich sofort wieder ein (hilft oft schon). „Neu starten“ startet die ganze Box – WLAN und Telefon sind dann einige Minuten weg. Beides wird im Protokoll vermerkt. Hilft auch der Neustart nicht, liegt die Störung beim Anbieter.</p>
