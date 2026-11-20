@@ -1171,3 +1171,10 @@ a.linkcard.attention b { color: var(--warn); }
 .bk-snext { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 16px 0 4px; }
 .bk-snext .btn.big { font-size: 17px; padding: 12px 26px; }
 .vc-ship { display: flex; flex-wrap: wrap; gap: 6px 20px; }
+/* Angebote: Produktkatalog je Vorlage */
+.oc-cat { display: grid; gap: 4px; max-height: 340px; overflow: auto; }
+.oc-cat > div { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.oc-cat > div.on { border-color: var(--accent); background: var(--accent-soft); }
+.oc-quick { display: grid; gap: 8px; margin: 10px 0 6px; padding: 10px 12px; border: 1px dashed var(--line-strong); border-radius: 10px; }
+.oc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 700px) { .oc-cat > div { grid-template-columns: 1fr; gap: 4px; } }

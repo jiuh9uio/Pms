@@ -37,7 +37,8 @@ export const offerTemplateInput = z.object({
   name: z.string().trim().min(1, 'Bitte einen Namen eintragen').max(80), area: z.enum(OFFER_AREAS),
   title: text(160), intro: text(3000), closing: text(3000),
   questions: z.array(z.string().trim().min(1).max(200)).max(40).default([]),
-  items: z.array(z.object({ itemId: z.uuid(), quantity: z.number().positive().max(100000).nullable().default(null) })).max(60).default([]),
+  /** Produktkatalog der Vorlage (z. B. „Tagung“); preselect = gleich ins neue Angebot übernehmen, sonst nur zur Auswahl angeboten */
+  items: z.array(z.object({ itemId: z.uuid(), quantity: z.number().positive().max(100000).nullable().default(null), preselect: z.boolean().default(true) })).max(80).default([]),
   validDays: z.number('Bitte eine Zahl eingeben').int().min(1).max(365), depositPercent: z.number('Bitte eine Zahl eingeben').int().min(0).max(100),
   documentIds: z.array(z.uuid()).max(10).default([]), sort: z.number().int().min(0).max(9999).default(0), active: z.boolean().default(true),
 });

@@ -101,7 +101,7 @@ function NewOfferDialog({ prefill, onClose, onCreated }: { prefill: { customerNa
         <button type="button" role="radio" aria-checked={mode === 'offer'} className={mode === 'offer' ? 'on' : ''} onClick={() => setMode('offer')}>
           <b>Direkt ein Angebot</b><small>Leistungen mit Preisen als PDF, mit AGB und Annahme über den Link.</small></button>
       </div>
-      <Field label="Vorlage" hint={mode === 'questions' ? 'übernimmt den Fragenkatalog; Leistungen stehen schon bereit, wenn Sie später das Angebot erstellen' : undefined}><select value={v.templateId} onChange={(e) => set('templateId', e.target.value)}>
+      <Field label="Anlass (Vorlage)" hint={mode === 'questions' ? 'übernimmt den Fragenkatalog; Leistungen stehen schon bereit, wenn Sie später das Angebot erstellen' : 'z. B. Tagung – bestimmt Texte, Fragen und den passenden Produktkatalog'}><select value={v.templateId} onChange={(e) => set('templateId', e.target.value)}>
         <option value="">ohne Vorlage (leer)</option>{(tpls ?? []).filter((t) => t.active).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
       <div className="formgrid">
         <Field label="Firma"><input value={v.customerCompany} onChange={(e) => set('customerCompany', e.target.value)} /></Field>
@@ -129,6 +129,9 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const { data: o, error } = useLoad(() => api<OfferDto>('GET', `/offers/${id}`), [id, rev]);
   const items = useLoad(() => api<OfferItemDto[]>('GET', '/offer-items')).data ?? [];
   const docs = useLoad(() => api<OfferDocumentDto[]>('GET', '/offer-documents')).data ?? [];
+  const tpls = useLoad(() => api<OfferTemplateDto[]>('GET', '/offer-templates')).data ?? [];
+  /** gewählter Produktkatalog (Vorlage) – Vorgabe: die Vorlage des Angebots */
+  const [catalogId, setCatalogId] = useState<string | null>(null);
   const [v, setV] = useState<(Omit<OfferDto, 'lines'> & { lines: LineDraft[]; questionsText: string }) | null>(null);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -151,6 +154,8 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
     if (!it) return;
     ch({ lines: [...v.lines, { itemId: it.id, description: it.name, detail: it.description, unit: it.unit, quantity: String(quantityFor(it.unit, v.persons, v.eventDate, v.eventEnd)).replace('.', ','), price: moneyInput(it.priceCents), tax: String(it.taxRatePercent) }] });
   };
+  const catTpl = tpls.find((t) => t.id === (catalogId ?? o.templateId ?? ''));
+  const catItems = (catTpl?.items ?? []).map((c) => items.find((x) => x.id === c.itemId && x.active)).filter((x): x is OfferItemDto => !!x);
   const recalc = () => ch({ lines: v.lines.map((l) => (l.unit === 'flat' ? l : { ...l, quantity: String(quantityFor(l.unit, v.persons, v.eventDate, v.eventEnd)) })) });
   const save = async (quiet = false) => {
     setBusy('save');
@@ -268,9 +273,20 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
           </tr>
         ))}</tbody>
       </table></div>
+      {!locked && tpls.some((t) => t.active && t.items.length) && (
+        <div className="oc-quick">
+          <label className="inlinelabel">Produktkatalog <select value={catalogId ?? o.templateId ?? ''} onChange={(e) => setCatalogId(e.target.value)} aria-label="Produktkatalog">
+            <option value="">– keiner –</option>{tpls.filter((t) => t.active && t.items.length).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
+          {catItems.length > 0 && <div className="oc-chips">{catItems.map((x) => (
+            <button type="button" key={x.id} className={`chip${v.lines.some((l) => l.itemId === x.id) ? ' on' : ''}`} title={v.lines.some((l) => l.itemId === x.id) ? 'steht schon im Angebot – noch einmal hinzufügen' : x.description || undefined} onClick={() => addItem(x.id)}>{v.lines.some((l) => l.itemId === x.id) ? '✓' : '+'} {x.name} <small className="muted">{formatMoney(x.priceCents)} {UNIT_LABEL[x.unit]}</small></button>
+          ))}</div>}
+        </div>
+      )}
       {!locked && <div className="btnrow">
         <select value="" onChange={(e) => { addItem(e.target.value); e.target.value = ''; }} aria-label="Leistung aus dem Katalog hinzufügen">
-          <option value="">+ Leistung aus dem Katalog …</option>{items.filter((x) => x.active).map((x) => <option key={x.id} value={x.id}>{x.name} · {formatMoney(x.priceCents)} {UNIT_LABEL[x.unit]}</option>)}
+          <option value="">+ Leistung aus allen Leistungen …</option>
+          {catItems.length > 0 && <optgroup label={`Katalog ${catTpl?.name ?? ''}`}>{catItems.map((x) => <option key={x.id} value={x.id}>{x.name} · {formatMoney(x.priceCents)} {UNIT_LABEL[x.unit]}</option>)}</optgroup>}
+          <optgroup label="Alle Leistungen">{items.filter((x) => x.active).map((x) => <option key={x.id} value={x.id}>{x.name} · {formatMoney(x.priceCents)} {UNIT_LABEL[x.unit]}</option>)}</optgroup>
         </select>
         <Button onClick={() => ch({ lines: [...v.lines, { itemId: null, description: '', detail: '', unit: 'flat', quantity: '1', price: '', tax: '19' }] })}>+ Freie Zeile</Button>
         <Button onClick={recalc} title="Mengen aus Personen, Tagen und Nächten neu berechnen (pauschale Zeilen bleiben)">Mengen neu berechnen</Button>
@@ -372,7 +388,7 @@ function TemplatesAdmin() {
   return (
     <section className="card">
       <div className="cardhead"><h2>Vorlagen</h2><div className="actions"><Button variant="primary" onClick={() => setEdit('new')}>Vorlage anlegen</Button></div></div>
-      <p className="muted small">Eine Vorlage enthält Titel, Texte, den Fragenkatalog, vorausgewählte Leistungen, Gültigkeit, Anzahlung und die Anlagen (z. B. AGB). Die Mustervorlagen enthalten noch keine Leistungen und Preise – bitte ergänzen.</p>
+      <p className="muted small">Eine Vorlage steht für eine Art von Anlass (z. B. Tagung, Hochzeit, Geburtstag) und enthält Titel, Texte, den Fragenkatalog, ihren eigenen Produktkatalog (welche Leistungen dazu passen und welche gleich ins Angebot kommen), Gültigkeit, Anzahlung und die Anlagen (z. B. AGB). Die Mustervorlagen enthalten noch keine Leistungen und Preise – bitte ergänzen.</p>
       <LoadState error={error} loading={!data} />
       {data && <ul className="plain">{data.map((t) => <li key={t.id} className={`rowlink${t.active ? '' : ' faded'}`} onClick={() => setEdit(t)}><span><b>{t.name}</b> <small className="muted">{AREA_LABEL[t.area]} · {t.items.length} Leistungen · {t.questions.length} Fragen · gültig {t.validDays} Tage{t.depositPercent ? ` · Anzahlung ${t.depositPercent} %` : ''}</small></span></li>)}</ul>}
       {edit && <TemplateDialog tpl={edit === 'new' ? null : edit} onClose={() => setEdit(null)} />}
@@ -386,12 +402,12 @@ function TemplateDialog({ tpl, onClose }: { tpl: OfferTemplateDto | null; onClos
   const docs = useLoad(() => api<OfferDocumentDto[]>('GET', '/offer-documents')).data ?? [];
   const [v, setV] = useState({
     name: tpl?.name ?? '', area: tpl?.area ?? 'both' as OfferArea, title: tpl?.title ?? '', intro: tpl?.intro ?? '', closing: tpl?.closing ?? '',
-    questions: (tpl?.questions ?? []).join('\n'), itemIds: (tpl?.items ?? []).map((x) => x.itemId), validDays: String(tpl?.validDays ?? 14), depositPercent: String(tpl?.depositPercent ?? 0),
+    questions: (tpl?.questions ?? []).join('\n'), catalog: (tpl?.items ?? []).map((x) => ({ itemId: x.itemId, preselect: x.preselect !== false, quantity: x.quantity ?? null })), validDays: String(tpl?.validDays ?? 14), depositPercent: String(tpl?.depositPercent ?? 0),
     documentIds: tpl?.documentIds ?? [], sort: String(tpl?.sort ?? 0), active: tpl?.active ?? true,
   });
   const [busy, setBusy] = useState(false);
   const save = async () => {
-    const p = offerTemplateInput.safeParse({ ...v, questions: v.questions.split('\n').map((x) => x.trim()).filter(Boolean), items: v.itemIds.map((itemId) => ({ itemId, quantity: null })),
+    const p = offerTemplateInput.safeParse({ ...v, questions: v.questions.split('\n').map((x) => x.trim()).filter(Boolean), items: v.catalog,
       validDays: Number(v.validDays) || 0, depositPercent: Number(v.depositPercent) || 0, sort: Number(v.sort) || 0 });
     if (!p.success) { toast(p.error.issues[0]?.message ?? 'Bitte Eingaben prüfen', 'error'); return; }
     setBusy(true);
@@ -413,7 +429,22 @@ function TemplateDialog({ tpl, onClose }: { tpl: OfferTemplateDto | null; onClos
       <Field label="Einleitung" wide><textarea rows={3} value={v.intro} onChange={(e) => setV({ ...v, intro: e.target.value })} /></Field>
       <Field label="Fragenkatalog (eine Frage je Zeile)" wide><textarea rows={6} value={v.questions} onChange={(e) => setV({ ...v, questions: e.target.value })} /></Field>
       <Field label="Schlusstext" wide><textarea rows={2} value={v.closing} onChange={(e) => setV({ ...v, closing: e.target.value })} /></Field>
-      <Field label="Vorausgewählte Leistungen" wide><div className="radiolist">{items.filter((i) => i.active).map((i) => <label key={i.id} className="check"><input type="checkbox" checked={v.itemIds.includes(i.id)} onChange={(e) => setV({ ...v, itemIds: toggle(v.itemIds, i.id, e.target.checked) })} /><span>{i.name} <small className="muted">{formatMoney(i.priceCents)} {UNIT_LABEL[i.unit]}</small></span></label>)}{items.length === 0 && <span className="muted small">Erst Leistungen anlegen.</span>}</div></Field>
+      <Field label="Produktkatalog dieser Vorlage" wide hint="„im Katalog“: wird beim Angebot mit dieser Vorlage zur schnellen Auswahl angeboten. „gleich ins Angebot“: steht beim Anlegen schon drin.">
+        <div className="oc-cat">
+          {items.filter((i) => i.active || v.catalog.some((c) => c.itemId === i.id)).map((i) => {
+            const c = v.catalog.find((x) => x.itemId === i.id);
+            const setC = (next: { in: boolean; pre: boolean }) => setV({ ...v, catalog: next.in ? (c ? v.catalog.map((x) => (x.itemId === i.id ? { ...x, preselect: next.pre } : x)) : [...v.catalog, { itemId: i.id, preselect: next.pre, quantity: null }]) : v.catalog.filter((x) => x.itemId !== i.id) });
+            return (
+              <div key={i.id} className={c ? 'on' : ''}>
+                <span>{i.name} <small className="muted">{formatMoney(i.priceCents)} {UNIT_LABEL[i.unit]}</small></span>
+                <label className="check"><input type="checkbox" checked={!!c} onChange={(e) => setC({ in: e.target.checked, pre: false })} /><span>im Katalog</span></label>
+                <label className="check"><input type="checkbox" checked={!!c?.preselect} disabled={!c} onChange={(e) => setC({ in: true, pre: e.target.checked })} /><span>gleich ins Angebot</span></label>
+              </div>
+            );
+          })}
+          {items.length === 0 && <span className="muted small">Erst unter „Leistungen“ Leistungen anlegen.</span>}
+        </div>
+      </Field>
       <Field label="Anlagen" wide><div className="radiolist">{docs.filter((d) => d.active || v.documentIds.includes(d.id)).map((d) => <label key={d.id} className="check"><input type="checkbox" checked={v.documentIds.includes(d.id)} onChange={(e) => setV({ ...v, documentIds: toggle(v.documentIds, d.id, e.target.checked) })} /><span>{d.name}{!d.active && <small className="muted"> (ausgeblendet – wird nicht mehr übernommen)</small>}</span></label>)}{docs.length === 0 && <span className="muted small">Noch keine Dokumente hochgeladen.</span>}</div></Field>
       <label className="check"><input type="checkbox" checked={v.active} onChange={(e) => setV({ ...v, active: e.target.checked })} /><span>In Benutzung</span></label>
     </Dialog>

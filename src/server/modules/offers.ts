@@ -194,6 +194,7 @@ export async function createOffer(db: Db, actor: Actor, v: OfferCreateInputT) {
     // Leistungen der Vorlage mit vorgeschlagener Menge (aus Personen, Tagen, Nächten)
     let pos = 1;
     for (const t of (tpl?.items as OfferTemplateDto['items'] | undefined) ?? []) {
+      if (t.preselect === false) continue; // nur im Katalog der Vorlage, nicht vorausgewählt
       const it = items.find((x) => x.id === t.itemId && x.active);
       if (!it) continue;
       const q = t.quantity ?? quantityFor(it.unit, v.persons, v.eventDate, v.eventEnd);

@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.107.0
+
+- **Angebote: fester Produktkatalog je Anlass.** Jede Vorlage (Tagung, Familienfeier, Weihnachtsfeier, Gruppenübernachtung, eigene) hat jetzt ihren eigenen **Produktkatalog**: In der Vorlage je Leistung „im Katalog“ (wird angeboten) und „gleich ins Angebot“ (steht beim Anlegen schon drin) ankreuzen – z. B. bei „Tagung“: Tagungspauschale gleich ins Angebot, Kaffeepause extra und Technik zur Auswahl.
+- Beim Schreiben eines Angebots steht über den Leistungen der Kasten **„Produktkatalog“** mit dem Katalog des Anlasses: ein Klick auf eine Leistung fügt sie mit passender Menge hinzu (✓ = steht schon drin). Der Katalog lässt sich dort auch wechseln. In der Auswahlliste stehen die Katalog-Leistungen oben, darunter alle Leistungen.
+- „Neues Angebot“: Feld heißt jetzt „Anlass (Vorlage)“.
+
 ## 1.106.0
 
 - **Gutscheinnummer wie im Papierbuch: Nummer / Jahr** – 1/26, 2/26, 3/26 … und ab Januar automatisch wieder 1/27. Das ist jetzt die Vorgabe (Gutscheine → Nummern & Porto). Falls im Papierbuch für dieses Jahr schon Gutscheine stehen: „In 2026 ab Nummer“ eintragen (z. B. 38 → es geht mit 38/26 weiter).

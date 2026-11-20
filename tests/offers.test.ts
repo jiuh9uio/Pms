@@ -50,8 +50,10 @@ describe('Angebote', () => {
     const item = { name: 'Tagungspauschale ganztags', description: 'Raum, Technik, 2 Kaffeepausen, Mittagessen', unit: 'person_day', priceCents: 4900, taxRatePercent: 19, area: 'both', sort: 1, active: true };
     expect((await call('POST', '/offer-items', user, item)).statusCode).toBe(403);
     itemId = (await ok('POST', '/offer-items', admin, item)).id;
-    await ok('POST', '/offer-items', admin, { ...item, name: 'Übernachtung EZ', unit: 'night', priceCents: 7900, taxRatePercent: 7, sort: 2 });
-    await ok('PUT', `/offer-templates/${tpls[0].id}`, admin, { ...tpls[0], items: [{ itemId, quantity: null }], depositPercent: 30 });
+    const ez = (await ok('POST', '/offer-items', admin, { ...item, name: 'Übernachtung EZ', unit: 'night', priceCents: 7900, taxRatePercent: 7, sort: 2 })).id;
+    // Produktkatalog der Vorlage: Tagungspauschale gleich ins Angebot, Übernachtung nur zur Auswahl
+    await ok('PUT', `/offer-templates/${tpls[0].id}`, admin, { ...tpls[0], items: [{ itemId, quantity: null }, { itemId: ez, quantity: null, preselect: false }], depositPercent: 30 });
+    expect((await ok('GET', '/offer-templates', user))[0].items).toEqual([{ itemId, quantity: null, preselect: true }, { itemId: ez, quantity: null, preselect: false }]);
   });
 
   it('AGB als PDF hochladen; keine PDF wird abgelehnt', async () => {
