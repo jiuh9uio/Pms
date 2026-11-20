@@ -379,7 +379,7 @@ export async function sendOffer(db: Db, actor: Actor, id: string, v: { to: strin
   if (o.mode === 'questions') {
     // nur Fragen: E-Mail ohne PDF; der Link führt zum Beantworten
     if (!o.questions.length) throw conflict('Bitte zuerst mindestens eine Frage eintragen.');
-    await sendMail(db, actor, { to: v.to, subject: withCode(v.subject, o.number), text: v.text });
+    await sendMail(db, actor, { to: v.to, subject: withCode(v.subject, o.number), threadCode: o.number, text: v.text });
     await logMailOut(db, id, 'questions', actor, v.to, withCode(v.subject, o.number), v.text);
     const done = await db.update(offers).set({ status: 'sent', sentAt: new Date(), sentTo: v.to, updatedAt: new Date(), version: o.version + 1 })
       .where(and(eq(offers.id, id), eq(offers.version, o.version), sql`${offers.status} in ('draft', 'sent')`)).returning({ id: offers.id });
@@ -393,7 +393,7 @@ export async function sendOffer(db: Db, actor: Actor, id: string, v: { to: strin
   const [cur] = await db.select({ pdf: offers.sentPdf, hash: offers.sentHash }).from(offers).where(eq(offers.id, id));
   const pdf = o.status === 'sent' && cur?.pdf ? cur.pdf : await render(db, o);
   const docs = o.documentIds.length ? await db.select().from(offerDocuments).where(sql`${offerDocuments.id} in ${o.documentIds}`) : [];
-  await sendMail(db, actor, { to: v.to, subject: withCode(v.subject, o.number), text: v.text, attachments: [
+  await sendMail(db, actor, { to: v.to, subject: withCode(v.subject, o.number), threadCode: o.number, text: v.text, attachments: [
     { filename: `Angebot_${o.number}.pdf`, content: pdf, contentType: 'application/pdf' },
     ...docs.map((d) => ({ filename: d.fileName, content: d.data, contentType: 'application/pdf' })),
   ] });
@@ -585,7 +585,7 @@ export async function catalogMailDraft(db: Exec, id: string, templateId: string 
 export async function sendCatalog(db: Db, actor: Actor, id: string, templateId: string | null, v: { to: string; subject: string; text: string }) {
   const { fileName, pdf, tpl, o } = await catalogPdf(db, id, templateId);
   if (o.status === 'accepted' || o.status === 'declined') throw conflict('Das Angebot ist bereits abgeschlossen.');
-  await sendMail(db, actor, { to: v.to, subject: withCode(v.subject, o.number), text: v.text, attachments: [{ filename: fileName, content: pdf, contentType: 'application/pdf' }] });
+  await sendMail(db, actor, { to: v.to, subject: withCode(v.subject, o.number), threadCode: o.number, text: v.text, attachments: [{ filename: fileName, content: pdf, contentType: 'application/pdf' }] });
   await logMailOut(db, id, 'catalog', actor, v.to, withCode(v.subject, o.number), v.text);
   await record(db, actor, { action: 'send_catalog', entity: 'offer', entityId: id, after: { to: v.to, number: o.number, catalog: tpl.name } });
   return { ok: true };

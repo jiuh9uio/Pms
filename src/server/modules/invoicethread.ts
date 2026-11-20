@@ -4,7 +4,7 @@ import type { Db, Exec } from '../db/client.js';
 import { inboxMails, invoiceEvents, invoices, offerEvents } from '../db/schema.js';
 import { conflict, notFound } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
-import { ownText, replyHint } from './offerthread.js';
+import { ownText, replyHint, type LinkOpts } from './offerthread.js';
 
 /**
  * Verlauf eines Kostenvoranschlags (und der Rechnung, die daraus wird). Die KV-Nummer (z. B. „KV-2026-0004“) steht im Betreff jeder
@@ -26,12 +26,17 @@ export async function lastRecipient(db: Exec, invoiceId: string) {
 }
 
 const fromOf = (m: { fromName: string; fromAddr: string }) => (m.fromName ? `${m.fromName} <${m.fromAddr}>` : m.fromAddr);
-/** Neue Posteingangs-Mail: KV-Nummer im Betreff (sonst im Text) suchen und zuordnen */
-export async function linkInboxMailToInvoice(db: Exec, m: { id: string; subject: string; body: string; fromName: string; fromAddr: string; receivedAt: Date }): Promise<boolean> {
-  const code = (CODE.exec(m.subject) ?? CODE.exec(m.body))?.[0]?.toUpperCase();
+/** Neue Posteingangs-Mail dem Kostenvoranschlag zuordnen: technischer Verweis – oder KV-Nummer im Betreff und ein Absender, an den der Kostenvoranschlag ging */
+export async function linkInboxMailToInvoice(db: Exec, m: { id: string; subject: string; body: string; fromName: string; fromAddr: string; receivedAt: Date }, opts: LinkOpts = {}): Promise<boolean> {
+  const code = (opts.code ?? CODE.exec(m.subject)?.[0])?.toUpperCase();
   if (!code) return false;
   const [inv] = await db.select({ id: invoices.id }).from(invoices).where(eq(invoices.estimateNumber, code));
   if (!inv) return false;
+  if (!opts.trusted) {
+    const [known] = !m.fromAddr.trim() ? [] : await db.select({ id: invoiceEvents.id }).from(invoiceEvents).where(and(eq(invoiceEvents.invoiceId, inv.id),
+      sql`(lower(${invoiceEvents.toAddr}) = lower(${m.fromAddr}) or position(lower(${m.fromAddr}) in lower(${invoiceEvents.who})) > 0)`)).limit(1);
+    if (!known) return false;
+  }
   const rows = await db.insert(invoiceEvents).values({ invoiceId: inv.id, at: m.receivedAt, kind: 'mail_in', who: fromOf(m), subject: m.subject, body: m.body.slice(0, MAX), inboxMailId: m.id })
     .onConflictDoNothing().returning({ id: invoiceEvents.id });
   return rows.length > 0;

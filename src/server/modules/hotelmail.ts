@@ -153,7 +153,7 @@ export async function sendEstimateMail(db: Db, actor: Actor, invoiceId: string, 
   if (!(await getInvoice(db, invoiceId)).lines.length) throw conflict('Der Kostenvoranschlag hat noch keine Positionen – bitte erst mindestens eine Position hinzufügen.');
   const f = await estimatePdf(db, invoiceId);
   const subject = withKvCode(v.subject, f.number);
-  await sendMail(db, actor, { ...v, subject, attachments: [{ filename: f.filename, content: f.pdf, contentType: 'application/pdf' }] });
+  await sendMail(db, actor, { ...v, subject, threadCode: f.number, attachments: [{ filename: f.filename, content: f.pdf, contentType: 'application/pdf' }] });
   await logInvoiceMailOut(db, invoiceId, 'estimate', actor, v.to, subject, v.text);
   await record(db, actor, { action: 'mail_estimate', entity: 'invoice', entityId: invoiceId, after: { to: v.to, subject: v.subject, estimateNumber: f.number } });
 }

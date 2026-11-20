@@ -454,11 +454,15 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.post('/inbox/:id/mail', email, (req) => inbox.sendReply(db, actor(req), z.uuid().parse((req.params as { id: string }).id), mailSendInput.parse(req.body), tpl(req)));
     // Vorgänge: zusammengehörige E-Mails mit eigener Nummer
     const cid = (req: FastifyRequest) => z.uuid().parse((req.params as { id: string }).id);
-    api.get('/mail-cases', email, (req) => mailcases.listCases(db, I.caseListQuery.parse(req.query)));
+    api.get('/mail-cases', email, (req) => mailcases.listCases(db, I.caseListQuery.parse(req.query), { offers: S.hasModule(req.user!, 'hotel') || S.hasModule(req.user!, 'restaurant') }));
     api.get('/mail-cases/:id', email, (req) => mailcases.getCase(db, cid(req)));
     api.patch('/mail-cases/:id', email, (req) => mailcases.updateCase(db, actor(req), cid(req), I.caseUpdateInput.parse(req.body)));
     api.post('/mail-cases/:id/assign', email, (req) => mailcases.assignMailToCase(db, actor(req), cid(req), z.object({ inboxMailId: z.uuid() }).parse(req.body).inboxMailId));
     api.post('/mail-cases/:id/remove', email, (req) => mailcases.removeMailFromCase(db, actor(req), cid(req), z.object({ inboxMailId: z.uuid() }).parse(req.body).inboxMailId));
+    const mailIdOf = (req: FastifyRequest) => z.object({ inboxMailId: z.uuid() }).parse(req.body).inboxMailId;
+    api.post('/mail-cases/:id/move', email, (req) => mailcases.moveMail(db, actor(req), cid(req), mailIdOf(req), I.caseNumberInput.parse(req.body).number));
+    api.post('/mail-cases/:id/split', email, (req) => mailcases.splitMail(db, actor(req), cid(req), mailIdOf(req)));
+    api.post('/mail-cases/:id/merge', email, (req) => mailcases.mergeCase(db, actor(req), cid(req), I.caseNumberInput.parse(req.body).number));
     api.post('/inbox/:id/case', email, async (req) => { const c = await mailcases.ensureCaseForMail(db, actor(req), cid(req)); return { id: c.id, number: c.number }; });
     api.get('/settings/mail-rules', { preHandler: requireAdmin }, () => inbox.getMailRules(db));
     api.put('/settings/mail-rules', { preHandler: requireAdmin }, (req) => inbox.saveMailRules(db, actor(req), I.mailRulesInput.parse(req.body)));

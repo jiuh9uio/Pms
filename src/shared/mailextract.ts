@@ -6,6 +6,10 @@
 export type MailKind = 'hotel' | 'table' | 'event' | 'meeting' | 'voucher' | 'question' | 'other';
 export interface MailExtract {
   kind: MailKind;
+  /** Namen der Anhänge (die Dateien selbst liegen nur im Postfach) */
+  attachments?: { name: string; size: number; type: string }[];
+  /** wann die Bestätigung der daraus angelegten Reservierung gesendet wurde */
+  confirmedAt?: string;
   /** gefundene Tage in Reihenfolge des Textes, ohne Doppelte (ISO) */
   dates: string[];
   /** Hotel: Anreise und Abreise, wenn erkennbar */

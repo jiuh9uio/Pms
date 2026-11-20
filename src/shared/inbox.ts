@@ -83,7 +83,8 @@ export type WebRequestSettings = z.infer<typeof webRequestSettingsInput>;
 export interface WebRequestPublic { enabled: boolean; hotelName: string; intro: string; privacy: string }
 
 // ---------- Vorgänge: zusammengehörige E-Mails mit eigener Nummer ----------
-export const CASE_STATUSES = ['open', 'done'] as const;
+export const CASE_STATUSES = ['open', 'working', 'done', 'archived'] as const;
+export const CASE_STATUS_LABEL: Record<(typeof CASE_STATUSES)[number], string> = { open: 'Offen', working: 'In Bearbeitung', done: 'Erledigt', archived: 'Archiviert' };
 export type CaseStatus = (typeof CASE_STATUSES)[number];
 /** ours = zuletzt hat der Kunde geschrieben (wir sind dran); theirs = zuletzt haben wir geschrieben */
 export type CaseTurn = 'ours' | 'theirs';
@@ -92,10 +93,12 @@ export interface CaseListRow {
   source: 'case' | 'offer' | 'invoice';
   id: string; number: string; kind: MailKind | 'offer' | 'estimate'; title: string; contact: string; status: CaseStatus; turn: CaseTurn | null;
   lastAt: string; snippet: string; count: number;
+  /** eingegangene Nachrichten, die noch niemand bearbeitet hat */
+  unread: number;
   /** Reservierung angelegt / Bestätigung gesendet (nur Vorgänge im Posteingang) */
   linked?: boolean; confirmed?: boolean;
 }
-export interface CaseMessage { id: string; at: string; dir: 'in' | 'out'; who: string; subject: string; text: string; inboxMailId: string | null; mailStatus: InboxStatus | null }
+export interface CaseMessage { id: string; at: string; dir: 'in' | 'out'; who: string; subject: string; text: string; inboxMailId: string | null; mailStatus: InboxStatus | null; attachments: { name: string; size: number; type: string }[] }
 export interface CaseDto {
   id: string; number: string; kind: MailKind; title: string; contactName: string; contactAddr: string; status: CaseStatus; turn: CaseTurn | null; createdAt: string; createdBy: string;
   messages: CaseMessage[];
@@ -109,7 +112,9 @@ export interface CaseDto {
   confirmedAt: string | null;
   candidates: { inboxMailId: string; at: string; from: string; subject: string }[];
 }
-export const caseListQuery = z.object({ status: z.enum(['open', 'done', 'all']).default('open'), kind: z.string().max(20).default('all'), q: z.string().trim().max(80).default('') });
+const caseDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional();
+export const caseListQuery = z.object({ status: z.enum(['open', 'done', 'archived', 'all']).default('open'), kind: z.string().max(20).default('all'), q: z.string().trim().max(80).default(''), from: caseDay, to: caseDay });
+export const caseNumberInput = z.object({ number: z.string().trim().regex(/^[Vv]-\d{4}-\d{4,6}$/, 'Bitte eine Vorgangsnummer wie V-2026-0001 eintragen') });
 export const caseUpdateInput = z.object({ kind: z.enum(MAIL_KINDS).optional(), status: z.enum(CASE_STATUSES).optional(), title: z.string().trim().max(200).optional() });
 
 // ---------- Antwortvorschläge: eigene Textbausteine je Kategorie (Vorgänge → Antwortvorlagen) ----------

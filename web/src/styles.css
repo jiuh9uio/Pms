@@ -1312,3 +1312,8 @@ a.linkcard.attention b { color: var(--warn); }
 .rt-bar { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; } .rt-bar > span { display: block; height: 100%; background: var(--accent); transition: width 1s linear; }
 /* Suche in der Kundendatenbank */
 .cpick { display: grid; gap: 4px; margin: 0 0 10px; } .cpick input { border-style: dashed; } .cpick-hits { margin-top: 0; max-height: 260px; overflow: auto; }
+/* Vorgänge: Ungelesen, Anhänge, Datum */
+.msg-unread { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+.msg-att { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 6px; font-size: 13px; } .msg-att > span { padding: 2px 8px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); }
+.msg-from { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); } .msg-from input { width: auto; padding-top: 5px; padding-bottom: 5px; }
+.msg-merge { margin-left: auto; align-self: center; }

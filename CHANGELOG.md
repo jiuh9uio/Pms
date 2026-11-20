@@ -3,6 +3,32 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.123.0
+
+Gründliche Prüfung und Verbesserung der E-Mail-Vorgänge (Bericht: `docs/vorgaenge-pruefbericht.md`).
+
+**Zuordnung sicherer und zuverlässiger**
+- Antworten werden jetzt zuerst über die **technischen Verweise der E-Mail** erkannt – auch wenn der Kunde den Betreff ändert oder die Nummer löscht.
+- Die Nummer im Betreff zählt nur noch, wenn der **Absender zum Vorgang gehört**. Fremde Absender, Weiterleitungen oder eine Nummer nur im Text werden nicht mehr automatisch zugeordnet, sondern im Vorgang **zur Prüfung vorgeschlagen**. Das gilt auch für Angebote und Kostenvoranschläge.
+- Eine E-Mail gehört nie zu zwei Vorgängen zugleich.
+
+**Abruf robuster**
+- Eine einzelne defekte E-Mail blockiert den Abruf nicht mehr; sie erscheint als Hinweis im Posteingang.
+- Setzt das Postfach seine Nummerierung zurück, entstehen keine doppelten E-Mails mehr.
+- HTML-E-Mails mit Anhang ohne Textteil wurden leer gespeichert – jetzt wird der Text gelesen.
+- Ein falsches Datum des Absenders (Zukunft) bringt die Reihenfolge nicht mehr durcheinander.
+
+**Bedienung**
+- **Anhänge werden angezeigt** (Name und Größe). Die Dateien selbst bleiben im E-Mail-Programm.
+- **Stand:** Offen, In Bearbeitung, Erledigt, Archiviert – direkt im Vorgang wählbar; Filter „Archiv“ und „seit Datum“.
+- **Neue Nachrichten** sind in der Liste mit Anzahl markiert.
+- **Falsch zugeordnet?** „gehört nicht hierher“: in einen anderen Vorgang verschieben, als eigenen Vorgang abtrennen oder nur lösen. **„Zusammenführen …“** legt zwei Vorgänge zusammen (die alte Nummer bleibt im Archiv und verweist auf den Zielvorgang).
+
+**Sicherheit und Tempo**
+- Angebots-Verläufe in der Vorgangsliste sieht nur, wer Angebote sehen darf.
+- Die Vorgangsliste lädt deutlich sparsamer (eine Abfrage statt vieler).
+- Keine Änderung an der Datenbankstruktur, keine Daten gelöscht. An den Löschregeln wurde nichts geändert.
+
 ## 1.122.0
 
 - **Kundendatenbank überall nutzbar.** Wo Empfänger- oder Kundendaten eingetragen werden, gibt es jetzt oben das Suchfeld **„Aus der Kundendatenbank übernehmen“**: Name, Firma oder Ort tippen, Treffer anklicken – Name, Firma, Anschrift, E-Mail und Telefon werden eingetragen und bleiben danach änderbar. Gesucht wird in der Gästekartei und bei den Firmen.

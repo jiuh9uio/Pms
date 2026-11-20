@@ -645,7 +645,8 @@ export const mailCases = pgTable('mail_cases', {
   title: text('title').notNull().default(''),
   contactName: text('contact_name').notNull().default(''),
   contactAddr: text('contact_addr').notNull().default(''),
-  status: text('status', { enum: ['open', 'done'] }).notNull().default('open'),
+  /** open = offen, working = in Bearbeitung, done = erledigt, archived = archiviert (Textspalte ohne Datenbank-Einschränkung) */
+  status: text('status', { enum: ['open', 'working', 'done', 'archived'] }).notNull().default('open'),
   createdBy: text('created_by').notNull().default(''),
   createdAt: ts('created_at').notNull().defaultNow(),
   updatedAt: ts('updated_at').notNull().defaultNow(),

@@ -326,6 +326,10 @@ describe('Übergaben zwischen den Schritten', () => {
     const inv = await ok('POST', '/invoices', admin, { include: 'none' });
     const kv = (await ok('POST', `/invoices/${inv.id}/estimate`, admin)).estimateNumber as string;
     const m2 = await mail(2, `AW: Kostenvoranschlag ${kv}`);
+    // ohne dass der Kostenvoranschlag je an diese Adresse ging, wird nichts zugeordnet (Nummer allein genügt nicht)
+    expect(await linkInboxMailToInvoice(db, m2)).toBe(false);
+    const { logInvoiceMailOut } = await import('../src/server/modules/invoicethread.js');
+    await logInvoiceMailOut(db, inv.id, 'estimate', { userId: null, userName: 'Chefin' } as never, 'kunde@example.org', `Kostenvoranschlag ${kv}`, 'Bitte mit Ja oder Nein antworten.');
     expect(await linkInboxMailToInvoice(db, m2)).toBe(true);
     await ok('POST', `/inbox/${m2.id}/mail?template=reply`, admin, { to: 'kunde@example.org', subject: `Re: Kostenvoranschlag ${kv}`, text: 'Danke für Ihre Rückmeldung.' });
     expect((await ok('GET', `/invoices/${inv.id}/timeline`, admin)).entries.map((e: { title: string }) => e.title)).toContain('Unsere Antwort');

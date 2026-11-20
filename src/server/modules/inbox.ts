@@ -6,7 +6,7 @@ import { MAIL_KINDS, type InboxCounts, type InboxMailDto, type InboxSettingsDto,
 import { extract, type MailExtract, type MailKind } from '../../shared/mailextract.js';
 import type { Db, Exec } from '../db/client.js';
 import { REQUEST_LABEL, siteFrom, type SiteRequest } from '../../shared/site.js';
-import { inboxMails, restaurantTables, settings, tableReservations } from '../db/schema.js';
+import { inboxMails, mailCases, restaurantTables, settings, tableReservations } from '../db/schema.js';
 import { clientKey } from '../lib/clientkey.js';
 import { AppError, conflict, notFound } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
@@ -14,7 +14,7 @@ import { invoiceOfInboxMail, linkInboxMailToInvoice, logInvoiceMailOut, withKvCo
 import { caseRef, ensureCaseForMail, linkInboxMailToCase, logCaseOut, withCaseCode } from './mailcases.js';
 import { linkInboxMail, logMailOut, offerOfInboxMail, withCode } from './offerthread.js';
 import { bookingMailDraft, ready as mailReady, signature } from './hotelmail.js';
-import { decrypt, encrypt, sendMail } from './mail.js';
+import { decrypt, encrypt, sendMail, threadCodesOf } from './mail.js';
 import { getHotel } from './settings.js';
 
 /**
@@ -54,7 +54,7 @@ export async function inboxState(db: Exec): Promise<InboxState> {
   const [u] = await db.select({ n: sql<number>`count(*)::int` }).from(inboxMails).where(sql`${inboxMails.status} = 'new' and ${inboxMails.caseId} is null`);
   return { lastFetchAt: st.lastFetchAt, lastError: st.lastError, ready: ready(s), autoMinutes: s.autoMinutes, newCount: n!.n, newWithoutCase: u!.n,
     // „wir sind dran“: offene Vorgänge, in denen zuletzt der Kunde geschrieben hat, plus neue Nachrichten ohne Vorgang
-    attention: u!.n + Number((await db.execute(sql`select count(*)::int as n from mail_cases c where c.status = 'open'
+    attention: u!.n + Number((await db.execute(sql`select count(*)::int as n from mail_cases c where c.status in ('open', 'working')
       and (select max(m.received_at) from inbox_mails m where m.case_id = c.id) > coalesce((select max(o.at) from mail_case_out o where o.case_id = c.id), '-infinity'::timestamptz)`))[0]!.n) };
 }
 
@@ -158,6 +158,62 @@ function explain(e: unknown) {
 const berlinDay = (d: Date) => d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Berlin' });
 let running = false;
 
+/** HTML → reiner Text (Notlösung, wenn die E-Mail keinen Textteil hat): Skripte, Stile und alle Tags entfallen */
+export const htmlToText = (h: string) => h.slice(0, 400_000).replace(/<(script|style|head|title)\b[\s\S]*?<\/\1\s*>/gi, ' ').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr|li|h[1-6]|table)\s*>/gi, '\n')
+  .replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&amp;/gi, '&').replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ');
+
+/** Eine abgeholte Nachricht speichern und – nur bei sicherer Grundlage – einem Vorgang, Angebot oder Kostenvoranschlag zuordnen. Liefert 1, wenn sie neu ist. */
+async function storeInbound(db: Db, rules: MailRules, uidValidity: string, raw: RawMail): Promise<number> {
+  const p = await simpleParser(raw.source, { skipImageLinks: true, skipTextToHtml: true });
+  const from = p.from?.value[0];
+  // Datum laut Absender – außer es liegt in der Zukunft (falsch gestellte Uhr): dann der Eingang am Server, sonst stimmt die Reihenfolge im Vorgang nicht
+  const date = p.date && p.date.getTime() <= raw.internalDate.getTime() + 3_600_000 ? p.date : raw.internalDate;
+  // Nur Text wird gespeichert. Fehlt ein Textteil (z. B. HTML-Nachricht mit Anhang), wird er aus dem HTML gewonnen – ohne Skripte, Stile und Tags.
+  const plain = (p.text ?? '').trim() ? p.text! : typeof p.html === 'string' ? htmlToText(p.html) : '';
+  const body = plain.replace(/\u0000/g, '').replace(/\n{4,}/g, '\n\n\n').trim().slice(0, MAX_BODY);
+  const subject = (p.subject ?? '').replace(/\u0000/g, '').slice(0, 300);
+  const messageId = (p.messageId ?? '').slice(0, 300);
+  // dieselbe Nachricht schon vorhanden (z. B. weil das Postfach seine Nummerierung zurückgesetzt hat)? Dann nicht doppelt anlegen
+  if (messageId) {
+    const [dup] = await db.select({ id: inboxMails.id }).from(inboxMails).where(and(eq(inboxMails.messageId, messageId), sql`${inboxMails.uidValidity} <> ${uidValidity}`)).limit(1);
+    if (dup) return 0;
+  }
+  const { ex, hidden } = judge(rules, { fromName: from?.name ?? '', fromAddr: from?.address ?? '', subject, body, day: berlinDay(date) });
+  // Anhänge werden nicht gespeichert, aber benannt – damit sichtbar ist, dass etwas dabei war (eingebettete Bilder zählen nicht)
+  const attachments = (p.attachments ?? []).filter((a) => !a.related && a.contentDisposition !== 'inline').slice(0, 20)
+    .map((a) => ({ name: String(a.filename ?? 'ohne Namen').replace(/[\u0000-\u001f]/g, '').slice(0, 120), size: a.size ?? 0, type: String(a.contentType ?? '').slice(0, 80) }));
+  const rows = await db.insert(inboxMails).values({
+    uidValidity, uid: raw.uid, messageId, fromName: (from?.name ?? '').slice(0, 200), fromAddr: (from?.address ?? '').slice(0, 200),
+    subject, receivedAt: date, body, kind: ex.kind, extract: attachments.length ? { ...ex, attachments } : ex, ...(hidden ? { status: 'ignored' as const, handledBy: BY_RULE } : {}),
+  }).onConflictDoNothing().returning({ id: inboxMails.id });
+  if (!rows[0]) return 0;
+  const refs = [p.inReplyTo, ...(Array.isArray(p.references) ? p.references : [p.references])].filter((x): x is string => typeof x === 'string' && !!x);
+  // Zuordnung darf den Abruf nie stören – im Zweifel bleibt die Nachricht unzugeordnet im Posteingang
+  await routeInbound(db, { id: rows[0].id, subject, body, fromName: from?.name ?? '', fromAddr: from?.address ?? '', receivedAt: date }, refs).catch(() => null);
+  return 1;
+}
+
+/**
+ * Zuordnung in fester Rangfolge; der erste Treffer gilt, eine Nachricht gehört nie zu zwei Vorgängen:
+ * 1. technische Verweise (In-Reply-To/References) auf eine unserer E-Mails oder auf eine frühere Nachricht desselben Vorgangs,
+ * 2. Nummer im Betreff – nur wenn der Absender zum Vorgang gehört (das prüfen die jeweiligen Funktionen),
+ * 3. sonst keine automatische Zuordnung (manuelle Prüfung über die Vorschläge im Vorgang).
+ */
+export async function routeInbound(db: Db, m: { id: string; subject: string; body: string; fromName: string; fromAddr: string; receivedAt: Date }, refs: string[]): Promise<'case' | 'offer' | 'invoice' | null> {
+  const byCode = async (code: string, trusted: boolean) => (code.startsWith('V-') ? ((await linkInboxMailToCase(db, m, { code, trusted })) ? 'case' as const : null)
+    : code.startsWith('AN-') ? ((await linkInboxMail(db, m, { code, trusted })) ? 'offer' as const : null)
+    : code.startsWith('KV-') ? ((await linkInboxMailToInvoice(db, m, { code, trusted })) ? 'invoice' as const : null) : null);
+  for (const code of threadCodesOf(refs)) { const hit = await byCode(code, true); if (hit) return hit; }
+  // Verweis auf eine frühere eingegangene Nachricht, die schon in einem Vorgang liegt (der Kunde schreibt in seinem eigenen Faden weiter)
+  const ids = refs.flatMap((r) => r.match(/<[^<>\s]+>/g) ?? []).slice(0, 50);
+  if (ids.length) {
+    const [prev] = await db.select({ number: mailCases.number }).from(inboxMails).innerJoin(mailCases, eq(mailCases.id, inboxMails.caseId)).where(sql`${inboxMails.messageId} in ${ids} and ${inboxMails.id} <> ${m.id}`).limit(1);
+    if (prev && await linkInboxMailToCase(db, m, { code: prev.number, trusted: true })) return 'case';
+  }
+  for (const code of [...m.subject.matchAll(/\b(?:V|AN|KV)-\d{4}-\d{4,6}\b/gi)].map((x) => x[0].toUpperCase())) { const hit = await byCode(code, false); if (hit) return hit; }
+  return null;
+}
+
 /** Neue Nachrichten abholen und einordnen. Bereits abgeholte werden nicht noch einmal geladen. */
 export async function fetchInbox(db: Db, actor: Actor | null): Promise<{ added: number }> {
   const s = await read(db, 'inbox', DEFAULTS);
@@ -172,23 +228,16 @@ export async function fetchInbox(db: Db, actor: Actor | null): Promise<{ added: 
     const got = await fetcher({ host: s.host, port: s.port, user: s.user, pass: decrypt(s.passEnc), folder: s.folder }, { uidValidity: st.uidValidity, lastUid: st.lastUid });
     let added = 0, lastUid = got.uidValidity === st.uidValidity ? st.lastUid : 0;
     for (const raw of got.mails) {
-      const p = await simpleParser(raw.source, { skipImageLinks: true, skipTextToHtml: true });
-      const from = p.from?.value[0];
-      const date = p.date ?? raw.internalDate;
-      const body = (p.text ?? '').replace(/\u0000/g, '').replace(/\n{4,}/g, '\n\n\n').trim().slice(0, MAX_BODY);
-      const subject = (p.subject ?? '').replace(/\u0000/g, '').slice(0, 300);
-      const { ex, hidden } = judge(rules, { fromName: from?.name ?? '', fromAddr: from?.address ?? '', subject, body, day: berlinDay(date) });
-      const rows = await db.insert(inboxMails).values({
-        uidValidity: got.uidValidity, uid: raw.uid, messageId: (p.messageId ?? '').slice(0, 300), fromName: (from?.name ?? '').slice(0, 200), fromAddr: (from?.address ?? '').slice(0, 200),
-        subject, receivedAt: date, body, kind: ex.kind, extract: ex, ...(hidden ? { status: 'ignored' as const, handledBy: BY_RULE } : {}),
-      }).onConflictDoNothing().returning({ id: inboxMails.id });
-      // Antwort auf ein Angebot (Kennzeichen „AN-Jahr-Nr.“ im Betreff oder Text) dem Verlauf zuordnen – ein Fehler dabei stört den Abruf nicht
-      if (rows[0]) await linkInboxMail(db, { id: rows[0].id, subject, body, fromName: from?.name ?? '', fromAddr: from?.address ?? '', receivedAt: date }).catch(() => false);
-      // Antwort in einem Vorgang (Kennzeichen „V-Jahr-Nr.“)
-      if (rows[0]) await linkInboxMailToCase(db, { id: rows[0].id, subject, body }).catch(() => false);
-      // Antwort auf einen Kostenvoranschlag (Kennzeichen „KV-Jahr-Nr.“)
-      if (rows[0]) await linkInboxMailToInvoice(db, { id: rows[0].id, subject, body, fromName: from?.name ?? '', fromAddr: from?.address ?? '', receivedAt: date }).catch(() => false);
-      added += rows.length;
+      // Jede Nachricht einzeln absichern: eine defekte E-Mail darf den Abruf nicht dauerhaft blockieren (sie käme sonst bei jedem Abruf wieder als erste)
+      try {
+        added += await storeInbound(db, rules, got.uidValidity, raw);
+      } catch (e) {
+        const note = `Diese Nachricht (Nr. ${raw.uid} im Postfach) konnte nicht verarbeitet werden: ${String((e as Error)?.message ?? e).slice(0, 300)}\n\nBitte im E-Mail-Programm öffnen.`;
+        const { ex } = judge(rules, { fromName: '', fromAddr: '', subject: '', body: '', day: berlinDay(raw.internalDate) });
+        const rows = await db.insert(inboxMails).values({ uidValidity: got.uidValidity, uid: raw.uid, subject: '(Nachricht konnte nicht gelesen werden)', receivedAt: raw.internalDate, body: note, kind: 'other', extract: { ...ex, kind: 'other' } })
+          .onConflictDoNothing().returning({ id: inboxMails.id });
+        added += rows.length;
+      }
       lastUid = Math.max(lastUid, raw.uid);
     }
     await write(db, 'inbox_state', { lastFetchAt: new Date().toISOString(), lastError: null, uidValidity: got.uidValidity, lastUid } satisfies State);
@@ -264,7 +313,7 @@ export async function updateInboxMail(db: Db, actor: Actor, id: string, v: { sta
   if (v.kind && r!.caseId) await db.execute(sql`update mail_cases set kind = ${v.kind} where id = ${r!.caseId}`);
   // Vorgang mitführen: sind alle Nachrichten erledigt/ignoriert, ist auch der Vorgang erledigt; wird eine wieder geöffnet, ist er wieder offen
   // Ausnahme: wird gerade eine Reservierung daraus angelegt, bleibt der Vorgang offen – die Bestätigung an den Kunden steht noch aus
-  if (v.status && r!.caseId && !v.linkKind) await db.execute(sql`update mail_cases set status = case when exists (select 1 from inbox_mails m where m.case_id = ${r!.caseId} and m.status = 'new') then 'open' else 'done' end where id = ${r!.caseId}`);
+  if (v.status && r!.caseId && !v.linkKind) await db.execute(sql`update mail_cases set status = case when exists (select 1 from inbox_mails m where m.case_id = ${r!.caseId} and m.status = 'new') then (case when status = 'working' then 'working' else 'open' end) else 'done' end where id = ${r!.caseId}`);
   await record(db, actor, { action: 'update', entity: 'inbox', entityId: id, before: { status: before.status, kind: before.kind }, after: { status: r!.status, kind: r!.kind, subject: r!.subject.slice(0, 80) } });
   return dto(r!, true);
 }
@@ -347,7 +396,10 @@ export async function sendReply(db: Db, actor: Actor, id: string, v: { to: strin
   const c = offer || invoice ? null : await ensureCaseForMail(db, actor, id);
   // die jeweilige Nummer bleibt im Betreff, damit auch die nächste Antwort des Kunden zugeordnet wird
   const subject = c ? withCaseCode(v.subject, c.number) : offer ? withCode(v.subject, offer.number) : invoice?.estimateNumber ? withKvCode(v.subject, invoice.estimateNumber) : v.subject;
-  await sendMail(db, actor, { ...v, subject, ...(r.messageId ? { inReplyTo: r.messageId } : {}) });
+  const threadCode = c?.number ?? offer?.number ?? invoice?.estimateNumber ?? undefined;
+  await sendMail(db, actor, { ...v, subject, ...(threadCode ? { threadCode } : {}), ...(r.messageId ? { inReplyTo: r.messageId } : {}) });
+  // Ab hier ist die E-Mail draußen: ein Fehler beim Vermerken darf nicht wie ein fehlgeschlagener Versand aussehen (sonst wird doppelt gesendet)
+  try {
   if (c) await logCaseOut(db, c.id, actor, v.to, subject, v.text);
   // Antwort auf eine E-Mail aus dem Verlauf eines Angebots / Kostenvoranschlags: dort festhalten, sonst fehlt sie im Verlauf
   if (offer) await logMailOut(db, offer.id, 'reply', actor, v.to, subject, v.text);
@@ -356,6 +408,9 @@ export async function sendReply(db: Db, actor: Actor, id: string, v: { to: strin
   const confirmed = template === 'confirm' ? { extract: { ...(r.extract as MailExtract), confirmedAt: new Date().toISOString() } as MailExtract } : {};
   await db.update(inboxMails).set({ repliedAt: new Date(), repliedBy: actor.userName, ...confirmed }).where(eq(inboxMails.id, id));
   await record(db, actor, { action: 'mail', entity: 'inbox', entityId: id, after: { to: v.to, subject: v.subject.slice(0, 120) } });
+  } catch (e) {
+    throw new AppError(500, 'sent_not_logged', `Die E-Mail wurde gesendet, konnte aber nicht im Vorgang vermerkt werden (${String((e as Error)?.message ?? e).slice(0, 120)}). Bitte NICHT erneut senden.`);
+  }
   return { ok: true };
 }
 

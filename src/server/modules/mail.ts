@@ -74,7 +74,10 @@ export async function saveMailSettings(db: Db, actor: Actor, v: { enabled: boole
 }
 
 // ---------- Versand ----------
-export interface Mail { to: string; subject: string; text: string; /** HTML-Fassung (z. B. mit Logo) */ html?: string; /** Message-ID der Nachricht, auf die geantwortet wird */ inReplyTo?: string; attachments?: { filename: string; content: Buffer; contentType: string; cid?: string }[] }
+export interface Mail { to: string; subject: string; text: string; /** HTML-Fassung (z. B. mit Logo) */ html?: string; /** Message-ID der Nachricht, auf die geantwortet wird */ inReplyTo?: string;
+  /** Kennzeichen des Vorgangs (V-…, AN-…, KV-…): steckt in der eigenen Message-ID, damit Antworten auch bei geändertem Betreff zugeordnet werden */ threadCode?: string;
+  /** von sendMail vergeben */ messageId?: string; references?: string[];
+  attachments?: { filename: string; content: Buffer; contentType: string; cid?: string }[] }
 type Sender = (config: { host: string; port: number; user: string; pass: string }, mail: Mail & { from: { name: string; address: string } }) => Promise<void>;
 
 let sender: Sender = async (c, mail) => {
@@ -82,7 +85,7 @@ let sender: Sender = async (c, mail) => {
     host: c.host, port: c.port, secure: c.port === 465, requireTLS: c.port !== 465, auth: { user: c.user, pass: c.pass },
     connectionTimeout: 15_000, greetingTimeout: 15_000, socketTimeout: 60_000,
   });
-  await transport.sendMail({ ...mail, ...(mail.inReplyTo ? { references: mail.inReplyTo } : {}) });
+  await transport.sendMail({ ...mail, ...(mail.references?.length ? { references: mail.references } : mail.inReplyTo ? { references: mail.inReplyTo } : {}) });
 };
 /** Für Tests: Versand ersetzen, damit keine echte E-Mail verschickt wird. */
 export const setMailSender = (s: Sender) => { sender = s; };
@@ -94,6 +97,16 @@ function explain(e: unknown) {
     return 'Anmeldung am E-Mail-Server abgelehnt. Bitte Adresse und Passwort prüfen. Bei GMX muss unter „E-Mail → Einstellungen → POP3/IMAP Abruf“ der Zugriff über POP3/IMAP erlaubt sein.';
   if (/ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|timeout/i.test(`${x.code} ${msg}`)) return `E-Mail-Server nicht erreichbar (${x.code ?? msg})`;
   return msg;
+}
+
+/** Message-ID der Form <pms.V-2026-0001.zufall@domain> – der Zufallsteil macht sie eindeutig und nicht erratbar */
+export const threadMessageId = (code: string, fromAddr: string) => `<pms.${code.toUpperCase()}.${randomBytes(9).toString('hex')}@${(fromAddr.split('@')[1] || 'pms.local').toLowerCase()}>`;
+const THREAD_REF = /<pms\.((?:V|AN|KV)-\d{4}-\d{4,6})\.[0-9a-f]{18}@[^>\s]+>/gi;
+/** Kennzeichen aus den technischen Verweisen (In-Reply-To, References) einer eingehenden E-Mail lesen */
+export function threadCodesOf(refs: string[]): string[] {
+  const out: string[] = [];
+  for (const r of refs) for (const m of r.matchAll(THREAD_REF)) { const c = m[1]!.toUpperCase(); if (!out.includes(c)) out.push(c); }
+  return out;
 }
 
 export async function sendMail(db: Db, actor: Actor, mail: Mail, einvoiceId: string | null = null) {
@@ -112,6 +125,8 @@ export async function sendMail(db: Db, actor: Actor, mail: Mail, einvoiceId: str
       if (logo) out = { ...mail, html: mailHtml(mail.text, (await getHotel(db)).name), attachments: [...(mail.attachments ?? []), { filename: logo.mime === 'image/png' ? 'logo.png' : 'logo.jpg', content: logo.data, contentType: logo.mime, cid: 'logo' }] };
     }
   } catch { out = mail; /* ohne Logo senden */ }
+  // eigene Message-ID mit dem Kennzeichen des Vorgangs: E-Mail-Programme tragen sie beim Antworten in „In-Reply-To/References“ ein
+  if (mail.threadCode) out = { ...out, messageId: threadMessageId(mail.threadCode, s.user), references: mail.inReplyTo ? [mail.inReplyTo] : undefined };
   try {
     await sender({ host: s.host, port: s.port, user: s.user, pass: decrypt(s.passEnc) }, { ...out, from: { name: s.fromName || s.user, address: s.user } });
     await db.insert(mailLog).values({ toAddr: mail.to, subject: mail.subject, attachments: names, status: 'sent', userName: actor.userName, einvoiceId });
