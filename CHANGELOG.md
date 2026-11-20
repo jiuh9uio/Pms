@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.110.0
+
+- **Angebote: „Absprache Schritt für Schritt“** – geführter Ablauf wie bei der Zimmerbuchung, z. B. für den Kellner direkt am Tisch (auch am Tablet): **Anlass → allgemeine Daten → Leistungen Gruppe für Gruppe → Übersicht** mit mitlaufender Summe und Feld für Wünsche. Am Ende entsteht ein Angebot als Entwurf; es wird nichts automatisch versendet.
+- „Neues Angebot“ (alles in einem Fenster) gibt es weiterhin daneben.
+
 ## 1.109.0
 
 - **Angebote: Konfigurator.** Im Angebot unter „Produktkatalog“ → **„Konfigurator öffnen“**: Schritt für Schritt durch die Gruppen des Katalogs (z. B. Raum → Verpflegung → Technik), Leistungen anklicken, Menge anpassen – die Summe läuft unten mit. Am Ende eine Übersicht und „Ins Angebot übernehmen“. Was schon im Angebot steht, ist vorausgewählt; freie Zeilen bleiben unverändert.

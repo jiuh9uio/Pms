@@ -13,6 +13,7 @@ import { deDate } from '../hotel/common.tsx';
 import { MailDialog } from '../hotel/MailDialog.tsx';
 import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useTabs, useToast } from '../ui.tsx';
 import { OfferLayoutCard } from './OfferLayoutCard.tsx';
+import { OfferWizard } from './OfferWizard.tsx';
 import { QuestionPicker } from './QuestionPicker.tsx';
 
 const TONE: Record<OfferState, 'neutral' | 'accent' | 'ok' | 'danger' | 'warn'> = { draft: 'neutral', sent: 'accent', accepted: 'ok', declined: 'danger', expired: 'warn', asked: 'accent', answered: 'warn' };
@@ -43,6 +44,7 @@ function OfferList() {
   const [q, setQ] = useState('');
   const [creating, setCreating] = useState(params.get('neu') === '1');
   const [openId, setOpenId] = useState<string | null>(params.get('angebot'));
+  const [wizard, setWizard] = useState(false);
   const { data, error } = useLoad(() => api<OfferListRow[]>('GET', `/offers?state=${state}&q=${encodeURIComponent(q.trim())}`), [state, q, rev]);
   const prefill = { customerName: params.get('name') ?? '', email: params.get('email') ?? '', phone: params.get('phone') ?? '', eventDate: params.get('datum') ?? '', persons: params.get('personen') ?? '' };
   return (
@@ -52,7 +54,8 @@ function OfferList() {
           <option value="open">offen (Entwurf, versendet, abgelaufen)</option><option value="accepted">angenommen</option><option value="declined">abgelehnt</option><option value="all">alle</option>
         </select>
         <input type="search" placeholder="Nummer, Kunde, Titel …" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Suche" />
-        <Button variant="primary" onClick={() => setCreating(true)}>Neues Angebot</Button>
+        <Button variant="primary" onClick={() => setWizard(true)} title="Geführt wie bei der Zimmerbuchung: Anlass, Daten, Leistungen Schritt für Schritt – z. B. bei der Absprache am Tisch">Absprache Schritt für Schritt</Button>
+        <Button onClick={() => setCreating(true)}>Neues Angebot</Button>
       </div>
       <LoadState error={error} loading={!data} />
       {data && (data.length === 0 ? <p className="muted card">Keine Angebote.</p> : (
@@ -72,6 +75,7 @@ function OfferList() {
         </table></div>
       ))}
       {creating && <NewOfferDialog prefill={prefill} onClose={() => { setCreating(false); if (params.get('neu')) { const p = new URLSearchParams(params); ['neu', 'name', 'email', 'phone', 'datum', 'personen'].forEach((k) => p.delete(k)); setParams(p, { replace: true }); } }} onCreated={(id) => { setCreating(false); setOpenId(id); }} />}
+      {wizard && <OfferWizard onClose={() => setWizard(false)} onCreated={(id) => { setWizard(false); setOpenId(id); }} />}
       {openId && <OfferEditor id={openId} onClose={() => setOpenId(null)} />}
     </>
   );
