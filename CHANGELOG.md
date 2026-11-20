@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.120.1
+
+- Kostenvoranschlag ohne Positionen: „Kostenvoranschlag senden“ meldet jetzt verständlich, dass erst eine Position fehlt (bisher wäre ein leerer Kostenvoranschlag verschickt worden). Eine Rechnung ohne Positionen ließ sich schon bisher nicht ausstellen.
+- Geprüft: Aus einem Kostenvoranschlag werden Positionen, Empfänger, Hinweis und Summe unverändert in die Rechnung und ihr PDF übernommen.
+
 ## 1.120.0
 
 - **Vorgänge: Antwortvorschläge.** Im Vorgang stehen unten passende **Antwortvorschläge** je Kategorie (z. B. bei Zimmeranfragen „Rückfrage: Reisedaten“, „Zimmer frei – bitte bestätigen“, „Rückfrage: Frühstück / Ankunft“). Ein Klick öffnet die fertige E-Mail mit Anrede und Grußformel – vor dem Senden änderbar.

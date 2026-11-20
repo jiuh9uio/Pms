@@ -137,6 +137,7 @@ export async function sendInvoiceMail(db: Db, actor: Actor, invoiceId: string, v
 // ---------- Kostenvoranschlag (Rechnungsentwurf mit KV-Nummer) per E-Mail ----------
 export async function estimateMailDraft(db: Db, invoiceId: string): Promise<MailDraft> {
   const inv = await getInvoice(db, invoiceId);
+  if (!inv.lines.length) throw conflict('Der Kostenvoranschlag hat noch keine Positionen – bitte erst unten mindestens eine Position hinzufügen.');
   const f = await estimatePdf(db, invoiceId);
   const h = await getHotel(db);
   const guest = inv.bookingId ? (await getBooking(db, inv.bookingId)).guest : null;
@@ -149,6 +150,7 @@ export async function estimateMailDraft(db: Db, invoiceId: string): Promise<Mail
   return { to: guest?.email || await lastRecipient(db, invoiceId), subject: `Kostenvoranschlag ${f.number} – ${h.name}`, text, attachment: f.filename, ready: await ready(db) };
 }
 export async function sendEstimateMail(db: Db, actor: Actor, invoiceId: string, v: { to: string; subject: string; text: string }) {
+  if (!(await getInvoice(db, invoiceId)).lines.length) throw conflict('Der Kostenvoranschlag hat noch keine Positionen – bitte erst mindestens eine Position hinzufügen.');
   const f = await estimatePdf(db, invoiceId);
   const subject = withKvCode(v.subject, f.number);
   await sendMail(db, actor, { ...v, subject, attachments: [{ filename: f.filename, content: f.pdf, contentType: 'application/pdf' }] });

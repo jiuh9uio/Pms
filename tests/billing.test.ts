@@ -269,6 +269,17 @@ describe('Kostenvoranschlag (Rechnungsentwurf mit eigener Nummer)', () => {
     expect(issued.estimateNumber).toBe(kv.estimateNumber);
     expect((await call('GET', `/invoices/${id}/estimate/pdf`, user)).statusCode).toBe(409);
     expect((await call('POST', `/invoices/${id}/estimate`, user)).statusCode).toBe(409);
+    // ein Kostenvoranschlag ohne Positionen lässt sich nicht versenden und nicht als Rechnung ausstellen
+    const leer = await ok('POST', '/invoices', user, { include: 'none' });
+    await ok('POST', `/invoices/${leer.id}/estimate`, user);
+    const lm = await call('GET', `/invoices/${leer.id}/estimate/mail`, user);
+    expect(lm.statusCode).toBe(409);
+    expect(lm.json().error.message).toContain('keine Positionen');
+    expect((await call('POST', `/invoices/${leer.id}/issue`, user, { version: (await ok('GET', `/invoices/${leer.id}`, user)).version })).statusCode).toBe(409);
+    // Rechnung aus dem Kostenvoranschlag: Positionen, Empfänger und Summe sind übernommen
+    const fin = await ok('GET', `/invoices/${id}`, user);
+    expect(fin.lines.map((l: { description: string }) => l.description)).toEqual(['Raummiete Saal']);
+    expect(fin).toMatchObject({ grossCents: 30000, recipientName: 'Erika Erfunden' });
     // ohne KV-Nummer gibt es kein KV-PDF
     const plain = await ok('POST', '/invoices', user, { include: 'none' });
     expect((await call('GET', `/invoices/${plain.id}/estimate/pdf`, user)).statusCode).toBe(409);
