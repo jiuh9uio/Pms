@@ -4,6 +4,7 @@ import * as B from '../shared/billing.js';
 import { isIsoDate } from '../shared/hotel.js';
 import type { Db } from './db/client.js';
 import type { Actor } from './modules/audit.js';
+import * as thread from './modules/invoicethread.js';
 import * as billing from './modules/billing.js';
 import * as slip from './modules/accountingslip.js';
 import * as terminal from './modules/terminal.js';
@@ -73,6 +74,10 @@ export function registerBillingRoutes(api: FastifyInstance, { db, requireUser, r
     await billing.invoicePdf(db, r.id).catch((e) => req.log.error(e));
     return r;
   });
+  // Verlauf (Kostenvoranschlag → Antwort des Kunden → Rechnung)
+  api.get('/invoices/:id/timeline', user, (req) => thread.invoiceTimeline(db, idOf(req)));
+  api.post('/invoices/:id/timeline/assign', user, (req) => thread.assignInboxMailToInvoice(db, actor(req), idOf(req), z.object({ inboxMailId: z.uuid() }).parse(req.body).inboxMailId));
+  api.post('/invoices/:id/timeline/remove', user, (req) => thread.removeInboxMailFromInvoice(db, actor(req), idOf(req), z.object({ eventId: z.uuid() }).parse(req.body).eventId));
   // Kostenvoranschlag: Entwurf mit eigener KV-Nummer, als PDF ohne Rechnungsnummer
   api.post('/invoices/:id/estimate', user, (req) => billing.makeEstimate(db, actor(req), idOf(req)));
   api.get('/invoices/:id/estimate/pdf', user, async (req, reply) => {

@@ -274,3 +274,55 @@ describe('Kostenvoranschlag (Rechnungsentwurf mit eigener Nummer)', () => {
     expect((await call('GET', `/invoices/${plain.id}/estimate/pdf`, user)).statusCode).toBe(409);
   });
 });
+
+describe('Kostenvoranschlag: Verlauf und Antwort Ja/Nein', () => {
+  it('E-Mail bittet um Ja/Nein; Antwort wird über die KV-Nummer zugeordnet; die Rechnung entsteht nur von Hand', async () => {
+    const { linkInboxMailToInvoice, logInvoiceMailOut, yesNo } = await import('../src/server/modules/invoicethread.js');
+    const { inboxMails } = await import('../src/server/db/schema.js');
+    const { id } = await ok('POST', '/invoices', user, { include: 'none' });
+    const kv = (await ok('POST', `/invoices/${id}/estimate`, user)).estimateNumber as string;
+    let inv = await ok('POST', `/invoices/${id}/lines`, user, { description: 'Saalmiete', detail: '', quantity: 1, unitPriceCents: 20000, taxRatePercent: 19 });
+    inv = await ok('PUT', `/invoices/${id}`, user, { ...inv, recipientName: 'Max Erdacht', recipientStreet: 'Weg 2', recipientZip: '12345', recipientCity: 'Ort', version: inv.version });
+    const draft = await ok('GET', `/invoices/${id}/estimate/mail`, user);
+    expect(draft.text).toContain('„Ja“');
+    expect(draft.text).toContain('„Nein“');
+    expect(draft.subject).toContain(kv);
+    // noch nichts gesendet: leerer Verlauf
+    expect((await ok('GET', `/invoices/${id}/timeline`, user)).entries).toEqual([]);
+    // Versand (hier ohne Postfach direkt vermerkt), dann die Antwort des Kunden
+    await logInvoiceMailOut(db, id, 'estimate', { userId: null, userName: 'Rezeption' } as never, 'kunde@example.org', draft.subject, draft.text);
+    let t = await ok('GET', `/invoices/${id}/timeline`, user);
+    expect(t).toMatchObject({ code: `[${kv}]`, answer: null, waiting: true, lastTo: 'kunde@example.org' });
+    const mail = async (uid: number, subject: string, body: string) => (await db.insert(inboxMails).values({ uidValidity: 'kv-test', uid, fromName: 'Max Erdacht', fromAddr: 'kunde@example.org', subject, receivedAt: new Date(Date.now() + uid * 1000), body, kind: 'other', extract: {} }).returning())[0]!;
+    const a = await mail(1, `AW: ${draft.subject}`, `Guten Tag,\nJa\n\nViele Grüße\n\n--- Ihre Nachricht ---\n> antworten Sie mit „Nein“`);
+    expect(await linkInboxMailToInvoice(db, a)).toBe(true);
+    expect(await linkInboxMailToInvoice(db, a)).toBe(false);
+    t = await ok('GET', `/invoices/${id}/timeline`, user);
+    expect(t).toMatchObject({ answer: 'yes', waiting: false });
+    // die Antwort stellt keine Rechnung aus
+    expect((await ok('GET', `/invoices/${id}`, user))).toMatchObject({ status: 'draft', number: null });
+    expect((await ok('GET', `/inbox/${a.id}`, admin)).invoice).toMatchObject({ id, label: `Kostenvoranschlag ${kv}` });
+    // weitere E-Mail ohne Nummer: Vorschlag → von Hand zuordnen → wieder lösen
+    const b = await mail(2, 'Noch etwas', 'Nein, doch nicht.');
+    t = await ok('GET', `/invoices/${id}/timeline`, user);
+    expect(t.candidates.map((c: { inboxMailId: string }) => c.inboxMailId)).toEqual([b.id]);
+    await ok('POST', `/invoices/${id}/timeline/assign`, user, { inboxMailId: b.id });
+    t = await ok('GET', `/invoices/${id}/timeline`, user);
+    expect(t.answer).toBe('no');
+    const ev = t.entries.find((e: { subject: string }) => e.subject === 'Noch etwas');
+    await ok('POST', `/invoices/${id}/timeline/remove`, user, { eventId: ev.id });
+    expect((await ok('GET', `/invoices/${id}/timeline`, user)).answer).toBe('yes');
+    // Rechnung von Hand; E-Mail-Vorschlag der Rechnung ist an die Adresse des Kostenvoranschlags vorbelegt
+    const issued = await ok('POST', `/invoices/${id}/issue`, user, { version: inv.version });
+    expect(issued.status).toBe('issued');
+    expect((await ok('GET', `/invoices/${id}/mail`, user)).to).toBe('kunde@example.org');
+    expect((await ok('GET', `/invoices/${id}/timeline`, user)).entries.map((e: { title: string }) => e.title)).toContain(`Rechnung ${issued.number} ausgestellt`);
+    // Erkennung
+    expect(yesNo('Ja, gerne!')).toBe('yes');
+    expect(yesNo('JA')).toBe('yes');
+    expect(yesNo('Hallo Frau Muster,\nnein danke.')).toBe('no');
+    expect(yesNo('Ja, aber bitte ohne Buffet')).toBe('unclear');
+    expect(yesNo('Jahresfeier findet statt?')).toBe('unclear');
+    expect(yesNo('> Ja')).toBeNull();
+  });
+});

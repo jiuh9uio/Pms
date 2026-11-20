@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.117.0
+
+- **Kostenvoranschlag: Verlauf und Antwort mit Ja oder Nein.** Die E-Mail zum Kostenvoranschlag bittet den Kunden, einfach mit **„Ja“** oder **„Nein“** zu antworten. Die KV-Nummer im Betreff (z. B. `KV-2026-0004`) ist das Kennzeichen: Der Posteingang ordnet die Antwort automatisch dem Kostenvoranschlag zu.
+- Im Kostenvoranschlag steht oben die **Kurzinfo** („Kunde hat mit Ja geantwortet“ / „mit Nein geantwortet“ / „Antwort da – bitte lesen“ / „wartet auf Antwort“) und darunter der **Verlauf** mit den gesendeten E-Mails und den Antworten. „Ja, aber …“ gilt als unklar.
+- **Danach gleich die Rechnung:** „Rechnung daraus ausstellen“ und „Per E-Mail senden“ – die Adresse des Kunden ist vorbelegt. Die Rechnung wird nie automatisch ausgestellt.
+- E-Mails derselben Adresse ohne Kennzeichen werden zum Zuordnen vorgeschlagen; falsche Zuordnungen lassen sich lösen. Im Posteingang steht bei zugeordneten E-Mails ein Verweis.
+- Datenbank: neue Tabelle für diesen Verlauf; bestehende Rechnungen bleiben unverändert.
+
 ## 1.116.0
 
 - **Freie Rechnung und Kostenvoranschlag: eigene Artikel und eigene Positionen.** In der Auswahl „Artikel übernehmen …“ stehen jetzt neben den Hotel-Leistungen auch Ihre **eigenen Artikel** (die Leistungen aus Angebote → Leistungen) – mit Preis, Steuersatz und Beschreibung, alles danach anpassbar.

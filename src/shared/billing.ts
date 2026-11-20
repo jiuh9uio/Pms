@@ -156,3 +156,18 @@ export const cancelFeeInput = z.object({
   taxRatePercent: z.number('Bitte einen Steuersatz wählen').min(0).max(100),
   text: z.string().trim().max(120).default(''),
 });
+
+/** Verlauf eines Kostenvoranschlags / einer Rechnung (wie ein Chat) */
+export interface InvoiceTimelineEntry { id: string; at: string; dir: 'out' | 'in' | 'event'; title: string; by: string; subject: string; text: string; answer: 'yes' | 'no' | 'unclear' | null; removable: boolean }
+export interface InvoiceTimeline {
+  /** Kennzeichen im Betreff (KV-Nummer), an dem Antworten erkannt werden */
+  code: string;
+  /** letzte Antwort des Kunden auf den Kostenvoranschlag: Ja / Nein / unklar (nur ein Hinweis – die Rechnung wird von Hand ausgestellt) */
+  answer: 'yes' | 'no' | 'unclear' | null;
+  /** hat der Kunde seit der letzten gesendeten E-Mail geantwortet? */
+  waiting: boolean;
+  /** letzte Empfängeradresse */
+  lastTo: string;
+  entries: InvoiceTimelineEntry[];
+  candidates: { inboxMailId: string; at: string; from: string; subject: string }[];
+}

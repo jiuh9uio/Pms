@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   INVOICE_STATUS_LABEL, PAYMENT_METHODS_BILLING, cancelInput, invoiceLineInput, invoiceUpdateInput, paymentInput, reverseInput,
-  type InvoiceDto, type PaymentDto,
+  type InvoiceDto, type InvoiceTimeline, type PaymentDto,
 } from '../../../src/shared/billing.js';
 import { formatMoney, moneyInput, parseMoney, todayBerlin, type ServiceDto } from '../../../src/shared/hotel.js';
 import type { OfferItemDto } from '../../../src/shared/offers.js';
@@ -86,6 +86,7 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
       {!inv ? <LoadState error={error} loading /> : (
         <div className="split">
           <div>
+            {inv.estimateNumber && <InvoiceThread inv={inv} />}
             {inv.status === 'cancelled' && <p className="notice danger">Storniert durch {inv.cancelledByNumber ? <button type="button" className="linkbtn" onClick={() => openInvoice(inv.cancelledById!)}>{inv.cancelledByNumber}</button> : 'Stornobeleg'}. Grund: {inv.cancelReason}</p>}
             {inv.kind === 'cancellation' && inv.cancelsId && <p className="notice">Storniert die Rechnung <button type="button" className="linkbtn" onClick={() => openInvoice(inv.cancelsId!)}>{inv.cancelsNumber}</button>.</p>}
             {inv.status === 'draft' ? <Recipient inv={inv} /> : (
@@ -151,6 +152,50 @@ function Recipient({ inv }: { inv: InvoiceDto }) {
       </div>
       {dirty && <div className="formactions"><Button type="submit" variant="primary" busy={f.busy}>Empfänger speichern</Button></div>}
     </form>
+  );
+}
+
+/** Verlauf zum Kostenvoranschlag: gesendet → Antwort des Kunden (Ja/Nein) → Rechnung; oben die Kurzinfo */
+function InvoiceThread({ inv }: { inv: InvoiceDto }) {
+  const { rev, bump } = useData();
+  const toast = useToast();
+  const { data } = useLoad(() => api<InvoiceTimeline>('GET', `/invoices/${inv.id}/timeline`), [inv.id, rev]);
+  const [open, setOpen] = useState(false);
+  if (!data || (data.entries.length === 0 && data.candidates.length === 0)) return null;
+  const when = (iso: string) => new Date(iso).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
+  const draft = inv.status === 'draft';
+  const ANSWER = { yes: 'Ja', no: 'Nein', unclear: 'unklar – bitte lesen' } as const;
+  const act = async (path: string, body: unknown, msg: string) => { try { await api('POST', `/invoices/${inv.id}/timeline/${path}`, body); toast(msg); bump(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); } };
+  return (
+    <section className="card ot-card">
+      <div className="ot-info">
+        {data.answer === 'yes' && <Badge tone="ok">Kunde hat mit Ja geantwortet</Badge>}
+        {data.answer === 'no' && <Badge tone="danger">Kunde hat mit Nein geantwortet</Badge>}
+        {data.answer === 'unclear' && <Badge tone="warn">Antwort da – bitte lesen</Badge>}
+        {!data.answer && data.waiting && <Badge tone="accent">wartet auf Antwort</Badge>}
+        {!draft && <span>Rechnung {inv.number} ausgestellt</span>}
+        {data.code && <span className="ot-code" title="Diese Nummer steht im Betreff der E-Mail. Antwortet der Kunde darauf, wird die Antwort hier automatisch zugeordnet.">Kennzeichen {data.code}</span>}
+        <button type="button" className="linkbtn" onClick={() => setOpen(!open)}>{open ? 'Verlauf ausblenden' : `Verlauf zeigen (${data.entries.length})`}</button>
+      </div>
+      {draft && data.answer === 'yes' && <p className="notice small">Der Kunde ist einverstanden – bitte die Antwort kurz lesen. Dann unten <b>„Rechnung daraus ausstellen“</b> und danach „Per E-Mail senden“ (die Adresse ist vorbelegt).</p>}
+      {draft && data.answer === 'no' && <p className="notice warn small">Der Kunde hat abgelehnt. Sie können den Kostenvoranschlag ändern und neu senden oder ihn verwerfen.</p>}
+      {draft && data.answer === 'unclear' && <p className="notice warn small">Die Antwort ist kein klares Ja oder Nein – bitte im Verlauf lesen.</p>}
+      {data.candidates.length > 0 && <div className="ot-cand">
+        <span className="muted small">Im Posteingang von dieser Adresse, noch nicht zugeordnet:</span>
+        {data.candidates.map((c) => <div key={c.inboxMailId}><span>{when(c.at)} · {c.subject || '(ohne Betreff)'}</span><Button onClick={() => void act('assign', { inboxMailId: c.inboxMailId }, 'E-Mail zugeordnet')}>Zuordnen</Button></div>)}
+      </div>}
+      {open && <ol className="ot-list">{data.entries.map((e) => (
+        <li key={e.id} className={`ot-${e.dir}`}>
+          <div className="ot-bubble">
+            <div className="ot-head"><b>{e.title}</b><small>{when(e.at)}{e.by ? ` · ${e.by}` : ''}</small></div>
+            {e.subject && <div className="ot-subject">{e.subject}</div>}
+            {e.answer && <div className="ot-hint">Antwort: {ANSWER[e.answer]}</div>}
+            {e.text && (e.text.length > 280 ? <details><summary>{e.text.slice(0, 200).trim()} … <u>ganz lesen</u></summary><div className="ot-text">{e.text}</div></details> : <div className="ot-text">{e.text}</div>)}
+            {e.removable && <button type="button" className="linkbtn small" onClick={() => { if (window.confirm('Diese E-Mail gehört nicht hierher? Die Zuordnung wird gelöst; die E-Mail bleibt im Posteingang.')) void act('remove', { eventId: e.id }, 'Zuordnung gelöst'); }}>gehört nicht hierher</button>}
+          </div>
+        </li>
+      ))}</ol>}
+    </section>
   );
 }
 

@@ -763,6 +763,22 @@ export const offerTemplates = pgTable('offer_templates', {
   ...stamps,
 });
 
+/** Verlauf eines Kostenvoranschlags / einer Rechnung: gesendete E-Mails (mit Text) und zugeordnete Antworten aus dem Posteingang */
+export const invoiceEvents = pgTable('invoice_events', {
+  id: id(),
+  invoiceId: uuid('invoice_id').notNull().references((): AnyPgColumn => invoices.id, { onDelete: 'cascade' }),
+  at: ts('at').notNull().defaultNow(),
+  kind: text('kind', { enum: ['mail_out', 'mail_in'] }).notNull(),
+  /** bei mail_out: estimate | invoice | reminder */
+  what: text('what').notNull().default(''),
+  who: text('who').notNull().default(''),
+  /** bei mail_out: Empfängeradresse (Vorbelegung für die nächste E-Mail, z. B. die Rechnung) */
+  toAddr: text('to_addr').notNull().default(''),
+  subject: text('subject').notNull().default(''),
+  body: text('body').notNull().default(''),
+  inboxMailId: uuid('inbox_mail_id'),
+}, (t) => [index('invoice_events_invoice_idx').on(t.invoiceId, t.at), uniqueIndex('invoice_events_inbox_idx').on(t.inboxMailId)]);
+
 /** Verlauf eines Angebots: gesendete E-Mails (mit Text) und zugeordnete Antworten aus dem Posteingang (Kopie des Textes) */
 export const offerEvents = pgTable('offer_events', {
   id: id(),

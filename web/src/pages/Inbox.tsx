@@ -80,7 +80,7 @@ export function Inbox() {
 function MailDetail({ id, onGone }: { id: string; onGone: () => void }) {
   const { user } = useAuth();
   const toast = useToast();
-  const { bump, newBooking, openBooking } = useData();
+  const { bump, newBooking, openBooking, openInvoice } = useData();
   const { data, error, reload } = useLoad(() => api<InboxMailDto>('GET', `/inbox/${id}`), [id]);
   const [h, setH] = useState({ from: '', to: '' });
   const [t, setT] = useState({ date: '', time: '', persons: '', name: '', phone: '', note: '' });
@@ -131,6 +131,7 @@ function MailDetail({ id, onGone }: { id: string; onGone: () => void }) {
         {data.repliedAt && <p className="muted small">Beantwortet am {fmtDateTime(data.repliedAt)}{data.repliedBy && ` von ${data.repliedBy}`}.</p>}
         {mail && <MailDialog path={`/inbox/${id}/mail?template=${mail}`} title={mail === 'confirm' ? 'Bestätigung senden' : mail === 'decline' ? 'Absage senden' : 'Antworten'} onClose={() => setMail(null)}
           onSent={() => { if (mail !== 'reply' && data.status === 'new') void patch({ status: 'done' }); else { bump(); reload(); } }} />}
+        {data.invoice && <p className="notice">Gehört zum Verlauf von <button type="button" className="linkbtn" onClick={() => openInvoice(data.invoice!.id)}>{data.invoice.label}</button>.</p>}
         {data.offer && <p className="notice">Gehört zum Verlauf von <a href={`/angebote?angebot=${data.offer.id}`}>Angebot {data.offer.number}</a>.</p>}
         {data.linkKind && <p className="notice">Daraus angelegt: {data.linkKind === 'booking'
           ? <button type="button" className="linkbtn" onClick={() => data.linkId && openBooking(data.linkId)}>Zimmerreservierung öffnen</button> : 'eine Tischreservierung (im Modul Restaurant zu finden)'}{data.handledBy && ` · bearbeitet von ${data.handledBy}`}</p>}

@@ -5,6 +5,7 @@ import { record, type Actor } from './audit.js';
 import { getBooking } from './bookings.js';
 import { estimatePdf, getInvoice, invoicePdf } from './billing.js';
 import { buildFromInvoice } from './einvoices.js';
+import { lastRecipient, logInvoiceMailOut, withKvCode } from './invoicethread.js';
 import { getMailSettings, sendMail } from './mail.js';
 import { getHotel } from './settings.js';
 
@@ -120,7 +121,7 @@ export async function invoiceMailDraft(db: Exec, invoiceId: string, kind: Invoic
       : 'Der Betrag ist bereits beglichen – vielen Dank.',
     '', signature(h),
   ].join('\n');
-  return { to: guest?.email ?? '', subject: `Rechnung ${inv.number} – ${h.name}`, text, attachment: `${safe(inv.number!)}.pdf`, ready: await ready(db) };
+  return { to: guest?.email || await lastRecipient(db, invoiceId), subject: `Rechnung ${inv.number} – ${h.name}`, text, attachment: `${safe(inv.number!)}.pdf`, ready: await ready(db) };
 }
 
 export async function sendInvoiceMail(db: Db, actor: Actor, invoiceId: string, v: { to: string; subject: string; text: string }, kind: InvoiceMailKind = 'invoice') {
@@ -129,6 +130,7 @@ export async function sendInvoiceMail(db: Db, actor: Actor, invoiceId: string, v
   // mit eingebetteten E-Rechnungsdaten, wo das möglich ist; sonst das archivierte PDF
   const pdf = await buildFromInvoice(db, invoiceId).then((r) => r.pdf, async () => (await invoicePdf(db, invoiceId)).pdf);
   await sendMail(db, actor, { ...v, attachments: [{ filename: `${safe(inv.number!)}.pdf`, content: Buffer.from(pdf), contentType: 'application/pdf' }] });
+  await logInvoiceMailOut(db, invoiceId, kind === 'reminder' ? 'reminder' : 'invoice', actor, v.to, v.subject, v.text);
   await record(db, actor, { action: kind === 'reminder' ? 'reminder' : 'mail', entity: 'invoice', entityId: inv.id, after: { to: v.to, subject: v.subject } });
 }
 
@@ -140,12 +142,16 @@ export async function estimateMailDraft(db: Db, invoiceId: string): Promise<Mail
   const guest = inv.bookingId ? (await getBooking(db, inv.bookingId)).guest : null;
   const text = [guest ? greeting(guest) : 'Guten Tag,', '',
     `anbei erhalten Sie unseren Kostenvoranschlag ${f.number} über ${formatMoney(inv.grossCents)} (inkl. Umsatzsteuer).`,
-    'Dies ist noch keine Rechnung – bitte überweisen Sie noch nichts. Geben Sie uns einfach Bescheid, ob wir so für Sie planen dürfen.',
+    'Dies ist noch keine Rechnung – bitte überweisen Sie noch nichts.', '',
+    'Sind Sie einverstanden? Dann antworten Sie bitte einfach auf diese E-Mail mit „Ja“. Wenn nicht, antworten Sie mit „Nein“ – oder schreiben Sie uns, was wir ändern sollen.',
+    `(Bitte den Betreff mit der Nummer ${f.number} stehen lassen, damit wir Ihre Antwort zuordnen können.)`,
     '', signature(h)].join('\n');
-  return { to: guest?.email ?? '', subject: `Kostenvoranschlag ${f.number} – ${h.name}`, text, attachment: f.filename, ready: await ready(db) };
+  return { to: guest?.email || await lastRecipient(db, invoiceId), subject: `Kostenvoranschlag ${f.number} – ${h.name}`, text, attachment: f.filename, ready: await ready(db) };
 }
 export async function sendEstimateMail(db: Db, actor: Actor, invoiceId: string, v: { to: string; subject: string; text: string }) {
   const f = await estimatePdf(db, invoiceId);
-  await sendMail(db, actor, { ...v, attachments: [{ filename: f.filename, content: f.pdf, contentType: 'application/pdf' }] });
+  const subject = withKvCode(v.subject, f.number);
+  await sendMail(db, actor, { ...v, subject, attachments: [{ filename: f.filename, content: f.pdf, contentType: 'application/pdf' }] });
+  await logInvoiceMailOut(db, invoiceId, 'estimate', actor, v.to, subject, v.text);
   await record(db, actor, { action: 'mail_estimate', entity: 'invoice', entityId: invoiceId, after: { to: v.to, subject: v.subject, estimateNumber: f.number } });
 }
