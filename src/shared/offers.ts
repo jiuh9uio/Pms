@@ -142,6 +142,8 @@ export interface OfferTimelineEntry {
   hint: 'accept' | 'decline' | null;
   /** zugeordnete Posteingangs-Mail lässt sich wieder lösen */
   removable: boolean;
+  /** gespeicherte Anhänge der E-Mail (z. B. der ausgefüllte Katalog) */
+  attachments: { id: string; name: string; size: number; type: string }[];
 }
 export interface OfferTimeline {
   /** Kennzeichen im Betreff, an dem Antworten erkannt werden */

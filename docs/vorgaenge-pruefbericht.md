@@ -31,11 +31,16 @@ Keine rechtliche Prüfung: Aussagen zum Datenschutz sind technische Feststellung
 - **Zugangsdaten:** IMAP-/SMTP-Passwort verschlüsselt gespeichert (AES-256-GCM), nicht im Protokoll.
 - **Zugriff:** alle Vorgangs-Schnittstellen nur mit Modul „E-Mail“.
 
-## Offen (braucht Entscheidung oder ist nicht umgesetzt)
+## Stand 1.124.0 (nach Freigabe umgesetzt)
 
-- **Löschen/Aufbewahrung:** Die Aufbewahrungsfrist entfernt erledigte E-Mails; Vorgänge und gespeicherte Antworten bleiben. „Daten löschen → Posteingang“ entfernt Vorgänge nicht. Änderung nur mit Freigabe.
-- **Anhänge** werden nicht gespeichert (nur benannt). Ein ausgefüllter Katalog muss weiterhin aus dem E-Mail-Programm gespeichert und im Angebot eingelesen werden.
+- **Löschen/Aufbewahrung:** Erledigte und archivierte Vorgänge werden nach der Aufbewahrungsfrist mit entfernt; „Daten löschen → Posteingang“ entfernt auch die Vorgänge. Der Nummernzähler bleibt.
+- **Anhänge** werden gespeichert (Tabelle `inbox_attachments`, je Datei bis 10 MB, höchstens 10 je E-Mail) und nur als Download ausgeliefert (`application/octet-stream`, `nosniff`).
+- Ein ausgefüllter Katalog lässt sich direkt aus dem Verlauf des Angebots einlesen; über ein Angebot sind nur Anhänge aus dessen eigenem Verlauf erreichbar.
+
+## Weiterhin offen
+
 - **Geringes Restrisiko:** Wer Angebote bearbeiten darf, kann über die Vorschläge im Angebot E-Mails derselben Absenderadresse sehen, auch ohne Modul „E-Mail“.
 - **Bestätigungen aus dem Hotelbereich** (nicht aus dem Posteingang) erzeugen keinen Vorgang.
 - **Zuständigkeit je Mitarbeiter** („wer bearbeitet gerade“) gibt es nicht; nur den Stand „In Bearbeitung“.
-- **Nicht getestet:** echter IMAP-/SMTP-Betrieb (kein Postfach in der Testumgebung), Verhalten realer E-Mail-Programme bei den Verweisen, sehr große Postfächer (nur Abfrageplan vereinfacht, keine Lastmessung).
+- **Anhänge** werden nicht auf Schadsoftware geprüft; die Datensicherung wird durch gespeicherte Anhänge größer.
+- **Nicht getestet:** echter IMAP-/SMTP-Betrieb (kein Postfach in der Testumgebung), Verhalten realer E-Mail-Programme bei den Verweisen, sehr große Postfächer (keine Lastmessung).

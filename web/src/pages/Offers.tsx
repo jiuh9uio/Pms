@@ -130,7 +130,7 @@ const toDraftLine = (l: OfferDto['lines'][number]): LineDraft => ({ itemId: l.it
 const qty = (s: string) => Number(s.replace(',', '.'));
 
 function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
-  const { rev, bump, newBooking } = useData();
+  const { rev, bump, newBooking, openInvoice } = useData();
   const isAdmin = useAuth().user.role === 'admin';
   const toast = useToast();
   const { data: o, error } = useLoad(() => api<OfferDto>('GET', `/offers/${id}`), [id, rev]);
@@ -147,6 +147,7 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
   const [askAlso, setAskAlso] = useState(false);
   const [catMail, setCatMail] = useState(false);
   const [catReturn, setCatReturn] = useState(false);
+  const [catInitial, setCatInitial] = useState<CatalogReturn | null>(null);
   const [config, setConfig] = useState(false);
   useEffect(() => { if (o) { setV({ ...o, lines: o.lines.map(toDraftLine), questionsText: o.questions.join('\n') }); setDirty(false); } }, [o]);
   if (!o || !v) return <Dialog title="Angebot" onClose={onClose}><LoadState error={error} loading /></Dialog>;
@@ -214,6 +215,10 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
       draft: { firstName: rest.length ? first : '', lastName: rest.length ? rest.join(' ') : first ?? '', email: o.email, phone: o.phone }, notes: `Aus Angebot ${o.number}${o.title ? ` (${o.title})` : ''}`,
       onCreated: (bid) => { void api('POST', `/offers/${id}/link-reservation`, { bookingId: bid }).then(bump); } });
   };
+  const invoiceDraft = async () => {
+    if (!window.confirm(`Aus Angebot ${o.number} einen Rechnungsentwurf anlegen?\n\nEmpfänger und alle Positionen werden übernommen. Es ist nur ein Entwurf – ausgestellt wird er erst unter Rechnungen.\n\nBitte nur, wenn Sie NICHT über die Kasse abrechnen.`)) return;
+    try { const r = await api<{ invoiceId: string }>('POST', `/offers/${id}/invoice`, {}); toast('Rechnungsentwurf angelegt'); openInvoice(r.invoiceId); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+  };
   const tableReservation = async () => {
     const time = window.prompt('Uhrzeit der Tischreservierung (HH:MM):', '18:00');
     if (!time || !/^\d{2}:\d{2}$/.test(time) || !o.eventDate) { if (!o.eventDate) toast('Im Angebot fehlt der Termin', 'error'); return; }
@@ -250,7 +255,7 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
           <dl>{o.answers.items.map((x, i) => <div key={i}><dt>{x.q}</dt><dd>{x.a || <span className="muted">– keine Angabe –</span>}</dd></div>)}</dl>
         </section>
       )}
-      <OfferThread offer={o} onAccept={!locked && !q && o.status === 'sent' ? () => void startAccept() : undefined} />
+      <OfferThread offer={o} onAccept={!locked && !q && o.status === 'sent' ? () => void startAccept() : undefined} onCatalog={!locked && !q ? (r) => { setCatInitial(r); setCatReturn(true); } : undefined} />
       {o.talk && (
         <section className="card answers">
           <h3 className="first">Absprache{o.talk.template ? ` – ${o.talk.template}` : ''} <small className="muted">– am {new Date(o.talk.at).toLocaleString('de-DE')} von {o.talk.by}</small></h3>
@@ -269,7 +274,9 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
           <div className="btnrow">
             {!o.bookingId ? <Button onClick={hotelBooking}>Hotelreservierung anlegen</Button> : <span className="muted small">Hotelreservierung verknüpft ✓</span>}
             {!o.tableReservationId ? <Button onClick={() => void tableReservation()}>Tischreservierung anlegen</Button> : <span className="muted small">Tischreservierung verknüpft ✓</span>}
+            <Button onClick={() => void invoiceDraft()} title="Legt unter Rechnungen einen Entwurf mit Empfänger und allen Positionen an. Nur nutzen, wenn nicht über die Kasse abgerechnet wird.">Rechnungsentwurf erstellen</Button>
           </div>
+          <p className="muted small">„Rechnungsentwurf erstellen“ ist nur für Fälle gedacht, die Sie <b>nicht über die Kasse</b> abrechnen – sonst würde doppelt abgerechnet.</p>
           <h3>Anzahlung</h3>
           <DepositPanel kind="offer" refId={o.id} base={`/offers/${o.id}`} suggestCents={Math.round((o.totalCents * o.depositPercent) / 100)} latestDue={o.eventDate ?? ''} />
         </section>
@@ -349,7 +356,7 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
         attachmentNote="– der Kunde kreuzt darin an und schickt es zurück"
         intro={<p className="muted small">Das Angebot bleibt ein Entwurf. Was schon im Angebot steht, ist im Katalog bereits angekreuzt.{catTpl.catalogPrices ? ' Preise werden gezeigt.' : ' Ohne Preise (einstellbar in der Vorlage).'}</p>} />}
       {catReturn && catTpl && <CatalogReturnDialog offerId={id} offerNumber={o.number} catalogName={catTpl.name} items={catItems} persons={v.persons} inOffer={v.lines.map((l) => l.itemId).filter((x): x is string => !!x)}
-        onApply={applyReturn} onClose={() => setCatReturn(false)} />}
+        initial={catInitial} onApply={applyReturn} onClose={() => { setCatReturn(false); setCatInitial(null); }} />}
       {config && catTpl && <ConfiguratorDialog catalogName={catTpl.name} items={catItems} lines={v.lines} persons={v.persons} from={v.eventDate} to={v.eventEnd}
         onApply={(lines) => { ch({ lines }); toast('Leistungen übernommen – bitte prüfen und speichern'); }} onClose={() => setConfig(false)} />}
       {accepting && <AcceptDialog offer={o} onClose={() => setAccepting(false)} />}
@@ -358,7 +365,7 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
 }
 
 /** Verlauf wie ein Chat: oben die Kurzinfo (Stand), darunter gesendete E-Mails (rechts), Antworten des Kunden (links) und Ereignisse */
-function OfferThread({ offer: o, onAccept }: { offer: OfferDto; onAccept?: () => void }) {
+function OfferThread({ offer: o, onAccept, onCatalog }: { offer: OfferDto; onAccept?: () => void; onCatalog?: (r: CatalogReturn) => void }) {
   const { rev, bump } = useData();
   const toast = useToast();
   const { data } = useLoad(() => api<OfferTimeline>('GET', `/offers/${o.id}/timeline`), [o.id, rev]);
@@ -395,6 +402,10 @@ function OfferThread({ offer: o, onAccept }: { offer: OfferDto; onAccept?: () =>
             {e.subject && <div className="ot-subject">{e.subject}</div>}
             {e.hint && <div className="ot-hint">{e.hint === 'accept' ? 'klingt nach Zusage – bitte prüfen' : 'klingt nach Absage – bitte prüfen'}</div>}
             {e.text && (e.text.length > 280 ? <details><summary>{e.text.slice(0, 200).trim()} … <u>ganz lesen</u></summary><div className="ot-text">{e.text}</div></details> : <div className="ot-text">{e.text}</div>)}
+            {e.attachments.length > 0 && <div className="msg-att">{e.attachments.map((a) => (
+              <span key={a.id} className="ot-att"><a href={`/api/v1/offers/${o.id}/attachments/${a.id}`} download={a.name}>📎 {a.name} ({Math.max(1, Math.round(a.size / 1024))} KB)</a>
+                {onCatalog && /pdf/i.test(`${a.type} ${a.name}`) && <Button onClick={() => void api<CatalogReturn>('POST', `/offers/${o.id}/catalog/read-attachment`, { attachmentId: a.id }).then(onCatalog, (err) => toast(err instanceof Error ? err.message : 'Fehler', 'error'))}>Als Katalog-Antwort einlesen</Button>}</span>
+            ))}</div>}
             {e.removable && <button type="button" className="linkbtn small" onClick={() => { if (window.confirm('Diese E-Mail gehört nicht zu diesem Angebot? Die Zuordnung wird gelöst; die E-Mail bleibt im Posteingang.')) void act('remove', { eventId: e.id }, 'Zuordnung gelöst'); }}>gehört nicht hierher</button>}
           </div>
         </li>
@@ -475,13 +486,14 @@ function ConfiguratorDialog({ catalogName, items, lines, persons, from, to, onAp
 }
 
 /** Rückmeldung zum Katalog: zurückgeschicktes PDF einlesen oder von Hand ankreuzen (bei Ausdruck, E-Mail-Text, Telefon) */
-function CatalogReturnDialog({ offerId, offerNumber, catalogName, items, persons, inOffer, onApply, onClose }: {
+function CatalogReturnDialog({ offerId, offerNumber, catalogName, items, persons, inOffer, initial, onApply, onClose }: {
   offerId: string; offerNumber: string; catalogName: string; items: OfferItemDto[]; persons: number; inOffer: string[];
+  /** schon eingelesene Antwort (aus einem Anhang im Verlauf) */ initial?: CatalogReturn | null;
   onApply: (r: { itemIds: string[]; persons: number | null; note: string }) => void; onClose: () => void;
 }) {
   const toast = useToast();
-  const [picked, setPicked] = useState<string[]>([]);
-  const [read, setRead] = useState<CatalogReturn | null>(null);
+  const [picked, setPicked] = useState<string[]>(() => (initial?.itemIds ?? []).filter((x) => items.some((i) => i.id === x)));
+  const [read, setRead] = useState<CatalogReturn | null>(initial ?? null);
   const [takePersons, setTakePersons] = useState(true);
   const [busy, setBusy] = useState(false);
   const upload = async (file: File) => {

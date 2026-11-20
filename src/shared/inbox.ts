@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { MailExtract, MailKind } from './mailextract.js';
+import type { MailAttachment, MailExtract, MailKind } from './mailextract.js';
 
 export const INBOX_STATUSES = ['new', 'done', 'ignored'] as const;
 export type InboxStatus = (typeof INBOX_STATUSES)[number];
@@ -98,7 +98,7 @@ export interface CaseListRow {
   /** Reservierung angelegt / Bestätigung gesendet (nur Vorgänge im Posteingang) */
   linked?: boolean; confirmed?: boolean;
 }
-export interface CaseMessage { id: string; at: string; dir: 'in' | 'out'; who: string; subject: string; text: string; inboxMailId: string | null; mailStatus: InboxStatus | null; attachments: { name: string; size: number; type: string }[] }
+export interface CaseMessage { id: string; at: string; dir: 'in' | 'out'; who: string; subject: string; text: string; inboxMailId: string | null; mailStatus: InboxStatus | null; attachments: MailAttachment[] }
 export interface CaseDto {
   id: string; number: string; kind: MailKind; title: string; contactName: string; contactAddr: string; status: CaseStatus; turn: CaseTurn | null; createdAt: string; createdBy: string;
   messages: CaseMessage[];

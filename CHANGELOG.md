@@ -3,6 +3,15 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.124.0
+
+- **Anhänge werden gespeichert.** Anhänge eingehender E-Mails liegen jetzt im Programm und lassen sich im Vorgang, in der Nachricht und im Verlauf eines Angebots **herunterladen** (je Datei bis 10 MB, höchstens 10 je E-Mail; größere werden nur benannt). Sie werden immer als Download ausgeliefert, nie im Browser ausgeführt, und zusammen mit der E-Mail gelöscht. Gilt für neu abgerufene E-Mails.
+- **Ausgefüllten Katalog direkt einlesen:** Schickt der Kunde den Katalog als Anhang zurück, steht im Verlauf des Angebots neben dem PDF **„Als Katalog-Antwort einlesen“** – ohne Umweg über das E-Mail-Programm.
+- **Rechnungsentwurf aus Angebot:** Bei einem angenommenen Angebot gibt es „Rechnungsentwurf erstellen“ – Empfänger und alle Positionen werden übernommen; ausgestellt wird erst unter Rechnungen. Nur für Fälle, die nicht über die Kasse abgerechnet werden.
+- **Löschregeln für Vorgänge (wie freigegeben):** Erledigte und archivierte Vorgänge werden nach der eingestellten Aufbewahrungsfrist mit entfernt, samt der gespeicherten Antworten; offene Vorgänge bleiben. „Daten löschen → Posteingang“ entfernt auch die Vorgänge. Vorgangsnummern werden danach nicht neu vergeben.
+- **Bau der Windows-Version:** Der Prüfschritt wartet jetzt auf den Test-Update-Server und wiederholt die Abfrage – er scheiterte bisher gelegentlich zufällig.
+- Datenbank: eine neue Tabelle für Anhänge; bestehende Daten bleiben unverändert.
+
 ## 1.123.0
 
 Gründliche Prüfung und Verbesserung der E-Mail-Vorgänge (Bericht: `docs/vorgaenge-pruefbericht.md`).

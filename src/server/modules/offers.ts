@@ -12,7 +12,7 @@ import { readCatalogPdf, renderCatalog } from '../einvoice/catalogpdf.js';
 import { renderOffer } from '../einvoice/offerpdf.js';
 import { AppError, conflict, notFound, stale } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
-import { getLayout, getLogo } from './billing.js';
+import { addLine, createInvoice, deleteDraft, getLayout, getLogo, updateDraft } from './billing.js';
 import { getPolicy } from './guestlink.js';
 import { ready, signature } from './hotelmail.js';
 import { sendMail, sign } from './mail.js';
@@ -613,4 +613,29 @@ export async function saveTalk(db: Db, actor: Actor, id: string, v: TalkInput) {
   if (!done.length) throw notFound('Angebot');
   await record(db, actor, { action: 'talk', entity: 'offer', entityId: id, after: { template: v.template, steps: v.steps.length } });
   return talk;
+}
+
+// ---------- Rechnungsentwurf aus einem angenommenen Angebot ----------
+/**
+ * Legt aus einem angenommenen Angebot einen Rechnungsentwurf an (Empfänger und alle Positionen) – nur ein Entwurf, ausgestellt wird er
+ * erst unter Rechnungen. Gedacht für Fälle, die nicht über die Kasse abgerechnet werden; es wird nichts automatisch erzeugt.
+ */
+export async function invoiceFromOffer(db: Db, actor: Actor, id: string) {
+  const o = await getOffer(db, id);
+  if (o.mode === 'questions') throw conflict('Das sind erst Fragen an den Kunden – daraus lässt sich keine Rechnung machen.');
+  if (o.status !== 'accepted') throw conflict('Eine Rechnung lässt sich erst aus einem angenommenen Angebot erstellen.');
+  if (!o.lines.length) throw conflict('Das Angebot hat keine Positionen.');
+  const { id: invoiceId } = await createInvoice(db, actor, { include: 'none' });
+  try {
+    await updateDraft(db, actor, invoiceId, {
+      recipientCompany: o.customerCompany, recipientName: o.customerName, recipientStreet: o.street, recipientZip: o.zip, recipientCity: o.city,
+      serviceFrom: o.eventDate, serviceTo: o.eventEnd ?? o.eventDate, notes: `Gemäß Angebot ${o.number}${o.title ? ` (${o.title})` : ''}`, version: 1,
+    });
+    for (const l of o.lines) await addLine(db, actor, invoiceId, { description: l.description, detail: l.detail, quantity: l.quantity, unitPriceCents: l.unitPriceCents, taxRatePercent: l.taxRatePercent });
+  } catch (e) {
+    await deleteDraft(db, actor, invoiceId).catch(() => {});
+    throw e;
+  }
+  await record(db, actor, { action: 'invoice_draft', entity: 'offer', entityId: id, after: { number: o.number, invoiceId, positionen: o.lines.length } });
+  return { invoiceId };
 }

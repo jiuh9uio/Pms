@@ -90,6 +90,11 @@ function MailsView({ status }: { status: Exclude<(typeof INBOX_TABS)[number][0],
   );
 }
 
+/** Anhang: gespeicherte Dateien als Download-Link, sonst nur der Name */
+const AttachmentChip = ({ a }: { a: { name: string; size: number; id?: string } }) => {
+  const label = <>📎 {a.name}{a.size ? ` (${Math.max(1, Math.round(a.size / 1024))} KB)` : ''}</>;
+  return a.id ? <a className="msg-attlink" href={`/api/v1/inbox/attachments/${a.id}`} download={a.name}>{label}</a> : <span>{label}</span>;
+};
 /** Was es ist – steht in Liste und Kopf vorn, der Name daneben */
 const WHAT: Record<MailKind | 'offer' | 'estimate', string> = { hotel: 'Zimmeranfrage', table: 'Tischanfrage', event: 'Feier / Veranstaltung', meeting: 'Tagung', voucher: 'Gutschein', question: 'Frage', other: 'Nachricht', offer: 'Angebot', estimate: 'Kostenvoranschlag' };
 /** Stand als farbiges Abzeichen: grün = bestätigt/erledigt, blau = angelegt, gelb = wir sind dran, grau = wartet auf Kunde */
@@ -224,7 +229,7 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
           <div className="msg-bubble">
             {m.text.length > 500 ? <details><summary>{m.text.slice(0, 380).trim()} … <u>ganz lesen</u></summary><div className="ot-text">{m.text}</div></details> : <div className="ot-text">{m.text || <span className="muted">(kein Text)</span>}</div>}
             <small>{m.dir === 'out' ? m.who.split(' → ')[0] : 'Kunde'} · {fmtDateTime(m.at)}{m.inboxMailId && <> · <button type="button" className="linkbtn" onClick={() => void relocate(m.inboxMailId!)}>gehört nicht hierher</button></>}</small>
-            {m.attachments.length > 0 && <div className="msg-att" title="Anhänge werden nicht ins Programm geladen – bitte im E-Mail-Programm öffnen">{m.attachments.map((a, i) => <span key={i}>📎 {a.name}{a.size ? ` (${Math.max(1, Math.round(a.size / 1024))} KB)` : ''}</span>)}<small className="muted">im E-Mail-Programm öffnen</small></div>}
+            {m.attachments.length > 0 && <div className="msg-att" title="Anklicken lädt den Anhang herunter">{m.attachments.map((a, i) => <AttachmentChip key={i} a={a} />)}{m.attachments.some((a) => !a.id) && <small className="muted">ohne Link: bitte im E-Mail-Programm öffnen</small>}</div>}
           </div>
         </li>
       ))}</ol>
@@ -328,7 +333,7 @@ function MailDetail({ id, onGone }: { id: string; onGone: () => void }) {
         <div className="cardhead"><div><h2>{data.subject || '(ohne Betreff)'}</h2><p className="muted">{data.fromName} &lt;{data.fromAddr}&gt; · {fmtDateTime(data.receivedAt)}</p></div>
           <div className="actions"><select value={data.kind} onChange={(e) => void patch({ kind: e.target.value })} aria-label="Art der Nachricht">{MAIL_KINDS.map((k) => <option key={k} value={k}>{MAIL_KIND_LABEL[k]}</option>)}</select></div></div>
         <pre className="mailbody">{data.body || '(kein Text – die Nachricht besteht vermutlich nur aus Bildern oder Anhängen)'}</pre>
-        {!!data.extract.attachments?.length && <p className="msg-att">{data.extract.attachments.map((a, i) => <span key={i}>📎 {a.name}{a.size ? ` (${Math.max(1, Math.round(a.size / 1024))} KB)` : ''}</span>)}<small className="muted">Anhänge bitte im E-Mail-Programm öffnen – sie werden nicht ins Programm geladen.</small></p>}
+        {!!data.extract.attachments?.length && <p className="msg-att">{data.extract.attachments.map((a, i) => <AttachmentChip key={i} a={a} />)}{data.extract.attachments.some((a) => !a.id) && <small className="muted">ohne Link (zu groß oder älter): bitte im E-Mail-Programm öffnen</small>}</p>}
         <div className="formactions">
           {data.status !== 'done' && <Button onClick={() => status('done', 'Als erledigt markiert')}>Erledigt</Button>}
           {data.status === 'new' && <Button onClick={() => status('ignored', 'Ignoriert')}>Ignorieren</Button>}

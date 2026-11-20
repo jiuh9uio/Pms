@@ -351,6 +351,13 @@
       "when": 1795196752992,
       "tag": "0049_vorgaenge",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1795214252259,
+      "tag": "0050_anhaenge",
+      "breakpoints": true
     }
   ]
 }

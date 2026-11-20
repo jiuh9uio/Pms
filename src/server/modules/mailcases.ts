@@ -180,7 +180,7 @@ export async function listCases(db: Exec, f: ListFilter, mods: { offers: boolean
 export async function updateCase(db: Db, actor: Actor, id: string, v: { kind?: MailKind; status?: CaseStatus; title?: string }) {
   const [before] = await db.select().from(mailCases).where(eq(mailCases.id, id));
   if (!before) throw notFound('Vorgang');
-  await db.update(mailCases).set({ ...(v.kind ? { kind: v.kind } : {}), ...(v.status ? { status: v.status } : {}), ...(v.title !== undefined ? { title: v.title || before.title } : {}) }).where(eq(mailCases.id, id));
+  await db.update(mailCases).set({ ...(v.kind ? { kind: v.kind } : {}), ...(v.status ? { status: v.status, updatedAt: new Date() } : {}), ...(v.title !== undefined ? { title: v.title || before.title } : {}) }).where(eq(mailCases.id, id));
   // die Kategorie gilt für den ganzen Vorgang – so passen auch die Aktionen an der Nachricht (Zimmer übernehmen, Tisch reservieren …)
   if (v.kind) await db.update(inboxMails).set({ kind: v.kind }).where(eq(inboxMails.caseId, id));
   // „erledigt“ gilt auch für die noch offenen Nachrichten des Vorgangs

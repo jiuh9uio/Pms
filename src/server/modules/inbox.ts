@@ -3,10 +3,10 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import type { MailDraft } from '../../shared/hotel.js';
 import { MAIL_KINDS, type InboxCounts, type InboxMailDto, type InboxSettingsDto, type InboxState, type InboxStatus, type MailRules, DEFAULT_REPLY_SNIPPETS, type ReplySnippet, type ReplyTemplate, type WebRequestPublic, type WebRequestSettings } from '../../shared/inbox.js';
-import { extract, type MailExtract, type MailKind } from '../../shared/mailextract.js';
+import { extract, type MailAttachment, type MailExtract, type MailKind } from '../../shared/mailextract.js';
 import type { Db, Exec } from '../db/client.js';
 import { REQUEST_LABEL, siteFrom, type SiteRequest } from '../../shared/site.js';
-import { inboxMails, mailCases, restaurantTables, settings, tableReservations } from '../db/schema.js';
+import { inboxAttachments, inboxMails, mailCases, restaurantTables, settings, tableReservations } from '../db/schema.js';
 import { clientKey } from '../lib/clientkey.js';
 import { AppError, conflict, notFound } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
@@ -27,6 +27,8 @@ interface State { lastFetchAt: string | null; lastError: string | null; uidValid
 const STATE0: State = { lastFetchAt: null, lastError: null, uidValidity: '', lastUid: 0 };
 /** beim ersten Abruf: so viele Tage zurück, höchstens so viele Nachrichten */
 const FIRST_DAYS = 30, MAX_PER_FETCH = 200, MAX_BODY = 20_000;
+/** Größe einer abgeholten E-Mail samt Anhängen; je Anhang höchstens MAX_ATTACHMENT, je Nachricht höchstens MAX_ATTACHMENTS Dateien werden gespeichert */
+const MAX_SOURCE = 20_000_000, MAX_ATTACHMENT = 10_000_000, MAX_ATTACHMENTS = 10;
 
 const read = async <T>(db: Exec, key: string, def: T): Promise<T> => {
   const [row] = await db.select().from(settings).where(eq(settings.key, key));
@@ -134,7 +136,7 @@ export const imapFetch: Fetcher = async (c, known) => {
       const uids = cont ? sorted.slice(0, MAX_PER_FETCH) : sorted.slice(-MAX_PER_FETCH);
       const mails: RawMail[] = [];
       if (uids.length) {
-        for await (const m of client.fetch(uids.join(','), { uid: true, internalDate: true, source: { maxLength: 2_000_000 } }, { uid: true }))
+        for await (const m of client.fetch(uids.join(','), { uid: true, internalDate: true, source: { maxLength: MAX_SOURCE } }, { uid: true }))
           if (m.source) mails.push({ uid: m.uid, source: m.source, internalDate: m.internalDate instanceof Date ? m.internalDate : new Date(m.internalDate ?? Date.now()) });
       }
       return { uidValidity, mails };
@@ -180,13 +182,26 @@ async function storeInbound(db: Db, rules: MailRules, uidValidity: string, raw: 
   }
   const { ex, hidden } = judge(rules, { fromName: from?.name ?? '', fromAddr: from?.address ?? '', subject, body, day: berlinDay(date) });
   // Anhänge werden nicht gespeichert, aber benannt – damit sichtbar ist, dass etwas dabei war (eingebettete Bilder zählen nicht)
-  const attachments = (p.attachments ?? []).filter((a) => !a.related && a.contentDisposition !== 'inline').slice(0, 20)
-    .map((a) => ({ name: String(a.filename ?? 'ohne Namen').replace(/[\u0000-\u001f]/g, '').slice(0, 120), size: a.size ?? 0, type: String(a.contentType ?? '').slice(0, 80) }));
+  const files = (p.attachments ?? []).filter((a) => !a.related && a.contentDisposition !== 'inline').slice(0, 20);
+  const attachments: MailAttachment[] = files.map((a) => ({ name: String(a.filename ?? 'ohne Namen').replace(/[\u0000-\u001f\\/]/g, '').slice(0, 120) || 'ohne Namen', size: a.size ?? 0, type: String(a.contentType ?? '').slice(0, 80) }));
   const rows = await db.insert(inboxMails).values({
     uidValidity, uid: raw.uid, messageId, fromName: (from?.name ?? '').slice(0, 200), fromAddr: (from?.address ?? '').slice(0, 200),
     subject, receivedAt: date, body, kind: ex.kind, extract: attachments.length ? { ...ex, attachments } : ex, ...(hidden ? { status: 'ignored' as const, handledBy: BY_RULE } : {}),
   }).onConflictDoNothing().returning({ id: inboxMails.id });
   if (!rows[0]) return 0;
+  // Anhänge speichern (als reine Daten – sie werden nie ausgeführt und nur als Download ausgeliefert); zu große bleiben nur benannt
+  if (files.length) {
+    let stored = 0;
+    for (let k = 0; k < files.length && stored < MAX_ATTACHMENTS; k++) {
+      const content = files[k]!.content;
+      if (!Buffer.isBuffer(content) || content.length === 0 || content.length > MAX_ATTACHMENT) continue;
+      try {
+        const [a] = await db.insert(inboxAttachments).values({ inboxMailId: rows[0].id, name: attachments[k]!.name, mime: attachments[k]!.type, sizeBytes: content.length, data: content }).returning({ id: inboxAttachments.id });
+        attachments[k] = { ...attachments[k]!, size: content.length, id: a!.id }; stored++;
+      } catch { /* Anhang nicht gespeichert – die Nachricht selbst bleibt erhalten */ }
+    }
+    if (stored) await db.update(inboxMails).set({ extract: { ...ex, attachments } }).where(eq(inboxMails.id, rows[0].id));
+  }
   const refs = [p.inReplyTo, ...(Array.isArray(p.references) ? p.references : [p.references])].filter((x): x is string => typeof x === 'string' && !!x);
   // Zuordnung darf den Abruf nie stören – im Zweifel bleibt die Nachricht unzugeordnet im Posteingang
   await routeInbound(db, { id: rows[0].id, subject, body, fromName: from?.name ?? '', fromAddr: from?.address ?? '', receivedAt: date }, refs).catch(() => null);
@@ -243,6 +258,10 @@ export async function fetchInbox(db: Db, actor: Actor | null): Promise<{ added: 
     await write(db, 'inbox_state', { lastFetchAt: new Date().toISOString(), lastError: null, uidValidity: got.uidValidity, lastUid } satisfies State);
     // Aufbewahrung: erledigte und ignorierte Nachrichten nach der eingestellten Frist aus dem Programm entfernen (im Postfach bleiben sie)
     if (s.keepDays > 0) await db.delete(inboxMails).where(sql`${inboxMails.status} <> 'new' and ${inboxMails.receivedAt} < now() - make_interval(days => ${s.keepDays})`);
+    // … und mit derselben Frist die erledigten und archivierten Vorgänge samt der gespeicherten Antworten (so freigegeben).
+    // Offene Vorgänge bleiben; ein Vorgang mit noch unbearbeiteten Nachrichten wird nie entfernt. Die Nummern werden nicht neu vergeben.
+    if (s.keepDays > 0) await db.execute(sql`delete from mail_cases c where c.status in ('done', 'archived') and c.updated_at < now() - make_interval(days => ${s.keepDays})
+      and not exists (select 1 from inbox_mails m where m.case_id = c.id and m.status = 'new')`);
     if (actor && added) await record(db, actor, { action: 'fetch', entity: 'inbox', after: { added } });
     return { added };
   } catch (e) {
@@ -313,7 +332,7 @@ export async function updateInboxMail(db: Db, actor: Actor, id: string, v: { sta
   if (v.kind && r!.caseId) await db.execute(sql`update mail_cases set kind = ${v.kind} where id = ${r!.caseId}`);
   // Vorgang mitführen: sind alle Nachrichten erledigt/ignoriert, ist auch der Vorgang erledigt; wird eine wieder geöffnet, ist er wieder offen
   // Ausnahme: wird gerade eine Reservierung daraus angelegt, bleibt der Vorgang offen – die Bestätigung an den Kunden steht noch aus
-  if (v.status && r!.caseId && !v.linkKind) await db.execute(sql`update mail_cases set status = case when exists (select 1 from inbox_mails m where m.case_id = ${r!.caseId} and m.status = 'new') then (case when status = 'working' then 'working' else 'open' end) else 'done' end where id = ${r!.caseId}`);
+  if (v.status && r!.caseId && !v.linkKind) await db.execute(sql`update mail_cases set status = case when exists (select 1 from inbox_mails m where m.case_id = ${r!.caseId} and m.status = 'new') then (case when status = 'working' then 'working' else 'open' end) else 'done' end, updated_at = now() where id = ${r!.caseId}`);
   await record(db, actor, { action: 'update', entity: 'inbox', entityId: id, before: { status: before.status, kind: before.kind }, after: { status: r!.status, kind: r!.kind, subject: r!.subject.slice(0, 80) } });
   return dto(r!, true);
 }
@@ -541,4 +560,12 @@ export async function submitSiteRequest(db: Db, v: SiteRequest, ip: string | nul
     await record(tx, { userId: null, userName: 'Gästeseite', ip }, { action: 'create', entity: 'inbox', after: { art: v.type } });
   });
   return { ok: true };
+}
+
+// ---------- Anhänge ----------
+/** Gespeicherten Anhang einer Nachricht holen (nur zum Herunterladen – der Inhalt wird vom Programm nie ausgeführt oder eingebettet) */
+export async function getAttachment(db: Exec, attachmentId: string) {
+  const [a] = await db.select().from(inboxAttachments).where(eq(inboxAttachments.id, attachmentId));
+  if (!a) throw notFound('Anhang');
+  return a;
 }

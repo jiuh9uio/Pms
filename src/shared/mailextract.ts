@@ -4,10 +4,12 @@
  * den ein Mensch prüft, bevor daraus eine Reservierung wird.
  */
 export type MailKind = 'hotel' | 'table' | 'event' | 'meeting' | 'voucher' | 'question' | 'other';
+/** id = im Programm gespeichert und abrufbar; ohne id nur der Name (zu groß oder aus der Zeit vor dem Speichern) */
+export interface MailAttachment { name: string; size: number; type: string; id?: string }
 export interface MailExtract {
   kind: MailKind;
   /** Namen der Anhänge (die Dateien selbst liegen nur im Postfach) */
-  attachments?: { name: string; size: number; type: string }[];
+  attachments?: MailAttachment[];
   /** wann die Bestätigung der daraus angelegten Reservierung gesendet wurde */
   confirmedAt?: string;
   /** gefundene Tage in Reihenfolge des Textes, ohne Doppelte (ISO) */

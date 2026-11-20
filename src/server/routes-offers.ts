@@ -76,6 +76,17 @@ export function registerOfferRoutes(api: FastifyInstance, { db, requireUser, req
     return offers.readCatalog(db, idOf(req), req.body);
   });
   api.post('/offers/:id/talk', user, (req) => offers.saveTalk(db, actor(req), idOf(req), O.talkInput.parse(req.body)));
+  // Rechnungsentwurf aus dem angenommenen Angebot (ausgestellt wird erst unter Rechnungen)
+  api.post('/offers/:id/invoice', user, (req) => offers.invoiceFromOffer(db, actor(req), idOf(req)));
+  // Anhänge aus dem Verlauf: herunterladen (immer als Download) oder einen ausgefüllten Katalog direkt einlesen
+  const attOf = (req: FastifyRequest) => z.object({ attachmentId: z.uuid() }).parse({ attachmentId: (req.params as { attachmentId?: string }).attachmentId ?? (req.body as { attachmentId?: string } | null)?.attachmentId }).attachmentId;
+  api.get('/offers/:id/attachments/:attachmentId', user, async (req, reply) => {
+    const f = await thread.offerAttachment(db, idOf(req), attOf(req));
+    const safe = f.name.replace(/[^\w .()\-äöüÄÖÜß]+/g, '_').slice(0, 120) || 'anhang';
+    return reply.header('Content-Type', 'application/octet-stream').header('X-Content-Type-Options', 'nosniff')
+      .header('Content-Disposition', `attachment; filename="${safe.replace(/[^\x20-\x7e]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(safe)}`).send(f.data);
+  });
+  api.post('/offers/:id/catalog/read-attachment', user, async (req) => offers.readCatalog(db, idOf(req), (await thread.offerAttachment(db, idOf(req), attOf(req))).data));
   // Verlauf: gesendete E-Mails, zugeordnete Antworten aus dem Posteingang, Absprache, Annahme
   api.get('/offers/:id/timeline', user, (req) => thread.timeline(db, idOf(req)));
   api.post('/offers/:id/timeline/assign', user, (req) => thread.assignInboxMail(db, actor(req), idOf(req), z.object({ inboxMailId: z.uuid() }).parse(req.body).inboxMailId));

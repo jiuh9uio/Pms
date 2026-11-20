@@ -272,3 +272,107 @@ describe('E-Mail-Vorgänge: Liste, Stand und Berechtigungen', () => {
     expect((await db.execute(sql`select count(*)::int as n from mail_cases`))[0]!.n).toBeGreaterThan(0);
   });
 });
+
+describe('Anhänge, Löschregeln, Rechnung aus Angebot', () => {
+  const b64 = (buf: Buffer) => buf.toString('base64').replace(/(.{76})/g, '$1\r\n');
+  const withPdf = (name: string, pdf: Buffer) => ['Content-Type: multipart/mixed; boundary="Y"', '', '--Y', 'Content-Type: text/plain; charset=utf-8', '', 'Anbei der ausgefüllte Katalog.',
+    '--Y', `Content-Type: application/pdf; name="${name}"`, `Content-Disposition: attachment; filename="${name}"`, 'Content-Transfer-Encoding: base64', '', b64(pdf), '--Y--'].join('\r\n');
+
+  it('Anhang wird gespeichert und nur als Download ausgeliefert; ohne Modul „E-Mail“ kein Zugriff', async () => {
+    const pdf = Buffer.from('%PDF-1.4\n%Testdatei\n%%EOF');
+    box.push(raw(70, 'Anna Anhang <anna@kunde.example>', 'Mit Datei', '', { body: withPdf('Mein Dokument.pdf', pdf) }), raw(71, 'Html Anhang <html@kunde.example>', 'Böse Datei', '', {
+      body: ['Content-Type: multipart/mixed; boundary="Z"', '', '--Z', 'Content-Type: text/plain', '', 'siehe Anhang', '--Z', 'Content-Type: text/html; name="seite.html"', 'Content-Disposition: attachment; filename="seite.html"', '', '<script>alert(1)</script>', '--Z--'].join('\r\n') }));
+    await fetchNow();
+    const m = (await byUid(70))! as unknown as { id: string; extract: { attachments: { id?: string; name: string; size: number }[] } };
+    const a = m.extract.attachments[0]!;
+    expect(a).toMatchObject({ name: 'Mein Dokument.pdf', size: pdf.length });
+    expect(a.id).toBeTruthy();
+    const dl = await call('GET', `/inbox/attachments/${a.id}`, admin);
+    expect(dl.statusCode).toBe(200);
+    expect(dl.rawPayload.equals(pdf)).toBe(true);
+    expect(dl.headers['content-disposition']).toMatch(/^attachment; filename="Mein Dokument\.pdf"/);
+    expect(dl.headers['content-type']).toBe('application/octet-stream');
+    expect(dl.headers['x-content-type-options']).toBe('nosniff');
+    // ein HTML-Anhang wird ebenfalls nur als Datei ausgeliefert, nie als Seite
+    const h = ((await byUid(71))! as unknown as { extract: { attachments: { id: string }[] } }).extract.attachments[0]!;
+    const hd = await call('GET', `/inbox/attachments/${h.id}`, admin);
+    expect(hd.headers['content-type']).toBe('application/octet-stream');
+    expect(hd.headers['content-disposition']).toContain('attachment');
+    const none = session(await call('POST', '/auth/login', {}, { username: 'ohne', password: 'ohne-post-12345' }));
+    expect((await call('GET', `/inbox/attachments/${a.id}`, none)).statusCode).toBe(403);
+    expect((await call('GET', '/inbox/attachments/00000000-0000-4000-8000-000000000000', admin)).statusCode).toBe(404);
+    // die Liste der Nachrichten lädt keine Dateiinhalte mit
+    expect(JSON.stringify(await ok('GET', '/inbox?status=all', admin))).not.toContain('Testdatei');
+  });
+
+  it('ausgefüllter Katalog aus der E-Mail: direkt im Angebot einlesen – nur Anhänge aus dem Verlauf dieses Angebots', async () => {
+    const { PDFDocument } = await import('pdf-lib');
+    const item = (await ok('POST', '/offer-items', admin, { name: 'Beamer Anhangtest', description: '', unit: 'day', priceCents: 4000, taxRatePercent: 19, area: 'both', group: '', sort: 1, active: true })).id;
+    const tpl = await ok('POST', '/offer-templates', admin, { name: 'Anhang-Katalog', area: 'both', title: '', intro: '', closing: '', questions: [], validDays: 14, depositPercent: 0, items: [{ itemId: item, quantity: null, preselect: false }] });
+    const o = await ok('POST', '/offers', admin, { templateId: tpl.id, customerName: 'Karl Katalog', email: 'karl@kunde.example', persons: 8 });
+    await ok('POST', `/offers/${o.id}/catalog/mail`, admin, { to: 'karl@kunde.example', subject: 'Leistungskatalog', text: 'Bitte ankreuzen.' });
+    const our = sent.at(-1)!;
+    expect(our.subject).toContain(`[${o.number}]`);
+    expect(threadCodesOf([our.messageId!])).toEqual([o.number]);
+    const doc = await PDFDocument.load((await call('GET', `/offers/${o.id}/catalog/pdf`, admin)).rawPayload);
+    doc.getForm().getCheckBox(`pos_${item}`).check();
+    doc.getForm().getTextField('personen').setText('11');
+    const filled = Buffer.from(await doc.save());
+    // Antwort mit geändertem Betreff, aber technischem Verweis auf unsere E-Mail
+    box.push(raw(80, 'Karl Katalog <karl@kunde.example>', 'hier das Formular', '', { body: withPdf('Katalog.pdf', filled), headers: [`In-Reply-To: ${our.messageId}`] }));
+    await fetchNow();
+    const t = await ok('GET', `/offers/${o.id}/timeline`, admin);
+    const entry = t.entries.find((e: { dir: string; attachments: unknown[] }) => e.dir === 'in' && e.attachments.length);
+    expect(entry.attachments[0]).toMatchObject({ name: 'Katalog.pdf' });
+    const read = await ok('POST', `/offers/${o.id}/catalog/read-attachment`, admin, { attachmentId: entry.attachments[0].id });
+    expect(read).toMatchObject({ itemIds: [item], persons: 11, offerNumber: o.number });
+    expect((await call('GET', `/offers/${o.id}/attachments/${entry.attachments[0].id}`, admin)).headers['content-disposition']).toContain('attachment');
+    // ein Anhang aus einer fremden E-Mail lässt sich über das Angebot nicht lesen
+    const foreign = ((await byUid(70))! as unknown as { extract: { attachments: { id: string }[] } }).extract.attachments[0]!.id;
+    expect((await call('POST', `/offers/${o.id}/catalog/read-attachment`, admin, { attachmentId: foreign })).statusCode).toBe(404);
+    expect((await call('GET', `/offers/${o.id}/attachments/${foreign}`, admin)).statusCode).toBe(404);
+  });
+
+  it('Rechnungsentwurf aus angenommenem Angebot: Empfänger und Positionen übernommen; vorher nicht möglich', async () => {
+    const o = await ok('POST', '/offers', admin, { customerCompany: 'Rechnung GmbH', customerName: 'Rita Rechnung', email: 'rita@kunde.example', persons: 4 });
+    const d = await ok('GET', `/offers/${o.id}`, admin);
+    await ok('PUT', `/offers/${o.id}`, admin, { ...d, street: 'Weg 3', zip: '12345', city: 'Ort', lines: [
+      { itemId: null, description: 'Raummiete', detail: 'Saal', unit: 'flat', quantity: 1, unitPriceCents: 25000, taxRatePercent: 19 },
+      { itemId: null, description: 'Menü', detail: '', unit: 'person', quantity: 4, unitPriceCents: 3500, taxRatePercent: 19 }], version: d.version });
+    expect((await call('POST', `/offers/${o.id}/invoice`, admin, {})).statusCode).toBe(409); // noch nicht angenommen
+    await ok('POST', `/offers/${o.id}/mail`, admin, { to: 'rita@kunde.example', subject: `Angebot ${o.number}`, text: 'Unser Angebot.' });
+    await ok('POST', `/offers/${o.id}/accept`, admin, { method: 'telefon', name: 'Rita Rechnung', note: '' });
+    const { invoiceId } = await ok('POST', `/offers/${o.id}/invoice`, admin, {});
+    const inv = await ok('GET', `/invoices/${invoiceId}`, admin);
+    expect(inv).toMatchObject({ status: 'draft', number: null, recipientCompany: 'Rechnung GmbH', recipientName: 'Rita Rechnung', recipientStreet: 'Weg 3', grossCents: 39000 });
+    expect(inv.lines.map((l: { description: string; quantity: number; unitPriceCents: number }) => [l.description, l.quantity, l.unitPriceCents])).toEqual([['Raummiete', 1, 25000], ['Menü', 4, 3500]]);
+    expect(inv.notes).toContain(o.number);
+  });
+
+  it('Löschregeln: erledigte Vorgänge gehen nach der Frist mit, offene bleiben; „Daten löschen → Posteingang“ entfernt auch die Vorgänge; Nummern werden nicht neu vergeben', async () => {
+    const cases = await ok('GET', '/mail-cases?status=all&kind=hotel', admin);
+    const all = (await db.execute(sql`select id, number, status from mail_cases order by number`)) as unknown as { id: string; number: string; status: string }[];
+    expect(cases.length + all.length).toBeGreaterThan(0);
+    const open = all.find((c) => c.status === 'open')!, other = all.find((c) => c.id !== open.id && c.status !== 'archived') ?? all.find((c) => c.id !== open.id)!;
+    await ok('PATCH', `/mail-cases/${other.id}`, admin, { status: 'done' });
+    // beide Vorgänge „alt“ machen; nur der erledigte darf verschwinden
+    await db.execute(sql`update mail_cases set updated_at = now() - interval '40 days' where id in (${open.id}, ${other.id})`);
+    await db.execute(sql`update inbox_mails set received_at = now() - interval '40 days' where case_id = ${other.id}`);
+    await ok('PUT', '/settings/inbox', admin, { enabled: true, host: 'imap.example.org', port: 993, user: 'info@example.org', password: '', folder: 'INBOX', autoMinutes: 0, keepDays: 30 });
+    await fetchNow();
+    const left = (await db.execute(sql`select id from mail_cases`)).map((r) => r.id);
+    expect(left).toContain(open.id);
+    expect(left).not.toContain(other.id);
+    expect((await db.execute(sql`select count(*)::int as n from mail_case_out where case_id = ${other.id}`))[0]!.n).toBe(0);
+    // Daten löschen → Posteingang
+    const highest = all.at(-1)!.number;
+    const purge = { billing: false, bookings: 'none', guests: false, resetNumbers: false, inbox: true, companies: false, password: 'sehr-geheim-123', confirm: 'LÖSCHEN', dryRun: false };
+    await ok('POST', '/settings/purge', admin, purge);
+    expect((await db.execute(sql`select (select count(*) from mail_cases)::int + (select count(*) from inbox_mails)::int + (select count(*) from inbox_attachments)::int + (select count(*) from mail_case_out)::int as n`))[0]!.n).toBe(0);
+    // ein neuer Vorgang bekommt eine höhere Nummer als alle früheren
+    await db.execute(sql`insert into inbox_mails (uid_validity, uid, from_addr, subject, received_at, kind, extract) values ('nach', 1, 'neu@kunde.example', 'Neu', now(), 'other', '{}')`);
+    const [fresh] = await db.execute(sql`select id from inbox_mails where uid_validity = 'nach'`);
+    const c = await ok('POST', `/inbox/${fresh!.id}/case`, admin, {});
+    expect(c.number > highest).toBe(true);
+  });
+});

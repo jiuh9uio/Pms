@@ -222,7 +222,16 @@ jobs:
             $s = New-Object Microsoft.PowerShell.Commands.WebRequestSession
             Post '/auth/setup' @{ username = 'chef'; name = 'Test'; password = 'sehr-geheim-123' } $s | Out-Null
             Post '/categories' @{ name = 'Doppelzimmer'; description = ''; stdOccupancy = 2; maxPersons = 2; basePriceCents = 9900; sort = 1 } $s | Out-Null
-            $st = Invoke-RestMethod "$base/update/status?refresh=1" -WebSession $s
+            # Der kleine Test-Update-Server (python) braucht einen Moment, bis er antwortet – erst darauf warten,
+            # dann die Abfrage bei „keine Verbindung“ ein paar Mal wiederholen (sonst scheitert der Bau zufällig).
+            foreach ($i in 1..30) { try { Invoke-WebRequest 'http://127.0.0.1:8099/latest.json' -UseBasicParsing -TimeoutSec 2 | Out-Null; break } catch { Start-Sleep 1 } }
+            $st = $null
+            foreach ($i in 1..10) {
+              $st = Invoke-RestMethod "$base/update/status?refresh=1" -WebSession $s
+              if ($st.available) { break }
+              Write-Host "Update noch nicht erkannt (Versuch $i): $($st.error)"
+              Start-Sleep 3
+            }
             if (-not $st.available -or $st.current -ne '0.0.1') { throw "Update wurde nicht erkannt: $($st | ConvertTo-Json)" }
             $r = Post '/update/install' @{} $s
             Write-Host "Update auf $($r.version) angestossen"

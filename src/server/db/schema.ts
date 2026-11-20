@@ -685,6 +685,17 @@ export const inboxMails = pgTable('inbox_mails', {
   caseId: uuid('case_id').references(() => mailCases.id, { onDelete: 'set null' }),
 }, (t) => [uniqueIndex('inbox_mails_uid_idx').on(t.uidValidity, t.uid), index('inbox_mails_received_idx').on(t.receivedAt), index('inbox_mails_case_idx').on(t.caseId)]);
 
+/** Anhänge eingegangener E-Mails (Datei im Programm gespeichert; wird mit der Nachricht gelöscht) */
+export const inboxAttachments = pgTable('inbox_attachments', {
+  id: id(),
+  inboxMailId: uuid('inbox_mail_id').notNull().references(() => inboxMails.id, { onDelete: 'cascade' }),
+  name: text('name').notNull().default(''),
+  mime: text('mime').notNull().default(''),
+  sizeBytes: integer('size_bytes').notNull().default(0),
+  data: bytea('data').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+}, (t) => [index('inbox_attachments_mail_idx').on(t.inboxMailId)]);
+
 // =====================================================================================
 // Team: Übergabebuch, Aufgaben und Reparaturmeldungen – für alle angemeldeten Benutzer
 // =====================================================================================

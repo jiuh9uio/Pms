@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
 import type { OfferAnswers, OfferTalk, OfferTimeline, OfferTimelineEntry } from '../../shared/offers.js';
 import type { Db, Exec } from '../db/client.js';
-import { inboxMails, offerEvents, offers } from '../db/schema.js';
+import { inboxAttachments, inboxMails, offerEvents, offers } from '../db/schema.js';
 import { conflict, notFound } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 
@@ -97,14 +97,16 @@ export async function timeline(db: Exec, offerId: string): Promise<OfferTimeline
   const [o] = await db.select().from(offers).where(eq(offers.id, offerId));
   if (!o) throw notFound('Angebot');
   const events = await db.select().from(offerEvents).where(eq(offerEvents.offerId, offerId)).orderBy(asc(offerEvents.at));
-  const e = (id: string, at: Date | string, title: string, by = '', text = ''): OfferTimelineEntry => ({ id, at: typeof at === 'string' ? at : at.toISOString(), dir: 'event', title, by, subject: '', text, hint: null, removable: false });
+  const e = (id: string, at: Date | string, title: string, by = '', text = ''): OfferTimelineEntry => ({ id, at: typeof at === 'string' ? at : at.toISOString(), dir: 'event', title, by, subject: '', text, hint: null, removable: false, attachments: [] });
+  const mailIds = events.map((x) => x.inboxMailId).filter((x): x is string => !!x);
+  const att = !mailIds.length ? [] : await db.select({ id: inboxAttachments.id, mailId: inboxAttachments.inboxMailId, name: inboxAttachments.name, size: inboxAttachments.sizeBytes, type: inboxAttachments.mime }).from(inboxAttachments).where(sql`${inboxAttachments.inboxMailId} in ${mailIds}`);
   const entries: OfferTimelineEntry[] = [e('created', o.createdAt, 'Angelegt', o.createdBy)];
   const talk = o.talk as OfferTalk | null, answers = o.answers as OfferAnswers | null;
   if (talk) entries.push(e('talk', talk.at, `Absprache am Tisch${talk.template ? ` – ${talk.template}` : ''}`, talk.by, talk.steps.filter((s) => s.answers.length || s.text).map((s) => `${s.title}: ${[s.answers.join(', '), s.text].filter(Boolean).join(' – ')}`).join('\n')));
   for (const x of events) {
     entries.push(x.kind === 'mail_out'
-      ? { id: x.id, at: x.at.toISOString(), dir: 'out', title: WHAT[x.what] ?? 'E-Mail gesendet', by: x.who, subject: x.subject, text: x.body, hint: null, removable: false }
-      : { id: x.id, at: x.at.toISOString(), dir: 'in', title: 'Antwort des Kunden', by: x.who, subject: x.subject, text: x.body, hint: replyHint(x.body), removable: true });
+      ? { id: x.id, at: x.at.toISOString(), dir: 'out', title: WHAT[x.what] ?? 'E-Mail gesendet', by: x.who, subject: x.subject, text: x.body, hint: null, removable: false, attachments: [] }
+      : { id: x.id, at: x.at.toISOString(), dir: 'in', title: 'Antwort des Kunden', by: x.who, subject: x.subject, text: x.body, hint: replyHint(x.body), removable: true, attachments: x.inboxMailId ? att.filter((a) => a.mailId === x.inboxMailId).map((a) => ({ id: a.id, name: a.name, size: a.size, type: a.type })) : [] });
   }
   // ältere Angebote (vor dem Verlauf versendet): wenigstens den Versand zeigen
   if (o.sentAt && !events.some((x) => x.kind === 'mail_out')) entries.push(e('sent', o.sentAt, o.mode === 'questions' ? 'Fragen gesendet' : 'Angebot gesendet', o.sentTo ? `an ${o.sentTo}` : ''));
@@ -121,4 +123,12 @@ export async function timeline(db: Exec, offerId: string): Promise<OfferTimeline
       sql`not exists (select 1 from ${offerEvents} where ${offerEvents.inboxMailId} = ${inboxMails.id})`)).orderBy(desc(inboxMails.receivedAt)).limit(5))
     .map((m) => ({ inboxMailId: m.id, at: m.at.toISOString(), from: m.fromName || m.fromAddr, subject: m.subject }));
   return { code: `[${o.number}]`, entries, candidates };
+}
+
+/** Anhang einer E-Mail, die zum Verlauf dieses Angebots gehört (nur dann darf er über das Angebot gelesen werden) */
+export async function offerAttachment(db: Exec, offerId: string, attachmentId: string) {
+  const [a] = await db.select({ a: inboxAttachments }).from(inboxAttachments)
+    .innerJoin(offerEvents, and(eq(offerEvents.inboxMailId, inboxAttachments.inboxMailId), eq(offerEvents.offerId, offerId))).where(eq(inboxAttachments.id, attachmentId)).limit(1);
+  if (!a) throw notFound('Anhang');
+  return a.a;
 }

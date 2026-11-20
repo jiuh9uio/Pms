@@ -464,6 +464,13 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.post('/mail-cases/:id/split', email, (req) => mailcases.splitMail(db, actor(req), cid(req), mailIdOf(req)));
     api.post('/mail-cases/:id/merge', email, (req) => mailcases.mergeCase(db, actor(req), cid(req), I.caseNumberInput.parse(req.body).number));
     api.post('/inbox/:id/case', email, async (req) => { const c = await mailcases.ensureCaseForMail(db, actor(req), cid(req)); return { id: c.id, number: c.number }; });
+    // Anhang herunterladen: immer als Download, nie im Browser dargestellt (ein HTML- oder SVG-Anhang könnte sonst Skripte ausführen)
+    api.get('/inbox/attachments/:id', email, async (req, reply) => {
+      const f = await inbox.getAttachment(db, cid(req));
+      const safe = f.name.replace(/[^\w .()\-äöüÄÖÜß]+/g, '_').slice(0, 120) || 'anhang';
+      return reply.header('Content-Type', 'application/octet-stream').header('X-Content-Type-Options', 'nosniff')
+        .header('Content-Disposition', `attachment; filename="${safe.replace(/[^\x20-\x7e]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(safe)}`).send(f.data);
+    });
     api.get('/settings/mail-rules', { preHandler: requireAdmin }, () => inbox.getMailRules(db));
     api.put('/settings/mail-rules', { preHandler: requireAdmin }, (req) => inbox.saveMailRules(db, actor(req), I.mailRulesInput.parse(req.body)));
     api.post('/inbox/reclassify', { preHandler: requireAdmin }, (req) => inbox.reclassify(db, actor(req)));

@@ -1317,3 +1317,5 @@ a.linkcard.attention b { color: var(--warn); }
 .msg-att { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-top: 6px; font-size: 13px; } .msg-att > span { padding: 2px 8px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); }
 .msg-from { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); } .msg-from input { width: auto; padding-top: 5px; padding-bottom: 5px; }
 .msg-merge { margin-left: auto; align-self: center; }
+.msg-attlink, .ot-att a { padding: 2px 8px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); text-decoration: none; color: var(--accent-text); }
+.ot-att { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }

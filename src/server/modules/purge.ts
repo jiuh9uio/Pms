@@ -53,7 +53,11 @@ async function work(tx: Tx, v: PurgeInput): Promise<Omit<PurgeResult, 'dryRun' |
       await tx.execute(sql`delete from settings where key = 'clean_manual'`);
     }
   }
-  if (v.inbox) r.mails = await del(tx, sql`delete from inbox_mails`);
+  if (v.inbox) {
+    r.mails = await del(tx, sql`delete from inbox_mails`);
+    // zum Posteingang gehören auch die Vorgänge mit den gespeicherten Antworten (so freigegeben); der Nummernzähler bleibt, damit keine Nummer doppelt vergeben wird
+    await del(tx, sql`delete from mail_cases`);
+  }
   if (v.guests) r.guests = await del(tx, sql`delete from guests g where not exists (select 1 from bookings b where b.guest_id = g.id)`);
   if (v.companies) r.companies = await del(tx, sql`delete from companies c where not exists (select 1 from bookings b where b.company_id = c.id)`);
   return r;
