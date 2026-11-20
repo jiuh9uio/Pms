@@ -22,7 +22,7 @@ export const inboxSettingsInput = z.object({
   keepDays: z.number().int().min(0).max(3650).default(0),
 });
 export interface InboxSettingsDto { enabled: boolean; host: string; port: number; user: string; folder: string; autoMinutes: number; keepDays: number; hasPassword: boolean }
-export interface InboxState { lastFetchAt: string | null; lastError: string | null; ready: boolean; autoMinutes: number; newCount: number }
+export interface InboxState { lastFetchAt: string | null; lastError: string | null; ready: boolean; autoMinutes: number; newCount: number; /** neue Nachrichten, die noch zu keinem Vorgang gehören */ newWithoutCase: number }
 
 export interface InboxMailDto {
   id: string; fromName: string; fromAddr: string; subject: string; receivedAt: string; snippet: string;
@@ -32,6 +32,8 @@ export interface InboxMailDto {
   repliedAt: string | null; repliedBy: string;
   /** nur in der Einzelansicht */
   body?: string;
+  /** Vorgang, zu dem die Nachricht gehört */
+  caseId: string | null; caseNumber?: string | null;
   /** nur in der Einzelansicht: Angebot, zu dessen Verlauf die Nachricht gehört */
   offer?: { id: string; number: string } | null;
   /** nur in der Einzelansicht: Kostenvoranschlag/Rechnung, zu deren Verlauf die Nachricht gehört */
@@ -79,3 +81,25 @@ export const webRequestInput = z.object({
 export const webRequestSettingsInput = z.object({ enabled: z.boolean(), intro: z.string().trim().max(600), privacy: z.string().trim().max(1200) });
 export type WebRequestSettings = z.infer<typeof webRequestSettingsInput>;
 export interface WebRequestPublic { enabled: boolean; hotelName: string; intro: string; privacy: string }
+
+// ---------- Vorgänge: zusammengehörige E-Mails mit eigener Nummer ----------
+export const CASE_STATUSES = ['open', 'done'] as const;
+export type CaseStatus = (typeof CASE_STATUSES)[number];
+/** ours = zuletzt hat der Kunde geschrieben (wir sind dran); theirs = zuletzt haben wir geschrieben */
+export type CaseTurn = 'ours' | 'theirs';
+export interface CaseListRow {
+  /** case = Vorgang im Posteingang; offer / invoice = Verlauf eines Angebots bzw. Kostenvoranschlags (öffnet dort) */
+  source: 'case' | 'offer' | 'invoice';
+  id: string; number: string; kind: MailKind | 'offer' | 'estimate'; title: string; contact: string; status: CaseStatus; turn: CaseTurn | null;
+  lastAt: string; snippet: string; count: number;
+}
+export interface CaseMessage { id: string; at: string; dir: 'in' | 'out'; who: string; subject: string; text: string; inboxMailId: string | null; mailStatus: InboxStatus | null }
+export interface CaseDto {
+  id: string; number: string; kind: MailKind; title: string; contactName: string; contactAddr: string; status: CaseStatus; turn: CaseTurn | null; createdAt: string; createdBy: string;
+  messages: CaseMessage[];
+  /** letzte eingegangene Nachricht – auf sie beziehen sich Antwort, Übernahme und Bestätigung */
+  latestInboxMailId: string | null;
+  candidates: { inboxMailId: string; at: string; from: string; subject: string }[];
+}
+export const caseListQuery = z.object({ status: z.enum(['open', 'done', 'all']).default('open'), kind: z.string().max(20).default('all'), q: z.string().trim().max(80).default('') });
+export const caseUpdateInput = z.object({ kind: z.enum(MAIL_KINDS).optional(), status: z.enum(CASE_STATUSES).optional(), title: z.string().trim().max(200).optional() });

@@ -232,3 +232,52 @@ describe('E-Mail-Posteingang', () => {
     expect((await call('POST', '/public/booking-request', {}, req)).statusCode).toBe(429);
   });
 });
+
+describe('Vorgänge: Nummer bei der ersten Antwort, Zuordnung über die Nummer', () => {
+  it('Vorgang anlegen, Antwort des Kunden zuordnen, Liste und Stand, erledigen, lösen', async () => {
+    const { inboxMails } = await import('../src/server/db/schema.js');
+    const { linkInboxMailToCase, logCaseOut, withCaseCode } = await import('../src/server/modules/mailcases.js');
+    const year = new Date().getFullYear();
+    const mail = async (uid: number, subject: string, body: string, from = 'gast@example.org') =>
+      (await db.insert(inboxMails).values({ uidValidity: 'case-test', uid, fromName: 'Erika Erfunden', fromAddr: from, subject, receivedAt: new Date(Date.now() - 600_000 + uid * 1000), body, kind: 'question', extract: {} }).returning())[0]!;
+    const first = await mail(1, 'Frage zu Parkplätzen', 'Gibt es Parkplätze am Haus?');
+    expect((await ok('GET', `/inbox/${first.id}`, admin)).caseId).toBeNull();
+    const c = await ok('POST', `/inbox/${first.id}/case`, admin);
+    expect(c.number).toMatch(new RegExp(`^V-${year}-\\d{4}$`)); // fortlaufend je Jahr
+    expect((await ok('POST', `/inbox/${first.id}/case`, admin)).number).toBe(c.number); // kein zweiter Vorgang
+    expect((await ok('GET', `/inbox/${first.id}`, admin))).toMatchObject({ caseId: c.id, caseNumber: c.number });
+    expect(withCaseCode('Re: Frage zu Parkplätzen', c.number)).toBe(`Re: Frage zu Parkplätzen [${c.number}]`);
+    expect(withCaseCode(`AW: x [${c.number}]`, c.number)).toBe(`AW: x [${c.number}]`);
+    let d = await ok('GET', `/mail-cases/${c.id}`, admin);
+    expect(d).toMatchObject({ kind: 'question', title: 'Frage zu Parkplätzen', contactAddr: 'gast@example.org', status: 'open', turn: 'ours', latestInboxMailId: first.id });
+    // unsere Antwort (hier ohne Postfach direkt vermerkt) → wartet auf den Kunden
+    await logCaseOut(db, c.id, { userId: null, userName: 'Chefin' } as never, 'gast@example.org', `Re: Frage zu Parkplätzen [${c.number}]`, 'Ja, direkt am Haus.');
+    d = await ok('GET', `/mail-cases/${c.id}`, admin);
+    expect(d.turn).toBe('theirs');
+    expect(d.messages.map((m: { dir: string }) => m.dir)).toEqual(['in', 'out']);
+    // Antwort des Kunden mit Nummer im Betreff → derselbe Vorgang, wir sind dran
+    await ok('PATCH', `/mail-cases/${c.id}`, admin, { status: 'done' });
+    const reply = await mail(900, `AW: Re: Frage zu Parkplätzen [${c.number.toLowerCase()}]`, 'Danke! Und Fahrräder?');
+    expect(await linkInboxMailToCase(db, reply)).toBe(true);
+    expect(await linkInboxMailToCase(db, reply)).toBe(false);
+    d = await ok('GET', `/mail-cases/${c.id}`, admin);
+    expect(d).toMatchObject({ status: 'open', turn: 'ours', latestInboxMailId: reply.id });
+    // E-Mail derselben Adresse ohne Nummer: Vorschlag → zuordnen → lösen
+    const loose = await mail(901, 'Noch etwas', 'ohne Nummer');
+    d = await ok('GET', `/mail-cases/${c.id}`, admin);
+    expect(d.candidates.map((x: { inboxMailId: string }) => x.inboxMailId)).toEqual([loose.id]);
+    await ok('POST', `/mail-cases/${c.id}/assign`, admin, { inboxMailId: loose.id });
+    expect((await call('POST', `/mail-cases/${c.id}/assign`, admin, { inboxMailId: loose.id })).statusCode).toBe(409);
+    d = await ok('POST', `/mail-cases/${c.id}/remove`, admin, { inboxMailId: loose.id });
+    expect(d.messages).toHaveLength(3);
+    // Liste: Kategorie ändern, filtern, suchen; erledigen setzt offene Nachrichten auf erledigt
+    await ok('PATCH', `/mail-cases/${c.id}`, admin, { kind: 'hotel' });
+    const list = await ok('GET', `/mail-cases?status=open&kind=hotel&q=${c.number}`, admin);
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ source: 'case', number: c.number, kind: 'hotel', turn: 'ours', count: 3 });
+    expect(await ok('GET', `/mail-cases?status=open&kind=table&q=${c.number}`, admin)).toEqual([]);
+    await ok('PATCH', `/mail-cases/${c.id}`, admin, { status: 'done' });
+    expect((await ok('GET', `/inbox/${reply.id}`, admin)).status).toBe('done');
+    expect((await ok('GET', '/inbox/state', admin)).newWithoutCase).toBeGreaterThanOrEqual(1); // „Noch etwas“ ist neu und ohne Vorgang
+  });
+});

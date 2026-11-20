@@ -1253,3 +1253,7 @@ a.linkcard.attention b { color: var(--warn); }
 }
 .oc-tabs { display: none; }
 @media (max-width: 760px) { .oc-tabs { display: block; } }
+/* Posteingang: Vorgänge */
+.mc-filter { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.mc-filter .segmented { margin: 0; } .mc-filter select { width: auto; } .mc-filter input { flex: 1 1 220px; }
+.ot-card .cardhead .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .ot-card .cardhead .actions select { width: auto; }

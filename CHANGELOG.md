@@ -3,6 +3,15 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.118.0
+
+- **E-Mail: Vorgänge.** Jeder E-Mail-Wechsel wird ein **Vorgang mit eigener Nummer** (z. B. `V-2026-0001`). Die Nummer entsteht mit Ihrer ersten Antwort (oder über „Vorgang anlegen“) und steht im Betreff Ihrer Antworten. Antwortet der Kunde, landet seine E-Mail automatisch im selben Vorgang; die Adresse des Kunden ist am Vorgang gespeichert.
+- **Neue Hauptansicht „Vorgänge“** im Posteingang: Liste mit Nummer, Kategorie, Kontakt, letzter Nachricht und Stand („wir sind dran“ / „wartet auf Kunde“ / „erledigt“); Filter nach Stand und Kategorie, Suche. Angebote (AN-…) und Kostenvoranschläge (KV-…) mit E-Mail-Verkehr stehen mit in der Liste und öffnen ihren eigenen Verlauf.
+- **Vorgang öffnen:** der ganze Wechsel als Chat – jetzt auch mit Ihren gesendeten Antworten. Darunter die letzte Nachricht des Kunden mit den Aktionen passend zur Kategorie (Zimmer übernehmen, Tisch reservieren, Bestätigung, Absage, Antworten). Die Kategorie lässt sich am Vorgang ändern.
+- E-Mails derselben Adresse ohne Nummer werden zum Zuordnen vorgeschlagen; falsche Zuordnungen lassen sich lösen. Die bisherigen Reiter (Neu, Erledigt, Ignoriert, Alle) bleiben.
+- Datenbank: zwei neue Tabellen (Vorgänge, gesendete Antworten) und ein Feld an den Posteingangs-Mails. An den Lösch- und Aufbewahrungsregeln wurde nichts geändert.
+- Hinweis: Die eingestellte Aufbewahrungsfrist entfernt erledigte E-Mails wie bisher – der Vorgang mit Ihren Antworten bleibt dabei vorerst bestehen. Ob Vorgänge mitgelöscht werden sollen, ist noch zu entscheiden.
+
 ## 1.117.0
 
 - **Kostenvoranschlag: Verlauf und Antwort mit Ja oder Nein.** Die E-Mail zum Kostenvoranschlag bittet den Kunden, einfach mit **„Ja“** oder **„Nein“** zu antworten. Die KV-Nummer im Betreff (z. B. `KV-2026-0004`) ist das Kennzeichen: Der Posteingang ordnet die Antwort automatisch dem Kostenvoranschlag zu.

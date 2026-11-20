@@ -11,6 +11,7 @@ import { clientKey } from '../lib/clientkey.js';
 import { AppError, conflict, notFound } from '../lib/errors.js';
 import { record, type Actor } from './audit.js';
 import { invoiceOfInboxMail, linkInboxMailToInvoice } from './invoicethread.js';
+import { caseRef, ensureCaseForMail, linkInboxMailToCase, logCaseOut, withCaseCode } from './mailcases.js';
 import { linkInboxMail, offerOfInboxMail } from './offerthread.js';
 import { bookingMailDraft, ready as mailReady, signature } from './hotelmail.js';
 import { decrypt, encrypt, sendMail } from './mail.js';
@@ -50,7 +51,8 @@ export async function saveInboxSettings(db: Db, actor: Actor, v: { enabled: bool
 export async function inboxState(db: Exec): Promise<InboxState> {
   const [s, st] = [await read(db, 'inbox', DEFAULTS), await read(db, 'inbox_state', STATE0)];
   const [n] = await db.select({ n: sql<number>`count(*)::int` }).from(inboxMails).where(eq(inboxMails.status, 'new'));
-  return { lastFetchAt: st.lastFetchAt, lastError: st.lastError, ready: ready(s), autoMinutes: s.autoMinutes, newCount: n!.n };
+  const [u] = await db.select({ n: sql<number>`count(*)::int` }).from(inboxMails).where(sql`${inboxMails.status} = 'new' and ${inboxMails.caseId} is null`);
+  return { lastFetchAt: st.lastFetchAt, lastError: st.lastError, ready: ready(s), autoMinutes: s.autoMinutes, newCount: n!.n, newWithoutCase: u!.n };
 }
 
 // ---------- Regeln ----------
@@ -179,6 +181,8 @@ export async function fetchInbox(db: Db, actor: Actor | null): Promise<{ added: 
       }).onConflictDoNothing().returning({ id: inboxMails.id });
       // Antwort auf ein Angebot (Kennzeichen „AN-Jahr-Nr.“ im Betreff oder Text) dem Verlauf zuordnen – ein Fehler dabei stört den Abruf nicht
       if (rows[0]) await linkInboxMail(db, { id: rows[0].id, subject, body, fromName: from?.name ?? '', fromAddr: from?.address ?? '', receivedAt: date }).catch(() => false);
+      // Antwort in einem Vorgang (Kennzeichen „V-Jahr-Nr.“)
+      if (rows[0]) await linkInboxMailToCase(db, { id: rows[0].id, subject, body }).catch(() => false);
       // Antwort auf einen Kostenvoranschlag (Kennzeichen „KV-Jahr-Nr.“)
       if (rows[0]) await linkInboxMailToInvoice(db, { id: rows[0].id, subject, body, fromName: from?.name ?? '', fromAddr: from?.address ?? '', receivedAt: date }).catch(() => false);
       added += rows.length;
@@ -215,7 +219,7 @@ type Row = typeof inboxMails.$inferSelect;
 const dto = (r: Row, full = false): InboxMailDto => ({
   id: r.id, fromName: r.fromName, fromAddr: r.fromAddr, subject: r.subject, receivedAt: r.receivedAt.toISOString(),
   snippet: r.body.replace(/\s+/g, ' ').slice(0, 160), kind: r.kind as MailKind, status: r.status as InboxStatus, extract: r.extract as MailExtract,
-  linkKind: r.linkKind, linkId: r.linkId, handledBy: r.handledBy, repliedAt: r.repliedAt?.toISOString() ?? null, repliedBy: r.repliedBy, ...(full ? { body: r.body } : {}),
+  caseId: r.caseId, linkKind: r.linkKind, linkId: r.linkId, handledBy: r.handledBy, repliedAt: r.repliedAt?.toISOString() ?? null, repliedBy: r.repliedBy, ...(full ? { body: r.body } : {}),
 });
 
 /** Suche in Betreff, Absender und Text (für Liste und Zähler gleich). */
@@ -242,7 +246,7 @@ export async function inboxCounts(db: Exec, f: { status: InboxStatus | 'all'; q:
 export async function getInboxMail(db: Exec, id: string): Promise<InboxMailDto> {
   const [r] = await db.select().from(inboxMails).where(eq(inboxMails.id, id));
   if (!r) throw notFound('E-Mail');
-  return { ...dto(r, true), offer: await offerOfInboxMail(db, id), invoice: await invoiceOfInboxMail(db, id) };
+  return { ...dto(r, true), caseNumber: await caseRef(db, r.caseId), offer: await offerOfInboxMail(db, id), invoice: await invoiceOfInboxMail(db, id) };
 }
 export async function updateInboxMail(db: Db, actor: Actor, id: string, v: { status?: InboxStatus; kind?: MailKind; linkKind?: 'booking' | 'table' | null; linkId?: string | null }) {
   const [before] = await db.select().from(inboxMails).where(eq(inboxMails.id, id));
@@ -254,6 +258,9 @@ export async function updateInboxMail(db: Db, actor: Actor, id: string, v: { sta
   if ((v.kind && v.kind !== before.kind) || (v.status === 'new' && before.status !== 'new')) set.extract = { ...(before.extract as MailExtract), manual: true } as MailExtract;
   if (v.linkKind !== undefined) { set.linkKind = v.linkKind; set.linkId = v.linkKind ? v.linkId ?? null : null; }
   const [r] = await db.update(inboxMails).set(set).where(eq(inboxMails.id, id)).returning();
+  if (v.kind && r!.caseId) await db.execute(sql`update mail_cases set kind = ${v.kind} where id = ${r!.caseId}`);
+  // Vorgang mitführen: sind alle Nachrichten erledigt/ignoriert, ist auch der Vorgang erledigt; wird eine wieder geöffnet, ist er wieder offen
+  if (v.status && r!.caseId) await db.execute(sql`update mail_cases set status = case when exists (select 1 from inbox_mails m where m.case_id = ${r!.caseId} and m.status = 'new') then 'open' else 'done' end where id = ${r!.caseId}`);
   await record(db, actor, { action: 'update', entity: 'inbox', entityId: id, before: { status: before.status, kind: before.kind }, after: { status: r!.status, kind: r!.kind, subject: r!.subject.slice(0, 80) } });
   return dto(r!, true);
 }
@@ -311,7 +318,13 @@ export async function replyDraft(db: Exec, id: string, template: ReplyTemplate, 
 export async function sendReply(db: Db, actor: Actor, id: string, v: { to: string; subject: string; text: string }) {
   const [r] = await db.select().from(inboxMails).where(eq(inboxMails.id, id));
   if (!r) throw notFound('E-Mail');
-  await sendMail(db, actor, { ...v, ...(r.messageId ? { inReplyTo: r.messageId } : {}) });
+  // Mit der ersten Antwort entsteht der Vorgang; seine Nummer steht im Betreff, damit die Antwort des Kunden zugeordnet wird.
+  // Gehört die Nachricht schon zum Verlauf eines Angebots oder Kostenvoranschlags, bleibt es bei deren Nummer.
+  const other = r.caseId ? null : (await offerOfInboxMail(db, id)) ?? (await invoiceOfInboxMail(db, id));
+  const c = other ? null : await ensureCaseForMail(db, actor, id);
+  const subject = c ? withCaseCode(v.subject, c.number) : v.subject;
+  await sendMail(db, actor, { ...v, subject, ...(r.messageId ? { inReplyTo: r.messageId } : {}) });
+  if (c) await logCaseOut(db, c.id, actor, v.to, subject, v.text);
   await db.update(inboxMails).set({ repliedAt: new Date(), repliedBy: actor.userName }).where(eq(inboxMails.id, id));
   await record(db, actor, { action: 'mail', entity: 'inbox', entityId: id, after: { to: v.to, subject: v.subject.slice(0, 120) } });
   return { ok: true };

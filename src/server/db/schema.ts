@@ -637,6 +637,30 @@ export const mailLog = pgTable('mail_log', {
 // =====================================================================================
 // E-Mail-Posteingang: abgerufene Nachrichten des Geschäftspostfachs (Kopie; das Postfach selbst bleibt unverändert)
 // =====================================================================================
+/** Vorgang: ein E-Mail-Wechsel mit eigener Nummer (V-Jahr-Nr.), die im Betreff der Antworten steht */
+export const mailCases = pgTable('mail_cases', {
+  id: id(),
+  number: text('number').notNull().unique(),
+  kind: text('kind', { enum: ['hotel', 'table', 'event', 'meeting', 'voucher', 'question', 'other'] }).notNull().default('other'),
+  title: text('title').notNull().default(''),
+  contactName: text('contact_name').notNull().default(''),
+  contactAddr: text('contact_addr').notNull().default(''),
+  status: text('status', { enum: ['open', 'done'] }).notNull().default('open'),
+  createdBy: text('created_by').notNull().default(''),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+}, (t) => [index('mail_cases_addr_idx').on(t.contactAddr)]);
+/** Gesendete Antworten eines Vorgangs (mit Text) */
+export const mailCaseOut = pgTable('mail_case_out', {
+  id: id(),
+  caseId: uuid('case_id').notNull().references(() => mailCases.id, { onDelete: 'cascade' }),
+  at: ts('at').notNull().defaultNow(),
+  by: text('by').notNull().default(''),
+  toAddr: text('to_addr').notNull().default(''),
+  subject: text('subject').notNull().default(''),
+  body: text('body').notNull().default(''),
+}, (t) => [index('mail_case_out_case_idx').on(t.caseId, t.at)]);
+
 export const inboxMails = pgTable('inbox_mails', {
   id: id(),
   uidValidity: text('uid_validity').notNull(),
@@ -656,7 +680,9 @@ export const inboxMails = pgTable('inbox_mails', {
   repliedAt: ts('replied_at'),
   repliedBy: text('replied_by').notNull().default(''),
   fetchedAt: ts('fetched_at').notNull().defaultNow(),
-}, (t) => [uniqueIndex('inbox_mails_uid_idx').on(t.uidValidity, t.uid), index('inbox_mails_received_idx').on(t.receivedAt)]);
+  /** Vorgang, zu dem die Nachricht gehört */
+  caseId: uuid('case_id').references(() => mailCases.id, { onDelete: 'set null' }),
+}, (t) => [uniqueIndex('inbox_mails_uid_idx').on(t.uidValidity, t.uid), index('inbox_mails_received_idx').on(t.receivedAt), index('inbox_mails_case_idx').on(t.caseId)]);
 
 // =====================================================================================
 // Team: Übergabebuch, Aufgaben und Reparaturmeldungen – für alle angemeldeten Benutzer

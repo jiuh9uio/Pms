@@ -344,6 +344,13 @@
       "when": 1795195363050,
       "tag": "0048_kv_verlauf",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1795196752992,
+      "tag": "0049_vorgaenge",
+      "breakpoints": true
     }
   ]
 }

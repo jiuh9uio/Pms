@@ -39,6 +39,7 @@ import { getGoLive, purge, setGoLive } from './modules/purge.js';
 import { checklist } from './modules/setup.js';
 import { getLogo, invoiceNumberState, setInvoiceNumber } from './modules/billing.js';
 import * as inbox from './modules/inbox.js';
+import * as mailcases from './modules/mailcases.js';
 import * as migration from './modules/migration.js';
 import * as team from './modules/team.js';
 import * as T from '../shared/team.js';
@@ -448,6 +449,14 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     const tpl = (req: FastifyRequest) => z.object({ template: z.enum(I.REPLY_TEMPLATES).default('reply') }).parse(req.query).template;
     api.get('/inbox/:id/mail', email, (req) => inbox.replyDraft(db, z.uuid().parse((req.params as { id: string }).id), tpl(req), S.hasModule(req.user!, 'hotel')));
     api.post('/inbox/:id/mail', email, (req) => inbox.sendReply(db, actor(req), z.uuid().parse((req.params as { id: string }).id), mailSendInput.parse(req.body)));
+    // Vorgänge: zusammengehörige E-Mails mit eigener Nummer
+    const cid = (req: FastifyRequest) => z.uuid().parse((req.params as { id: string }).id);
+    api.get('/mail-cases', email, (req) => mailcases.listCases(db, I.caseListQuery.parse(req.query)));
+    api.get('/mail-cases/:id', email, (req) => mailcases.getCase(db, cid(req)));
+    api.patch('/mail-cases/:id', email, (req) => mailcases.updateCase(db, actor(req), cid(req), I.caseUpdateInput.parse(req.body)));
+    api.post('/mail-cases/:id/assign', email, (req) => mailcases.assignMailToCase(db, actor(req), cid(req), z.object({ inboxMailId: z.uuid() }).parse(req.body).inboxMailId));
+    api.post('/mail-cases/:id/remove', email, (req) => mailcases.removeMailFromCase(db, actor(req), cid(req), z.object({ inboxMailId: z.uuid() }).parse(req.body).inboxMailId));
+    api.post('/inbox/:id/case', email, async (req) => { const c = await mailcases.ensureCaseForMail(db, actor(req), cid(req)); return { id: c.id, number: c.number }; });
     api.get('/settings/mail-rules', { preHandler: requireAdmin }, () => inbox.getMailRules(db));
     api.put('/settings/mail-rules', { preHandler: requireAdmin }, (req) => inbox.saveMailRules(db, actor(req), I.mailRulesInput.parse(req.body)));
     api.post('/inbox/reclassify', { preHandler: requireAdmin }, (req) => inbox.reclassify(db, actor(req)));
