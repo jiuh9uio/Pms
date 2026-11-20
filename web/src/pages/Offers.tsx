@@ -321,8 +321,7 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
       {!locked && <div className="btnrow">
         <select value="" onChange={(e) => { addItem(e.target.value); e.target.value = ''; }} aria-label="Leistung aus dem Katalog hinzufügen">
           <option value="">+ Leistung aus allen Leistungen …</option>
-          {catItems.length > 0 && <optgroup label={`Katalog ${catTpl?.name ?? ''}`}>{catItems.map((x) => <option key={x.id} value={x.id}>{x.name} · {formatMoney(x.priceCents)} {UNIT_LABEL[x.unit]}</option>)}</optgroup>}
-          <optgroup label="Alle Leistungen">{items.filter((x) => x.active).map((x) => <option key={x.id} value={x.id}>{x.name} · {formatMoney(x.priceCents)} {UNIT_LABEL[x.unit]}</option>)}</optgroup>
+          {items.filter((x) => x.active).map((x) => <option key={x.id} value={x.id}>{x.name} · {formatMoney(x.priceCents)} {UNIT_LABEL[x.unit]}</option>)}
         </select>
         <Button onClick={() => ch({ lines: [...v.lines, { itemId: null, description: '', detail: '', unit: 'flat', quantity: '1', price: '', tax: '19' }] })}>+ Freie Zeile</Button>
         <Button onClick={recalc} title="Mengen aus Personen, Tagen und Nächten neu berechnen (pauschale Zeilen bleiben)">Mengen neu berechnen</Button>
@@ -378,7 +377,7 @@ function OfferThread({ offer: o, onAccept }: { offer: OfferDto; onAccept?: () =>
         <span className="ot-code" title="Dieses Kennzeichen steht im Betreff jeder E-Mail zu diesem Angebot. Antwortet der Kunde darauf, wird die Antwort hier automatisch zugeordnet.">Kennzeichen {data.code}</span>
         <button type="button" className="linkbtn" onClick={() => setOpen(!open)}>{open ? 'Verlauf ausblenden' : `Verlauf zeigen (${data.entries.length})`}</button>
       </div>
-      {hint === 'accept' && <p className="notice small">Die letzte Antwort <b>klingt nach einer Zusage</b> – bitte lesen und prüfen. {onAccept && <Button onClick={onAccept}>Als angenommen vermerken …</Button>}</p>}
+      {hint === 'accept' && <p className="notice small">Die letzte Antwort <b>klingt nach einer Zusage</b> – bitte lesen und prüfen. {onAccept ? <Button onClick={onAccept}>Als angenommen vermerken …</Button> : o.status === 'draft' && 'Annehmen lässt sich erst ein versendetes Angebot: bitte zuerst das Angebot senden.'}</p>}
       {hint === 'decline' && <p className="notice warn small">Die letzte Antwort <b>klingt nach einer Absage</b> – bitte lesen und prüfen.</p>}
       {data.candidates.length > 0 && <div className="ot-cand">
         <span className="muted small">Im Posteingang von dieser Adresse, noch nicht zugeordnet:</span>

@@ -83,7 +83,7 @@ const NAV: NavItem[] = [
   { to: '/restaurant', label: 'Tischreservierungen', short: 'Tische', icon: '◍', module: 'restaurant' },
   { to: '/angebote', label: 'Angebote', icon: '✍', module: 'restaurant', jump: true },
   // Rechnungen: alles, was mit Rechnungen zu tun hat, an einem Ort – jede Zeile verlangt ihre eigene Freigabe
-  { to: '/rechnungen', label: 'Hotelrechnungen', short: 'Hotel', icon: '€', module: 'rechnungen', need: 'hotel', group: 'Hotel' },
+  { to: '/rechnungen', label: 'Hotelrechnungen', short: 'Rechn.', icon: '€', module: 'rechnungen', need: 'hotel', group: 'Hotel' },
   { to: '/tagesabschluss', label: 'Tagesabschluss', short: 'Abschluss', icon: '∑', module: 'rechnungen', need: 'hotel', group: 'Hotel', jump: true },
   { to: '/erechnung', label: 'E-Rechnung erstellen', short: 'E-Rechn.', icon: '✉', module: 'rechnungen', need: 'erechnung', group: 'E-Rechnung' },
   { to: '/erechnung', tab: 'archiv', label: 'E-Rechnungs-Archiv', short: 'Archiv', icon: '▤', module: 'rechnungen', need: 'erechnung', group: 'E-Rechnung' },

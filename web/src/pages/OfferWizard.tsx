@@ -83,7 +83,7 @@ export function OfferWizard({ onClose, onCreated }: { onClose: () => void; onCre
         eventDate: v.eventDate || null, eventEnd: v.eventEnd || null, persons });
       id = r.id;
       const o = await api<OfferDto>('GET', `/offers/${r.id}`);
-      await api('PUT', `/offers/${r.id}`, { ...o, notes: v.wishes.trim(),
+      await api('PUT', `/offers/${r.id}`, { ...o,
         lines: chosen.map((it) => ({ itemId: it.id, description: it.name, detail: it.description, unit: it.unit, quantity: qty(qtyText(it)), unitPriceCents: it.priceCents, taxRatePercent: it.taxRatePercent })),
         version: o.version });
       await api('POST', `/offers/${r.id}/talk`, { template: tpl?.name ?? '', steps: [

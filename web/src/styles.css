@@ -1244,3 +1244,10 @@ a.linkcard.attention b { color: var(--warn); }
 .ot-event .ot-text { text-align: left; }
 .ot-bubble summary { cursor: pointer; margin-top: 4px; }
 @media (max-width: 700px) { .ot-code { margin-left: 0; } }
+/* Handy: Umschalter mit vielen Feldern lassen sich seitlich schieben statt abgeschnitten zu werden */
+@media (max-width: 700px) { .segmented:not(.wrap) { max-width: 100%; overflow-x: auto; } .segmented:not(.wrap) button { flex: none; white-space: nowrap; } }
+/* Handy: Leistungstabelle des Angebots seitlich schieben statt Felder zu quetschen; Katalog der Vorlage untereinander */
+@media (max-width: 700px) {
+  .offerlines { min-width: 680px; } .offerlines td:first-child { min-width: 220px; }
+  .oc-cat > div { grid-template-columns: 1fr 1fr; } .oc-cat > div > span:first-child { grid-column: 1 / -1; }
+}

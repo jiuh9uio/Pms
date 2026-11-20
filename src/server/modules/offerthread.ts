@@ -14,7 +14,7 @@ const CODE = /\bAN-\d{4}-\d{4,6}\b/i;
 const MAX = 20_000;
 
 /** Kennzeichen an den Betreff hängen, falls die Nummer nicht schon darin steht */
-export const withCode = (subject: string, number: string) => (subject.toUpperCase().includes(number.toUpperCase()) ? subject : `${subject} [${number}]`.slice(0, 200));
+export const withCode = (subject: string, number: string) => (subject.toUpperCase().includes(number.toUpperCase()) ? subject : `${subject.slice(0, 190 - number.length)} [${number}]`);
 
 export async function logMailOut(db: Exec, offerId: string, what: 'questions' | 'catalog' | 'offer', actor: Actor, to: string, subject: string, body: string) {
   await db.insert(offerEvents).values({ offerId, kind: 'mail_out', what, who: `${actor.userName} → ${to}`, subject: subject.slice(0, 300), body: body.slice(0, MAX) });

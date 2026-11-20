@@ -3,6 +3,19 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.113.0
+
+Aufräumen nach einer Durchsicht aller Seiten (großer Bildschirm und Handybreite):
+
+- Handy: Umschalter mit vielen Feldern (z. B. Rechnungen „Alle / Offen / Bezahlt / Storniert / Entwürfe“) waren rechts abgeschnitten – sie lassen sich jetzt seitlich schieben.
+- Handy: Im Angebot wurden die Felder der Leistungstabelle unlesbar schmal – die Tabelle lässt sich jetzt seitlich schieben. Der Produktkatalog in der Vorlage bricht sauber um.
+- Rechnungen (Handy): In der unteren Leiste stand zweimal „Hotel“ – der Eintrag für die Hotelrechnungen heißt jetzt „Rechn.“.
+- Angebot: In der Auswahlliste „+ Leistung …“ standen die Katalog-Leistungen doppelt (sie stehen direkt darüber als Schaltflächen) – die Liste zeigt jetzt einfach alle Leistungen.
+- Angebot: Klingt eine Antwort nach Zusage, das Angebot ist aber noch ein Entwurf, steht jetzt dabei, dass es erst versendet werden muss.
+- Absprache: Die „weiteren Wünsche“ standen danach doppelt im Angebot (Absprache-Zettel und interne Notiz) – jetzt nur noch im Absprache-Zettel.
+- Startseite: Bei „Gutscheine“ stand noch „mit PIN aus der Kasse“ – korrigiert.
+- Sehr lange E-Mail-Betreffs konnten das Kennzeichen des Angebots abschneiden – korrigiert.
+
 ## 1.112.0
 
 - **Angebote: Verlauf wie ein Chat.** Oben im Angebot steht die **Kurzinfo** (bestätigt / noch nicht bestätigt, zuletzt gesendet, letzte Antwort, „wartet auf Antwort“); „Verlauf zeigen“ blendet alles zeitlich geordnet ein: Absprache am Tisch, gesendete E-Mails (Fragen, Katalog, Angebot – mit Text), Antworten des Kunden, Annahme oder Ablehnung.
