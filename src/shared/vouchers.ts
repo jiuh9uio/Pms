@@ -43,6 +43,9 @@ export const voucherInput = z.object({
   recipientName: text(120), message: text(400),
   designId: z.union([z.literal(''), z.uuid()]),
   note: text(400),
+  /** Gutscheinbuch */
+  payMethod: text(40).default(''),
+  cashier: text(80).default(''),
 }).refine((v) => !v.validUntil || v.validUntil >= v.issuedOn, { path: ['validUntil'], message: 'Liegt vor dem Ausstellungsdatum' });
 export type VoucherInput = z.infer<typeof voucherInput>;
 
@@ -64,9 +67,11 @@ export interface VoucherDto {
   buyerName: string; buyerCompany: string; buyerStreet: string; buyerZip: string; buyerCity: string; buyerCountry: string; buyerEmail: string;
   recipientName: string; message: string; designId: string | null; status: VoucherStatus; invoiceId: string | null; invoiceNumber: string | null; invoiceStatus: string | null;
   sentAt: string | null; sentTo: string | null; note: string; createdBy: string; createdAt: string; version: number;
+  payMethod: string; cashier: string; redeemedAt: string | null; redeemedBy: string | null;
 }
+export const PAY_METHODS = ['Bar', 'EC-Karte', 'Kreditkarte', 'Überweisung', 'Rechnung', 'sonstiges'];
 export interface VoucherDesignDto { id: string; name: string; textPos: TextPos; createdAt: string; hasImage: boolean; hasLayout: boolean }
-export interface VoucherOverviewDto { vouchers: VoucherDto[]; designs: VoucherDesignDto[]; numbering: VoucherNumbering; nextNumber: string; suggestedValidUntil: string }
+export interface VoucherOverviewDto { cashiers: string[]; vouchers: VoucherDto[]; designs: VoucherDesignDto[]; numbering: VoucherNumbering; nextNumber: string; suggestedValidUntil: string }
 
 // ---------- Design-Editor ----------
 /** Seite: DIN A5 quer, Maße in Millimetern (Ursprung oben links) */

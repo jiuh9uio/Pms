@@ -492,7 +492,7 @@ describe('Gutscheine', () => {
     expect(v1.number).toBe('SH-1001');
     expect((await ok('GET', '/vouchers', admin)).nextNumber).toBe('SH-1002');
     // doppelte Nummer
-    expect((await call('POST', '/vouchers', admin, { ...base, number: 'SH-1001' })).json().error.fields.number).toMatch(/vergeben/);
+    expect((await call('POST', '/vouchers', admin, { ...base, posCardNo: 'K-100', number: 'SH-1001' })).json().error.fields.number).toMatch(/vergeben/);
     // PIN: verschlüsselt in der Datenbank, in der Liste nur die letzten Stellen
     const [raw] = await db.execute(sql`select pin_enc, pin_hint from vouchers where id = ${v1.id}`) as unknown as { pin_enc: string; pin_hint: string }[];
     expect(raw!.pin_enc).not.toContain('4711');
@@ -575,5 +575,34 @@ describe('Gutschein-Vorlagen', () => {
       const pv = await call('GET', `/voucher-designs/${d.id}/preview`, admin);
       expect(pv.rawPayload.subarray(0, 4).toString(), p.key).toBe('%PDF');
     }
+  });
+});
+
+describe('Gutscheinbuch', () => {
+  it('speichert Zahlungsart und Kassierer, vermerkt Einlösung mit Datum und Benutzer', async () => {
+    const o = await ok('GET', '/vouchers', admin);
+    const base = { pin: '', posCardNo: '300777', valueCents: 2500, issuedOn: today, validUntil: '', buyerName: '', buyerCompany: '', buyerStreet: '', buyerZip: '', buyerCity: '', buyerCountry: '', buyerEmail: '', recipientName: '', message: '', designId: '', note: '' };
+    const v = await ok('POST', '/vouchers', admin, { ...base, number: o.nextNumber, payMethod: 'EC-Karte', cashier: 'Anna' });
+    let row = (await ok('GET', '/vouchers', admin)).vouchers.find((x: { id: string }) => x.id === v.id);
+    expect(row).toMatchObject({ payMethod: 'EC-Karte', cashier: 'Anna', redeemedAt: null });
+    expect((await ok('GET', '/vouchers', admin)).cashiers).toContain('Anna');
+    await ok('POST', `/vouchers/${v.id}/status`, admin, { status: 'redeemed', version: row.version });
+    row = (await ok('GET', '/vouchers', admin)).vouchers.find((x: { id: string }) => x.id === v.id);
+    expect(row.status).toBe('redeemed');
+    expect(row.redeemedAt).toBeTruthy();
+    expect(row.redeemedBy).toBe('Chefin');
+    await ok('POST', `/vouchers/${v.id}/status`, admin, { status: 'active', version: row.version });
+    row = (await ok('GET', '/vouchers', admin)).vouchers.find((x: { id: string }) => x.id === v.id);
+    expect(row).toMatchObject({ status: 'active', redeemedAt: null, redeemedBy: null });
+  });
+});
+
+describe('Gutscheinbuch: Kassennummer', () => {
+  it('lehnt eine schon vergebene Kassennummer ab', async () => {
+    const o = await ok('GET', '/vouchers', admin);
+    const base = { pin: '', valueCents: 1000, issuedOn: today, validUntil: '', buyerName: '', buyerCompany: '', buyerStreet: '', buyerZip: '', buyerCity: '', buyerCountry: '', buyerEmail: '', recipientName: '', message: '', designId: '', note: '', payMethod: 'Bar', cashier: '' };
+    await ok('POST', '/vouchers', admin, { ...base, number: o.nextNumber, posCardNo: 'K-DOPPELT' });
+    const r = await call('POST', '/vouchers', admin, { ...base, number: (await ok('GET', '/vouchers', admin)).nextNumber, posCardNo: 'k-doppelt' });
+    expect(r.json().error.fields.posCardNo).toMatch(/schon bei Gutschein/);
   });
 });

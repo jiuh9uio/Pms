@@ -50,6 +50,7 @@ function dto(r: Row, inv?: { number: string | null; status: string } | null): Vo
     recipientName: r.recipientName, message: r.message, designId: r.designId, status: r.status as VoucherStatus, invoiceId: r.invoiceId,
     invoiceNumber: inv?.number ?? null, invoiceStatus: inv?.status ?? null, sentAt: r.sentAt?.toISOString() ?? null, sentTo: r.sentTo, note: r.note,
     createdBy: r.createdBy, createdAt: r.createdAt.toISOString(), version: r.version,
+    payMethod: r.payMethod, cashier: r.cashier, redeemedAt: r.redeemedAt?.toISOString() ?? null, redeemedBy: r.redeemedBy,
   };
 }
 
@@ -58,7 +59,9 @@ export async function overview(db: Exec, today: string): Promise<VoucherOverview
     .leftJoin(invoices, eq(invoices.id, vouchers.invoiceId)).orderBy(desc(vouchers.createdAt)).limit(500);
   const designs = await db.select({ id: voucherDesigns.id, name: voucherDesigns.name, textPos: voucherDesigns.textPos, createdAt: voucherDesigns.createdAt, hasImage: sql<boolean>`${voucherDesigns.mime} is not null`, hasLayout: sql<boolean>`${voucherDesigns.layout} is not null` }).from(voucherDesigns).orderBy(voucherDesigns.createdAt);
   const numbering = await getNumbering(db);
+  const cashiers = await db.execute(sql`select cashier from vouchers where cashier <> '' group by cashier order by max(created_at) desc limit 20`) as unknown as { cashier: string }[];
   return {
+    cashiers: cashiers.map((c) => c.cashier),
     vouchers: rows.map((r) => dto(r.v, r.invNumber !== undefined && r.v.invoiceId ? { number: r.invNumber, status: r.invStatus ?? '' } : null)),
     designs: designs.map((d): VoucherDesignDto => ({ id: d.id, name: d.name, textPos: d.textPos as TextPos, createdAt: d.createdAt.toISOString(), hasImage: d.hasImage, hasLayout: d.hasLayout })),
     numbering, nextNumber: await nextNumber(db), suggestedValidUntil: suggestValidUntil(today, numbering.validYears),
@@ -69,13 +72,24 @@ const fields = (v: VoucherInput) => ({
   number: v.number.trim(), posCardNo: v.posCardNo, valueCents: v.valueCents, issuedOn: v.issuedOn, validUntil: v.validUntil || null,
   buyerName: v.buyerName, buyerCompany: v.buyerCompany, buyerStreet: v.buyerStreet, buyerZip: v.buyerZip, buyerCity: v.buyerCity, buyerCountry: v.buyerCountry || 'Deutschland',
   buyerEmail: v.buyerEmail, recipientName: v.recipientName, message: v.message, designId: v.designId || null, note: v.note,
+  payMethod: v.payMethod ?? '', cashier: v.cashier ?? '',
 });
 const pinFields = (pin: string) => (pin.trim() ? { pinEnc: encrypt(pin.trim()), pinHint: pin.trim().slice(-2) } : {});
 /** fürs Protokoll: ohne PIN */
 const safe = (v: VoucherInput) => ({ ...v, pin: v.pin ? '(eingegeben)' : '' });
 const duplicate = (e: unknown) => e instanceof Error && /vouchers_number_idx|duplicate key/.test(e.message + String((e as { cause?: unknown }).cause ?? ''));
 
+/** Eine Kassennummer gehört zu genau einem (nicht stornierten) Gutschein */
+async function checkPosCard(db: Exec, posCardNo: string, exceptId: string | null) {
+  const no = posCardNo.trim();
+  if (!no) return;
+  const [other] = await db.select({ id: vouchers.id, number: vouchers.number }).from(vouchers)
+    .where(sql`lower(trim(${vouchers.posCardNo})) = ${no.toLowerCase()} and ${vouchers.status} <> 'cancelled'${exceptId ? sql` and ${vouchers.id} <> ${exceptId}` : sql``}`);
+  if (other) throw new AppError(400, 'validation', 'Bitte die Eingaben prüfen', { posCardNo: `Diese Kassennummer steht schon bei Gutschein ${other.number}` });
+}
+
 export async function create(db: Db, actor: Actor, v: VoucherInput) {
+  await checkPosCard(db, v.posCardNo, null);
   try {
     const [row] = await db.insert(vouchers).values({ ...fields(v), ...pinFields(v.pin), createdBy: actor.userName }).returning();
     await record(db, actor, { action: 'create', entity: 'voucher', entityId: row!.id, after: safe(v) });
@@ -98,6 +112,7 @@ export async function update(db: Db, actor: Actor, id: string, v: VoucherInput, 
       const before = await lock(tx, id);
       if (before.version !== version) throw stale();
       if (before.status === 'cancelled') throw conflict('Der Gutschein ist storniert und kann nicht mehr geändert werden.', 'voucher_cancelled');
+      await checkPosCard(tx, v.posCardNo, id);
       if (before.invoiceId && before.valueCents !== v.valueCents) {
         const [inv] = await tx.select({ status: invoices.status }).from(invoices).where(eq(invoices.id, before.invoiceId));
         if (inv && inv.status !== 'draft' && inv.status !== 'cancelled') throw conflict('Zu diesem Gutschein ist bereits eine Rechnung ausgestellt – der Wert lässt sich nicht mehr ändern.', 'voucher_invoiced');
@@ -117,7 +132,8 @@ export async function setStatus(db: Db, actor: Actor, id: string, status: Vouche
     const before = await lock(tx, id);
     if (before.version !== version) throw stale();
     if (before.status === 'cancelled' && status !== 'cancelled') throw conflict('Ein stornierter Gutschein lässt sich nicht wieder aktivieren. Bitte einen neuen anlegen.', 'voucher_cancelled');
-    await tx.update(vouchers).set({ status, version: before.version + 1, updatedAt: new Date() }).where(eq(vouchers.id, id));
+    const redeemed = status === 'redeemed' ? { redeemedAt: new Date(), redeemedBy: actor.userName } : status === 'active' ? { redeemedAt: null, redeemedBy: null } : {};
+    await tx.update(vouchers).set({ status, ...redeemed, version: before.version + 1, updatedAt: new Date() }).where(eq(vouchers.id, id));
     await record(tx, actor, { action: 'status', entity: 'voucher', entityId: id, before: { status: before.status }, after: { status } });
     return { ok: true };
   });

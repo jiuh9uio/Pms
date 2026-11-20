@@ -302,6 +302,13 @@
       "when": 1795125875135,
       "tag": "0042_gutschein_design_editor",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1795135708313,
+      "tag": "0043_gutscheinbuch",
+      "breakpoints": true
     }
   ]
 }

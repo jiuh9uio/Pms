@@ -891,6 +891,11 @@ export const vouchers = pgTable('vouchers', {
   invoiceId: uuid('invoice_id').references(() => invoices.id, { onDelete: 'set null' }),
   sentAt: ts('sent_at'),
   sentTo: text('sent_to'),
+  /** Gutscheinbuch: wie bezahlt und wer kassiert hat; wann und von wem eingelöst */
+  payMethod: text('pay_method').notNull().default(''),
+  cashier: text('cashier').notNull().default(''),
+  redeemedAt: ts('redeemed_at'),
+  redeemedBy: text('redeemed_by'),
   note: text('note').notNull().default(''),
   createdBy: text('created_by').notNull(),
   ...stamps,

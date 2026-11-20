@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { formatMoney, moneyInput, parseMoney, todayBerlin } from '../../../src/shared/hotel.js';
 import {
-  TEXT_POS, TEXT_POS_LABEL, VOUCHER_STATUS_LABEL, voucherInput, voucherInvoiceInput, voucherNumberingInput,
+  PAY_METHODS, TEXT_POS, TEXT_POS_LABEL, VOUCHER_STATUS_LABEL, voucherInput, voucherInvoiceInput, voucherNumberingInput,
   type TextPos, type VoucherDto, type VoucherOverviewDto,
 } from '../../../src/shared/vouchers.js';
 import { api } from '../api.ts';
@@ -22,16 +22,26 @@ export function Vouchers() {
   const [rev, setRev] = useState(0);
   const reload = () => setRev((r) => r + 1);
   const { data, error } = useLoad(() => api<VoucherOverviewDto>('GET', '/vouchers'), [rev]);
-  const { current, bar } = useTabs([['liste', 'Gutscheine'], ['motive', 'Motive'], ...(isAdmin ? [['einstellungen', 'Nummern & Porto'] as const] : [])] as const);
+  const { current, bar } = useTabs([['liste', 'Gutscheinbuch'], ['motive', 'Motive'], ...(isAdmin ? [['einstellungen', 'Nummern & Porto'] as const] : [])] as const);
   const [open, setOpen] = useState<VoucherDto | 'new' | null>(null);
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('active');
-  const list = (data?.vouchers ?? []).filter((v) => (!status || v.status === status)
-    && (!q.trim() || [v.number, v.recipientName, v.buyerName, v.buyerCompany, v.posCardNo].join(' ').toLowerCase().includes(q.trim().toLowerCase())));
+  const [month, setMonth] = useState('');
+  const list = (data?.vouchers ?? []).filter((v) => (!status || v.status === status) && (!month || v.issuedOn.startsWith(month))
+    && (!q.trim() || [v.number, v.recipientName, v.buyerName, v.buyerCompany, v.posCardNo, v.cashier, v.payMethod].join(' ').toLowerCase().includes(q.trim().toLowerCase())));
+  /** Gutscheinbuch als CSV (Excel) – zum Ablegen oder für den Steuerberater */
+  const csv = () => {
+    const esc = (x: string) => `"${x.replace(/"/g, '""')}"`;
+    const rows = [['interne Nr.', 'Datum', 'Kassennummer', 'Wert', 'Zahlungsart', 'kassiert von', 'für', 'Käufer', 'Status', 'eingelöst am', 'eingelöst von', 'gültig bis', 'Rechnung'],
+      ...list.map((v) => [v.number, deDate(v.issuedOn), v.posCardNo, (v.valueCents / 100).toFixed(2).replace('.', ','), v.payMethod, v.cashier, v.recipientName, v.buyerCompany || v.buyerName,
+        VOUCHER_STATUS_LABEL[v.status], v.redeemedAt ? deDate(v.redeemedAt.slice(0, 10)) : '', v.redeemedBy ?? '', v.validUntil ? deDate(v.validUntil) : '', v.invoiceNumber ?? (v.invoiceId ? 'Entwurf' : '')])];
+    const blob = new Blob(['\ufeff' + rows.map((r) => r.map((c) => esc(String(c))).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Gutscheinbuch${month ? `-${month}` : ''}.csv`; a.click(); URL.revokeObjectURL(a.href);
+  };
   const sum = list.filter((v) => v.status === 'active').reduce((s, v) => s + v.valueCents, 0);
   return (
     <>
-      <PageHeader title="Gutscheine" sub="Geschenkkarten aus der Kasse festhalten, gestalten, per E-Mail senden und abrechnen"
+      <PageHeader title="Gutscheine" sub="Das Gutscheinbuch: jeder verkaufte Gutschein mit Nummer, Wert, Zahlungsart und wer kassiert hat"
         actions={<Button variant="primary" onClick={() => setOpen('new')}>Neuer Gutschein</Button>} />
       {bar}
       <LoadState error={error} loading={!data} />
@@ -42,22 +52,27 @@ export function Vouchers() {
             <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
               <option value="active">gültige</option><option value="redeemed">eingelöste</option><option value="cancelled">stornierte</option><option value="">alle</option>
             </select>
-            {status === 'active' && list.length > 0 && <span className="muted small">{list.length} gültig · zusammen {formatMoney(sum)}</span>}
+            <select value={month} onChange={(e) => setMonth(e.target.value)} aria-label="Monat">
+              <option value="">alle Monate</option>
+              {[...new Set((data.vouchers).map((v) => v.issuedOn.slice(0, 7)))].sort().reverse().map((m) => <option key={m} value={m}>{['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'][Number(m.slice(5, 7)) - 1]} {m.slice(0, 4)}</option>)}
+            </select>
+            <Button onClick={csv} disabled={!list.length}>Liste als Excel (CSV)</Button>
+            {list.length > 0 && <span className="muted small">{list.length} {list.length === 1 ? 'Gutschein' : 'Gutscheine'} · zusammen {formatMoney(list.reduce((t, v) => t + v.valueCents, 0))}{status === 'active' ? ' noch offen' : ''}</span>}
           </div>
           {list.length === 0 ? <p className="muted">{data.vouchers.length ? 'Keine Gutscheine für diese Auswahl.' : 'Noch keine Gutscheine – oben rechts „Neuer Gutschein“.'}</p> : (
             <div className="card flush tablewrap"><table>
-              <thead><tr><th>Kassennummer</th><th className="hide-sm">interne Nr.</th><th className="num">Wert</th><th>für</th><th className="hide-sm">Käufer</th><th className="hide-sm">gültig bis</th><th>Status</th><th className="hide-sm">Rechnung</th><th className="hide-sm">E-Mail</th></tr></thead>
+              <thead><tr><th>Nr.</th><th>Datum</th><th>Kassennummer</th><th className="num">Wert</th><th className="hide-sm">Zahlung</th><th className="hide-sm">kassiert von</th><th className="hide-sm">für / Käufer</th><th>Status</th><th className="hide-sm">Rechnung</th></tr></thead>
               <tbody>{list.map((v) => (
                 <tr key={v.id} className="rowlink" tabIndex={0} onClick={() => setOpen(v)} onKeyDown={(e) => { if (e.key === 'Enter') setOpen(v); }}>
-                  <td><b>{v.posCardNo || '–'}</b></td>
-                  <td className="hide-sm">{v.number}</td>
+                  <td><b>{v.number}</b></td>
+                  <td className="nowrap">{deDate(v.issuedOn)}</td>
+                  <td>{v.posCardNo || '–'}</td>
                   <td className="num">{formatMoney(v.valueCents)}</td>
-                  <td>{v.recipientName || '–'}</td>
-                  <td className="hide-sm">{v.buyerCompany || v.buyerName || '–'}</td>
-                  <td className="hide-sm">{v.validUntil ? deDate(v.validUntil) : '–'}</td>
-                  <td><Badge tone={TONE[v.status]}>{VOUCHER_STATUS_LABEL[v.status]}</Badge></td>
+                  <td className="hide-sm">{v.payMethod || '–'}</td>
+                  <td className="hide-sm">{v.cashier || '–'}</td>
+                  <td className="hide-sm">{v.recipientName || v.buyerCompany || v.buyerName || '–'}</td>
+                  <td><Badge tone={TONE[v.status]}>{VOUCHER_STATUS_LABEL[v.status]}</Badge>{v.redeemedAt && <><br /><small className="muted">{deDate(v.redeemedAt.slice(0, 10))}{v.redeemedBy ? ` · ${v.redeemedBy}` : ''}</small></>}</td>
                   <td className="hide-sm">{v.invoiceId ? (v.invoiceNumber ?? 'Entwurf') : '–'}</td>
-                  <td className="hide-sm">{v.sentAt ? deDate(v.sentAt.slice(0, 10)) : '–'}</td>
                 </tr>
               ))}</tbody>
             </table></div>
@@ -71,13 +86,16 @@ export function Vouchers() {
   );
 }
 
-type Form = Record<'number' | 'pin' | 'posCardNo' | 'value' | 'issuedOn' | 'validUntil' | 'buyerName' | 'buyerCompany' | 'buyerStreet' | 'buyerZip' | 'buyerCity' | 'buyerCountry' | 'buyerEmail' | 'recipientName' | 'message' | 'designId' | 'note', string>;
+type Form = Record<'payMethod' | 'cashier' | 'number' | 'pin' | 'posCardNo' | 'value' | 'issuedOn' | 'validUntil' | 'buyerName' | 'buyerCompany' | 'buyerStreet' | 'buyerZip' | 'buyerCity' | 'buyerCountry' | 'buyerEmail' | 'recipientName' | 'message' | 'designId' | 'note', string>;
 
 function VoucherDialog({ voucher: v, data, isAdmin, onClose, onChanged }: { voucher: VoucherDto | null; data: VoucherOverviewDto; isAdmin: boolean; onClose: () => void; onChanged: () => void }) {
   const toast = useToast();
   const { openInvoice } = useData();
   const today = todayBerlin();
+  const { user } = useAuth();
+  const [more, setMore] = useState(!!v);
   const [f, setF] = useState<Form>(() => ({
+    payMethod: v?.payMethod ?? 'Bar', cashier: v ? v.cashier : user.name,
     number: v?.number ?? data.nextNumber, pin: '', posCardNo: v?.posCardNo ?? '', value: v ? moneyInput(v.valueCents) : '',
     issuedOn: v?.issuedOn ?? today, validUntil: v ? v.validUntil ?? '' : data.suggestedValidUntil,
     buyerName: v?.buyerName ?? '', buyerCompany: v?.buyerCompany ?? '', buyerStreet: v?.buyerStreet ?? '', buyerZip: v?.buyerZip ?? '', buyerCity: v?.buyerCity ?? '',
@@ -90,7 +108,7 @@ function VoucherDialog({ voucher: v, data, isAdmin, onClose, onChanged }: { vouc
   const set = (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   const locked = v?.status === 'cancelled';
   // Neuer Gutschein: Rechnungsentwurf gleich mit anlegen (Gutschein 0 %, bei Postversand Versandkosten)
-  const [inv, setInv] = useState({ create: true, post: false, postage: data.numbering.postageCents ? moneyInput(data.numbering.postageCents) : '', postageTax: '19' });
+  const [inv, setInv] = useState({ create: false, post: false, postage: data.numbering.postageCents ? moneyInput(data.numbering.postageCents) : '', postageTax: '19' });
   const [invError, setInvError] = useState('');
   const s = useSubmit(voucherInput, async (d) => {
     if (v) { await api('PUT', `/vouchers/${v.id}`, { ...d, version: v.version }); toast('Gutschein gespeichert'); onChanged(); onClose(); return; }
@@ -108,7 +126,7 @@ function VoucherDialog({ voucher: v, data, isAdmin, onClose, onChanged }: { vouc
   });
   const save = () => {
     setInvError('');
-    if (!v && inv.create && !f.buyerName.trim() && !f.buyerCompany.trim()) { setInvError('Für die Rechnung bitte Name oder Firma des Käufers eintragen – oder „Rechnung gleich mit anlegen“ abwählen.'); return; }
+    if (!v && inv.create && !f.buyerName.trim() && !f.buyerCompany.trim()) { setMore(true); setInvError('Für die Rechnung bitte Name oder Firma des Käufers eintragen – oder „Rechnung gewünscht“ abwählen.'); return; }
     if (!v && inv.create && inv.post && inv.postage.trim() && Number.isNaN(parseMoney(inv.postage))) { setInvError('Bitte die Versandkosten als Betrag eintragen, z. B. 2,50'); return; }
     void s.submit({ ...f, valueCents: f.value.trim() === '' ? NaN : parseMoney(f.value) });
   };
@@ -134,11 +152,20 @@ function VoucherDialog({ voucher: v, data, isAdmin, onClose, onChanged }: { vouc
       {locked && <p className="notice warn">Dieser Gutschein ist storniert.</p>}
       {v?.status === 'redeemed' && <p className="notice">Als eingelöst markiert.</p>}
       <form className="formgrid" onSubmit={(e) => { e.preventDefault(); save(); }} noValidate>
-        <h3 className="wide first">Gutschein</h3>
-        <Field label="Kassennummer (Gutscheinnummer der Kasse)" error={s.errors.posCardNo} hint="steht groß auf dem Gutschein, mit Strichcode zum Scannen an der Kasse"><input value={f.posCardNo} onChange={set('posCardNo')} disabled={locked} autoFocus={!v} /></Field>
-        <Field label="Gutscheinnummer intern" error={s.errors.number} hint={v ? undefined : 'automatisch fortlaufend – bei Bedarf ändern'}><input value={f.number} onChange={set('number')} disabled={locked} /></Field>
+        <h3 className="wide first">Eintrag ins Gutscheinbuch</h3>
+        <Field label="Gutscheinnummer intern" error={s.errors.number} hint={v ? undefined : 'wird automatisch weitergezählt'}><input value={f.number} onChange={set('number')} disabled={locked} /></Field>
+        <Field label="Kassennummer" error={s.errors.posCardNo} hint="Nummer der Geschenkkarte aus der Kasse"><input value={f.posCardNo} onChange={set('posCardNo')} disabled={locked} autoFocus={!v} /></Field>
         <Field label="Wert" error={s.errors.valueCents}><span className="moneyin"><input inputMode="decimal" value={f.value} onChange={set('value')} placeholder="50,00" disabled={locked} /><span>€</span></span></Field>
-        <Field label="Ausgestellt am" error={s.errors.issuedOn}><input type="date" value={f.issuedOn} onChange={set('issuedOn')} disabled={locked} /></Field>
+        <Field label="Bezahlt mit" error={s.errors.payMethod}><select value={PAY_METHODS.includes(f.payMethod) || !f.payMethod ? f.payMethod : 'sonstiges'} onChange={set('payMethod')} disabled={locked}>{!v?.payMethod && v && <option value="">–</option>}{PAY_METHODS.map((m) => <option key={m}>{m}</option>)}</select></Field>
+        <Field label="Kassiert von" error={s.errors.cashier}><input value={f.cashier} list="vc-cashiers" onChange={set('cashier')} disabled={locked} /></Field>
+        <datalist id="vc-cashiers">{data.cashiers.map((c) => <option key={c} value={c} />)}</datalist>
+        <Field label="Datum" error={s.errors.issuedOn}><input type="date" value={f.issuedOn} onChange={set('issuedOn')} disabled={locked} /></Field>
+        {v?.status === 'redeemed' && v.redeemedAt && <p className="wide muted small">Eingelöst am {deDate(v.redeemedAt.slice(0, 10))}{v.redeemedBy ? ` – eingetragen von ${v.redeemedBy}` : ''}.</p>}
+        {!v && <label className="check wide"><input type="checkbox" checked={inv.create} onChange={(e) => { setInv({ ...inv, create: e.target.checked }); if (e.target.checked) setMore(true); }} />
+          <span>Rechnung gewünscht<small>z. B. für Firmen oder bei Postversand – dann entsteht ein Rechnungsentwurf (Gutschein 0 %, ggf. Versandkosten). Käufer bitte unten eintragen.</small></span></label>}
+        {!more && <button type="button" className="linkbtn wide" onClick={() => setMore(true)}>+ Weitere Angaben: Gültigkeit, beschenkte Person, Gruß, Motiv, Käufer …</button>}
+        {more && <>
+        <h3 className="wide">Gutschein</h3>
         <Field label="Gültig bis" error={s.errors.validUntil} hint="leer = ohne Datum auf dem Gutschein"><input type="date" value={f.validUntil} onChange={set('validUntil')} disabled={locked} /></Field>
 
         <h3 className="wide">Für wen?</h3>
@@ -156,11 +183,10 @@ function VoucherDialog({ voucher: v, data, isAdmin, onClose, onChanged }: { vouc
         <Field label="Ort" error={s.errors.buyerCity}><input value={f.buyerCity} onChange={set('buyerCity')} disabled={locked} /></Field>
         <Field label="E-Mail" error={s.errors.buyerEmail} wide><input type="email" value={f.buyerEmail} onChange={set('buyerEmail')} disabled={locked} /></Field>
         <Field label="Notiz (intern)" error={s.errors.note} wide><input value={f.note} onChange={set('note')} disabled={locked} /></Field>
+        </>}
         {!v && (
           <>
-            <h3 className="wide">Rechnung und Versand</h3>
-            <label className="check wide"><input type="checkbox" checked={inv.create} onChange={(e) => setInv({ ...inv, create: e.target.checked })} />
-              <span>Rechnung gleich mit anlegen<small>als Entwurf an den Käufer: Gutscheinwert mit 0 % (Mehrzweckgutschein – Umsatzsteuer erst bei Einlösung). Danach prüfen und „Ausstellen“ drücken.</small></span></label>
+            {inv.create && <h3 className="wide">Rechnung und Versand</h3>}
             {inv.create && (
               <>
                 <div className="wide vc-ship">

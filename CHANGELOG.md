@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.105.0
+
+- **Digitales Gutscheinbuch:** Der Reiter heißt jetzt „Gutscheinbuch“ – eine Liste aller Gutscheine mit **Nr. · Datum · Kassennummer · Wert · Zahlung · kassiert von · für/Käufer · Status (mit „eingelöst am … von …“) · Rechnung**. Filter nach Status und Monat, Suche (auch nach Kassierer oder Zahlungsart), Summe der angezeigten Gutscheine und **„Liste als Excel (CSV)“** zum Ablegen oder für den Steuerberater.
+- **Neuer Gutschein = Eintrag ins Gutscheinbuch:** oben nur noch das Nötige – interne Nummer (zählt automatisch weiter), **Kassennummer**, **Wert**, **Bezahlt mit** (Bar, EC-Karte, Kreditkarte, Überweisung, Rechnung, sonstiges), **Kassiert von** (vorbelegt mit dem angemeldeten Namen, frühere Namen werden vorgeschlagen) und Datum. Alles Weitere (Gültigkeit, beschenkte Person, Gruß, Motiv, Käufer) unter „+ Weitere Angaben“.
+- **Rechnung nur noch, wenn gewünscht:** Häkchen „Rechnung gewünscht“ (z. B. für Firmen oder Postversand) – dann entsteht der Rechnungsentwurf wie bisher.
+- **Zurückverfolgen:** Beim Markieren als eingelöst merkt sich das Programm Datum und Benutzer. Eine Kassennummer kann nur einem (nicht stornierten) Gutschein gehören.
+- Datenbank: Gutscheine haben zusätzliche Spalten für Zahlungsart, kassiert von, eingelöst am und eingelöst von (mit Freigabe).
+
 ## 1.104.0
 
 - **Gutschein anlegen mit Rechnung in einem Schritt:** Im Fenster „Neuer Gutschein“ gibt es unten „Rechnung und Versand“. „Rechnung gleich mit anlegen“ (vorausgewählt) erzeugt beim Speichern einen **Rechnungsentwurf** an den Käufer mit dem Gutscheinwert zu **0 %** (Hinweis „Mehrzweckgutschein – Umsatzsteuer fällt bei Einlösung an“). Bei „wird per Post verschickt“ kommen die **Versandkosten** dazu (Vorschlag aus „Nummern & Porto“, Steuersatz wählbar, Vorgabe 19 %).
