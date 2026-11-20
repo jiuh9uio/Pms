@@ -1251,3 +1251,5 @@ a.linkcard.attention b { color: var(--warn); }
   .offerlines { min-width: 680px; } .offerlines td:first-child { min-width: 220px; }
   .oc-cat > div { grid-template-columns: 1fr 1fr; } .oc-cat > div > span:first-child { grid-column: 1 / -1; }
 }
+.oc-tabs { display: none; }
+@media (max-width: 760px) { .oc-tabs { display: block; } }

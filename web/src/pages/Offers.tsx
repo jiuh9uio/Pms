@@ -26,8 +26,9 @@ export function Offers() {
   const { current, bar } = useTabs(isAdmin ? TABS : TABS.slice(0, 1));
   return (
     <>
-      <PageHeader title="Angebote" sub="Tagungen, Feiern und Gruppen – aus Vorlagen zusammenstellen, als PDF mit AGB versenden, Annahme festhalten" />
-      {isAdmin && bar}
+      <PageHeader title="Angebote & Absprachen" sub="Tagungen, Feiern und Gruppen – am Tisch absprechen, Katalog schicken, Angebot senden, Verlauf mit dem Kunden im Blick" />
+      {/* Reiter nur am Handy: am großen Bildschirm stehen dieselben Punkte links in der Navigation */}
+      {isAdmin && <div className="oc-tabs">{bar}</div>}
       {current === 'angebote' && <OfferList />}
       {current === 'leistungen' && isAdmin && <ItemsAdmin />}
       {current === 'vorlagen' && isAdmin && <TemplatesAdmin />}

@@ -16,6 +16,7 @@ const GROUPS: [Tile['group'], string][] = [['tag', 'Tagesgeschäft'], ['buero', 
 const TILES: Tile[] = [
   { group: 'tag', to: '/hotel', title: 'Hotel', text: 'Übersicht, Belegungsplan, Reservierungen, Gäste, Frühstück, Reinigung', icon: '▦', module: 'hotel' },
   { group: 'tag', to: '/restaurant', title: 'Restaurant', text: 'Tischreservierungen je Tag, Tische verwalten', icon: '◍', module: 'restaurant' },
+  { group: 'tag', to: '/angebote', title: 'Angebote', text: 'Tagungen und Feiern: Absprache am Tisch, Katalog zum Ankreuzen, Angebot, Verlauf mit dem Kunden', icon: '✍', module: ['hotel', 'restaurant'] },
   { group: 'tag', to: '/email', title: 'E-Mail', text: 'Geschäftspostfach lesen, Zimmer- und Tischanfragen übernehmen und beantworten', icon: '✉', module: 'email' },
   { group: 'tag', to: '/team', title: 'Team', text: 'Übergabebuch, Aufgaben und Reparaturen für alle Schichten', icon: '✎' },
   { group: 'buero', to: '/rechnungen', alt: '/erechnung', title: 'Rechnungen', text: 'Hotelrechnungen, Tagesabschluss, E-Rechnung und Archiv', icon: '€', module: ['hotel', 'erechnung'] },

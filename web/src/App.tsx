@@ -74,7 +74,7 @@ const NAV: NavItem[] = [
   { to: '/reinigung', label: 'Reinigung', icon: '✧', module: 'hotel', group: 'Haus' },
   { to: '/gaeste', label: 'Gäste', icon: '☺', module: 'hotel', group: 'Kunden' },
   { to: '/firmen', label: 'Firmen', icon: '⌘', module: 'hotel', more: true, group: 'Kunden' },
-  { to: '/angebote', label: 'Angebote', icon: '✍', module: 'hotel', group: 'Kunden' },
+  { to: '/angebote', label: 'Angebote', icon: '✍', module: 'hotel', group: 'Kunden', jump: true },
   { to: '/meldescheine', label: 'Meldeschein-Archiv', short: 'Meldescheine', icon: '▤', module: 'hotel', more: true, group: 'Kunden' },
   { to: '/rechnungen', label: 'Rechnungen', short: 'Rechn.', icon: '€', module: 'hotel', group: 'Abrechnung', jump: true },
   { to: '/tagesabschluss', label: 'Tagesabschluss', short: 'Abschluss', icon: '∑', module: 'hotel', more: true, group: 'Abrechnung' },
@@ -91,6 +91,15 @@ const NAV: NavItem[] = [
   // Einkauf: vorerst mit der Freigabe „Schnelldruck“ (die Bons kommen aus dem Bondrucker)
   { to: '/einkauf', label: 'Warenzugang', short: 'Zugang', icon: 'box', module: 'einkauf', need: 'schnelldruck', group: 'Einkauf' },
   { to: '/einkauf', tab: 'leergut', label: 'Leergut', icon: 'keg', module: 'einkauf', need: 'schnelldruck', group: 'Einkauf' },
+  // Angebote & Absprachen: eigener Bereich (für alle mit Hotel oder Restaurant); die Einrichtung pflegt der Administrator
+  { to: '/angebote', label: 'Angebote & Absprachen', short: 'Angebote', icon: '✍', module: 'angebote', group: 'Angebote' },
+  { to: '/angebote', tab: 'leistungen', label: 'Leistungen', short: 'Leist.', icon: '☷', module: 'angebote', admin: true, group: 'Einrichtung' },
+  { to: '/angebote', tab: 'vorlagen', label: 'Vorlagen & Absprache-Schritte', short: 'Vorlagen', icon: '▤', module: 'angebote', admin: true, group: 'Einrichtung' },
+  { to: '/angebote', tab: 'dokumente', label: 'AGB & Dokumente', short: 'AGB', icon: '▤', module: 'angebote', admin: true, more: true, group: 'Einrichtung' },
+  { to: '/angebote', tab: 'gestaltung', label: 'Gestaltung', short: 'Gestalt.', icon: '◐', module: 'angebote', admin: true, more: true, group: 'Einrichtung' },
+  { to: '/hotel', label: 'Hotel', icon: '▦', module: 'angebote', need: 'hotel', jump: true, group: 'Wechseln' },
+  { to: '/restaurant', label: 'Restaurant', icon: '◍', module: 'angebote', need: 'restaurant', jump: true, group: 'Wechseln' },
+  { to: '/email', label: 'Posteingang', short: 'E-Mail', icon: '✉', module: 'angebote', need: 'email', jump: true, more: true, group: 'Wechseln' },
   { to: '/gutscheine', label: 'Gutscheine', icon: 'gift', module: 'gutscheine', group: 'Gutscheine' },
   { to: '/schnelldruck', label: 'Schnelldruck', short: 'Druck', icon: '⎙', module: 'schnelldruck' },
   { to: '/kontrollen', label: 'Kontrollen', icon: '✓', module: 'kontrollen' },
@@ -106,7 +115,7 @@ const NAV: NavItem[] = [
   { to: '/kurzanleitung', label: 'Kurzanleitung', short: 'Hilfe', icon: '✍', module: 'verwaltung', group: 'Hilfe' },
   { to: '/als-programm', label: 'Als Programm öffnen', short: 'Programm', icon: '▣', module: 'verwaltung', group: 'Hilfe' },
 ];
-const MODULE_TITLE: Record<string, string> = { hotel: 'Hotel', restaurant: 'Restaurant', schnelldruck: 'Schnelldruck', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet', email: 'E-Mail', team: 'Team', einkauf: 'Einkauf', gutscheine: 'Gutscheine', verwaltung: 'Verwaltung', rechnungen: 'Rechnungen' };
+const MODULE_TITLE: Record<string, string> = { hotel: 'Hotel', restaurant: 'Restaurant', schnelldruck: 'Schnelldruck', kontrollen: 'Kontrollen', erechnung: 'E-Rechnung', internet: 'Internet', email: 'E-Mail', team: 'Team', einkauf: 'Einkauf', angebote: 'Angebote', gutscheine: 'Gutscheine', verwaltung: 'Verwaltung', rechnungen: 'Rechnungen' };
 
 export function App() {
   const [state, setState] = useState<AuthState | null>(null);

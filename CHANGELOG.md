@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.114.0
+
+- **Angebote sind jetzt ein eigener Bereich.** Auf der Startseite gibt es die Kachel **„Angebote“** (Tagesgeschäft). Im Bereich stehen links: Angebote & Absprachen, darunter die Einrichtung (Leistungen, Vorlagen & Absprache-Schritte, AGB & Dokumente, Gestaltung – nur Administrator) und schnelle Wechsel zu Hotel, Restaurant und Posteingang.
+- Aus Hotel und Restaurant führt „Angebote“ weiterhin dorthin. Die Suche findet Angebote, Leistungen und Vorlagen.
+- An den Abläufen und Berechtigungen ändert sich nichts.
+
 ## 1.113.0
 
 Aufräumen nach einer Durchsicht aller Seiten (großer Bildschirm und Handybreite):
