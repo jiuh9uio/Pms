@@ -12,7 +12,7 @@ import { DepositPanel } from '../billing/DepositPanel.tsx';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
 import { MailDialog } from '../hotel/MailDialog.tsx';
-import { Badge, Button, Dialog, Field, LoadState, PageHeader, useLoad, useTabs, useToast } from '../ui.tsx';
+import { Badge, Button, Dialog, Field, LoadState, LongText, PageHeader, useLoad, useTabs, useToast } from '../ui.tsx';
 import { OfferLayoutCard } from './OfferLayoutCard.tsx';
 import { OfferWizard } from './OfferWizard.tsx';
 import { QuestionPicker } from './QuestionPicker.tsx';
@@ -401,7 +401,7 @@ function OfferThread({ offer: o, onAccept, onCatalog }: { offer: OfferDto; onAcc
             <div className="ot-head"><b>{e.title}</b><small>{when(e.at)}{e.by ? ` · ${e.by}` : ''}</small></div>
             {e.subject && <div className="ot-subject">{e.subject}</div>}
             {e.hint && <div className="ot-hint">{e.hint === 'accept' ? 'klingt nach Zusage – bitte prüfen' : 'klingt nach Absage – bitte prüfen'}</div>}
-            {e.text && (e.text.length > 280 ? <details><summary>{e.text.slice(0, 200).trim()} … <u>ganz lesen</u></summary><div className="ot-text">{e.text}</div></details> : <div className="ot-text">{e.text}</div>)}
+            <LongText text={e.text} limit={280} shown={200} />
             {e.attachments.length > 0 && <div className="msg-att">{e.attachments.map((a) => (
               <span key={a.id} className="ot-att"><a href={`/api/v1/offers/${o.id}/attachments/${a.id}`} download={a.name}>📎 {a.name} ({Math.max(1, Math.round(a.size / 1024))} KB)</a>
                 {onCatalog && /pdf/i.test(`${a.type} ${a.name}`) && <Button onClick={() => void api<CatalogReturn>('POST', `/offers/${o.id}/catalog/read-attachment`, { attachmentId: a.id }).then(onCatalog, (err) => toast(err instanceof Error ? err.message : 'Fehler', 'error'))}>Als Katalog-Antwort einlesen</Button>}</span>

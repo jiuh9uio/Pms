@@ -166,3 +166,19 @@ export function useTabs<K extends string>(tabs: readonly (readonly [K, string])[
   );
   return { current, bar };
 }
+
+/**
+ * Langer Text (E-Mail im Verlauf): eingeklappt nur der Anfang, aufgeklappt der ganze Text – nie beides zugleich.
+ * limit = ab dieser Länge wird gekürzt; shown = so viele Zeichen sind eingeklappt zu sehen.
+ */
+export function LongText({ text, limit, shown, empty }: { text: string; limit: number; shown: number; empty?: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  if (!text) return empty ? <div className="ot-text">{empty}</div> : null;
+  if (text.length <= limit) return <div className="ot-text">{text}</div>;
+  return (
+    <div className="ot-text">
+      {open ? text : `${text.slice(0, shown).trim()} … `}
+      {open ? <><br /><button type="button" className="linkbtn" onClick={() => setOpen(false)}>weniger zeigen</button></> : <button type="button" className="linkbtn" aria-expanded={false} onClick={() => setOpen(true)}>ganz lesen</button>}
+    </div>
+  );
+}

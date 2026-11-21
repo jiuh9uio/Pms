@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.138.0
+
+- **Behoben: langer Text stand nach „ganz lesen“ doppelt da** (oben der gekürzte Anfang, darunter noch einmal alles). Jetzt wird der gekürzte Anfang durch den ganzen Text ersetzt; mit „weniger zeigen“ klappt er wieder ein. Gilt für Vorgänge sowie den Verlauf von Angeboten und Kostenvoranschlägen.
+- Nur Darstellung – an den gesendeten E-Mails selbst war nichts doppelt.
+
 ## 1.137.0
 
 - **Erledigte Vorgänge: keine Antwort-Knöpfe mehr.** Ist ein Vorgang erledigt (z. B. nach einer Absage) oder archiviert, stehen unten nur noch ein Hinweis und **„Wieder öffnen“**. Schreibt der Kunde noch einmal, öffnet sich der Vorgang wie bisher von selbst.

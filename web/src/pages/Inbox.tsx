@@ -9,7 +9,7 @@ import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
 import { MailDialog } from '../hotel/MailDialog.tsx';
-import { Badge, Button, Field, LoadState, PageHeader, fmtDateTime, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
+import { Badge, Button, Field, LoadState, LongText, PageHeader, fmtDateTime, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
 
 export const INBOX_TABS = [['vorgaenge', 'Vorgänge'], ['new', 'Neu'], ['done', 'Erledigt'], ['ignored', 'Ignoriert'], ['all', 'Alle'], ['vorlagen', 'Antwortvorlagen']] as const;
 const tone = (k: MailKind) => (k === 'hotel' || k === 'meeting' ? 'accent' : k === 'table' || k === 'event' ? 'ok' : k === 'voucher' ? 'warn' : 'neutral');
@@ -295,7 +295,7 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
       <ol className="msg-chat">{data.messages.map((m) => (
         <li key={m.id} className={m.dir === 'out' ? 'me' : 'them'}>
           <div className="msg-bubble">
-            {m.text.length > 500 ? <details><summary>{m.text.slice(0, 380).trim()} … <u>ganz lesen</u></summary><div className="ot-text">{m.text}</div></details> : <div className="ot-text">{m.text || <span className="muted">(kein Text)</span>}</div>}
+            <LongText text={m.text} limit={500} shown={380} empty={<span className="muted">(kein Text)</span>} />
             <small>{m.dir === 'out' ? m.who.split(' → ')[0] : 'Kunde'} · {fmtDateTime(m.at)}{m.inboxMailId && <> · <button type="button" className="linkbtn" onClick={() => void relocate(m.inboxMailId!)}>gehört nicht hierher</button></>}</small>
             {m.attachments.length > 0 && <div className="msg-att" title="Anklicken lädt den Anhang herunter">{m.attachments.map((a, i) => <AttachmentChip key={i} a={a} />)}{m.attachments.some((a) => !a.id) && <small className="muted">ohne Link: bitte im E-Mail-Programm öffnen</small>}</div>}
           </div>

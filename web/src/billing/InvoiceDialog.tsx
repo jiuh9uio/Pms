@@ -14,7 +14,7 @@ import { CustomerPicker } from '../CustomerPicker.tsx';
 import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
-import { Badge, Button, Dialog, Field, LoadState, fmtDateTime, useLoad, useSubmit, useToast } from '../ui.tsx';
+import { Badge, Button, Dialog, Field, LoadState, LongText, fmtDateTime, useLoad, useSubmit, useToast } from '../ui.tsx';
 
 export const InvoiceStatus = ({ inv }: { inv: Pick<InvoiceDto, 'status' | 'kind' | 'openCents' | 'dueDate'> }) => {
   if (inv.kind === 'cancellation') return <Badge tone="neutral">Stornobeleg</Badge>;
@@ -243,7 +243,7 @@ function InvoiceThread({ inv, onResend }: { inv: InvoiceDto; onResend?: () => vo
             <div className="ot-head"><b>{e.title}</b><small>{when(e.at)}{e.by ? ` · ${e.by}` : ''}</small></div>
             {e.subject && <div className="ot-subject">{e.subject}</div>}
             {e.answer && <div className="ot-hint">Antwort: {ANSWER[e.answer]}</div>}
-            {e.text && (e.text.length > 280 ? <details><summary>{e.text.slice(0, 200).trim()} … <u>ganz lesen</u></summary><div className="ot-text">{e.text}</div></details> : <div className="ot-text">{e.text}</div>)}
+            <LongText text={e.text} limit={280} shown={200} />
             {e.removable && <button type="button" className="linkbtn small" onClick={() => { if (window.confirm('Diese E-Mail gehört nicht hierher? Die Zuordnung wird gelöst; die E-Mail bleibt im Posteingang.')) void act('remove', { eventId: e.id }, 'Zuordnung gelöst'); }}>gehört nicht hierher</button>}
           </div>
         </li>
