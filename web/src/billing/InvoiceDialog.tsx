@@ -85,6 +85,8 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
         {inv.status === 'draft' ? <Button variant="primary" busy={busy} onClick={() => void issue()}>{inv.estimateNumber ? 'Rechnung daraus ausstellen' : 'Ausstellen'}</Button> : <Button onClick={onClose}>Schließen</Button>}
       </>}>
       {!inv ? <LoadState error={error} loading /> : (
+        <>
+        {inv.status === 'draft' && inv.kind === 'invoice' && <DraftSteps inv={inv} />}
         <div className="split">
           <div>
             {inv.estimateNumber && <InvoiceThread inv={inv} />}
@@ -114,13 +116,17 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
                 <tr className="sum"><td>Offen</td><td className="num">{formatMoney(inv.openCents)}</td></tr>
               </>}
             </tbody></table>
-            {inv.status === 'draft' && inv.estimateNumber && <p className="notice small"><b>Kostenvoranschlag {inv.estimateNumber}</b> – noch keine Rechnung: zählt nicht zum Umsatz und hat keine Rechnungsnummer. Sie können ihn weiter ändern. Mit „Rechnung daraus ausstellen“ wird daraus die Rechnung; den Kostenvoranschlag selbst gibt es dann nicht mehr als eigenes PDF.</p>}
+            {inv.status === 'draft' && inv.estimateNumber && <>
+              <p className="notice small"><b>Noch keine Rechnung.</b> Zählt nicht zum Umsatz, lässt sich weiter ändern.{inv.estimateValidUntil && <> Gültig bis {deDate(inv.estimateValidUntil)}.</>}</p>
+              <details className="iv-more"><summary>Wie geht es weiter?</summary><p className="muted small">Kostenvoranschlag senden oder als PDF ausdrucken. Ist der Kunde einverstanden, wird mit „Rechnung daraus ausstellen“ die Rechnung daraus – erst dann gibt es eine Rechnungsnummer. Den Kostenvoranschlag selbst gibt es danach nicht mehr als eigenes PDF.</p></details>
+            </>}
             {inv.status !== 'draft' && inv.estimateNumber && <p className="muted small">Entstanden aus Kostenvoranschlag {inv.estimateNumber}.</p>}
-            {inv.status === 'draft' && <p className="muted small">Entwurf – noch ohne Rechnungsnummer. Beim Ausstellen werden noch nicht zugeordnete Anzahlungen der Reservierung verrechnet.</p>}
+            {inv.status === 'draft' && !inv.estimateNumber && <p className="muted small">Entwurf – noch ohne Rechnungsnummer.{inv.bookingId && ' Beim Ausstellen werden noch nicht zugeordnete Anzahlungen der Reservierung verrechnet.'}</p>}
             {(inv.status === 'issued' || inv.payments.length > 0) && inv.kind === 'invoice' && <Payments inv={inv} />}
             {inv.issuedAt && <p className="muted small">Ausgestellt {fmtDateTime(inv.issuedAt)} von {inv.issuedBy}</p>}
           </aside>
         </div>
+        </>
       )}
       {inv && kvMail && <MailDialog path={`/invoices/${id}/estimate/mail`} title={`Kostenvoranschlag ${inv.estimateNumber} per E-Mail`} onClose={() => setKvMail(false)} onSent={bump} attachmentNote="(der Kostenvoranschlag als PDF – keine Rechnung)" />}
       {inv && mail && <MailDialog path={`/invoices/${id}/mail?kind=${mail}`} title={mail === 'reminder' ? `Zahlungserinnerung zur Rechnung ${inv.number}` : `Rechnung ${inv.number} per E-Mail`} onClose={() => setMail(false)} onSent={bump} />}
@@ -141,13 +147,31 @@ function Recipient({ inv }: { inv: InvoiceDto }) {
   const [v, setV] = useState(init);
   useEffect(() => setV(init), [inv.version]); // eslint-disable-line react-hooks/exhaustive-deps
   const dirty = JSON.stringify(v) !== JSON.stringify(init);
-  const f = useSubmit(invoiceUpdateInput, async (d) => { await api('PUT', `/invoices/${inv.id}`, d); toast('Gespeichert'); bump(); });
+  // steht der Empfänger schon fest, genügt eine Zeile – das Formular klappt erst über „Ändern“ auf
+  const known = !!(inv.recipientCompany || inv.recipientName);
+  const [edit, setEdit] = useState(!known);
+  const f = useSubmit(invoiceUpdateInput, async (d) => { await api('PUT', `/invoices/${inv.id}`, d); toast('Gespeichert'); bump(); setEdit(false); });
   const input = (k: keyof typeof v, label: string, o: { wide?: boolean; type?: string; hint?: string } = {}) => (
     <Field label={label} error={f.errors[k]} wide={o.wide} hint={o.hint}><input type={o.type ?? 'text'} value={v[k]} onChange={(e) => setV({ ...v, [k]: e.target.value })} /></Field>
   );
+  if (!edit && known) return (
+    <div className="iv-rcp">
+      <div>
+        <small className="muted">Empfänger</small>
+        <b>{inv.recipientCompany || inv.recipientName}</b>
+        <span>{[inv.recipientCompany ? inv.recipientName : '', inv.recipientStreet, [inv.recipientZip, inv.recipientCity].filter(Boolean).join(' ')].filter(Boolean).join(' · ') || <i className="muted">ohne Anschrift</i>}</span>
+      </div>
+      <div>
+        <small className="muted">{serviceLabel(inv.serviceFrom, inv.serviceTo, kv)}</small>
+        <b>{inv.serviceFrom ? `${deDate(inv.serviceFrom)}${inv.serviceTo && inv.serviceTo !== inv.serviceFrom ? ` – ${deDate(inv.serviceTo)}` : ''}` : '–'}</b>
+        {kv && <span>{inv.estimateValidUntil ? `gültig bis ${deDate(inv.estimateValidUntil)}` : 'ohne Gültigkeitsangabe'}</span>}
+      </div>
+      <Button onClick={() => setEdit(true)}>Ändern</Button>
+    </div>
+  );
   return (
-    <form onSubmit={(e) => void f.submit({ ...v, serviceFrom: v.serviceFrom || null, serviceTo: v.serviceTo || null, estimateValidUntil: v.estimateValidUntil || null, version: inv.version }, e)} noValidate>
-      <h3 className="first">Rechnungsempfänger</h3>
+    <form className="iv-rcpform" onSubmit={(e) => void f.submit({ ...v, serviceFrom: v.serviceFrom || null, serviceTo: v.serviceTo || null, estimateValidUntil: v.estimateValidUntil || null, version: inv.version }, e)} noValidate>
+      <h3 className="first">{kv ? 'Empfänger und Termin' : 'Rechnungsempfänger'}</h3>
       <CustomerPicker onPick={(c) => setV({ ...v, recipientCompany: c.company, recipientName: c.name, recipientStreet: c.street, recipientZip: c.zip, recipientCity: c.city, recipientCountry: c.country, recipientVatId: c.vatId || v.recipientVatId })} />
       <div className="formgrid">
         {input('recipientCompany', 'Firma', { hint: 'leer bei Privatrechnung' })}{input('recipientName', 'Name / z. Hd.')}
@@ -157,8 +181,25 @@ function Recipient({ inv }: { inv: InvoiceDto }) {
         {kv && input('estimateValidUntil', 'Kostenvoranschlag gültig bis', { type: 'date', hint: 'steht auf dem Kostenvoranschlag; leer = ohne Angabe' })}
         <Field label="Hinweis auf der Rechnung" wide error={f.errors.notes}><textarea rows={2} value={v.notes} onChange={(e) => setV({ ...v, notes: e.target.value })} /></Field>
       </div>
-      {dirty && <div className="formactions"><Button type="submit" variant="primary" busy={f.busy}>Empfänger speichern</Button></div>}
+      <div className="formactions">{known && <Button onClick={() => { setV(init); setEdit(false); }}>Abbrechen</Button>}<Button type="submit" variant="primary" busy={f.busy} disabled={!dirty}>Speichern</Button></div>
     </form>
+  );
+}
+
+/** Weg eines Entwurfs als Schritte (wie bei „Neue Reservierung“ und den Vorgängen): was ist geschafft, was steht an */
+function DraftSteps({ inv }: { inv: InvoiceDto }) {
+  const { rev } = useData();
+  const kv = !!inv.estimateNumber;
+  const { data } = useLoad(() => (kv ? api<InvoiceTimeline>('GET', `/invoices/${inv.id}/timeline`) : Promise.resolve(null)), [inv.id, rev, kv]);
+  const sent = !!data?.entries.some((e) => e.dir === 'out');
+  const marks: [string, boolean][] = kv
+    ? [['Empfänger', !!(inv.recipientCompany || inv.recipientName)], ['Positionen', inv.lines.length > 0], ['Gesendet', sent], [data?.answer === 'no' ? 'Kunde: Nein' : data?.answer === 'unclear' ? 'Antwort lesen' : 'Kunde: Ja', data?.answer === 'yes'], ['Rechnung', false]]
+    : [['Empfänger', !!(inv.recipientCompany || inv.recipientName)], ['Positionen', inv.lines.length > 0], ['Ausstellen', false]];
+  const first = marks.findIndex(([, ok]) => !ok);
+  return (
+    <ol className="cs-steps iv-steps" aria-label="Stand">{marks.map(([label, ok], i) => (
+      <li key={i} className={ok ? 'done' : i === first ? 'now' : 'todo'} aria-current={!ok && i === first ? 'step' : undefined}><span className="cs-num">{ok ? '✓' : i + 1}</span><span className="cs-label">{label}</span></li>
+    ))}</ol>
   );
 }
 

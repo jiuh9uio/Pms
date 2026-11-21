@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.133.0
+
+- **Fenster für Kostenvoranschlag und Rechnungsentwurf übersichtlicher.** Oben zeigt eine **Schritte-Leiste**, wie weit es ist (Empfänger → Positionen → Gesendet → Kunde: Ja → Rechnung). Der **Empfänger** steht als eine Zeile mit Termin und Gültigkeit; das große Formular klappt erst über „Ändern“ auf (bei einem neuen Entwurf ohne Empfänger ist es gleich offen). Dadurch sind die **Positionen** sofort zu sehen.
+- Die Hinweise rechts neben den Beträgen sind gekürzt; die längere Erklärung steht hinter „Wie geht es weiter?“.
+- Nur Darstellung – keine Änderung an Abläufen, Beträgen oder an der Datenbank.
+
 ## 1.132.0
 
 - **Eigener Bereich „Freie Rechnungen & Kostenvoranschläge“** (Rechnungen → oben in der Seitenleiste). Dort stehen alle Rechnungen und Kostenvoranschläge **ohne Reservierung** – z. B. Getränkelieferung, Raummiete, Außer-Haus-Verkauf – mit den Knöpfen „+ Kostenvoranschlag“ und „+ Freie Rechnung“ und den Filtern Alle / Kostenvoranschläge / Rechnungsentwürfe / Offen / Bezahlt / Storniert.

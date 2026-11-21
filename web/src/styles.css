@@ -1360,3 +1360,10 @@ a.linkcard.attention b { color: var(--warn); }
 .sort-tile:hover { border-color: var(--mk); box-shadow: 0 2px 10px color-mix(in srgb, var(--mk) 25%, transparent); transform: translateY(-1px); }
 .sort-tile.on { background: color-mix(in srgb, var(--mk) 14%, var(--surface)); border-color: var(--mk); box-shadow: 0 0 0 1px var(--mk) inset; }
 .sort-tile .rt-check { position: absolute; top: 6px; right: 8px; width: 20px; height: 20px; border-radius: 50%; background: var(--mk); color: #fff; font-style: normal; font-size: 12px; display: grid; place-items: center; }
+
+/* Rechnungs- und Kostenvoranschlags-Fenster: Schritte oben, Empfänger als eine Zeile */
+.iv-steps { padding: 0 0 14px; border-bottom: 0; } .iv-steps li { min-width: 96px; }
+.iv-rcp { display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: center; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 10px; margin-bottom: 16px; }
+.iv-rcp > div { display: grid; gap: 1px; min-width: 0; } .iv-rcp > div:first-child { flex: 1 1 220px; } .iv-rcp small { font-size: 12px; } .iv-rcp span { font-size: 13.5px; color: var(--ink-2); }
+.iv-rcpform { padding: 14px; border: 1px solid var(--line-strong); border-radius: 10px; margin-bottom: 16px; }
+.iv-more { margin: 6px 0; } .iv-more summary { cursor: pointer; font-size: 13.5px; color: var(--accent-text); }
