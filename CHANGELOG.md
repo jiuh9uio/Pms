@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.126.0
+
+- **Gesamtexport der Eigenkontrolle:** Unter Kontrollen → Temperaturprotokoll → „Drucken / Senden …“ wählen Sie jetzt, was ins PDF kommt: **Temperaturen, Reinigung, Wareneingang** – einzeln oder alles zusammen, für einen frei wählbaren Zeitraum. Das PDF lässt sich ansehen, drucken, speichern oder per E-Mail senden. Reinigung: Tag, Aufgabe, Turnus, Name und Uhrzeit, dazu Aufgaben ohne Eintrag im Zeitraum. Wareneingang: Lieferant, Ware, Temperatur, Ergebnis (Beanstandungen rot) und Bemerkungen im vollen Wortlaut.
+- Ohne Auswahl bleibt alles wie bisher (nur Temperaturen). Der Bon enthält weiterhin nur die Temperaturen. Der Wareneingang gehört zu keinem Bereich und erscheint nur bei „alle Bereiche“.
+- Keine Änderung an der Datenbank.
+
 ## 1.125.0
 
 - **E-Mails aus dem Hotelbereich gehören jetzt zu einem Vorgang.** Bestätigung, Absage, Stornobestätigung, Rückfrage und Gäste-Link, die aus einer Reservierung gesendet werden, erscheinen unter „Vorgänge“; die Vorgangsnummer steht im Betreff. Antwortet der Gast, landet seine E-Mail in diesem Vorgang. Der Vorgang gilt als erledigt, solange der Gast nicht antwortet – nur bei einer Rückfrage bleibt er offen. Wurde die Reservierung aus einer E-Mail-Anfrage angelegt, wird deren Vorgang weitergeführt. Aus dem Vorgang lässt sich die Reservierung öffnen.

@@ -369,6 +369,34 @@ describe('Temperaturprotokoll ausgeben', () => {
     expect(dayLine).toMatch(/9!/); // außerhalb des Sollbereichs markiert
     expect(lines.some((t) => /Tür offen/.test(t))).toBe(true);
   });
+  it('Gesamtexport: Temperaturen, Reinigung und Wareneingang wählbar in einem PDF; Dateiname und E-Mail passen zur Auswahl', async () => {
+    const { PDFDocument } = await import('pdf-lib');
+    const [area] = await ok('GET', '/hygiene/areas', admin);
+    const task = await ok('POST', '/cleaning/tasks', admin, { areaId: area.id, name: 'Arbeitsflächen desinfizieren', intervalDays: 1, active: true });
+    await ok('POST', `/cleaning/tasks/${task.id}/done`, admin);
+    await ok('POST', '/goods-receipts', admin, { supplier: 'Frischdienst Muster', goods: 'Molkereiprodukte', tempC: 9.5, ok: false, note: 'zu warm angeliefert, Annahme verweigert und Lieferant informiert' });
+    await ok('POST', '/goods-receipts', admin, { supplier: 'Getränke Muster', goods: 'Wasser', tempC: null, ok: true, note: '' });
+    const get = (parts: string, extra = '') => app.inject({ method: 'GET', url: `/api/v1/hygiene/export/pdf?from=${addDays(today, -2)}&to=${today}&parts=${parts}${extra}`, cookies: admin });
+    const pagesOf = async (r: { rawPayload: Buffer }) => (await PDFDocument.load(r.rawPayload)).getPageCount();
+    const all = await get('temp,clean,goods');
+    expect(all.statusCode).toBe(200);
+    expect(all.headers['content-disposition']).toMatch(/Eigenkontrolle_.*\.pdf/);
+    const onlyTemp = await get('temp'), onlyClean = await get('clean'), onlyGoods = await get('goods');
+    expect(onlyClean.headers['content-disposition']).toMatch(/Reinigungsprotokoll_/);
+    expect(onlyGoods.headers['content-disposition']).toMatch(/Wareneingang_/);
+    // ohne Angabe wie bisher: nur das Temperaturprotokoll
+    const legacy = await app.inject({ method: 'GET', url: `/api/v1/hygiene/export/pdf?from=${addDays(today, -2)}&to=${today}`, cookies: admin });
+    expect(legacy.headers['content-disposition']).toMatch(/Temperaturprotokoll_/);
+    expect(await pagesOf(legacy)).toBe(await pagesOf(onlyTemp));
+    expect(await pagesOf(all)).toBeGreaterThanOrEqual(await pagesOf(onlyTemp));
+    expect(all.rawPayload.length).toBeGreaterThan(onlyTemp.rawPayload.length);
+    expect(all.rawPayload.length).toBeGreaterThan(onlyClean.rawPayload.length);
+    if (process.env.PDF_OUT) (await import('node:fs')).writeFileSync(process.env.PDF_OUT, all.rawPayload);
+    const draft = await ok('GET', `/hygiene/export/mail?from=${addDays(today, -2)}&to=${today}&parts=clean,goods`, admin);
+    expect(draft.subject).toMatch(/^Eigenkontrolle/);
+    expect(draft.text).toContain('Reinigung, Wareneingang');
+    expect(draft.attachment).toMatch(/^Eigenkontrolle_/);
+  });
 });
 
 describe('Steuersätze prüfen', () => {

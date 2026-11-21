@@ -85,8 +85,9 @@ export function registerControlRoutes(api: FastifyInstance, { db, requireUser, r
 
   // Temperaturprotokoll ausgeben: PDF (ansehen/drucken), per E-Mail, kompakt auf dem Bondrucker
   const expQ = (req: FastifyRequest) => {
-    const q = z.object({ from: z.string().refine(isIsoDate, 'Bitte ein Datum wählen'), to: z.string().refine(isIsoDate, 'Bitte ein Datum wählen'), area: z.uuid().optional() }).parse(req.query);
-    return { from: q.from, to: q.to, areaId: q.area ?? null };
+    const q = z.object({ from: z.string().refine(isIsoDate, 'Bitte ein Datum wählen'), to: z.string().refine(isIsoDate, 'Bitte ein Datum wählen'), area: z.uuid().optional(), parts: z.string().max(40).optional() }).parse(req.query);
+    const parts = hygexp.EXPORT_PARTS.filter((p) => (q.parts ?? '').split(',').includes(p));
+    return { from: q.from, to: q.to, areaId: q.area ?? null, parts };
   };
   api.get('/hygiene/export/pdf', user, async (req, reply) => {
     const r = await hygexp.exportPdf(db, actor(req), expQ(req));

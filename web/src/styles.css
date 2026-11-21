@@ -1326,3 +1326,5 @@ a.linkcard.attention b { color: var(--warn); }
 .nx-list { display: grid; gap: 10px; margin: 10px 0; } .nx-row { display: grid; grid-template-columns: 210px 1fr; gap: 10px; align-items: start; } .nx-row > span { font-weight: 600; padding-top: 6px; }
 @media (max-width: 700px) { .nx-row { grid-template-columns: 1fr; gap: 4px; } }
 .msg-head { flex-wrap: wrap; } .msg-who { flex: 1 1 230px; min-width: 200px; }
+
+.exp-parts { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin: 10px 0; } .exp-parts legend { font-weight: 600; padding: 0 6px; font-size: 14px; }
