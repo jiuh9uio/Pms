@@ -4,7 +4,7 @@ import {
   type InvoiceDto, type InvoiceTimeline, type PaymentDto,
 } from '../../../src/shared/billing.js';
 import { formatMoney, moneyInput, parseMoney, todayBerlin, type ServiceDto } from '../../../src/shared/hotel.js';
-import type { OfferItemDto } from '../../../src/shared/offers.js';
+import type { OfferItemDto, OfferListRow } from '../../../src/shared/offers.js';
 import type { TaxRateDto } from '../../../src/shared/schemas.js';
 import { useNavigate } from 'react-router-dom';
 import { hasModule } from '../../../src/shared/schemas.js';
@@ -95,6 +95,7 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
           <div>
             {inv.estimateNumber && <InvoiceThread inv={inv} onResend={() => setKvMail(true)} />}
             {kvId && kvSent && <EstimateNext inv={inv} line={kvLine} />}
+            {inv.status === 'draft' && <FromOffer inv={inv} go={navigate} />}
             {inv.status === 'cancelled' && <p className="notice danger">Storniert durch {inv.cancelledByNumber ? <button type="button" className="linkbtn" onClick={() => openInvoice(inv.cancelledById!)}>{inv.cancelledByNumber}</button> : 'Stornobeleg'}. Grund: {inv.cancelReason}</p>}
             {inv.kind === 'cancellation' && inv.cancelsId && <p className="notice">Storniert die Rechnung <button type="button" className="linkbtn" onClick={() => openInvoice(inv.cancelsId!)}>{inv.cancelsNumber}</button>.</p>}
             {inv.status === 'draft' ? <Recipient inv={inv} /> : (
@@ -207,6 +208,32 @@ function DraftSteps({ inv }: { inv: InvoiceDto }) {
     <ol className="cs-steps iv-steps" aria-label="Stand">{marks.map(([label, ok], i) => (
       <li key={i} className={ok ? 'done' : i === first ? 'now' : 'todo'} aria-current={!ok && i === first ? 'step' : undefined}><span className="cs-num">{ok ? '✓' : i + 1}</span><span className="cs-label">{label}</span></li>
     ))}</ol>
+  );
+}
+
+/**
+ * Entwurf oder Kostenvoranschlag, der aus einem Angebot entstanden ist (Tagung, Feier …): Hinweis auf das Angebot und darauf,
+ * ob dort schon eine Hotel- bzw. Tischreservierung angelegt ist. Angelegt wird die Reservierung im Angebot – dort stehen Termin und Personenzahl.
+ * Bei allem anderen (z. B. Warenbestellung) erscheint nichts: dort gibt es nur die Auftragsbestätigung.
+ */
+function FromOffer({ inv, go }: { inv: InvoiceDto; go: (to: string) => void }) {
+  const { rev } = useData();
+  const number = /\bAN-\d{4}-\d{4,6}\b/i.exec(inv.notes)?.[0]?.toUpperCase() ?? null;
+  const { data } = useLoad(() => (number ? api<OfferListRow[]>('GET', `/offers?state=all&q=${number}`).catch(() => []) : Promise.resolve([])), [number, rev]);
+  const o = data?.find((x) => x.number.toUpperCase() === number);
+  if (!o) return null;
+  const hotel = o.area === 'hotel' || o.area === 'both', rest = o.area === 'restaurant' || o.area === 'both';
+  const open = (hotel && !o.bookingId) || (rest && !o.tableReservationId);
+  return (
+    <section className="card iv-next">
+      <div className="formactions">
+        <span>Aus <b>Angebot {o.number}</b>{o.title ? ` – ${o.title}` : ''}{o.eventDate ? ` · ${deDate(o.eventDate)}` : ''}{o.persons ? ` · ${o.persons} Pers.` : ''}</span>
+        {hotel && <Badge tone={o.bookingId ? 'ok' : 'warn'}>{o.bookingId ? '✓ Hotelreservierung angelegt' : 'Hotelreservierung fehlt'}</Badge>}
+        {rest && <Badge tone={o.tableReservationId ? 'ok' : 'warn'}>{o.tableReservationId ? '✓ Tischreservierung angelegt' : 'Tischreservierung fehlt'}</Badge>}
+        <Button variant={open ? 'primary' : undefined} onClick={() => go(`/angebote?angebot=${o.id}`)}>{open ? 'Im Angebot Reservierung anlegen' : 'Angebot öffnen'}</Button>
+      </div>
+      {open && o.status !== 'accepted' && <p className="muted small">Die Reservierung lässt sich im Angebot anlegen, sobald es als angenommen markiert ist.</p>}
+    </section>
   );
 }
 

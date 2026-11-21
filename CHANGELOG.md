@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.144.0
+
+- **Kostenvoranschlag bzw. Rechnungsentwurf aus einem Angebot (Tagung, Feier …):** Im Fenster steht jetzt, aus welchem Angebot er stammt, ob dort schon eine **Hotel- bzw. Tischreservierung** angelegt ist, und ein Knopf führt ins Angebot, um sie anzulegen. Dort stehen Termin und Personenzahl bereits.
+- **Warenbestellung und alles andere:** Hier erscheint dieser Hinweis nicht – es gibt nur die Auftragsbestätigung.
+- Erkannt wird die Herkunft am Vermerk „Gemäß Angebot AN-…“ im Hinweisfeld, den das Programm beim Anlegen aus dem Angebot einträgt. Keine Änderung an der Datenbank.
+
 ## 1.143.0
 
 - **Kostenvoranschlag vereinfacht:** Nach dem Senden gibt es nur noch **„Auftragsbestätigung senden“** (mit den Positionen aus dem Kostenvoranschlag). „Tisch reservieren“ und „Ware ist da“ sind dort wieder entfernt.
