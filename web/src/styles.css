@@ -1381,15 +1381,22 @@ a.linkcard.attention b { color: var(--warn); }
 .msg.msg-solo { grid-template-columns: 1fr; height: auto; min-height: 0; } .msg-solo .msg-side { border-right: 0; } .msg-solo .msg-list { overflow: visible; }
 @media (min-width: 1100px) { .msg-solo .msg-list { display: grid; grid-template-columns: 1fr 1fr; } .msg-solo .msg-item:nth-child(odd) { border-right: 1px solid var(--line); } .msg-solo .msg-list > p, .msg-solo .msg-list > .loadstate { grid-column: 1 / -1; } }
 .msg-solo .msg-item { padding: 14px 18px; }
-.msg-dlg { display: flex; flex-direction: column; margin: -4px 0; } .msg-dlg .msg-back { display: none; } .msg-dlg .msg-head { padding-left: 0; padding-right: 0; }
-.msg-dlg .msg-chat { max-height: none; overflow: visible; border-radius: 10px; padding: 16px; } .msg-dlg .msg-bubble { max-width: min(78%, 760px); font-size: 15px; }
+.msg-dlg { display: flex; flex-direction: column; flex: 1; min-height: 0; } .msg-dlg .msg-back { display: none; } .msg-dlg .msg-head { padding-left: 0; padding-right: 0; }
+.msg-dlg .msg-chat { flex: 1 1 0; min-height: 160px; max-height: none; overflow: auto; border-radius: 10px; padding: 16px; } .msg-dlg .msg-bubble { max-width: min(78%, 760px); font-size: 15px; }
 .msg-dlg .cs-steps { padding-left: 0; padding-right: 0; } .msg-dlg .msg-next { border-radius: 10px; margin-bottom: 10px; border-bottom: 0; }
-.msg-dlg .msg-foot { position: sticky; bottom: -1px; background: var(--surface); padding-left: 0; padding-right: 0; }
+.msg-dlg .msg-foot { padding-left: 0; padding-right: 0; flex: none; }
 .msg-contact { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: end; flex-basis: 100%; padding-top: 8px; border-top: 1px solid var(--line); }
 .msg-contact label { display: grid; gap: 3px; font-size: 13px; flex: 1 1 220px; } .msg-contact input { width: 100%; }
-dialog.dialog.xl:has(.msg-dlg) { width: min(1320px, calc(100vw - 24px)); height: calc(100dvh - 24px); } dialog.dialog.xl:has(.msg-dlg) .dialog-body { flex: 1; }
+dialog.dialog.xl:has(.msg-dlg) { width: min(1320px, calc(100vw - 24px)); height: calc(100dvh - 24px); } dialog.dialog.xl:has(.msg-dlg) .dialog-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+/* nur der Verlauf scrollt – Kopf, Schritte und die Knöpfe unten bleiben fest stehen und überdecken keinen Text */
+.msg-dlg > * { flex: none; } .msg-dlg .msg-more { max-height: 44vh; overflow: auto; }
 
 /* Zusage / Absage auf einen Blick */
 .msg-mark { display: inline-flex; align-items: center; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .msg-mark.yes { background: color-mix(in srgb, #1f8a50 18%, var(--surface)); color: color-mix(in srgb, #1f8a50 65%, var(--ink)); border: 1px solid color-mix(in srgb, #1f8a50 45%, var(--line)); }
 .msg-mark.no { background: color-mix(in srgb, #c62828 16%, var(--surface)); color: color-mix(in srgb, #c62828 65%, var(--ink)); border: 1px solid color-mix(in srgb, #c62828 45%, var(--line)); }
+/* kleine Bildschirme: hier scrollt das ganze Fenster (sonst wären die Knöpfe unten abgeschnitten) */
+@media (max-width: 760px), (max-height: 560px) {
+  dialog.dialog.xl:has(.msg-dlg) .dialog-body { display: block; overflow-y: auto; }
+  .msg-dlg { display: block; } .msg-dlg .msg-chat { overflow: visible; min-height: 0; } .msg-dlg .msg-more { max-height: none; overflow: visible; }
+}

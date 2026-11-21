@@ -3,6 +3,10 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.141.0
+
+- **Behoben: Im großen Vorgangs-Fenster lagen die Knöpfe unten über dem Text** (z. B. „Wieder öffnen“ mitten in der Nachricht). Jetzt stehen Kopf, Schritte und Knöpfe fest, und nur der Verlauf dazwischen scrollt. Auf kleinen Bildschirmen scrollt das ganze Fenster.
+
 ## 1.140.0
 
 - **Zusage oder Absage auf einen Blick:** In der Liste der Vorgänge und im Vorgang selbst steht neben der Art ein grünes **„✓ Zusage“** (Bestätigung bzw. Auftragsbestätigung gesendet) oder ein rotes **„✗ Absage“** (Absage gesendet, nichts reserviert). Vorgänge ohne beides bleiben ohne Markierung.
