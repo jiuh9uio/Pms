@@ -3,6 +3,16 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.142.0
+
+- **Aus dem Kostenvoranschlag einen Auftrag machen.** Ist der Kostenvoranschlag gesendet, erscheint der Abschnitt „Auftrag daraus machen“:
+  - **Auftragsbestätigung senden** – die E-Mail listet automatisch alle Positionen, den Gesamtbetrag und den voraussichtlichen Termin aus dem Kostenvoranschlag.
+  - **Ware ist da – Kunden benachrichtigen** – nach der Auftragsbestätigung.
+  - **Tisch reservieren** – legt eine Tischreservierung an (Datum aus dem Leistungstermin vorbelegt) und vermerkt sie im Verlauf.
+- Die Schritte-Leiste zeigt „Auftrag bestätigt“, „Tisch reserviert“ und „Ware da – gemeldet“, sobald es geschehen ist. Der Kostenvoranschlag bleibt ein Entwurf; die Rechnung wird weiterhin von Hand ausgestellt.
+- **Behoben:** Esc in einem darüber geöffneten Fenster (z. B. E-Mail schreiben) schloss auch das Fenster darunter. Jetzt schließt Esc nur das oberste.
+- Keine Änderung am Aufbau der Datenbank.
+
 ## 1.141.0
 
 - **Behoben: Im großen Vorgangs-Fenster lagen die Knöpfe unten über dem Text** (z. B. „Wieder öffnen“ mitten in der Nachricht). Jetzt stehen Kopf, Schritte und Knöpfe fest, und nur der Verlauf dazwischen scrollt. Auf kleinen Bildschirmen scrollt das ganze Fenster.

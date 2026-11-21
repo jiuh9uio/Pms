@@ -406,3 +406,47 @@ describe('Freie Rechnungen getrennt von Hotelrechnungen', () => {
     expect((await ok('GET', '/invoices?status=draft', user)).length).toBeGreaterThanOrEqual(kv.length + drafts.length);
   });
 });
+
+describe('Aus dem Kostenvoranschlag: Auftragsbestätigung, „Ware ist da“, Vermerk „Tisch reserviert“', () => {
+  it('Auftragsbestätigung listet die Positionen; beide E-Mails tragen die KV-Nummer und stehen im Verlauf; der Kostenvoranschlag bleibt Entwurf', async () => {
+    const { setMailSender } = await import('../src/server/modules/mail.js') as unknown as { setMailSender: (s: unknown) => void };
+    const out: { to: string; subject: string; text: string; attachments?: unknown[] }[] = [];
+    setMailSender(async (_c: unknown, m: { to: string; subject: string; text: string }) => { out.push(m); });
+    await ok('PUT', '/settings/mail', admin, { enabled: true, host: 'mail.example.org', port: 587, user: 'haus@example.org', fromName: 'Haus', password: 'nur-test' });
+    const { id } = await ok('POST', '/invoices', user, { include: 'none' });
+    // ohne Kostenvoranschlag bzw. ohne Positionen: nicht möglich
+    expect((await call('GET', `/invoices/${id}/order/mail?kind=order_confirm`, user)).statusCode).toBe(409);
+    const kv = await ok('POST', `/invoices/${id}/estimate`, user);
+    expect((await call('GET', `/invoices/${id}/order/mail?kind=order_confirm`, user)).statusCode).toBe(409);
+    await ok('POST', `/invoices/${id}/lines`, user, { description: 'Pils 30 L', detail: '', quantity: 3, unitPriceCents: 5200, taxRatePercent: 19 });
+    let inv = await ok('POST', `/invoices/${id}/lines`, user, { description: 'Anfahrt', detail: '', quantity: 1, unitPriceCents: 1800, taxRatePercent: 19 });
+    inv = await ok('PUT', `/invoices/${id}`, user, { ...inv, recipientName: 'Fritz Fass', serviceFrom: addDays(today, 10), serviceTo: addDays(today, 10), version: inv.version });
+    const d = await ok('GET', `/invoices/${id}/order/mail?kind=order_confirm`, user);
+    expect(d.subject).toMatch(/^Auftragsbestätigung/);
+    expect(d.text).toContain('Guten Tag Fritz Fass,');
+    expect(d.text).toContain('- 3 × Pils 30 L – 156,00');
+    expect(d.text).toContain('- 1 × Anfahrt – 18,00');
+    expect(d.text).toContain('Gesamtbetrag: 174,00');
+    expect(d.text).toContain(kv.estimateNumber);
+    expect((await call('GET', `/invoices/${id}/order/mail?kind=unsinn`, user)).statusCode).toBe(400);
+    await ok('POST', `/invoices/${id}/order/mail?kind=order_confirm`, user, { to: 'fritz@example.org', subject: d.subject, text: d.text });
+    expect(out.at(-1)).toMatchObject({ to: 'fritz@example.org' });
+    expect(out.at(-1)!.subject).toContain(`[${kv.estimateNumber}]`);
+    const d2 = await ok('GET', `/invoices/${id}/order/mail?kind=order_ready`, user);
+    expect(d2.to).toBe('fritz@example.org'); // letzte Empfängeradresse vorbelegt
+    await ok('POST', `/invoices/${id}/order/mail?kind=order_ready`, user, { to: d2.to, subject: d2.subject, text: d2.text });
+    await ok('POST', `/invoices/${id}/timeline/note`, user, { what: 'table', text: 'Tisch reserviert: 12.12.2026, 19:00 Uhr, 6 Personen, auf Fritz Fass' });
+    const t = await ok('GET', `/invoices/${id}/timeline`, user);
+    expect(t.entries.map((e: { what?: string }) => e.what)).toEqual(['order_confirm', 'order_ready', 'table']);
+    expect(t.entries.map((e: { dir: string }) => e.dir)).toEqual(['out', 'out', 'event']);
+    expect(t.entries[2].title).toContain('Tisch reserviert');
+    expect(t.lastTo).toBe('fritz@example.org');
+    // weiterhin Entwurf ohne Rechnungsnummer
+    expect(await ok('GET', `/invoices/${id}`, user)).toMatchObject({ status: 'draft', number: null, estimateNumber: kv.estimateNumber });
+    // nach dem Ausstellen der Rechnung gibt es keine Auftragsbestätigung mehr aus dem Kostenvoranschlag
+    let cur = await ok('GET', `/invoices/${id}`, user);
+    cur = await ok('PUT', `/invoices/${id}`, user, { ...cur, recipientStreet: 'Weg 1', recipientZip: '12345', recipientCity: 'Ort', version: cur.version });
+    await ok('POST', `/invoices/${id}/issue`, user, { version: cur.version });
+    expect((await call('GET', `/invoices/${id}/order/mail?kind=order_confirm`, user)).statusCode).toBe(409);
+  });
+});

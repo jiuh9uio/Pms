@@ -189,7 +189,7 @@ export const cancelFeeInput = z.object({
 });
 
 /** Verlauf eines Kostenvoranschlags / einer Rechnung (wie ein Chat) */
-export interface InvoiceTimelineEntry { id: string; at: string; dir: 'out' | 'in' | 'event'; title: string; by: string; subject: string; text: string; answer: 'yes' | 'no' | 'unclear' | null; removable: boolean }
+export interface InvoiceTimelineEntry { id: string; at: string; dir: 'out' | 'in' | 'event'; /** Art der gesendeten E-Mail bzw. des Vermerks (estimate, order_confirm, order_ready, table …) */ what?: string; title: string; by: string; subject: string; text: string; answer: 'yes' | 'no' | 'unclear' | null; removable: boolean }
 export interface InvoiceTimeline {
   /** Kennzeichen im Betreff (KV-Nummer), an dem Antworten erkannt werden */
   code: string;

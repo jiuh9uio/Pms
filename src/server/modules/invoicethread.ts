@@ -16,7 +16,7 @@ const MAX = 20_000;
 
 export const withKvCode = (subject: string, number: string) => (subject.toUpperCase().includes(number.toUpperCase()) ? subject : `${subject.slice(0, 190 - number.length)} [${number}]`);
 
-export async function logInvoiceMailOut(db: Exec, invoiceId: string, what: 'estimate' | 'invoice' | 'reminder' | 'reply', actor: Actor, to: string, subject: string, body: string) {
+export async function logInvoiceMailOut(db: Exec, invoiceId: string, what: 'estimate' | 'invoice' | 'reminder' | 'reply' | 'order_confirm' | 'order_ready', actor: Actor, to: string, subject: string, body: string) {
   await db.insert(invoiceEvents).values({ invoiceId, kind: 'mail_out', what, who: `${actor.userName} → ${to}`, toAddr: to, subject: subject.slice(0, 300), body: body.slice(0, MAX) });
 }
 /** letzte Adresse, an die zu diesem Vorgang etwas gesendet wurde (Vorbelegung, z. B. für die Rechnung nach dem Kostenvoranschlag) */
@@ -82,14 +82,23 @@ export function yesNo(body: string): 'yes' | 'no' | 'unclear' | null {
   return h === 'accept' ? 'yes' : h === 'decline' ? 'no' : 'unclear';
 }
 
-const WHAT: Record<string, string> = { reply: 'Unsere Antwort', estimate: 'Kostenvoranschlag gesendet', invoice: 'Rechnung gesendet', reminder: 'Zahlungserinnerung gesendet' };
+const WHAT: Record<string, string> = { reply: 'Unsere Antwort', estimate: 'Kostenvoranschlag gesendet', invoice: 'Rechnung gesendet', reminder: 'Zahlungserinnerung gesendet', order_confirm: 'Auftragsbestätigung gesendet', order_ready: '„Ware ist da“ gesendet' };
+/** Vermerk ohne E-Mail am Verlauf (z. B. „Tisch reserviert“) */
+export async function logInvoiceNote(db: Db, actor: Actor, invoiceId: string, what: 'table', text: string) {
+  const [inv] = await db.select({ id: invoices.id }).from(invoices).where(eq(invoices.id, invoiceId));
+  if (!inv) throw notFound('Rechnung');
+  await db.insert(invoiceEvents).values({ invoiceId, kind: 'note', what, who: actor.userName, subject: text.slice(0, 300) });
+  await record(db, actor, { action: 'note', entity: 'invoice', entityId: invoiceId, after: { what, text: text.slice(0, 120) } });
+  return { ok: true };
+}
 
 export async function invoiceTimeline(db: Exec, invoiceId: string): Promise<InvoiceTimeline> {
   const [inv] = await db.select().from(invoices).where(eq(invoices.id, invoiceId));
   if (!inv) throw notFound('Rechnung');
   const events = await db.select().from(invoiceEvents).where(eq(invoiceEvents.invoiceId, invoiceId)).orderBy(asc(invoiceEvents.at));
   const entries: InvoiceTimelineEntry[] = events.map((x) => (x.kind === 'mail_out'
-    ? { id: x.id, at: x.at.toISOString(), dir: 'out' as const, title: WHAT[x.what] ?? 'E-Mail gesendet', by: x.who, subject: x.subject, text: x.body, answer: null, removable: false }
+    ? { id: x.id, at: x.at.toISOString(), dir: 'out' as const, what: x.what, title: WHAT[x.what] ?? 'E-Mail gesendet', by: x.who, subject: x.subject, text: x.body, answer: null, removable: false }
+    : x.kind === 'note' ? { id: x.id, at: x.at.toISOString(), dir: 'event' as const, what: x.what, title: x.subject || 'Vermerk', by: x.who, subject: '', text: '', answer: null, removable: false }
     : { id: x.id, at: x.at.toISOString(), dir: 'in' as const, title: 'Antwort des Kunden', by: x.who, subject: x.subject, text: x.body, answer: yesNo(x.body), removable: true }));
   if (inv.issuedAt && inv.number) entries.push({ id: 'issued', at: inv.issuedAt.toISOString(), dir: 'event', title: `Rechnung ${inv.number} ausgestellt`, by: inv.issuedBy, subject: '', text: '', answer: null, removable: false });
   entries.sort((a, b) => a.at.localeCompare(b.at));

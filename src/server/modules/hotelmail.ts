@@ -161,6 +161,38 @@ export async function estimateMailDraft(db: Db, invoiceId: string): Promise<Mail
     '', signature(h)].join('\n');
   return { to: guest?.email || await lastRecipient(db, invoiceId), subject: `Kostenvoranschlag ${f.number} – ${h.name}`, text, attachment: f.filename, ready: await ready(db) };
 }
+/**
+ * Aus dem Kostenvoranschlag: Auftragsbestätigung (mit den Positionen) bzw. „Ihre Bestellung ist da“.
+ * Der Kostenvoranschlag bleibt ein Entwurf – die Rechnung wird weiterhin von Hand ausgestellt.
+ */
+export type OrderMailKind = 'order_confirm' | 'order_ready';
+export async function orderMailDraft(db: Db, invoiceId: string, kind: OrderMailKind): Promise<MailDraft> {
+  const inv = await getInvoice(db, invoiceId);
+  if (!inv.estimateNumber || inv.status !== 'draft') throw conflict('Das geht nur bei einem Kostenvoranschlag, aus dem noch keine Rechnung geworden ist.');
+  if (!inv.lines.length) throw conflict('Der Kostenvoranschlag hat noch keine Positionen – bitte erst mindestens eine Position hinzufügen.');
+  const h = await getHotel(db);
+  const guest = inv.bookingId ? (await getBooking(db, inv.bookingId)).guest : null;
+  const hello = guest ? greeting(guest) : inv.recipientName ? `Guten Tag ${inv.recipientName},` : 'Guten Tag,';
+  const qty = (n: number) => n.toLocaleString('de-DE');
+  const when = inv.serviceFrom ? `${de(inv.serviceFrom)}${inv.serviceTo && inv.serviceTo !== inv.serviceFrom ? ` bis ${de(inv.serviceTo)}` : ''}` : '';
+  const text = (kind === 'order_confirm' ? [hello, '',
+    `vielen Dank für Ihren Auftrag. Hiermit bestätigen wir Ihnen gemäß unserem Kostenvoranschlag ${inv.estimateNumber}:`, '',
+    ...inv.lines.map((l) => `- ${qty(l.quantity)} × ${l.description}${l.detail ? ` (${l.detail})` : ''} – ${formatMoney(l.totalCents)}`), '',
+    `Gesamtbetrag: ${formatMoney(inv.grossCents)} (inkl. Umsatzsteuer)`,
+    ...(when ? [`Voraussichtlicher Termin: ${when}`] : []), '',
+    'Sobald alles bereitsteht, erhalten Sie von uns eine kurze Nachricht. Die Rechnung erhalten Sie gesondert.', '', signature(h)]
+    : [hello, '', `Ihre Bestellung zu unserem Kostenvoranschlag ${inv.estimateNumber} ist bei uns eingetroffen und steht für Sie bereit.`, '',
+      '- Abholung möglich: ', '', 'Bitte geben Sie uns kurz Bescheid, wann Sie kommen.', '', signature(h)]).join('\n');
+  return { to: guest?.email || await lastRecipient(db, invoiceId), subject: `${kind === 'order_confirm' ? 'Auftragsbestätigung' : 'Ihre Bestellung ist da'} – ${h.name}`, text, attachment: null, ready: await ready(db) };
+}
+export async function sendOrderMail(db: Db, actor: Actor, invoiceId: string, kind: OrderMailKind, v: { to: string; subject: string; text: string }) {
+  const inv = await getInvoice(db, invoiceId);
+  if (!inv.estimateNumber || inv.status !== 'draft') throw conflict('Das geht nur bei einem Kostenvoranschlag, aus dem noch keine Rechnung geworden ist.');
+  const subject = withKvCode(v.subject, inv.estimateNumber);
+  await sendMail(db, actor, { ...v, subject, threadCode: inv.estimateNumber });
+  await logInvoiceMailOut(db, invoiceId, kind, actor, v.to, subject, v.text);
+  await record(db, actor, { action: `mail_${kind}`, entity: 'invoice', entityId: invoiceId, after: { to: v.to, estimateNumber: inv.estimateNumber } });
+}
 export async function sendEstimateMail(db: Db, actor: Actor, invoiceId: string, v: { to: string; subject: string; text: string }) {
   if (!(await getInvoice(db, invoiceId)).lines.length) throw conflict('Der Kostenvoranschlag hat noch keine Positionen – bitte erst mindestens eine Position hinzufügen.');
   const f = await estimatePdf(db, invoiceId);

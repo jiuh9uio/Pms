@@ -14,6 +14,7 @@ import { CustomerPicker } from '../CustomerPicker.tsx';
 import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
+import { tableReservationInput } from '../../../src/shared/restaurant.js';
 import { Badge, Button, Dialog, Field, LoadState, LongText, fmtDateTime, useLoad, useSubmit, useToast } from '../ui.tsx';
 
 export const InvoiceStatus = ({ inv }: { inv: Pick<InvoiceDto, 'status' | 'kind' | 'openCents' | 'dueDate'> }) => {
@@ -94,6 +95,7 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
         <div className="split">
           <div>
             {inv.estimateNumber && <InvoiceThread inv={inv} onResend={() => setKvMail(true)} />}
+            {kvId && kvSent && <EstimateNext inv={inv} line={kvLine} />}
             {inv.status === 'cancelled' && <p className="notice danger">Storniert durch {inv.cancelledByNumber ? <button type="button" className="linkbtn" onClick={() => openInvoice(inv.cancelledById!)}>{inv.cancelledByNumber}</button> : 'Stornobeleg'}. Grund: {inv.cancelReason}</p>}
             {inv.kind === 'cancellation' && inv.cancelsId && <p className="notice">Storniert die Rechnung <button type="button" className="linkbtn" onClick={() => openInvoice(inv.cancelsId!)}>{inv.cancelsNumber}</button>.</p>}
             {inv.status === 'draft' ? <Recipient inv={inv} /> : (
@@ -196,14 +198,65 @@ function DraftSteps({ inv }: { inv: InvoiceDto }) {
   const kv = !!inv.estimateNumber;
   const { data } = useLoad(() => (kv ? api<InvoiceTimeline>('GET', `/invoices/${inv.id}/timeline`) : Promise.resolve(null)), [inv.id, rev, kv]);
   const sent = !!data?.entries.some((e) => e.dir === 'out');
+  const did = (what: string) => !!data?.entries.some((e) => e.what === what);
   const marks: [string, boolean][] = kv
-    ? [['Empfänger', !!(inv.recipientCompany || inv.recipientName)], ['Positionen', inv.lines.length > 0], ['Gesendet', sent], [data?.answer === 'no' ? 'Kunde: Nein' : data?.answer === 'unclear' ? 'Antwort lesen' : 'Kunde: Ja', data?.answer === 'yes'], ['Rechnung', false]]
+    ? [['Empfänger', !!(inv.recipientCompany || inv.recipientName)], ['Positionen', inv.lines.length > 0], ['Gesendet', sent], [data?.answer === 'no' ? 'Kunde: Nein' : data?.answer === 'unclear' ? 'Antwort lesen' : 'Kunde: Ja', data?.answer === 'yes' || did('order_confirm') || did('table')],
+      ...(did('order_confirm') ? [['Auftrag bestätigt', true] as [string, boolean]] : []), ...(did('table') ? [['Tisch reserviert', true] as [string, boolean]] : []), ...(did('order_ready') ? [['Ware da – gemeldet', true] as [string, boolean]] : []), ['Rechnung', false]]
     : [['Empfänger', !!(inv.recipientCompany || inv.recipientName)], ['Positionen', inv.lines.length > 0], ['Ausstellen', false]];
   const first = marks.findIndex(([, ok]) => !ok);
   return (
     <ol className="cs-steps iv-steps" aria-label="Stand">{marks.map(([label, ok], i) => (
       <li key={i} className={ok ? 'done' : i === first ? 'now' : 'todo'} aria-current={!ok && i === first ? 'step' : undefined}><span className="cs-num">{ok ? '✓' : i + 1}</span><span className="cs-label">{label}</span></li>
     ))}</ol>
+  );
+}
+
+/**
+ * Aus dem (gesendeten) Kostenvoranschlag weitermachen: Auftragsbestätigung senden, „Ware ist da“ melden oder einen Tisch reservieren.
+ * Der Kostenvoranschlag bleibt dabei ein Entwurf; die Rechnung wird weiterhin unten von Hand ausgestellt.
+ */
+function EstimateNext({ inv, line }: { inv: InvoiceDto; line: InvoiceTimeline | null }) {
+  const { bump } = useData();
+  const { user } = useAuth();
+  const toast = useToast();
+  const [mail, setMail] = useState<false | 'order_confirm' | 'order_ready'>(false);
+  const [table, setTable] = useState(false);
+  const did = (what: string) => !!line?.entries.some((e) => e.what === what);
+  const [t, setT] = useState({ date: inv.serviceFrom ?? '', time: '', persons: '', name: inv.recipientName || inv.recipientCompany, phone: '' });
+  const f = useSubmit(tableReservationInput, async (d) => {
+    await api('POST', '/restaurant/reservations', d);
+    const text = `Tisch reserviert: ${deDate(d.date)}, ${d.time} Uhr, ${d.persons} ${d.persons === 1 ? 'Person' : 'Personen'}, auf ${d.name}`;
+    // der Vermerk im Verlauf ist Beiwerk – schlägt er fehl, steht die Reservierung trotzdem
+    await api('POST', `/invoices/${inv.id}/timeline/note`, { what: 'table', text }).catch(() => null);
+    toast(text); setTable(false); bump();
+  });
+  return (
+    <section className="card iv-next">
+      <h3 className="first">Auftrag daraus machen</h3>
+      <div className="formactions">
+        {!did('order_confirm') ? <Button variant="primary" onClick={() => setMail('order_confirm')} title="E-Mail mit allen Positionen des Kostenvoranschlags – z. B. für eine Warenbestellung">Auftragsbestätigung senden</Button>
+          : !did('order_ready') ? <Button variant="primary" onClick={() => setMail('order_ready')}>Ware ist da – Kunden benachrichtigen</Button>
+            : <span className="muted small">Auftrag bestätigt und „Ware ist da“ gemeldet.</span>}
+        {did('order_confirm') && <button type="button" className="linkbtn" onClick={() => { if (window.confirm('Die Auftragsbestätigung wurde schon gesendet. Noch einmal senden?')) setMail('order_confirm'); }}>Auftragsbestätigung erneut senden</button>}
+        {hasModule(user, 'restaurant') && <Button onClick={() => setTable(!table)}>{did('table') ? 'Weiteren Tisch reservieren' : 'Tisch reservieren'}</Button>}
+      </div>
+      {table && (
+        <form onSubmit={(e) => void f.submit({ ...t, persons: Number(t.persons), durationMin: 120, tableId: null, note: `Zu Kostenvoranschlag ${inv.estimateNumber}` }, e)} noValidate>
+          <div className="formgrid cols3">
+            <Field label="Datum" error={f.errors.date}><input type="date" value={t.date} onChange={(e) => setT({ ...t, date: e.target.value })} /></Field>
+            <Field label="Uhrzeit" error={f.errors.time}><input type="time" value={t.time} onChange={(e) => setT({ ...t, time: e.target.value })} /></Field>
+            <Field label="Personen" error={f.errors.persons}><input inputMode="numeric" value={t.persons} onChange={(e) => setT({ ...t, persons: e.target.value })} /></Field>
+            <Field label="Name" error={f.errors.name}><input value={t.name} onChange={(e) => setT({ ...t, name: e.target.value })} /></Field>
+            <Field label="Telefon" error={f.errors.phone}><input value={t.phone} onChange={(e) => setT({ ...t, phone: e.target.value })} /></Field>
+          </div>
+          <div className="formactions"><Button type="submit" variant="primary" busy={f.busy}>Tisch reservieren</Button></div>
+          <p className="muted small">Die Reservierung wird für 2 Stunden ohne festen Tisch angelegt; den Tisch weisen Sie im Bereich Restaurant zu. Eine Bestätigung an den Kunden senden Sie über „Auftragsbestätigung senden“.</p>
+        </form>
+      )}
+      <p className="muted small">Der Kostenvoranschlag bleibt dabei ein Entwurf. Die Rechnung stellen Sie wie gewohnt unten aus.</p>
+      {mail && <MailDialog path={`/invoices/${inv.id}/order/mail?kind=${mail}`} title={mail === 'order_confirm' ? `Auftragsbestätigung zu ${inv.estimateNumber}` : `Ware ist da – ${inv.estimateNumber}`} onClose={() => setMail(false)} onSent={bump}
+        intro={<p className="muted small">{mail === 'order_confirm' ? 'Die Positionen stammen aus dem Kostenvoranschlag – bitte prüfen. ' : 'Bitte eintragen, wann abgeholt werden kann. '}Vor dem Senden lässt sich alles ändern.</p>} />}
+    </section>
   );
 }
 

@@ -78,7 +78,7 @@ export function Dialog({ title, onClose, children, footer, size = 'md' }: { titl
     return () => d.close();
   }, []);
   return (
-    <dialog ref={ref} className={`dialog ${size}`} onCancel={(e) => { e.preventDefault(); onClose(); }}
+    <dialog ref={ref} className={`dialog ${size}`} onCancel={(e) => { /* Esc in einem darüber geöffneten Fenster (z. B. E-Mail) schließt nur dieses, nicht auch das Fenster darunter */ if (e.target !== ref.current) return; e.preventDefault(); onClose(); }}
       onMouseDown={(e) => { if (e.target === ref.current) onClose(); }}>
       <div className="dialog-head"><h2>{title}</h2><button type="button" className="iconbtn" onClick={onClose} aria-label="Schließen">✕</button></div>
       <div className="dialog-body">{children}</div>

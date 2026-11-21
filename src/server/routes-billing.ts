@@ -76,6 +76,7 @@ export function registerBillingRoutes(api: FastifyInstance, { db, requireUser, r
   });
   // Verlauf (Kostenvoranschlag → Antwort des Kunden → Rechnung)
   api.get('/invoices/:id/timeline', user, (req) => thread.invoiceTimeline(db, idOf(req)));
+  api.post('/invoices/:id/timeline/note', user, (req) => { const v = z.object({ what: z.literal('table'), text: z.string().trim().min(1).max(300) }).parse(req.body); return thread.logInvoiceNote(db, actor(req), idOf(req), v.what, v.text); });
   api.post('/invoices/:id/timeline/assign', user, (req) => thread.assignInboxMailToInvoice(db, actor(req), idOf(req), z.object({ inboxMailId: z.uuid() }).parse(req.body).inboxMailId));
   api.post('/invoices/:id/timeline/remove', user, (req) => thread.removeInboxMailFromInvoice(db, actor(req), idOf(req), z.object({ eventId: z.uuid() }).parse(req.body).eventId));
   // Kostenvoranschlag: Entwurf mit eigener KV-Nummer, als PDF ohne Rechnungsnummer

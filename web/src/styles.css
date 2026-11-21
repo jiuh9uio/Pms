@@ -1400,3 +1400,5 @@ dialog.dialog.xl:has(.msg-dlg) { width: min(1320px, calc(100vw - 24px)); height:
   dialog.dialog.xl:has(.msg-dlg) .dialog-body { display: block; overflow-y: auto; }
   .msg-dlg { display: block; } .msg-dlg .msg-chat { overflow: visible; min-height: 0; } .msg-dlg .msg-more { max-height: none; overflow: visible; }
 }
+
+.iv-next { margin-bottom: 16px; } .iv-next .formactions { justify-content: flex-start; align-items: center; margin-top: 4px; }
