@@ -28,11 +28,13 @@ async function nextNumber(tx: Exec) {
 }
 
 /** Vorgang zu einer Nachricht: vorhandenen liefern oder neu anlegen (Nummer, Kategorie und Kontakt aus der Nachricht) */
-export async function ensureCaseForMail(db: Db, actor: Actor, inboxMailId: string): Promise<Case> {
+export async function ensureCaseForMail(db: Db, actor: Actor, inboxMailId: string, kind?: MailKind): Promise<Case> {
   return db.transaction(async (tx) => {
     const [m] = await tx.select().from(inboxMails).where(eq(inboxMails.id, inboxMailId)).for('update');
     if (!m) throw notFound('E-Mail');
     if (m.caseId) { const [c] = await tx.select().from(mailCases).where(eq(mailCases.id, m.caseId)); if (c) return c; }
+    // aus dem Posteingang einsortiert: die gewählte Kategorie gilt für Nachricht und Vorgang
+    if (kind && kind !== m.kind) { await tx.update(inboxMails).set({ kind }).where(eq(inboxMails.id, inboxMailId)); m.kind = kind; }
     const number = await nextNumber(tx);
     const [c] = await tx.insert(mailCases).values({ number, kind: m.kind, title: cleanTitle(m.subject) || '(ohne Betreff)', contactName: m.fromName, contactAddr: m.fromAddr.toLowerCase(), createdBy: actor.userName }).returning();
     await tx.update(inboxMails).set({ caseId: c!.id }).where(eq(inboxMails.id, inboxMailId));

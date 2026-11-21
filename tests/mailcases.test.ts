@@ -444,4 +444,23 @@ describe('Hotelbereich, Zuständigkeit, einstellbare Hinweise', () => {
     expect((await ok('GET', '/case-next-texts', mailOnly)).hotel).toBe('Erst anrufen.');
     expect((await call('PUT', '/case-next-texts', admin, { ...d, hotel: '' })).statusCode).toBe(400);
   });
+
+  it('Posteingang einsortieren: Art wählen → offener Vorgang mit dieser Art; die Nachricht bleibt unbearbeitet (wir sind dran); zweimal ergibt keinen zweiten Vorgang', async () => {
+    validity = 'sort1';
+    box = [raw(1, 'Tina Tisch <tina@kunde.example>', 'Frage', 'Haben Sie am Samstag um 19 Uhr einen Tisch für 4 Personen?', { id: '<sortieren1@kunde.example>' })];
+    await fetchNow();
+    const m = (await byUid(1))!;
+    expect(m.case_id).toBeNull();
+    expect((await call('POST', `/inbox/${m.id}/case`, admin, { kind: 'unsinn' })).statusCode).toBe(400);
+    const c = await ok('POST', `/inbox/${m.id}/case`, mailOnly, { kind: 'table' });
+    const dto = await ok('GET', `/mail-cases/${c.id}`, admin);
+    expect(dto).toMatchObject({ kind: 'table', status: 'open', turn: 'ours', contactAddr: 'tina@kunde.example', latestInboxMailId: m.id });
+    expect((await ok('GET', `/inbox/${m.id}`, admin))).toMatchObject({ kind: 'table', status: 'new', caseId: c.id });
+    const row = (await ok('GET', '/mail-cases?status=open&kind=table', admin)).find((r: { id: string }) => r.id === c.id);
+    expect(row).toMatchObject({ unread: 1, turn: 'ours' });
+    // noch einmal einsortieren (anderer Mitarbeiter, andere Art): derselbe Vorgang, Art bleibt
+    expect((await ok('POST', `/inbox/${m.id}/case`, admin, { kind: 'hotel' })).id).toBe(c.id);
+    expect((await ok('GET', `/mail-cases/${c.id}`, admin)).kind).toBe('table');
+  });
+
 });

@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.127.0
+
+- **Posteingang ist jetzt nur noch zum Einsortieren.** Bei einer neuen E-Mail wählen Sie die Art (Zimmer, Tisch, Feier, Tagung, Gutschein, Frage, Sonstiges – der Vorschlag des Programms ist markiert) und klicken **„In Vorgänge verschieben“**. Die Nachricht steht dann als offener Vorgang unter „Vorgänge“; das Programm wechselt gleich dorthin. Antworten, Reservieren, Absagen und Erledigen geschieht im Vorgang, nicht mehr im Posteingang. Für Werbung u. Ä. gibt es „Kein Vorgang – ignorieren“ und „Entfernen“.
+- Bei Zimmer- und Tischanfragen steht im Vorgang die Übernahme („Freie Zimmer ansehen und reservieren“ bzw. „Tisch reservieren“) gleich offen.
+- Gehört eine E-Mail schon zu einem Vorgang, führt der Posteingang mit einem Knopf direkt dorthin.
+- Behoben: E-Mails ohne erkannte Angaben konnten beim Öffnen einen Anzeigefehler auslösen.
+- Keine Änderung an der Datenbank.
+
 ## 1.126.0
 
 - **Gesamtexport der Eigenkontrolle:** Unter Kontrollen → Temperaturprotokoll → „Drucken / Senden …“ wählen Sie jetzt, was ins PDF kommt: **Temperaturen, Reinigung, Wareneingang** – einzeln oder alles zusammen, für einen frei wählbaren Zeitraum. Das PDF lässt sich ansehen, drucken, speichern oder per E-Mail senden. Reinigung: Tag, Aufgabe, Turnus, Name und Uhrzeit, dazu Aufgaben ohne Eintrag im Zeitraum. Wareneingang: Lieferant, Ware, Temperatur, Ergebnis (Beanstandungen rot) und Bemerkungen im vollen Wortlaut.

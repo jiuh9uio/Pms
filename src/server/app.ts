@@ -466,7 +466,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.post('/mail-cases/:id/move', email, (req) => mailcases.moveMail(db, actor(req), cid(req), mailIdOf(req), I.caseNumberInput.parse(req.body).number));
     api.post('/mail-cases/:id/split', email, (req) => mailcases.splitMail(db, actor(req), cid(req), mailIdOf(req)));
     api.post('/mail-cases/:id/merge', email, (req) => mailcases.mergeCase(db, actor(req), cid(req), I.caseNumberInput.parse(req.body).number));
-    api.post('/inbox/:id/case', email, async (req) => { const c = await mailcases.ensureCaseForMail(db, actor(req), cid(req)); return { id: c.id, number: c.number }; });
+    api.post('/inbox/:id/case', email, async (req) => { const c = await mailcases.ensureCaseForMail(db, actor(req), cid(req), z.object({ kind: z.enum(I.MAIL_KINDS).optional() }).parse(req.body ?? {}).kind); return { id: c.id, number: c.number }; });
     // Anhang herunterladen: immer als Download, nie im Browser dargestellt (ein HTML- oder SVG-Anhang könnte sonst Skripte ausführen)
     api.get('/inbox/attachments/:id', email, async (req, reply) => {
       const f = await inbox.getAttachment(db, cid(req));

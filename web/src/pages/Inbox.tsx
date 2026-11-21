@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CASE_STATUSES, CASE_STATUS_LABEL, MAIL_KINDS, MAIL_KIND_LABEL, MAIL_KIND_SHORT, DEFAULT_NEXT_TEXTS, NEXT_TEXT_LABEL, nextTextsInput, replySnippetsInput, type NextTexts, type CaseDto, type CaseListRow, type CaseStatus, type ReplySnippet, type InboxCounts, type InboxMailDto, type InboxState, type InboxStatus } from '../../../src/shared/inbox.js';
 import type { MailKind } from '../../../src/shared/mailextract.js';
 import { tableReservationInput } from '../../../src/shared/restaurant.js';
@@ -84,7 +84,7 @@ function MailsView({ status }: { status: Exclude<(typeof INBOX_TABS)[number][0],
             </button>
           ))}
         </div>
-        <div className="inboxdetail">{openId ? <MailDetail key={openId} id={openId} onGone={() => setOpenId(null)} /> : <p className="card muted">Links eine Nachricht wählen.</p>}</div>
+        <div className="inboxdetail">{openId ? <MailDetail key={openId} id={openId} sorting onGone={() => setOpenId(null)} /> : <p className="card muted">Links eine Nachricht wählen.</p>}</div>
       </div>
     </>
   );
@@ -119,7 +119,10 @@ function CasesView() {
   const [kind, setKind] = useState('all');
   const [q, setQ] = useState('');
   const [from, setFrom] = useState('');
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [params] = useSearchParams();
+  const [openId, setOpenId] = useState<string | null>(params.get('vorgang'));
+  const wanted = params.get('vorgang');
+  useEffect(() => { if (wanted) setOpenId(wanted); }, [wanted]);
   const [who, setWho] = useState('');
   const { user } = useAuth();
   const staff = useLoad(() => api<string[]>('GET', '/mail-cases/assignees')).data ?? [];
@@ -146,7 +149,7 @@ function CasesView() {
         </div>
         <div className="msg-list">
           <LoadState error={list.error} loading={!list.data} />
-          {list.data?.length === 0 && <p className="muted small msg-empty">Keine Vorgänge in dieser Ansicht. Ein Vorgang entsteht, sobald Sie auf eine E-Mail antworten (Posteingang).</p>}
+          {list.data?.length === 0 && <p className="muted small msg-empty">Keine Vorgänge in dieser Ansicht. Ein Vorgang entsteht, wenn Sie eine E-Mail im Posteingang einsortieren („In Vorgänge verschieben“).</p>}
           {list.data?.map((r) => {
             const waiting = (r.status === 'open' || r.status === 'working') && r.turn === 'ours';
             return (
@@ -186,7 +189,7 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const toast = useToast();
   const { data, error, reload } = useLoad(() => api<CaseDto>('GET', `/mail-cases/${id}`), [id, rev]);
   const [reply, setReply] = useState<false | string>(false);
-  const [more, setMore] = useState(false);
+  const [moreSet, setMore] = useState<boolean | null>(null);
   const snippets = useLoad(() => api<ReplySnippet[]>('GET', '/reply-snippets')).data ?? [];
   const texts = useLoad(() => api<NextTexts>('GET', '/case-next-texts')).data ?? DEFAULT_NEXT_TEXTS;
   const staff = useLoad(() => api<string[]>('GET', '/mail-cases/assignees')).data ?? [];
@@ -195,6 +198,8 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
   if (!data) return <LoadState error={error} loading />;
   const act = async (method: 'PATCH' | 'POST', path: string, body: unknown, msg: string) => { try { await api(method, `/mail-cases/${id}${path}`, body); toast(msg); bump(); reload(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); } };
   const next = nextStep(data, texts);
+  // Zimmer- und Tischanfragen: die Übernahme steht gleich offen, solange nichts angelegt ist und wir am Zug sind
+  const more = moreSet ?? (data.turn === 'ours' && !data.latestLinkKind && (data.kind === 'hotel' || data.kind === 'table') && data.status !== 'done' && data.status !== 'archived');
   const people = data.assignee && !staff.includes(data.assignee) ? [data.assignee, ...staff] : staff;
   /** Nachricht gehört nicht hierher: lösen, in einen anderen Vorgang verschieben oder als eigenen Vorgang abtrennen */
   const relocate = async (inboxMailId: string) => {
@@ -338,7 +343,11 @@ function NextTextsAdmin() {
   );
 }
 
-function MailDetail({ id, onGone }: { id: string; onGone: () => void }) {
+/** sorting = Ansicht im Posteingang: Nachrichten ohne Vorgang werden hier nur einsortiert (Kategorie wählen → Vorgang); bearbeitet wird im Vorgang */
+function MailDetail({ id, onGone, sorting = false }: { id: string; onGone: () => void; sorting?: boolean }) {
+  const go = useNavigate();
+  const [pick, setPick] = useState<MailKind | null>(null);
+  const [moving, setMoving] = useState(false);
   const { user } = useAuth();
   const toast = useToast();
   const { bump, newBooking, openBooking, openInvoice } = useData();
@@ -348,7 +357,7 @@ function MailDetail({ id, onGone }: { id: string; onGone: () => void }) {
   const [mail, setMail] = useState<'reply' | 'confirm' | 'decline' | null>(null);
   useEffect(() => {
     if (!data) return;
-    const x = data.extract;
+    const x = { ...data.extract, dates: data.extract.dates ?? [] };
     setH({ from: x.from ?? x.dates[0] ?? '', to: x.to ?? '' });
     setT({ date: x.dates[0] ?? '', time: x.time ?? '', persons: x.persons ? String(x.persons + (x.children ?? 0)) : '', name: data.fromName || data.fromAddr, phone: x.phone, note: `Per E-Mail: ${data.subject}`.slice(0, 200) });
   }, [data]);
@@ -361,7 +370,7 @@ function MailDetail({ id, onGone }: { id: string; onGone: () => void }) {
     await patch({ status: 'done', linkKind: 'table', linkId: r.id }, `Tisch für ${d.name} am ${deDate(d.date)} reserviert`);
   });
   if (!data) return <div className="card"><LoadState error={error} loading /></div>;
-  const x = data.extract;
+  const x = { ...data.extract, dates: data.extract.dates ?? [] };
   const who = splitName(data.fromName, data.fromAddr);
   const hotelOk = /^\d{4}-\d\d-\d\d$/.test(h.from) && /^\d{4}-\d\d-\d\d$/.test(h.to) && h.from < h.to;
   const book = () => newBooking({
@@ -374,6 +383,36 @@ function MailDetail({ id, onGone }: { id: string; onGone: () => void }) {
     try { await api('DELETE', `/inbox/${id}`); toast('Entfernt'); bump(); onGone(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
   };
   const status = (s: InboxStatus, msg: string) => void patch({ status: s }, msg);
+  const toCase = async () => {
+    if (!pick) return;
+    setMoving(true);
+    try { const c = await api<{ id: string; number: string }>('POST', `/inbox/${id}/case`, { kind: pick }); toast(`Vorgang ${c.number} angelegt`); bump(); go(`/email?ansicht=vorgaenge&vorgang=${c.id}`); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); setMoving(false); }
+  };
+  // Posteingang: Nachricht ohne Vorgang nur einsortieren – oder, wenn sie schon dazugehört, dorthin wechseln
+  if (sorting && !data.offer && !data.invoice) return (
+    <section className="card">
+      <div className="cardhead"><div><h2>{data.subject || '(ohne Betreff)'}</h2><p className="muted">{data.fromName} &lt;{data.fromAddr}&gt; · {fmtDateTime(data.receivedAt)}</p></div></div>
+      <pre className="mailbody">{data.body || '(kein Text – die Nachricht besteht vermutlich nur aus Bildern oder Anhängen)'}</pre>
+      {!!data.extract.attachments?.length && <p className="msg-att">{data.extract.attachments.map((a, i) => <AttachmentChip key={i} a={a} />)}</p>}
+      {data.caseId ? <>
+        <p className="notice small">Gehört zum Vorgang <b>{data.caseNumber}</b>. Antworten, Reservieren, Absagen und Erledigen geschieht dort.</p>
+        <div className="formactions"><Button variant="primary" onClick={() => go(`/email?ansicht=vorgaenge&vorgang=${data.caseId}`)}>Vorgang {data.caseNumber} öffnen</Button></div>
+      </> : <>
+        <h3>Was ist das?</h3>
+        <p className="muted small">Bitte die Art wählen – dann wandert die Nachricht als offener Vorgang in „Vorgänge“. Dort wird geantwortet, reserviert, abgesagt oder erledigt. Der Vorschlag des Programms ist markiert; bitte mit dem Text vergleichen.</p>
+        <div className="sort-kinds" role="group" aria-label="Art der Nachricht">{MAIL_KINDS.map((k) => (
+          <button key={k} type="button" className={`kindchip k-${k}${pick === k ? ' on' : ''}`} aria-pressed={pick === k} onClick={() => setPick(k)}>{MAIL_KIND_LABEL[k]}{k === data.kind && <small> · Vorschlag</small>}</button>
+        ))}</div>
+        <div className="formactions">
+          <Button variant="primary" busy={moving} disabled={!pick} onClick={() => void toCase()}>In Vorgänge verschieben</Button>
+          {data.status === 'new' ? <Button onClick={() => status('ignored', 'Ignoriert')} title="Kein Vorgang nötig, z. B. Werbung">Kein Vorgang – ignorieren</Button> : <Button onClick={() => status('new', 'Wieder offen')}>Wieder öffnen</Button>}
+          <Button variant="danger" onClick={() => void remove()}>Entfernen</Button>
+        </div>
+        {!pick && <p className="muted small">Erst die Art wählen, dann „In Vorgänge verschieben“.</p>}
+      </>}
+    </section>
+  );
   return (
     <>
       <section className="card">
