@@ -116,6 +116,19 @@ const AttachmentChip = ({ a }: { a: { name: string; size: number; id?: string } 
 };
 /** Was es ist – steht in Liste und Kopf vorn, der Name daneben */
 const WHAT: Record<MailKind | 'offer' | 'estimate', string> = { hotel: 'Zimmeranfrage', table: 'Tischanfrage', event: 'Feier / Veranstaltung', meeting: 'Tagung', voucher: 'Gutschein', question: 'Frage', other: 'Nachricht', offer: 'Angebot', estimate: 'Kostenvoranschlag' };
+/** Bildzeichen je Art – in Liste, Kopf und beim Einsortieren */
+const KIND_ICON: Record<MailKind | 'offer' | 'estimate', string> = { hotel: '🛏️', table: '🍽️', event: '🎉', meeting: '👥', voucher: '🎁', question: '❓', other: '✉️', offer: '📄', estimate: '🧾' };
+/** Weg eines Vorgangs als Schritte (wie bei „Neue Reservierung“): was ist geschafft, was steht an */
+function caseSteps(c: CaseDto): { label: string; state: 'done' | 'now' | 'todo' }[] {
+  const closed = c.status === 'done' || c.status === 'archived';
+  const answered = c.messages.some((m) => m.dir === 'out');
+  const booking = c.kind === 'hotel' || c.kind === 'table' || !!c.latestLinkKind || !!c.bookingId;
+  const marks = booking
+    ? [['Anfrage', true], [c.kind === 'table' || c.latestLinkKind === 'table' ? 'Tisch reserviert' : 'Zimmer reserviert', !!c.latestLinkKind || !!c.bookingId], ['Bestätigung gesendet', !!c.confirmedAt || (!!c.bookingId && answered)], ['Erledigt', closed]] as const
+    : [['Anfrage', true], ['Beantwortet', answered], ['Erledigt', closed]] as const;
+  const firstOpen = marks.findIndex(([, ok]) => !ok);
+  return marks.map(([label, ok], i) => ({ label, state: closed || ok ? 'done' : i === firstOpen ? 'now' : 'todo' }));
+}
 /** Stand als farbiges Abzeichen: grün = bestätigt/erledigt, blau = angelegt, gelb = wir sind dran, grau = wartet auf Kunde */
 function stageOf(c: { status: string; turn: string | null; linked: boolean; confirmed: boolean }): { label: string; tone: 'ok' | 'accent' | 'warn' | 'neutral' } {
   if (c.status === 'done') return { label: 'Erledigt', tone: 'ok' };
@@ -172,8 +185,8 @@ function CasesView() {
           {list.data?.map((r) => {
             const waiting = (r.status === 'open' || r.status === 'working') && r.turn === 'ours';
             return (
-              <button key={`${r.source}-${r.id}`} type="button" className={`msg-item${r.source === 'case' && r.id === openId ? ' on' : ''}${waiting ? ' ours' : ''}${r.status === 'done' ? ' done' : ''}`} onClick={() => open(r)}>
-                <span className={`msg-avatar k-${r.kind}`} aria-hidden>{initials(r.contact)}</span>
+              <button key={`${r.source}-${r.id}`} type="button" className={`msg-item mk-${r.kind}${r.source === 'case' && r.id === openId ? ' on' : ''}${waiting ? ' ours' : ''}${r.status === 'done' ? ' done' : ''}`} onClick={() => open(r)}>
+                <span className={`msg-avatar k-${r.kind}`} aria-hidden>{KIND_ICON[r.kind]}</span>
                 <span className="msg-main">
                   <span className="msg-top"><b>{WHAT[r.kind]}</b><small>{shortTime(r.lastAt)}</small></span>
                   <span className="msg-sub">{r.contact || r.title} · {r.number}{r.source !== 'case' && ' ›'}</span>
@@ -239,7 +252,7 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
     <>
       <header className="msg-head">
         <button type="button" className="iconbtn msg-back" onClick={onBack} aria-label="Zurück zur Liste">‹</button>
-        <span className={`msg-avatar k-${data.kind}`} aria-hidden>{initials(data.contactName || data.contactAddr)}</span>
+        <span className={`msg-avatar k-${data.kind}`} aria-hidden>{KIND_ICON[data.kind]}</span>
         <div className="msg-who">
           <b>{WHAT[data.kind]} <Badge tone={stage.tone}>{stage.label}</Badge></b>
           <small>{data.contactName ? `${data.contactName} · ` : ''}{data.contactAddr} · {data.number}</small>
@@ -252,6 +265,9 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
         <label>Stand <select value={data.status} onChange={(e) => void act('PATCH', '', { status: e.target.value }, `Stand: ${CASE_STATUS_LABEL[e.target.value as CaseStatus]}`)} aria-label="Stand des Vorgangs">{CASE_STATUSES.map((k) => <option key={k} value={k}>{CASE_STATUS_LABEL[k]}</option>)}</select></label>
         <button type="button" className="linkbtn" onClick={() => void merge()}>Mit anderem Vorgang zusammenführen …</button>
       </div>}
+      <ol className="cs-steps" aria-label="Stand des Vorgangs">{caseSteps(data).map((st, i) => (
+        <li key={st.label} className={st.state} aria-current={st.state === 'now' ? 'step' : undefined}><span className="cs-num">{st.state === 'done' ? '✓' : i + 1}</span><span className="cs-label">{st.label}</span></li>
+      ))}</ol>
       <div className={`msg-next t-${next.tone}`}><span><b>Als Nächstes:</b> {next.text}</span>
         {data.bookingId && <button type="button" className="linkbtn" onClick={() => openBooking(data.bookingId!)}>Reservierung {data.bookingNumber} öffnen</button>}
       </div>
@@ -429,7 +445,7 @@ function MailDetail({ id, onGone, sorting = false, inCase = false }: { id: strin
         <h3>Was ist das?</h3>
         <p className="muted small">Bitte die Art wählen – dann wandert die Nachricht als offener Vorgang in „Vorgänge“. Dort wird geantwortet, reserviert, abgesagt oder erledigt. Der Vorschlag des Programms ist markiert; bitte mit dem Text vergleichen.</p>
         <div className="sort-kinds" role="group" aria-label="Art der Nachricht">{MAIL_KINDS.map((k) => (
-          <button key={k} type="button" className={`kindchip k-${k}${pick === k ? ' on' : ''}`} aria-pressed={pick === k} onClick={() => setPick(k)}>{MAIL_KIND_LABEL[k]}{k === data.kind && <small> · Vorschlag</small>}</button>
+          <button key={k} type="button" className={`sort-tile mk-${k}${pick === k ? ' on' : ''}`} aria-pressed={pick === k} onClick={() => setPick(k)}><span className="sort-ico" aria-hidden>{KIND_ICON[k]}</span><b>{MAIL_KIND_LABEL[k]}</b>{k === data.kind && <small>Vorschlag</small>}{pick === k && <i className="rt-check" aria-hidden>✓</i>}</button>
         ))}</div>
         <div className="formactions">
           <Button variant="primary" busy={moving} disabled={!pick} onClick={() => void toCase()}>In Vorgänge verschieben</Button>

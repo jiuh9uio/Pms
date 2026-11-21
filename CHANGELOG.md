@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.130.0
+
+- **Vorgänge mit Grafiken, angelehnt an „Neue Reservierung“:** Im Vorgang zeigt eine **Schritte-Leiste**, wie weit er ist – bei Zimmer und Tisch „Anfrage → reserviert → Bestätigung gesendet → Erledigt“, sonst „Anfrage → Beantwortet → Erledigt“. Geschafftes ist grün abgehakt, der nächste Schritt blau hervorgehoben.
+- In der Liste hat jede Art ein **Bildzeichen** und einen **Farbstreifen** (Zimmer blau, Tisch und Feier grün, Gutschein gelb, Angebot und Kostenvoranschlag lila).
+- Im Posteingang wird die Art über große **Kacheln** mit Bildzeichen gewählt statt über kleine Knöpfe.
+- Nur Darstellung – keine Änderung an Abläufen oder an der Datenbank.
+
 ## 1.129.0
 
 - **Vorgänge aufgeräumt.** Die Zuständigkeit je Mitarbeiter ist wieder entfernt (Auswahl, „Ich übernehme“, Filter und Name in der Liste).
