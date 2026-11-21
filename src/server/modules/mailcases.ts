@@ -186,7 +186,8 @@ export async function listCases(db: Exec, f: ListFilter, mods: { offers: boolean
         (select count(*)::int from inbox_mails m where m.case_id = c.id) + (select count(*)::int from mail_case_out o where o.case_id = c.id) as n,
         (select count(*)::int from inbox_mails m where m.case_id = c.id and m.status = 'new') as unread,
         exists (select 1 from inbox_mails m where m.case_id = c.id and m.link_kind is not null) as linked,
-        exists (select 1 from inbox_mails m where m.case_id = c.id and m.extract ? 'confirmedAt') as confirmed
+        exists (select 1 from inbox_mails m where m.case_id = c.id and (m.extract ? 'confirmedAt' or m.extract ? 'orderConfirmedAt')) as confirmed,
+        exists (select 1 from inbox_mails m where m.case_id = c.id and m.extract ? 'declinedAt') as declined
       from mail_cases c
         left join lateral (select received_at, left(body, 300) as body from inbox_mails m where m.case_id = c.id order by received_at desc limit 1) li on true
         left join lateral (select at, left(body, 300) as body from mail_case_out o where o.case_id = c.id order by at desc limit 1) lo on true
@@ -194,13 +195,13 @@ export async function listCases(db: Exec, f: ListFilter, mods: { offers: boolean
         and ${q ? sql`(lower(c.number) like ${like} or lower(c.title) like ${like} or lower(c.contact_name) like ${like} or c.contact_addr like ${like})` : sql`true`}
       order by greatest(coalesce(li.received_at, c.created_at), coalesce(lo.at, c.created_at)) desc limit 300`);
     for (const r of rows as unknown as { id: string; number: string; kind: MailKind; title: string; status: CaseStatus; assignee: string; contact_name: string; contact_addr: string; created_at: Date | string;
-      in_at: Date | string | null; in_body: string | null; out_at: Date | string | null; out_body: string | null; n: number; unread: number; linked: boolean; confirmed: boolean }[]) {
+      in_at: Date | string | null; in_body: string | null; out_at: Date | string | null; out_body: string | null; n: number; unread: number; linked: boolean; confirmed: boolean; declined: boolean }[]) {
       const inAt = r.in_at ? new Date(r.in_at) : null, outAt = r.out_at ? new Date(r.out_at) : null;
       const lastIn = !!inAt && (!outAt || inAt >= outAt);
       const lastAt = (lastIn ? inAt : outAt ?? new Date(r.created_at))!.toISOString();
       if (!inRange(lastAt)) continue;
       out.push({ source: 'case', id: r.id, number: r.number, kind: r.kind, title: r.title, contact: r.contact_name || r.contact_addr, status: r.status,
-        turn: inAt || outAt ? (lastIn ? 'ours' : 'theirs') : null, lastAt, snippet: snip((lastIn ? r.in_body : r.out_body) ?? ''), count: r.n, unread: r.unread, linked: r.linked, confirmed: r.confirmed, assignee: r.assignee });
+        turn: inAt || outAt ? (lastIn ? 'ours' : 'theirs') : null, lastAt, snippet: snip((lastIn ? r.in_body : r.out_body) ?? ''), count: r.n, unread: r.unread, linked: r.linked, confirmed: r.confirmed, declined: r.declined && !r.linked && !r.confirmed, assignee: r.assignee });
     }
   }
   const wantOpen = f.status === 'open', wantDone = f.status === 'done';

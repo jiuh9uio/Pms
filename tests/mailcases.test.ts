@@ -578,6 +578,9 @@ describe('Hotelbereich, Zuständigkeit, einstellbare Hinweise', () => {
     const dto = await ok('GET', `/mail-cases/${c.id}`, admin);
     expect(dto.declinedAt).toBeTruthy();
     expect(dto).toMatchObject({ confirmedAt: null, latestLinkKind: null });
+    // in der Liste: als Absage markiert, nicht als Zusage
+    const row = (await ok('GET', '/mail-cases?status=all', admin)).find((r: { id: string }) => r.id === c.id);
+    expect(row).toMatchObject({ declined: true, confirmed: false });
   });
 
 

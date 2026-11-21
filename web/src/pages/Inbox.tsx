@@ -193,7 +193,7 @@ function CasesView() {
               <button key={`${r.source}-${r.id}`} type="button" className={`msg-item mk-${r.kind}${r.source === 'case' && r.id === openId ? ' on' : ''}${waiting ? ' ours' : ''}${r.status === 'done' ? ' done' : ''}`} onClick={() => open(r)}>
                 <span className={`msg-avatar k-${r.kind}`} aria-hidden>{KIND_ICON[r.kind]}</span>
                 <span className="msg-main">
-                  <span className="msg-top"><b>{WHAT[r.kind]}</b><small>{shortTime(r.lastAt)}</small></span>
+                  <span className="msg-top"><b>{WHAT[r.kind]}{r.confirmed && <span className="msg-mark yes" title="Zugesagt – Bestätigung gesendet">✓ Zusage</span>}{r.declined && <span className="msg-mark no" title="Abgesagt – Absage gesendet">✗ Absage</span>}</b><small>{shortTime(r.lastAt)}</small></span>
                   <span className="msg-sub">{r.contact || r.title} · {r.number}{r.source !== 'case' && ' ›'}</span>
                   <span className="msg-snip">{r.turn === 'theirs' && 'Sie: '}{r.snippet || r.title}</span>
                 </span>
@@ -271,7 +271,7 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
         <button type="button" className="iconbtn msg-back" onClick={onBack} aria-label="Zurück zur Liste">‹</button>
         <span className={`msg-avatar k-${data.kind}`} aria-hidden>{KIND_ICON[data.kind]}</span>
         <div className="msg-who">
-          <b>{WHAT[data.kind]} <Badge tone={stage.tone}>{stage.label}</Badge></b>
+          <b>{WHAT[data.kind]} {(data.confirmedAt || data.orderConfirmedAt) && <span className="msg-mark yes">✓ Zusage</span>}{data.declinedAt && !data.latestLinkKind && !data.confirmedAt && <span className="msg-mark no">✗ Absage</span>} <Badge tone={stage.tone}>{stage.label}</Badge></b>
           <small>{data.contactName ? `${data.contactName} · ` : ''}{data.contactAddr} · {data.number}</small>
         </div>
         {data.status !== 'done' && data.status !== 'archived' && <Button variant="primary" onClick={() => void act('PATCH', '', { status: 'done' }, 'Vorgang erledigt')}>Erledigt</Button>}

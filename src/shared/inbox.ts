@@ -102,6 +102,8 @@ export interface CaseListRow {
   unread: number;
   /** Reservierung angelegt / Bestätigung gesendet (nur Vorgänge im Posteingang) */
   linked?: boolean; confirmed?: boolean;
+  /** Absage gesendet (und nichts reserviert) */
+  declined?: boolean;
   /** zuständiger Mitarbeiter (nur Vorgänge im Posteingang) */
   assignee?: string;
 }

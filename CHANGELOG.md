@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.140.0
+
+- **Zusage oder Absage auf einen Blick:** In der Liste der Vorgänge und im Vorgang selbst steht neben der Art ein grünes **„✓ Zusage“** (Bestätigung bzw. Auftragsbestätigung gesendet) oder ein rotes **„✗ Absage“** (Absage gesendet, nichts reserviert). Vorgänge ohne beides bleiben ohne Markierung.
+- Absagen, die vor Version 1.137.0 gesendet wurden, sind nicht vermerkt und bekommen deshalb keine Markierung.
+- Keine Änderung an der Datenbank.
+
 ## 1.139.0
 
 - **Vorgänge öffnen sich in einem großen Fenster.** Die Liste der Vorgänge nimmt jetzt die ganze Breite ein; ein Klick öffnet den Vorgang in einem fast bildschirmfüllenden Fenster mit Schritten, Verlauf und Antwort-Knöpfen – wie beim Kostenvoranschlag.

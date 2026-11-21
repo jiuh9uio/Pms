@@ -1388,3 +1388,8 @@ a.linkcard.attention b { color: var(--warn); }
 .msg-contact { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: end; flex-basis: 100%; padding-top: 8px; border-top: 1px solid var(--line); }
 .msg-contact label { display: grid; gap: 3px; font-size: 13px; flex: 1 1 220px; } .msg-contact input { width: 100%; }
 dialog.dialog.xl:has(.msg-dlg) { width: min(1320px, calc(100vw - 24px)); height: calc(100dvh - 24px); } dialog.dialog.xl:has(.msg-dlg) .dialog-body { flex: 1; }
+
+/* Zusage / Absage auf einen Blick */
+.msg-mark { display: inline-flex; align-items: center; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.msg-mark.yes { background: color-mix(in srgb, #1f8a50 18%, var(--surface)); color: color-mix(in srgb, #1f8a50 65%, var(--ink)); border: 1px solid color-mix(in srgb, #1f8a50 45%, var(--line)); }
+.msg-mark.no { background: color-mix(in srgb, #c62828 16%, var(--surface)); color: color-mix(in srgb, #c62828 65%, var(--ink)); border: 1px solid color-mix(in srgb, #c62828 45%, var(--line)); }
