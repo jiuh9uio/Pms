@@ -463,4 +463,40 @@ describe('Hotelbereich, Zuständigkeit, einstellbare Hinweise', () => {
     expect((await ok('GET', `/mail-cases/${c.id}`, admin)).kind).toBe('table');
   });
 
+
+  it('Absender ausfiltern: offene Nachrichten wandern nach „Ignoriert“, neue beim Abruf gleich mit; Vorgänge bleiben; Sammel-Anbieter nur je Adresse; aufheben holt zurück', async () => {
+    validity = 'filter1';
+    box = [raw(1, 'Lidl Plus <info@mail.lidlplus.example>', 'Angebote der Woche', 'Werbung', { id: '<f1@x.example>' }),
+      raw(2, 'Lidl Plus <info@mail.lidlplus.example>', 'Noch mehr Angebote', 'Werbung', { id: '<f2@x.example>' }),
+      raw(3, 'Gast <gast9@gmx.de>', 'Zimmer', 'Haben Sie ein Zimmer frei?', { id: '<f3@x.example>' })];
+    await fetchNow();
+    const m1 = (await byUid(1))!, m3 = (await byUid(3))!;
+    // ganze Domain eines Sammel-Anbieters: abgelehnt; einzelne Adresse dort geht
+    expect((await call('POST', `/inbox/${m3.id}/block-sender`, admin, { scope: 'domain' })).statusCode).toBe(409);
+    expect((await ok('POST', `/inbox/${m1.id}/block-sender`, mailOnly, { scope: 'address' }))).toEqual({ entry: 'info@mail.lidlplus.example', hidden: 2 });
+    expect((await byUid(2))!.status).toBe('ignored');
+    expect((await byUid(3))!.status).toBe('new');
+    expect((await ok('GET', `/inbox/${m1.id}`, admin)).blockedBy).toBe('info@mail.lidlplus.example');
+    // nächster Abruf: gleich ausgefiltert; andere Adresse derselben Domain noch nicht
+    box.push(raw(4, 'Lidl Plus <info@mail.lidlplus.example>', 'Neu', 'Werbung', { id: '<f4@x.example>' }), raw(5, 'Lidl <news@lidlplus.example>', 'Neu', 'Werbung', { id: '<f5@x.example>' }));
+    await fetchNow();
+    expect((await byUid(4))!.status).toBe('ignored');
+    expect((await byUid(5))!.status).toBe('new');
+    // Domain: gilt auch für Unterdomains
+    expect((await ok('POST', `/inbox/${(await byUid(5))!.id}/block-sender`, admin, { scope: 'domain' })).entry).toBe('lidlplus.example');
+    box.push(raw(6, 'X <angebote@mail.lidlplus.example>', 'Neu', 'Werbung', { id: '<f6@x.example>' }), raw(7, 'Y <chef@nichtlidlplus.example>', 'Frage', 'Hallo', { id: '<f7@x.example>' }));
+    await fetchNow();
+    expect((await byUid(6))!.status).toBe('ignored');
+    expect((await byUid(7))!.status).toBe('new');
+    // Nachricht mit Vorgang bleibt beim Ausfiltern, wo sie ist
+    const c = await ok('POST', `/inbox/${m3.id}/case`, admin, { kind: 'hotel' });
+    expect((await ok('POST', `/inbox/${m3.id}/block-sender`, admin, { scope: 'address' })).hidden).toBe(0);
+    expect((await byUid(3))!).toMatchObject({ status: 'new', case_id: c.id });
+    expect((await ok('GET', '/inbox/blocked-senders', admin)).sort()).toEqual(['gast9@gmx.de', 'info@mail.lidlplus.example', 'lidlplus.example']);
+    // aufheben: was nur wegen des Filters ignoriert war, ist wieder neu
+    expect((await ok('POST', '/inbox/blocked-senders/remove', admin, { entry: 'info@mail.lidlplus.example' })).restored).toBe(0); // die Domain ist weiter ausgefiltert – nichts kommt zurück
+    expect((await ok('POST', '/inbox/blocked-senders/remove', admin, { entry: 'lidlplus.example' })).restored).toBeGreaterThan(0);
+    expect((await call('POST', '/inbox/blocked-senders/remove', admin, { entry: 'gibtesnicht.example' })).statusCode).toBe(404);
+  });
+
 });

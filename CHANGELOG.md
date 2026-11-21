@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.128.0
+
+- **Absender ausfiltern:** Im Posteingang steht bei jeder E-Mail ohne Vorgang „Nichts für das Programm?“ mit zwei Knöpfen: **nur diese Adresse** oder **alles von dieser Domain** künftig ausfiltern. E-Mails dieses Absenders landen dann beim Abruf gleich unter „Ignoriert“; die noch offenen wandern sofort mit. Das ist keine Spam-Meldung – im Postfach wird nichts verändert oder gelöscht.
+- Aufheben: im Reiter „Ignoriert“ unter „Ausgefilterte Absender“ oder direkt an einer ausgefilterten E-Mail; deren Nachrichten erscheinen dann wieder unter „Neu“.
+- Schutz vor Versehen: Bei Anbietern wie GMX, Web.de, Gmail oder T-Online lässt sich nur die einzelne Adresse ausfiltern, nicht die ganze Domain. Nachrichten, die schon zu einem Vorgang, Angebot oder Kostenvoranschlag gehören, bleiben sichtbar.
+- Keine Änderung an der Datenbank.
+
 ## 1.127.0
 
 - **Posteingang ist jetzt nur noch zum Einsortieren.** Bei einer neuen E-Mail wählen Sie die Art (Zimmer, Tisch, Feier, Tagung, Gutschein, Frage, Sonstiges – der Vorschlag des Programms ist markiert) und klicken **„In Vorgänge verschieben“**. Die Nachricht steht dann als offener Vorgang unter „Vorgänge“; das Programm wechselt gleich dorthin. Antworten, Reservieren, Absagen und Erledigen geschieht im Vorgang, nicht mehr im Posteingang. Für Werbung u. Ä. gibt es „Kein Vorgang – ignorieren“ und „Entfernen“.

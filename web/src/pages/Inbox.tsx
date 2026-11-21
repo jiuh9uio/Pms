@@ -69,6 +69,7 @@ function MailsView({ status }: { status: Exclude<(typeof INBOX_TABS)[number][0],
             onClick={() => setKind(k)}>{k === 'all' ? 'Alle' : MAIL_KIND_SHORT[k]}<span className="n">{n}</span></button>;
         })}
       </div>
+      {current === 'ignored' && <BlockedSenders />}
       <div className="inboxfilter">
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Suchen in Absender, Betreff, Text" aria-label="Suchen" />
       </div>
@@ -87,6 +88,24 @@ function MailsView({ status }: { status: Exclude<(typeof INBOX_TABS)[number][0],
         <div className="inboxdetail">{openId ? <MailDetail key={openId} id={openId} sorting onGone={() => setOpenId(null)} /> : <p className="card muted">Links eine Nachricht wählen.</p>}</div>
       </div>
     </>
+  );
+}
+
+/** Ausgefilterte Absender (Reiter „Ignoriert“): Übersicht mit „aufheben“ */
+function BlockedSenders() {
+  const { rev, bump } = useData();
+  const toast = useToast();
+  const { data, reload } = useLoad(() => api<string[]>('GET', '/inbox/blocked-senders'), [rev]);
+  if (!data?.length) return null;
+  const off = async (entry: string) => {
+    if (!window.confirm(`Filter für ${entry} aufheben? Dessen ausgefilterte E-Mails erscheinen wieder unter „Neu“.`)) return;
+    try { await api('POST', '/inbox/blocked-senders/remove', { entry }); toast(`Filter für ${entry} aufgehoben`); bump(); reload(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+  };
+  return (
+    <details className="blk-list"><summary>Ausgefilterte Absender ({data.length})</summary>
+      <p className="muted small">E-Mails dieser Absender landen beim Abruf gleich hier unter „Ignoriert“. Ein Eintrag ohne @ gilt für alle Adressen dieser Domain.</p>
+      <div className="blk-chips">{data.map((e) => <span key={e} className="chip">{e} <button type="button" className="linkbtn" aria-label={`Filter für ${e} aufheben`} onClick={() => void off(e)}>aufheben</button></span>)}</div>
+    </details>
   );
 }
 
@@ -389,6 +408,17 @@ function MailDetail({ id, onGone, sorting = false }: { id: string; onGone: () =>
     try { const c = await api<{ id: string; number: string }>('POST', `/inbox/${id}/case`, { kind: pick }); toast(`Vorgang ${c.number} angelegt`); bump(); go(`/email?ansicht=vorgaenge&vorgang=${c.id}`); }
     catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); setMoving(false); }
   };
+  const domain = data.fromAddr.includes('@') ? data.fromAddr.slice(data.fromAddr.lastIndexOf('@') + 1).toLowerCase() : '';
+  const block = async (scope: 'address' | 'domain') => {
+    const what = scope === 'domain' ? `alle Adressen von ${domain}` : data.fromAddr.toLowerCase();
+    if (!window.confirm(`E-Mails von ${what} künftig ausfiltern?\n\nSie erscheinen dann nicht mehr unter „Neu“, sondern gleich unter „Ignoriert“. Das lässt sich dort wieder aufheben.`)) return;
+    try { const r = await api<{ entry: string; hidden: number }>('POST', `/inbox/${id}/block-sender`, { scope }); toast(`${r.entry} wird ausgefiltert${r.hidden ? ` – ${r.hidden} ${r.hidden === 1 ? 'Nachricht' : 'Nachrichten'} nach „Ignoriert“ verschoben` : ''}`); bump(); onGone(); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+  };
+  const unblock = async (entry: string) => {
+    try { const r = await api<{ restored: number }>('POST', '/inbox/blocked-senders/remove', { entry }); toast(`Filter für ${entry} aufgehoben${r.restored ? ` – ${r.restored} wieder unter „Neu“` : ''}`); bump(); reload(); }
+    catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
+  };
   // Posteingang: Nachricht ohne Vorgang nur einsortieren – oder, wenn sie schon dazugehört, dorthin wechseln
   if (sorting && !data.offer && !data.invoice) return (
     <section className="card">
@@ -410,6 +440,14 @@ function MailDetail({ id, onGone, sorting = false }: { id: string; onGone: () =>
           <Button variant="danger" onClick={() => void remove()}>Entfernen</Button>
         </div>
         {!pick && <p className="muted small">Erst die Art wählen, dann „In Vorgänge verschieben“.</p>}
+        {data.blockedBy ? <p className="notice small">Dieser Absender wird ausgefiltert (<b>{data.blockedBy}</b>): seine E-Mails landen gleich unter „Ignoriert“. <button type="button" className="linkbtn" onClick={() => void unblock(data.blockedBy!)}>Filter aufheben</button></p>
+          : domain && <div className="blk">
+            <b>Nichts für das Programm?</b> <span className="muted small">Absender künftig ausfiltern – seine E-Mails landen dann automatisch unter „Ignoriert“ (im Postfach bleiben sie). Das ist keine Spam-Meldung.</span>
+            <div className="formactions">
+              <Button onClick={() => void block('address')}>Nur {data.fromAddr.toLowerCase()} ausfiltern</Button>
+              <Button onClick={() => void block('domain')}>Alles von {domain} ausfiltern</Button>
+            </div>
+          </div>}
       </>}
     </section>
   );

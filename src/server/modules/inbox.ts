@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import type { MailDraft } from '../../shared/hotel.js';
@@ -68,6 +68,58 @@ export async function saveMailRules(db: Db, actor: Actor, v: MailRules) {
   await record(db, actor, { action: 'update', entity: 'settings', entityId: 'mail_rules', after: v });
   return v;
 }
+// ---------- Absender ausfiltern (Posteingang → „Absender künftig ausfiltern“) ----------
+/** Eintrag mit @ = genau diese Adresse; ohne @ = alle Adressen dieser Domain (auch Unterdomains) */
+export const senderBlocked = (list: string[], addr: string): string | null => {
+  const a = addr.trim().toLowerCase();
+  if (!a) return null;
+  const dom = a.slice(a.lastIndexOf('@') + 1);
+  return list.find((e) => (e.includes('@') ? e === a : dom === e || dom.endsWith(`.${e}`))) ?? null;
+};
+/** Anbieter, bei denen viele verschiedene Kunden ihre Adresse haben – eine ganze Domain davon wird nie ausgefiltert */
+const SHARED = ['gmx.de', 'gmx.net', 'gmx.at', 'gmx.ch', 'web.de', 'gmail.com', 'googlemail.com', 't-online.de', 'outlook.com', 'outlook.de', 'hotmail.com', 'hotmail.de', 'live.de', 'live.com', 'yahoo.de', 'yahoo.com',
+  'icloud.com', 'me.com', 'mac.com', 'freenet.de', 'arcor.de', 'aol.com', 'aol.de', 'posteo.de', 'mailbox.org', 'vodafone.de', 'online.de', '1und1.de', 'kabelmail.de', 'unitybox.de', 'ewe.net', 'protonmail.com', 'proton.me'];
+const BY_FILTER = 'Filter';
+export async function getBlockedSenders(db: Exec): Promise<string[]> {
+  const v = (await read(db, 'mail_block', { items: [] as string[] })).items;
+  return Array.isArray(v) ? v : [];
+}
+/** Absender (oder dessen ganze Domain) künftig ausfiltern; noch offene Nachrichten dieses Absenders ohne Vorgang wandern gleich mit nach „Ignoriert“ */
+export async function blockSender(db: Db, actor: Actor, id: string, scope: 'address' | 'domain') {
+  const [r] = await db.select().from(inboxMails).where(eq(inboxMails.id, id));
+  if (!r) throw notFound('E-Mail');
+  const addr = r.fromAddr.trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(addr)) throw conflict('Diese Nachricht hat keine brauchbare Absenderadresse');
+  if (r.uidValidity === 'web') throw conflict('Anfragen über die Gästeseite lassen sich nicht ausfiltern');
+  const dom = addr.slice(addr.lastIndexOf('@') + 1);
+  if (scope === 'domain' && SHARED.includes(dom)) throw conflict(`Bei ${dom} haben viele verschiedene Kunden ihre Adresse – bitte nur diese eine Adresse ausfiltern`);
+  const own = (await read(db, 'inbox', DEFAULTS)).user.toLowerCase();
+  if (own && (addr === own || (scope === 'domain' && own.endsWith(`@${dom}`)))) throw conflict('Die eigene Adresse lässt sich nicht ausfiltern');
+  const entry = scope === 'domain' ? dom : addr;
+  const list = await getBlockedSenders(db);
+  if (!list.includes(entry)) { if (list.length >= 300) throw conflict('Es sind schon 300 Absender ausgefiltert – bitte erst alte Einträge entfernen'); await write(db, 'mail_block', { items: [...list, entry].sort() }); }
+  const match = scope === 'domain' ? sql`(lower(${inboxMails.fromAddr}) like ${`%@${dom}`} or lower(${inboxMails.fromAddr}) like ${`%.${dom}`})` : sql`lower(${inboxMails.fromAddr}) = ${addr}`;
+  // nur unbearbeitete Nachrichten ohne Vorgang und ohne Reservierung – was schon bearbeitet wird, bleibt, wo es ist
+  const hidden = await db.update(inboxMails).set({ status: 'ignored', handledBy: BY_FILTER }).where(and(eq(inboxMails.status, 'new'), isNull(inboxMails.caseId), isNull(inboxMails.linkKind), match)).returning({ id: inboxMails.id });
+  await record(db, actor, { action: 'block_sender', entity: 'inbox', after: { entry, hidden: hidden.length } });
+  return { entry, hidden: hidden.length };
+}
+/** Filter aufheben; was nur wegen dieses Filters unter „Ignoriert“ liegt, wird wieder „Neu“ */
+export async function unblockSender(db: Db, actor: Actor, entry: string) {
+  const e = entry.trim().toLowerCase();
+  const list = await getBlockedSenders(db);
+  if (!list.includes(e)) throw notFound('Eintrag');
+  const rest = list.filter((x) => x !== e);
+  await write(db, 'mail_block', { items: rest });
+  const match = e.includes('@') ? sql`lower(${inboxMails.fromAddr}) = ${e}` : sql`(lower(${inboxMails.fromAddr}) like ${`%@${e}`} or lower(${inboxMails.fromAddr}) like ${`%.${e}`})`;
+  // zurückholen, was nur wegen dieses Eintrags ausgefiltert war – nicht, was ein anderer Eintrag (z. B. die ganze Domain) weiter ausfiltert
+  const cand = await db.select({ id: inboxMails.id, fromAddr: inboxMails.fromAddr }).from(inboxMails).where(and(eq(inboxMails.status, 'ignored'), eq(inboxMails.handledBy, BY_FILTER), match));
+  const back = cand.filter((m) => !senderBlocked(rest, m.fromAddr));
+  for (const m of back) await db.update(inboxMails).set({ status: 'new', handledBy: '' }).where(eq(inboxMails.id, m.id));
+  await record(db, actor, { action: 'unblock_sender', entity: 'inbox', after: { entry: e, restored: back.length } });
+  return { restored: back.length };
+}
+
 /** Art und Angaben einer Nachricht nach den Regeln bestimmen. */
 function judge(rules: MailRules, m: { fromName: string; fromAddr: string; subject: string; body: string; day: string }) {
   const ex = extract(m.subject, m.body, m.day, {
@@ -165,7 +217,7 @@ export const htmlToText = (h: string) => h.slice(0, 400_000).replace(/<(script|s
   .replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&amp;/gi, '&').replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ');
 
 /** Eine abgeholte Nachricht speichern und – nur bei sicherer Grundlage – einem Vorgang, Angebot oder Kostenvoranschlag zuordnen. Liefert 1, wenn sie neu ist. */
-async function storeInbound(db: Db, rules: MailRules, uidValidity: string, raw: RawMail): Promise<number> {
+async function storeInbound(db: Db, rules: MailRules, blocked: string[], uidValidity: string, raw: RawMail): Promise<number> {
   const p = await simpleParser(raw.source, { skipImageLinks: true, skipTextToHtml: true });
   const from = p.from?.value[0];
   // Datum laut Absender – außer es liegt in der Zukunft (falsch gestellte Uhr): dann der Eingang am Server, sonst stimmt die Reihenfolge im Vorgang nicht
@@ -180,13 +232,16 @@ async function storeInbound(db: Db, rules: MailRules, uidValidity: string, raw: 
     const [dup] = await db.select({ id: inboxMails.id }).from(inboxMails).where(and(eq(inboxMails.messageId, messageId), sql`${inboxMails.uidValidity} <> ${uidValidity}`)).limit(1);
     if (dup) return 0;
   }
-  const { ex, hidden } = judge(rules, { fromName: from?.name ?? '', fromAddr: from?.address ?? '', subject, body, day: berlinDay(date) });
+  const judged = judge(rules, { fromName: from?.name ?? '', fromAddr: from?.address ?? '', subject, body, day: berlinDay(date) });
+  const ex = judged.ex;
+  const filtered = !!senderBlocked(blocked, from?.address ?? '');
+  const hidden = judged.hidden || filtered;
   // Anhänge werden nicht gespeichert, aber benannt – damit sichtbar ist, dass etwas dabei war (eingebettete Bilder zählen nicht)
   const files = (p.attachments ?? []).filter((a) => !a.related && a.contentDisposition !== 'inline').slice(0, 20);
   const attachments: MailAttachment[] = files.map((a) => ({ name: String(a.filename ?? 'ohne Namen').replace(/[\u0000-\u001f\\/]/g, '').slice(0, 120) || 'ohne Namen', size: a.size ?? 0, type: String(a.contentType ?? '').slice(0, 80) }));
   const rows = await db.insert(inboxMails).values({
     uidValidity, uid: raw.uid, messageId, fromName: (from?.name ?? '').slice(0, 200), fromAddr: (from?.address ?? '').slice(0, 200),
-    subject, receivedAt: date, body, kind: ex.kind, extract: attachments.length ? { ...ex, attachments } : ex, ...(hidden ? { status: 'ignored' as const, handledBy: BY_RULE } : {}),
+    subject, receivedAt: date, body, kind: ex.kind, extract: attachments.length ? { ...ex, attachments } : ex, ...(hidden ? { status: 'ignored' as const, handledBy: filtered ? BY_FILTER : BY_RULE } : {}),
   }).onConflictDoNothing().returning({ id: inboxMails.id });
   if (!rows[0]) return 0;
   // Anhänge speichern (als reine Daten – sie werden nie ausgeführt und nur als Download ausgeliefert); zu große bleiben nur benannt
@@ -205,6 +260,9 @@ async function storeInbound(db: Db, rules: MailRules, uidValidity: string, raw: 
   const refs = [p.inReplyTo, ...(Array.isArray(p.references) ? p.references : [p.references])].filter((x): x is string => typeof x === 'string' && !!x);
   // Zuordnung darf den Abruf nie stören – im Zweifel bleibt die Nachricht unzugeordnet im Posteingang
   await routeInbound(db, { id: rows[0].id, subject, body, fromName: from?.name ?? '', fromAddr: from?.address ?? '', receivedAt: date }, refs).catch(() => null);
+  // gehört die Nachricht trotz Filter zu einem laufenden Vorgang, Angebot oder Kostenvoranschlag, bleibt sie sichtbar
+  if (filtered) await db.execute(sql`update inbox_mails m set status = 'new', handled_by = '' where m.id = ${rows[0].id} and (m.case_id is not null
+    or exists (select 1 from offer_events e where e.inbox_mail_id = m.id) or exists (select 1 from invoice_events e where e.inbox_mail_id = m.id))`).catch(() => null);
   return 1;
 }
 
@@ -240,12 +298,13 @@ export async function fetchInbox(db: Db, actor: Actor | null): Promise<{ added: 
   try {
     st = await read(db, 'inbox_state', STATE0);
     const rules = await getMailRules(db);
+    const blocked = await getBlockedSenders(db);
     const got = await fetcher({ host: s.host, port: s.port, user: s.user, pass: decrypt(s.passEnc), folder: s.folder }, { uidValidity: st.uidValidity, lastUid: st.lastUid });
     let added = 0, lastUid = got.uidValidity === st.uidValidity ? st.lastUid : 0;
     for (const raw of got.mails) {
       // Jede Nachricht einzeln absichern: eine defekte E-Mail darf den Abruf nicht dauerhaft blockieren (sie käme sonst bei jedem Abruf wieder als erste)
       try {
-        added += await storeInbound(db, rules, got.uidValidity, raw);
+        added += await storeInbound(db, rules, blocked, got.uidValidity, raw);
       } catch (e) {
         const note = `Diese Nachricht (Nr. ${raw.uid} im Postfach) konnte nicht verarbeitet werden: ${String((e as Error)?.message ?? e).slice(0, 300)}\n\nBitte im E-Mail-Programm öffnen.`;
         const { ex } = judge(rules, { fromName: '', fromAddr: '', subject: '', body: '', day: berlinDay(raw.internalDate) });
@@ -317,7 +376,7 @@ export async function inboxCounts(db: Exec, f: { status: InboxStatus | 'all'; q:
 export async function getInboxMail(db: Exec, id: string): Promise<InboxMailDto> {
   const [r] = await db.select().from(inboxMails).where(eq(inboxMails.id, id));
   if (!r) throw notFound('E-Mail');
-  return { ...dto(r, true), caseNumber: await caseRef(db, r.caseId), offer: await offerOfInboxMail(db, id), invoice: await invoiceOfInboxMail(db, id).then((x) => (x ? { id: x.id, label: x.label } : null)) };
+  return { ...dto(r, true), blockedBy: senderBlocked(await getBlockedSenders(db), r.fromAddr), caseNumber: await caseRef(db, r.caseId), offer: await offerOfInboxMail(db, id), invoice: await invoiceOfInboxMail(db, id).then((x) => (x ? { id: x.id, label: x.label } : null)) };
 }
 export async function updateInboxMail(db: Db, actor: Actor, id: string, v: { status?: InboxStatus; kind?: MailKind; linkKind?: 'booking' | 'table' | null; linkId?: string | null }) {
   const [before] = await db.select().from(inboxMails).where(eq(inboxMails.id, id));

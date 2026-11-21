@@ -445,6 +445,9 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.post('/inbox/fetch', email, (req) => inbox.fetchInbox(db, actor(req)));
     api.get('/inbox/:id', email, (req) => inbox.getInboxMail(db, z.uuid().parse((req.params as { id: string }).id)));
     api.patch('/inbox/:id', email, (req) => inbox.updateInboxMail(db, actor(req), z.uuid().parse((req.params as { id: string }).id), I.inboxUpdateInput.parse(req.body)));
+    api.get('/inbox/blocked-senders', email, () => inbox.getBlockedSenders(db));
+    api.post('/inbox/blocked-senders/remove', email, (req) => inbox.unblockSender(db, actor(req), z.object({ entry: z.string().trim().min(3).max(200) }).parse(req.body).entry));
+    api.post('/inbox/:id/block-sender', email, (req) => inbox.blockSender(db, actor(req), z.uuid().parse((req.params as { id: string }).id), z.object({ scope: z.enum(['address', 'domain']) }).parse(req.body).scope));
     api.delete('/inbox/:id', email, (req) => inbox.deleteInboxMail(db, actor(req), z.uuid().parse((req.params as { id: string }).id)));
     const tpl = (req: FastifyRequest) => z.object({ template: z.enum(I.REPLY_TEMPLATES).default('reply') }).parse(req.query).template;
     const snippetOf = (req: FastifyRequest) => z.object({ vorlage: z.string().max(40).optional() }).parse(req.query).vorlage;

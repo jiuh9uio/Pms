@@ -34,6 +34,8 @@ export interface InboxMailDto {
   body?: string;
   /** Vorgang, zu dem die Nachricht gehört */
   caseId: string | null; caseNumber?: string | null;
+  /** Eintrag der Liste „ausgefilterte Absender“, der auf diesen Absender passt (Adresse oder Domain) */
+  blockedBy?: string | null;
   /** nur in der Einzelansicht: Angebot, zu dessen Verlauf die Nachricht gehört */
   offer?: { id: string; number: string } | null;
   /** nur in der Einzelansicht: Kostenvoranschlag/Rechnung, zu deren Verlauf die Nachricht gehört */
