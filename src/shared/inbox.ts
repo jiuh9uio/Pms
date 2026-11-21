@@ -119,6 +119,8 @@ export interface CaseDto {
   confirmedAt: string | null;
   /** Bestellung: wann die Auftragsbestätigung bzw. die Nachricht „Ware ist da“ gesendet wurde */
   orderConfirmedAt: string | null; orderReadyAt: string | null;
+  /** wann eine Absage gesendet wurde */
+  declinedAt: string | null;
   candidates: { inboxMailId: string; at: string; from: string; subject: string }[];
   /** zuständiger Mitarbeiter (leer = niemand) */
   assignee: string;

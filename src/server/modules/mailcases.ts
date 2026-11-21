@@ -149,7 +149,7 @@ export async function getCase(db: Exec, id: string): Promise<CaseDto> {
   // schon angelegt? (irgendeine Nachricht des Vorgangs wurde als Reservierung übernommen)
   const [linked] = await db.select({ k: inboxMails.linkKind, id: inboxMails.id }).from(inboxMails).where(and(eq(inboxMails.caseId, id), sql`${inboxMails.linkKind} is not null`)).limit(1);
   const link = (linked?.k ?? null) as 'booking' | 'table' | null;
-  const [conf] = await db.select({ at: sql<string | null>`max(${inboxMails.extract}->>'confirmedAt')`, oc: sql<string | null>`max(${inboxMails.extract}->>'orderConfirmedAt')`, or: sql<string | null>`max(${inboxMails.extract}->>'orderReadyAt')` }).from(inboxMails).where(eq(inboxMails.caseId, id));
+  const [conf] = await db.select({ at: sql<string | null>`max(${inboxMails.extract}->>'confirmedAt')`, oc: sql<string | null>`max(${inboxMails.extract}->>'orderConfirmedAt')`, or: sql<string | null>`max(${inboxMails.extract}->>'orderReadyAt')`, de: sql<string | null>`max(${inboxMails.extract}->>'declinedAt')` }).from(inboxMails).where(eq(inboxMails.caseId, id));
   // Vorschläge: E-Mails derselben Adresse seit Beginn des Vorgangs, die noch nirgends zugeordnet sind
   const candidates = (await db.select({ id: inboxMails.id, at: inboxMails.receivedAt, fromName: inboxMails.fromName, fromAddr: inboxMails.fromAddr, subject: inboxMails.subject })
     .from(inboxMails).where(and(isNull(inboxMails.caseId), gte(inboxMails.receivedAt, c.createdAt),
@@ -159,7 +159,7 @@ export async function getCase(db: Exec, id: string): Promise<CaseDto> {
     .map((m) => ({ inboxMailId: m.id, at: m.at.toISOString(), from: m.fromName || m.fromAddr, subject: m.subject }));
   const [bk] = c.bookingId ? await db.select({ number: bookings.number }).from(bookings).where(eq(bookings.id, c.bookingId)) : [];
   return {
-    orderConfirmedAt: conf?.oc ?? null, orderReadyAt: conf?.or ?? null,
+    orderConfirmedAt: conf?.oc ?? null, orderReadyAt: conf?.or ?? null, declinedAt: conf?.de ?? null,
     assignee: c.assignee, bookingId: bk ? c.bookingId : null, bookingNumber: bk?.number ?? null,
     id: c.id, number: c.number, kind: c.kind as MailKind, title: c.title, contactName: c.contactName, contactAddr: c.contactAddr, status: c.status as CaseStatus, turn: turnOf(messages),
     createdAt: c.createdAt.toISOString(), createdBy: c.createdBy, messages, latestInboxMailId: latestIn?.inboxMailId ?? null, latestLinkKind: link, linkedInboxMailId: linked?.id ?? null, confirmedAt: conf?.at ?? null, candidates,

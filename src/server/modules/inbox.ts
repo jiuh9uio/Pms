@@ -506,8 +506,8 @@ export async function sendReply(db: Db, actor: Actor, id: string, v: { to: strin
   if (invoice) await logInvoiceMailOut(db, invoice.id, 'reply', actor, v.to, subject, v.text);
   // Bestätigung gesendet: an der Nachricht vermerken (für den Stand „bestätigt“ im Vorgang)
   // Bestellung: Auftragsbestätigung bzw. „Ware ist da“ gesendet – ebenfalls an der Nachricht vermerkt (von Hand eingeordnet, damit die Regeln sie nicht neu einordnen)
-  const stamp = template === 'confirm' ? 'confirmedAt' : template === 'order_confirm' ? 'orderConfirmedAt' : template === 'order_ready' ? 'orderReadyAt' : null;
-  const confirmed = stamp ? { extract: { ...(r.extract as MailExtract), ...(stamp === 'confirmedAt' ? {} : { manual: true }), [stamp]: new Date().toISOString() } as MailExtract } : {};
+  const stamp = template === 'confirm' ? 'confirmedAt' : template === 'order_confirm' ? 'orderConfirmedAt' : template === 'order_ready' ? 'orderReadyAt' : template === 'decline' ? 'declinedAt' : null;
+  const confirmed = stamp ? { extract: { ...(r.extract as MailExtract), ...(stamp === 'confirmedAt' || stamp === 'declinedAt' ? {} : { manual: true }), [stamp]: new Date().toISOString() } as MailExtract } : {};
   await db.update(inboxMails).set({ repliedAt: new Date(), repliedBy: actor.userName, ...confirmed }).where(eq(inboxMails.id, id));
   await record(db, actor, { action: 'mail', entity: 'inbox', entityId: id, after: { to: v.to, subject: v.subject.slice(0, 120) } });
   } catch (e) {

@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.137.0
+
+- **Erledigte Vorgänge: keine Antwort-Knöpfe mehr.** Ist ein Vorgang erledigt (z. B. nach einer Absage) oder archiviert, stehen unten nur noch ein Hinweis und **„Wieder öffnen“**. Schreibt der Kunde noch einmal, öffnet sich der Vorgang wie bisher von selbst.
+- **Absage wird richtig angezeigt.** Nach einer Absage zeigt die Schritte-Leiste „Anfrage → Abgesagt → Erledigt“ und das Abzeichen „Abgesagt“ – nicht mehr fälschlich „Tisch reserviert“ und „Bestätigung gesendet“.
+- Allgemein gilt jetzt: Abgehakt wird nur, was wirklich geschehen ist. Ein erledigter Vorgang hakt nicht mehr alle Schritte ab.
+- Für Absagen vor diesem Update ist die Absage nicht vermerkt; dort bleiben „reserviert“ und „bestätigt“ jetzt einfach grau. Keine Änderung an der Datenbank.
+
 ## 1.136.0
 
 - **Absendername wird auf Plausibilität geprüft.** Namen wie „MyWebsite“, „Kontaktformular“, „info“ oder „no-reply“ werden nicht mehr als Kundenname übernommen – weder im Vorgang noch in der Anrede noch im Namensfeld der Reservierung.

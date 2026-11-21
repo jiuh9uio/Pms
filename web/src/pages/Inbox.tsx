@@ -123,13 +123,16 @@ function caseSteps(c: CaseDto): { label: string; state: 'done' | 'now' | 'todo' 
   const closed = c.status === 'done' || c.status === 'archived';
   const answered = c.messages.some((m) => m.dir === 'out');
   const booking = c.kind === 'hotel' || c.kind === 'table' || !!c.latestLinkKind || !!c.bookingId;
-  const marks = c.kind === 'order'
+  // abgesagt (und nichts reserviert): der Weg endet mit der Absage – „reserviert“ und „bestätigt“ gab es nie
+  const declined = !!c.declinedAt && !c.latestLinkKind && !c.bookingId;
+  const marks = declined ? [['Anfrage', true], ['Abgesagt', true], ['Erledigt', closed]] as const : c.kind === 'order'
     ? [['Bestellung', true], ['Auftrag bestätigt', !!c.orderConfirmedAt], ['Ware da – gemeldet', !!c.orderReadyAt], ['Erledigt', closed]] as const
     : booking
     ? [['Anfrage', true], [c.kind === 'table' || c.latestLinkKind === 'table' ? 'Tisch reserviert' : 'Zimmer reserviert', !!c.latestLinkKind || !!c.bookingId], ['Bestätigung gesendet', !!c.confirmedAt || (!!c.bookingId && answered)], ['Erledigt', closed]] as const
     : [['Anfrage', true], ['Beantwortet', answered], ['Erledigt', closed]] as const;
   const firstOpen = marks.findIndex(([, ok]) => !ok);
-  return marks.map(([label, ok], i) => ({ label, state: closed || ok ? 'done' : i === firstOpen ? 'now' : 'todo' }));
+  // erledigt heißt nicht, dass jeder Schritt gemacht wurde: abgehakt wird nur, was wirklich geschehen ist
+  return marks.map(([label, ok], i) => ({ label, state: ok ? 'done' : closed ? 'todo' : i === firstOpen ? 'now' : 'todo' }));
 }
 /** Stand als farbiges Abzeichen: grün = bestätigt/erledigt, blau = angelegt, gelb = wir sind dran, grau = wartet auf Kunde */
 function stageOf(c: { status: string; turn: string | null; linked: boolean; confirmed: boolean }): { label: string; tone: 'ok' | 'accent' | 'warn' | 'neutral' } {
@@ -210,6 +213,7 @@ function nextStep(c: CaseDto, by: NextTexts): { text: string; tone: 'warn' | 'ne
   if (c.status === 'done' || c.status === 'archived') return { text: c.status === 'archived' ? 'Archiviert – nichts zu tun.' : 'Erledigt – nichts zu tun.', tone: 'ok' };
   const last = c.messages[c.messages.length - 1];
   if (c.bookingId && !c.latestInboxMailId) return { text: `E-Mail zur Reservierung ${c.bookingNumber ?? ''} aus dem Hotelbereich gesendet. Antwortet der Gast, erscheint seine Nachricht hier.`, tone: 'neutral' };
+  if (c.declinedAt && !c.latestLinkKind && c.turn !== 'ours') return { text: `Absage gesendet am ${new Date(c.declinedAt).toLocaleDateString('de-DE')}. Der Vorgang kann als erledigt markiert werden.`, tone: 'neutral' };
   if (c.kind === 'order') {
     if (c.turn === 'ours' && c.orderConfirmedAt) return { text: 'Der Kunde hat zur Bestellung noch einmal geschrieben – bitte lesen und antworten.', tone: 'warn' };
     if (c.orderReadyAt) return { text: `„Ware ist da“ gemeldet am ${new Date(c.orderReadyAt).toLocaleDateString('de-DE')}. Nach der Abholung als erledigt markieren.`, tone: 'ok' };
@@ -252,10 +256,12 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
     if (!t?.trim()) return;
     try { await api('POST', `/mail-cases/${id}/merge`, { number: t.trim() }); toast(`Mit ${t.trim().toUpperCase()} zusammengeführt`); bump(); onBack(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
   };
+  const closedCase = data.status === 'done' || data.status === 'archived';
   // Bestellung: erst die Auftragsbestätigung, dann die Nachricht „Ware ist da“
   const orderNext = data.kind !== 'order' || data.status === 'done' || data.status === 'archived' ? null : !data.orderConfirmedAt ? 'confirm' : !data.orderReadyAt ? 'ready' : null;
   const stage = data.kind === 'order' && data.status !== 'done' && data.status !== 'archived' && data.turn !== 'ours' && data.orderConfirmedAt
     ? (data.orderReadyAt ? { label: 'Ware da – wartet auf Abholung', tone: 'ok' as const } : { label: 'Bestätigt – Ware wird beschafft', tone: 'accent' as const })
+    : closedCase && data.declinedAt && !data.latestLinkKind ? { label: 'Abgesagt', tone: 'neutral' as const }
     : stageOf({ status: data.status, turn: data.turn, linked: !!data.latestLinkKind, confirmed: !!data.confirmedAt });
   const fit = snippets.filter((x) => x.active && (x.kind === data.kind || x.kind === 'all'));
   const ins = data.messages.filter((x) => x.dir === 'in').length;
@@ -295,7 +301,8 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
           </div>
         </li>
       ))}</ol>
-      {data.latestInboxMailId && (
+      {closedCase && <footer className="msg-foot"><span className="muted small">Dieser Vorgang ist {data.status === 'archived' ? 'archiviert' : 'erledigt'}. Schreibt der Kunde noch einmal, öffnet er sich von selbst wieder.</span><Button onClick={() => void act('PATCH', '', { status: 'open' }, 'Vorgang wieder geöffnet')}>Wieder öffnen</Button></footer>}
+      {!closedCase && data.latestInboxMailId && (
         <footer className="msg-foot">
           {fit.length > 0 && <div className="msg-sugg"><span className="muted small">Antwortvorschläge:</span>{fit.map((x) => <button key={x.id} type="button" className="chip" onClick={() => setReply(`reply&vorlage=${encodeURIComponent(x.id)}`)}>{x.title}</button>)}</div>}
           {data.latestLinkKind && !data.confirmedAt && <Button variant="primary" onClick={() => setReply('confirm')}>Bestätigung senden</Button>}
@@ -305,10 +312,10 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
           <Button onClick={() => setMore(!more)}>{more ? 'Übernehmen / absagen ausblenden' : 'Übernehmen / absagen …'}</Button>
         </footer>
       )}
-      {!data.latestInboxMailId && data.bookingId && <footer className="msg-foot"><span className="muted small">Weitere E-Mails an den Gast senden Sie aus der Reservierung – sie erscheinen dann hier. Antwortet der Gast, können Sie auch von hier aus antworten.</span></footer>}
+      {!closedCase && !data.latestInboxMailId && data.bookingId && <footer className="msg-foot"><span className="muted small">Weitere E-Mails an den Gast senden Sie aus der Reservierung – sie erscheinen dann hier. Antwortet der Gast, können Sie auch von hier aus antworten.</span></footer>}
       {reply && data.latestInboxMailId && <MailDialog path={`/inbox/${reply === 'confirm' && data.linkedInboxMailId ? data.linkedInboxMailId : data.latestInboxMailId}/mail?template=${reply}`} title={`${reply === 'confirm' ? 'Bestätigung senden' : reply === 'order_confirm' ? 'Auftragsbestätigung senden' : reply === 'order_ready' ? 'Ware ist da – Kunden benachrichtigen' : 'Antworten'} – ${data.number}`} onClose={() => setReply(false)} onSent={() => { bump(); reload(); }}
         intro={<p className="muted small">{reply === 'order_confirm' && 'Bitte Artikel, Menge, Preis und Termin im Text eintragen – das Programm kennt die Bestellung nicht. '}{reply === 'order_ready' && 'Bitte eintragen, wann abgeholt werden kann. '}Die Vorgangsnummer {data.number} wird beim Senden automatisch in den Betreff gesetzt.</p>} />}
-      {more && data.latestInboxMailId && <div className="msg-more"><MailDetail key={data.latestInboxMailId} id={data.latestInboxMailId} inCase onGone={() => { bump(); reload(); }} /></div>}
+      {more && !closedCase && data.latestInboxMailId && <div className="msg-more"><MailDetail key={data.latestInboxMailId} id={data.latestInboxMailId} inCase onGone={() => { bump(); reload(); }} /></div>}
     </>
   );
 }

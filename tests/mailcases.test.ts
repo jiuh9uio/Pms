@@ -564,4 +564,20 @@ describe('Hotelbereich, Zuständigkeit, einstellbare Hinweise', () => {
     expect((await db.execute(sql`select contact_name from mail_cases where id = ${c2.id}`))[0]!.contact_name).toBe('Max Muster');
   });
 
+
+  it('Absage: wird am Vorgang vermerkt (kein „reserviert“ oder „bestätigt“); freie Antworten vermerken nichts', async () => {
+    validity = 'absage1';
+    box = [raw(1, 'Hans Eschbach <hans@kunde.example>', 'Tisch', 'Haben Sie am 24.12. um 18 Uhr einen Tisch für 6 Personen?', { id: '<absage1@x.example>' })];
+    await fetchNow();
+    const m = (await byUid(1))!;
+    const c = await ok('POST', `/inbox/${m.id}/case`, admin, { kind: 'table' });
+    await ok('POST', `/inbox/${m.id}/mail?template=reply`, admin, { to: 'hans@kunde.example', subject: 'Re: Tisch', text: 'Wir prüfen das.' });
+    expect((await ok('GET', `/mail-cases/${c.id}`, admin))).toMatchObject({ declinedAt: null, confirmedAt: null });
+    const d = await ok('GET', `/inbox/${m.id}/mail?template=decline`, admin);
+    await ok('POST', `/inbox/${m.id}/mail?template=decline`, admin, { to: d.to, subject: d.subject, text: d.text });
+    const dto = await ok('GET', `/mail-cases/${c.id}`, admin);
+    expect(dto.declinedAt).toBeTruthy();
+    expect(dto).toMatchObject({ confirmedAt: null, latestLinkKind: null });
+  });
+
 });

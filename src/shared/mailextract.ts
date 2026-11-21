@@ -15,6 +15,8 @@ export interface MailExtract {
   confirmedAt?: string;
   /** Bestellung: Auftragsbestätigung gesendet / Nachricht „Ware ist da“ gesendet */
   orderConfirmedAt?: string; orderReadyAt?: string;
+  /** Absage gesendet */
+  declinedAt?: string;
   /** gefundene Tage in Reihenfolge des Textes, ohne Doppelte (ISO) */
   dates: string[];
   /** Hotel: Anreise und Abreise, wenn erkennbar */
