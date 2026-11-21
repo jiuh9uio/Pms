@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.132.0
+
+- **Eigener Bereich „Freie Rechnungen & Kostenvoranschläge“** (Rechnungen → oben in der Seitenleiste). Dort stehen alle Rechnungen und Kostenvoranschläge **ohne Reservierung** – z. B. Getränkelieferung, Raummiete, Außer-Haus-Verkauf – mit den Knöpfen „+ Kostenvoranschlag“ und „+ Freie Rechnung“ und den Filtern Alle / Kostenvoranschläge / Rechnungsentwürfe / Offen / Bezahlt / Storniert.
+- **„Hotelrechnungen“** zeigt nur noch Rechnungen zu Reservierungen. Bereits vorhandene freie Rechnungen und Kostenvoranschläge sind in den neuen Bereich gewandert – es geht nichts verloren.
+- Entwürfe und Kostenvoranschläge zeigen in der Liste jetzt ihren Betrag (Summe der Positionen) statt 0,00 €.
+- Unverändert: ein gemeinsamer Nummernkreis für alle Rechnungen, Tagesabschluss und Export für die Buchhaltung enthalten weiterhin alle Rechnungen. Keine Änderung an der Datenbank und an den Zugriffsrechten.
+
 ## 1.131.0
 
 - **Bruttopreise eindeutig ausgewiesen.** Geprüft: Das Programm hat eingegebene Preise schon bisher als Bruttopreise behandelt und die Umsatzsteuer nie aufgeschlagen – an den Beträgen ändert sich nichts. Neu ist die Darstellung auf Kostenvoranschlag, Rechnung und Angebot: Spalten **„Einzelpreis brutto“** und **„Gesamt brutto“**, darunter **Nettobetrag**, **Enthaltene Umsatzsteuer** (je Steuersatz getrennt) und **Gesamtbetrag brutto**.

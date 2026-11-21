@@ -19,7 +19,7 @@ const TILES: Tile[] = [
   { group: 'tag', to: '/angebote', title: 'Angebote', text: 'Tagungen und Feiern: Absprache am Tisch, Katalog zum Ankreuzen, Angebot, Verlauf mit dem Kunden', icon: '✍', module: ['hotel', 'restaurant'] },
   { group: 'tag', to: '/email', title: 'Vorgänge', text: 'Alle Anfragen und E-Mail-Wechsel mit Kunden an einer Stelle – mit Nummer, Stand und nächstem Schritt', icon: '✉', module: 'email' },
   { group: 'tag', to: '/team', title: 'Team', text: 'Übergabebuch, Aufgaben und Reparaturen für alle Schichten', icon: '✎' },
-  { group: 'buero', to: '/rechnungen', alt: '/erechnung', title: 'Rechnungen', text: 'Hotelrechnungen, Tagesabschluss, E-Rechnung und Archiv', icon: '€', module: ['hotel', 'erechnung'] },
+  { group: 'buero', to: '/rechnungen', alt: '/erechnung', title: 'Rechnungen', text: 'Freie Rechnungen, Kostenvoranschläge, Hotelrechnungen, Tagesabschluss, E-Rechnung', icon: '€', module: ['hotel', 'erechnung'] },
   { group: 'buero', to: '/auswertung', title: 'Auswertung', text: 'Belegungsvorschau, Jahresvergleich, Herkunft der Gäste, Buchungsquellen', icon: '◔', module: 'hotel' },
   { group: 'buero', to: '/gutscheine', title: 'Gutscheine', text: 'Gutscheinbuch mit Kassennummer, eigenes Motiv, E-Mail und Rechnung', icon: 'gift', module: ['hotel', 'restaurant'] },
   { group: 'buero', to: '/einkauf', title: 'Einkauf', text: 'Warenzugang und Leergut-Rückgabe mit Bon', icon: 'cart', module: 'schnelldruck' },

@@ -83,7 +83,8 @@ const NAV: NavItem[] = [
   { to: '/restaurant', label: 'Tischreservierungen', short: 'Tische', icon: '◍', module: 'restaurant' },
   { to: '/angebote', label: 'Angebote', icon: '✍', module: 'restaurant', jump: true },
   // Rechnungen: alles, was mit Rechnungen zu tun hat, an einem Ort – jede Zeile verlangt ihre eigene Freigabe
-  { to: '/rechnungen', label: 'Hotelrechnungen', short: 'Rechn.', icon: '€', module: 'rechnungen', need: 'hotel', group: 'Hotel' },
+  { to: '/freie-rechnungen', label: 'Freie Rechnungen & Kostenvoranschläge', short: 'Frei / KV', icon: '✎', module: 'rechnungen', need: 'hotel', group: 'Frei' },
+  { to: '/rechnungen', label: 'Hotelrechnungen', short: 'Hotel', icon: '€', module: 'rechnungen', need: 'hotel', group: 'Hotel' },
   { to: '/tagesabschluss', label: 'Tagesabschluss', short: 'Abschluss', icon: '∑', module: 'rechnungen', need: 'hotel', group: 'Hotel', jump: true },
   { to: '/erechnung', label: 'E-Rechnung erstellen', short: 'E-Rechn.', icon: '✉', module: 'rechnungen', need: 'erechnung', group: 'E-Rechnung' },
   { to: '/erechnung', tab: 'archiv', label: 'E-Rechnungs-Archiv', short: 'Archiv', icon: '▤', module: 'rechnungen', need: 'erechnung', group: 'E-Rechnung' },
@@ -239,7 +240,8 @@ function Shell({ user }: { user: UserDto }) {
           <Route path="/team" element={<Team />} />
           {hotel && <Route path="/gaeste" element={<Guests />} />}
           {hotel && <Route path="/meldescheine" element={<Registrations />} />}
-          {hotel && <Route path="/rechnungen" element={<Invoices />} />}
+          {hotel && <Route path="/rechnungen" element={<Invoices key="hotel" scope="hotel" />} />}
+          {hotel && <Route path="/freie-rechnungen" element={<Invoices key="free" scope="free" />} />}
           {hotel && <Route path="/firmen" element={<Companies />} />}
           {hotel && <Route path="/auswertung" element={<Report />} />}
           {isAdmin && <Route path="/zimmer" element={<RoomsPrices />} />}

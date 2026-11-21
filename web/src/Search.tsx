@@ -18,6 +18,7 @@ const PAGES: Page[] = [
   { to: '/gaeste', title: 'Gäste', area: 'Hotel', words: 'gästekartei kundenkartei gast adresse datenschutz', module: 'hotel' },
   { to: '/firmen', title: 'Firmen', area: 'Hotel', words: 'firmenkunden firmenpreis', module: 'hotel' },
   { to: '/rechnungen', title: 'Rechnungen', area: 'Hotel', words: 'rechnung storno zahlung offene posten export csv mahnung zahlungserinnerung', module: 'hotel' },
+  { to: '/freie-rechnungen', title: 'Freie Rechnungen & Kostenvoranschläge', area: 'Hotel', words: 'kostenvoranschlag kv freie rechnung angebot lieferung rechnung storno zahlung offene posten export csv mahnung zahlungserinnerung', module: 'hotel' },
   { to: '/auswertung', title: 'Auswertung', area: 'Hotel', words: 'statistik umsatz auslastung monat jahr', module: 'hotel' },
   { to: '/zimmer?ansicht=kategorien', title: 'Zimmerkategorien und Preise', area: 'Hotel · Zimmer & Preise', words: 'kategorie grundpreis einzelbelegung aufpreis kinder', module: 'hotel', admin: true },
   { to: '/zimmer?ansicht=zimmer', title: 'Zimmer anlegen und ändern', area: 'Hotel · Zimmer & Preise', words: 'zimmernummer etage', module: 'hotel', admin: true },

@@ -26,7 +26,7 @@ export function registerBillingRoutes(api: FastifyInstance, { db, requireUser, r
 
   api.get('/invoices', user, (req) => {
     const q = z.object({
-      status: z.enum(['open', 'paid', 'draft', 'issued', 'cancelled', 'archive']).optional(), q: z.string().max(100).optional(),
+      status: z.enum(['open', 'paid', 'draft', 'issued', 'cancelled', 'archive', 'estimate']).optional(), scope: z.enum(['free', 'hotel']).optional(), q: z.string().max(100).optional(),
       from: z.string().refine(isIsoDate).optional(), to: z.string().refine(isIsoDate).optional(),
       serviceFrom: z.string().refine(isIsoDate).optional(), serviceTo: z.string().refine(isIsoDate).optional(), method: z.enum(B.PAYMENT_METHODS_BILLING).optional(),
     }).parse(req.query);

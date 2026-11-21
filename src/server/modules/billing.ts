@@ -20,7 +20,8 @@ const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
 // ---------- Lesen ----------
 const LIST = sql`
   select i.*, b.number as booking_number, c.number as cancels_number, cb.id as cancelled_by_id, cb.number as cancelled_by_number,
-    coalesce((select sum(p.amount_cents) from payments p where p.invoice_id = i.id), 0)::int as paid_cents
+    coalesce((select sum(p.amount_cents) from payments p where p.invoice_id = i.id), 0)::int as paid_cents,
+    case when i.status = 'draft' then coalesce((select sum(l.total_cents) from invoice_lines l where l.invoice_id = i.id), 0)::int end as draft_cents
   from invoices i
     left join bookings b on b.id = i.booking_id
     left join invoices c on c.id = i.cancels_id
@@ -28,7 +29,8 @@ const LIST = sql`
 
 function toRow(x: Raw): InvoiceListRow {
   const status = x.status as InvoiceListRow['status'];
-  const gross = x.gross_cents as number;
+  // Entwürfe und Kostenvoranschläge: der Betrag ergibt sich aus den Positionen (festgeschrieben wird er erst beim Ausstellen)
+  const gross = status === 'draft' && x.draft_cents != null ? (x.draft_cents as number) : (x.gross_cents as number);
   const paid = x.paid_cents as number;
   return {
     id: x.id as string, number: (x.number as string) ?? null, estimateNumber: (x.estimate_number as string) ?? null, estimateValidUntil: x.estimate_valid_until ? String(x.estimate_valid_until).slice(0, 10) : null, kind: x.kind as InvoiceListRow['kind'], status,
@@ -48,10 +50,15 @@ function toRow(x: Raw): InvoiceListRow {
   };
 }
 
-export async function listInvoices(db: Exec, f: { status?: string; q?: string; from?: string; to?: string; bookingId?: string; serviceFrom?: string; serviceTo?: string; method?: string; all?: boolean }) {
+export async function listInvoices(db: Exec, f: { status?: string; q?: string; from?: string; to?: string; bookingId?: string; serviceFrom?: string; serviceTo?: string; method?: string; all?: boolean;
+  /** free = ohne Reservierung (freie Rechnungen und Kostenvoranschläge), hotel = zu einer Reservierung */ scope?: 'free' | 'hotel' }) {
   const c: SQL[] = [sql`true`];
+  if (f.scope === 'free') c.push(sql`i.booking_id is null`);
+  if (f.scope === 'hotel') c.push(sql`i.booking_id is not null`);
   if (f.status === 'open' || f.status === 'paid') c.push(sql`i.status = 'issued' and i.kind = 'invoice'`);
   else if (f.status === 'archive') c.push(sql`i.status <> 'draft'`);
+  else if (f.status === 'estimate') c.push(sql`i.status = 'draft' and i.estimate_number is not null`);
+  else if (f.status === 'draft' && f.scope === 'free') c.push(sql`i.status = 'draft' and i.estimate_number is null`);
   else if (f.status) c.push(sql`i.status = ${f.status}`);
   // Leistungszeitraum überschneidet den gewählten Zeitraum
   if (f.serviceFrom) c.push(sql`coalesce(i.service_to, i.service_from) >= ${f.serviceFrom}::date`);

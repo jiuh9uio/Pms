@@ -386,3 +386,23 @@ describe('Bruttopreise und Gültigkeit des Kostenvoranschlags', () => {
     expect([200, 409]).toContain(pdf.statusCode);
   });
 });
+
+describe('Freie Rechnungen getrennt von Hotelrechnungen', () => {
+  it('scope=free zeigt nur Rechnungen und Kostenvoranschläge ohne Reservierung, scope=hotel nur die zu Reservierungen; Filter Kostenvoranschläge / Entwürfe', async () => {
+    const all = await ok('GET', '/invoices', user);
+    const free = await ok('GET', '/invoices?scope=free', user);
+    const hotel = await ok('GET', '/invoices?scope=hotel', user);
+    expect(free.length).toBeGreaterThan(0);
+    expect(hotel.length).toBeGreaterThan(0);
+    expect(free.every((i: { bookingId: string | null }) => i.bookingId === null)).toBe(true);
+    expect(hotel.every((i: { bookingId: string | null }) => i.bookingId !== null)).toBe(true);
+    expect(free.length + hotel.length).toBe(all.length);
+    const kv = await ok('GET', '/invoices?scope=free&status=estimate', user);
+    expect(kv.length).toBeGreaterThan(0);
+    expect(kv.every((i: { status: string; estimateNumber: string | null }) => i.status === 'draft' && !!i.estimateNumber)).toBe(true);
+    const drafts = await ok('GET', '/invoices?scope=free&status=draft', user);
+    expect(drafts.every((i: { status: string; estimateNumber: string | null }) => i.status === 'draft' && !i.estimateNumber)).toBe(true);
+    // ohne scope bleibt „Entwürfe“ wie bisher: alle Entwürfe einschließlich Kostenvoranschläge
+    expect((await ok('GET', '/invoices?status=draft', user)).length).toBeGreaterThanOrEqual(kv.length + drafts.length);
+  });
+});
