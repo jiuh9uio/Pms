@@ -3,6 +3,11 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.143.0
+
+- **Kostenvoranschlag vereinfacht:** Nach dem Senden gibt es nur noch **„Auftragsbestätigung senden“** (mit den Positionen aus dem Kostenvoranschlag). „Tisch reservieren“ und „Ware ist da“ sind dort wieder entfernt.
+- Bereits angelegte Tischreservierungen und gesendete E-Mails bleiben unverändert; ihre Einträge im Verlauf bleiben sichtbar.
+
 ## 1.142.0
 
 - **Aus dem Kostenvoranschlag einen Auftrag machen.** Ist der Kostenvoranschlag gesendet, erscheint der Abschnitt „Auftrag daraus machen“:
