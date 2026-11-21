@@ -1,6 +1,6 @@
 import { and, asc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import {
-  taxBreakdown, type BookingBillingDto, type InvoiceDto, type InvoiceListRow, type IssuerDto, type PaymentDto,
+  lineGrossCents, taxBreakdown, type BookingBillingDto, type InvoiceDto, type InvoiceListRow, type IssuerDto, type PaymentDto,
 } from '../../shared/billing.js';
 import { addDays, isActiveStatus, todayBerlin } from '../../shared/hotel.js';
 import type { Db, Exec, Tx } from '../db/client.js';
@@ -31,7 +31,7 @@ function toRow(x: Raw): InvoiceListRow {
   const gross = x.gross_cents as number;
   const paid = x.paid_cents as number;
   return {
-    id: x.id as string, number: (x.number as string) ?? null, estimateNumber: (x.estimate_number as string) ?? null, kind: x.kind as InvoiceListRow['kind'], status,
+    id: x.id as string, number: (x.number as string) ?? null, estimateNumber: (x.estimate_number as string) ?? null, estimateValidUntil: x.estimate_valid_until ? String(x.estimate_valid_until).slice(0, 10) : null, kind: x.kind as InvoiceListRow['kind'], status,
     bookingId: (x.booking_id as string) ?? null, bookingNumber: (x.booking_number as string) ?? null,
     cancelsId: (x.cancels_id as string) ?? null, cancelsNumber: (x.cancels_number as string) ?? null,
     cancelledById: (x.cancelled_by_id as string) ?? null, cancelledByNumber: (x.cancelled_by_number as string) ?? null,
@@ -264,7 +264,7 @@ export async function createInvoice(db: Db, actor: Actor, v: { bookingId?: strin
     if (v.bookingId && v.include !== 'none' && lines.length === 0) throw conflict('Alle Leistungen dieser Reservierung stehen bereits auf einer Rechnung', 'already_invoiced');
     const [inv] = await tx.insert(invoices).values({ bookingId: v.bookingId ?? null, ...recipient, serviceFrom, serviceTo, createdBy: actor.userName }).returning();
     if (lines.length)
-      await tx.insert(invoiceLines).values(lines.map((l, i) => ({ ...l, invoiceId: inv!.id, pos: i + 1, totalCents: Math.round(l.quantity * l.unitPriceCents) })));
+      await tx.insert(invoiceLines).values(lines.map((l, i) => ({ ...l, invoiceId: inv!.id, pos: i + 1, totalCents: lineGrossCents(l.quantity, l.unitPriceCents) })));
     await record(tx, actor, { action: 'create', entity: 'invoice', entityId: inv!.id, after: { bookingId: v.bookingId ?? null, include: v.include, lines: lines.length } });
     return { id: inv!.id };
   });
@@ -284,7 +284,7 @@ export async function addLine(db: Db, actor: Actor, id: string, l: { description
   await db.transaction(async (tx) => {
     await lockDraft(tx, id);
     const [{ n }] = (await tx.select({ n: sql<number>`coalesce(max(${invoiceLines.pos}), 0)::int` }).from(invoiceLines).where(eq(invoiceLines.invoiceId, id))) as [{ n: number }];
-    await tx.insert(invoiceLines).values({ ...l, invoiceId: id, pos: n + 1, totalCents: Math.round(l.quantity * l.unitPriceCents) });
+    await tx.insert(invoiceLines).values({ ...l, invoiceId: id, pos: n + 1, totalCents: lineGrossCents(l.quantity, l.unitPriceCents) });
     await record(tx, actor, { action: 'line_add', entity: 'invoice', entityId: id, after: l });
   });
 }
@@ -635,7 +635,9 @@ export async function makeEstimate(db: Db, actor: Actor, id: string) {
     const [row] = await tx.insert(numberSequences).values({ key: 'estimate', year, last: 1 })
       .onConflictDoUpdate({ target: [numberSequences.key, numberSequences.year], set: { last: sql`${numberSequences.last} + 1` } }).returning();
     const estimateNumber = `KV-${year}-${String(row!.last).padStart(4, '0')}`;
-    await tx.update(invoices).set({ estimateNumber, updatedAt: new Date() }).where(eq(invoices.id, id));
+    // Gültigkeit: Vorgabe in Tagen aus dem Rechnungslayout; das Datum steht fest am Kostenvoranschlag und lässt sich dort ändern
+    const days = (await getLayout(tx)).estimateValidDays;
+    await tx.update(invoices).set({ estimateNumber, estimateValidUntil: days > 0 ? addDays(todayBerlin(), days) : null, updatedAt: new Date() }).where(eq(invoices.id, id));
     await record(tx, actor, { action: 'estimate', entity: 'invoice', entityId: id, after: { estimateNumber } });
     return { estimateNumber };
   });

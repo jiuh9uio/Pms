@@ -154,7 +154,8 @@ export async function estimateMailDraft(db: Db, invoiceId: string): Promise<Mail
   const guest = inv.bookingId ? (await getBooking(db, inv.bookingId)).guest : null;
   const text = [guest ? greeting(guest) : 'Guten Tag,', '',
     `anbei erhalten Sie unseren Kostenvoranschlag ${f.number} über ${formatMoney(inv.grossCents)} (inkl. Umsatzsteuer).`,
-    'Dies ist noch keine Rechnung – bitte überweisen Sie noch nichts.', '',
+    'Dies ist noch keine Rechnung – bitte überweisen Sie noch nichts.',
+    ...(inv.estimateValidUntil ? [`Der Kostenvoranschlag ist gültig bis zum ${inv.estimateValidUntil.slice(8, 10)}.${inv.estimateValidUntil.slice(5, 7)}.${inv.estimateValidUntil.slice(0, 4)}.`] : []), '',
     'Sind Sie einverstanden? Dann antworten Sie bitte einfach auf diese E-Mail mit „Ja“. Wenn nicht, antworten Sie mit „Nein“ – oder schreiben Sie uns, was wir ändern sollen.',
     `(Bitte den Betreff mit der Nummer ${f.number} stehen lassen, damit wir Ihre Antwort zuordnen können.)`,
     '', signature(h)].join('\n');

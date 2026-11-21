@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { lineGrossCents } from './billing.js';
 
 /** Angebote für Tagungen, Feiern und Gruppen: Katalog (Leistungen), Vorlagen, Angebote mit Positionen. */
 export const OFFER_UNITS = ['person', 'day', 'person_day', 'night', 'person_night', 'flat'] as const;
@@ -169,7 +170,8 @@ export function quantityFor(unit: OfferUnit, persons: number, from: string | nul
   const { days, nights } = spanOf(from, to);
   return { person: persons, day: days, person_day: persons * days, night: nights, person_night: persons * nights, flat: 1 }[unit];
 }
-export const lineTotal = (q: number, unitPriceCents: number) => Math.round(q * unitPriceCents);
+/** Zeilenbetrag brutto – dieselbe Rechnung wie bei Rechnungen */
+export const lineTotal = (q: number, unitPriceCents: number) => lineGrossCents(q, unitPriceCents);
 
 // ---------- Gestaltung des Angebots-PDFs (Angebote → Gestaltung) ----------
 const flag = (d: boolean) => z.union([z.boolean(), z.enum(['true', 'false']).transform((v) => v === 'true')]).default(d);

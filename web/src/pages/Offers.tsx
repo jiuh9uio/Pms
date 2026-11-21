@@ -298,7 +298,7 @@ function OfferEditor({ id, onClose }: { id: string; onClose: () => void }) {
       <Field label="Einleitung" wide><textarea rows={3} value={v.intro} disabled={locked} onChange={(e) => ch({ intro: e.target.value })} /></Field>
       <h3>Leistungen</h3>
       <div className="tablewrap"><table className="lines offerlines">
-        <thead><tr><th>Leistung</th><th>Abrechnung</th><th className="num">Menge</th><th className="num">Einzelpreis</th><th className="num">USt %</th><th className="num">Gesamt</th><th /></tr></thead>
+        <thead><tr><th>Leistung</th><th>Abrechnung</th><th className="num">Menge</th><th className="num">Einzelpreis brutto</th><th className="num">USt %</th><th className="num">Gesamt brutto</th><th /></tr></thead>
         <tbody>{v.lines.map((l, i) => (
           <tr key={i}>
             <td><input value={l.description} disabled={locked} onChange={(e) => setLine(i, { description: e.target.value })} aria-label="Bezeichnung" /><input className="small" placeholder="Beschreibung (optional)" value={l.detail} disabled={locked} onChange={(e) => setLine(i, { detail: e.target.value })} aria-label="Beschreibung" /></td>
@@ -475,7 +475,7 @@ function ConfiguratorDialog({ catalogName, items, lines, persons, from, to, onAp
         </div>
       ); })}</div>}
       {last && (chosen.length === 0 ? <p className="muted">Noch nichts ausgewählt.</p> : (
-        <div className="tablewrap"><table><thead><tr><th>Leistung</th><th className="num">Menge</th><th className="num">Einzelpreis</th><th className="num">Gesamt</th></tr></thead>
+        <div className="tablewrap"><table><thead><tr><th>Leistung</th><th className="num">Menge</th><th className="num">Einzelpreis brutto</th><th className="num">Gesamt brutto</th></tr></thead>
           <tbody>
             {groups.map((x) => x.items.filter((it) => it.id in sel).map((it) => <tr key={it.id}><td><b>{it.name}</b> <small className="muted">{x.name}</small></td><td className="num">{sel[it.id]}</td><td className="num">{formatMoney(priceOf(it))} <small className="muted">{UNIT_LABEL[it.unit]}</small></td><td className="num">{formatMoney(sumOf(it))}</td></tr>))}
             {other.length > 0 && <tr><td colSpan={3} className="muted">Weitere Zeilen im Angebot ({other.length}) – bleiben unverändert</td><td className="num">{formatMoney(otherTotal)}</td></tr>}

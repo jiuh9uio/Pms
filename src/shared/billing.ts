@@ -15,6 +15,8 @@ export const recipientInput = z.object({
 });
 export const invoiceUpdateInput = recipientInput.extend({
   serviceFrom: isoDate.nullable(), serviceTo: isoDate.nullable(), notes: text(1000), version,
+  /** Kostenvoranschlag: gültig bis (leer = ohne Angabe) */
+  estimateValidUntil: isoDate.nullable().optional(),
 }).refine((v) => !v.serviceFrom || !v.serviceTo || v.serviceFrom <= v.serviceTo, { message: 'Ende liegt vor dem Beginn', path: ['serviceTo'] })
   .refine((v) => !!(v.recipientCompany || v.recipientName), { message: 'Bitte Firma oder Namen angeben', path: ['recipientName'] });
 export const invoiceLineInput = z.object({
@@ -39,14 +41,39 @@ export const paymentInput = z.object({
 }).refine((v) => !!v.bookingId || !!v.invoiceId, { message: 'Reservierung oder Rechnung angeben', path: ['bookingId'] });
 export const reverseInput = z.object({ note: required(300) });
 
-/** Steuerausweis: Bruttobeträge je Satz → Netto und Steuer (Rundung je Steuersatz auf Summenebene). */
+// ---------- Preisrechnung: alle Preise sind BRUTTO (inklusive Umsatzsteuer) ----------
+/**
+ * Ganzzahlige Division mit kaufmännischer Rundung (ab ,5 vom Betrag weg – auch bei Minusbeträgen, damit ein Storno
+ * genau das Gegenstück der Rechnung ergibt). Gerechnet wird nur mit ganzen Zahlen (Cent), nie mit Kommazahlen.
+ */
+export function divRound(numerator: number, denominator: number): number {
+  const n = BigInt(Math.round(numerator)), d = BigInt(Math.round(denominator));
+  if (d <= 0n) throw new Error('Teiler muss größer als 0 sein');
+  const a = n < 0n ? -n : n;
+  const q = (2n * a + d) / (2n * d);
+  return Number(n < 0n ? -q : q);
+}
+/** Zeilenbetrag brutto in Cent: Menge (höchstens 2 Nachkommastellen) × Einzelpreis brutto */
+export const lineGrossCents = (quantity: number, unitPriceCents: number) => divRound(Math.round(quantity * 100) * unitPriceCents, 100);
+/** Aus einem Bruttobetrag herausgerechneter Nettobetrag (Steuersatz mit höchstens 2 Nachkommastellen) */
+export const netFromGross = (grossCents: number, taxRatePercent: number) => divRound(grossCents * 10_000, 10_000 + Math.round(taxRatePercent * 100));
+/**
+ * Steuerausweis: Die Bruttobeträge werden je Steuersatz summiert; aus jeder Summe werden Netto und enthaltene Umsatzsteuer
+ * herausgerechnet (Rundung einmal je Steuersatz auf der Summe, nicht je Zeile). Netto + Steuer ergibt immer genau das Brutto –
+ * die Umsatzsteuer wird nie auf einen eingegebenen Preis aufgeschlagen.
+ */
 export function taxBreakdown(lines: { totalCents: number; taxRatePercent: number }[]) {
   const by = new Map<number, number>();
   for (const l of lines) by.set(l.taxRatePercent, (by.get(l.taxRatePercent) ?? 0) + l.totalCents);
   return [...by.entries()].sort((a, b) => a[0] - b[0]).map(([rate, gross]) => {
-    const net = Math.round(gross / (1 + rate / 100));
+    const net = netFromGross(gross, rate);
     return { rate, grossCents: gross, netCents: net, taxCents: gross - net };
   });
+}
+/** Beschriftung des Leistungsdatums: ein Tag = Termin/Datum, mehrere Tage = Zeitraum; bei Kostenvoranschlägen „voraussichtlich“ (beim Zeitraum kurz, damit daneben Platz für beide Daten bleibt) */
+export function serviceLabel(from: string | null, to: string | null, estimate: boolean): string {
+  const range = !!from && !!to && to !== from;
+  return estimate ? (range ? 'Leistung vorauss.' : 'Voraussichtl. Leistungstermin') : range ? 'Leistungszeitraum' : 'Leistungsdatum';
 }
 
 export interface InvoiceLineDto { id: string; pos: number; description: string; detail: string; quantity: number; unitPriceCents: number; taxRatePercent: number; totalCents: number }
@@ -61,6 +88,8 @@ export interface InvoiceDto {
   id: string; number: string | null; kind: 'invoice' | 'cancellation'; status: 'draft' | 'issued' | 'cancelled';
   /** Kostenvoranschlag (KV-Jahr-Nr.): der Entwurf wird als Kostenvoranschlag geführt bzw. die Rechnung ist daraus entstanden */
   estimateNumber: string | null;
+  /** Kostenvoranschlag: gültig bis */
+  estimateValidUntil?: string | null;
   bookingId: string | null; bookingNumber: string | null; cancelsId: string | null; cancelsNumber: string | null; cancelledById: string | null; cancelledByNumber: string | null;
   recipientCompany: string; recipientName: string; recipientStreet: string; recipientZip: string; recipientCity: string; recipientCountry: string; recipientVatId: string;
   serviceFrom: string | null; serviceTo: string | null; issueDate: string | null; dueDate: string | null; notes: string; cancelReason: string;
@@ -116,6 +145,8 @@ export const invoiceLayoutInput = z.object({
   letterhead: flag(false),
   /** kleine Absenderzeile über der Anschrift (für Fensterumschläge) */
   senderLine: flag(true),
+  /** Kostenvoranschlag: so viele Tage gilt er ab dem Tag, an dem er angelegt wird (0 = ohne Gültigkeitsangabe) */
+  estimateValidDays: z.coerce.number('Bitte eine Zahl eingeben').int().min(0).max(365).default(14),
 });
 export type InvoiceLayoutDto = z.infer<typeof invoiceLayoutInput>;
 

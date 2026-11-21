@@ -1,0 +1,1 @@
+ALTER TABLE "invoices" ADD COLUMN "estimate_valid_until" date;

@@ -179,7 +179,7 @@ export function OfferWizard({ onClose, onCreated }: { onClose: () => void; onCre
         )}
         {chosen.length > 0 && <>
           <h3>Leistungen fürs Angebot</h3>
-          <div className="tablewrap"><table><thead><tr><th>Leistung</th><th className="num">Menge</th><th className="num">Einzelpreis</th><th className="num">Gesamt</th></tr></thead>
+          <div className="tablewrap"><table><thead><tr><th>Leistung</th><th className="num">Menge</th><th className="num">Einzelpreis brutto</th><th className="num">Gesamt brutto</th></tr></thead>
             <tbody>
               {chosen.map((it) => <tr key={it.id}><td><b>{it.name}</b></td><td className="num">{qtyText(it)}</td><td className="num">{formatMoney(it.priceCents)} <small className="muted">{UNIT_LABEL[it.unit]}</small></td><td className="num">{formatMoney(sumOf(it))}</td></tr>)}
               <tr><td colSpan={3}><b>Summe</b> <small className="muted">inkl. Umsatzsteuer</small></td><td className="num"><b>{formatMoney(total)}</b></td></tr>

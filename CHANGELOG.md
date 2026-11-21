@@ -3,6 +3,15 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.131.0
+
+- **Bruttopreise eindeutig ausgewiesen.** Geprüft: Das Programm hat eingegebene Preise schon bisher als Bruttopreise behandelt und die Umsatzsteuer nie aufgeschlagen – an den Beträgen ändert sich nichts. Neu ist die Darstellung auf Kostenvoranschlag, Rechnung und Angebot: Spalten **„Einzelpreis brutto“** und **„Gesamt brutto“**, darunter **Nettobetrag**, **Enthaltene Umsatzsteuer** (je Steuersatz getrennt) und **Gesamtbetrag brutto**.
+- **Rechnung in ganzen Cent** mit kaufmännischer Rundung (einmal je Steuersatz auf der Summe; Minusbeträge spiegelbildlich), auch bei Mengen mit Nachkommastellen. Angebote rechnen jetzt mit derselben Funktion.
+- **Kostenvoranschlag: Gültigkeit.** Beim Anlegen bekommt er ein „gültig bis“-Datum (Vorgabe 14 Tage, einstellbar unter Einstellungen → Rechnungslayout; 0 = ohne Angabe). Das Datum steht fest am Kostenvoranschlag, lässt sich dort ändern und erscheint im PDF und in der E-Mail. Kostenvoranschläge erhalten außerdem den Satz „Alle Preise verstehen sich inklusive der gesetzlichen Umsatzsteuer.“
+- **Leistungsdatum:** Ein einzelner Tag heißt jetzt „Leistungsdatum“, mehrere Tage „Leistungszeitraum“. Auf dem Kostenvoranschlag steht „Voraussichtl. Leistungstermin“, auf dem Angebot „Geplanter Termin“.
+- Bereits ausgestellte Rechnungen und gesendete Angebote bleiben in ihrer archivierten Form unverändert. Bestehende Kostenvoranschläge haben zunächst kein „gültig bis“ – es lässt sich nachtragen.
+- Datenbank: ein neues Feld „gültig bis“ an den Rechnungsentwürfen; bestehende Daten bleiben unverändert.
+
 ## 1.130.0
 
 - **Vorgänge mit Grafiken, angelehnt an „Neue Reservierung“:** Im Vorgang zeigt eine **Schritte-Leiste**, wie weit er ist – bei Zimmer und Tisch „Anfrage → reserviert → Bestätigung gesendet → Erledigt“, sonst „Anfrage → Beantwortet → Erledigt“. Geschafftes ist grün abgehakt, der nächste Schritt blau hervorgehoben.

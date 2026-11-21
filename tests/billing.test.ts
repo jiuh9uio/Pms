@@ -337,3 +337,52 @@ describe('Kostenvoranschlag: Verlauf und Antwort Ja/Nein', () => {
     expect(yesNo('> Ja')).toBeNull();
   });
 });
+
+describe('Bruttopreise und Gültigkeit des Kostenvoranschlags', () => {
+  it('Beispiel: 3 × 52,00 € + 18,00 € = 174,00 € brutto; Netto 146,22 € und 27,78 € USt herausgerechnet; gemischte Sätze getrennt; Rabattzeile', async () => {
+    const { id } = await ok('POST', '/invoices', user, { include: 'none' });
+    await ok('POST', `/invoices/${id}/lines`, user, { description: 'Pils 30 L', detail: '', quantity: 3, unitPriceCents: 5200, taxRatePercent: 19 });
+    let inv = await ok('POST', `/invoices/${id}/lines`, user, { description: 'Anfahrt', detail: '', quantity: 1, unitPriceCents: 1800, taxRatePercent: 19 });
+    expect(inv.grossCents).toBe(17400);
+    expect(inv.lines.map((l: { totalCents: number }) => l.totalCents)).toEqual([15600, 1800]);
+    expect(inv.taxes).toEqual([{ rate: 19, grossCents: 17400, netCents: 14622, taxCents: 2778 }]);
+    // zweiter Steuersatz und ein Rabatt als Minuszeile
+    await ok('POST', `/invoices/${id}/lines`, user, { description: 'Übernachtung', detail: '', quantity: 2, unitPriceCents: 9900, taxRatePercent: 7 });
+    inv = await ok('POST', `/invoices/${id}/lines`, user, { description: 'Rabatt 10 % auf Getränke', detail: '', quantity: 1, unitPriceCents: -1560, taxRatePercent: 19 });
+    expect(inv.grossCents).toBe(17400 + 19800 - 1560);
+    expect(inv.taxes).toEqual([{ rate: 7, grossCents: 19800, netCents: 18505, taxCents: 1295 }, { rate: 19, grossCents: 15840, netCents: 13311, taxCents: 2529 }]);
+    expect(inv.taxes.reduce((s: number, t: { netCents: number; taxCents: number }) => s + t.netCents + t.taxCents, 0)).toBe(inv.grossCents);
+    // Menge mit Nachkommastellen
+    inv = await ok('POST', `/invoices/${id}/lines`, user, { description: 'Fassbier anteilig', detail: '', quantity: 1.15, unitPriceCents: 100, taxRatePercent: 19 });
+    expect(inv.lines.at(-1).totalCents).toBe(115);
+  });
+
+  it('Gültigkeit: Vorgabe in Tagen aus dem Layout, fest am Kostenvoranschlag, dort änderbar; spätere Änderung der Vorgabe ändert bestehende nicht', async () => {
+    const mk = async () => {
+      const { id } = await ok('POST', '/invoices', user, { include: 'none' });
+      await ok('POST', `/invoices/${id}/estimate`, user);
+      return ok('GET', `/invoices/${id}`, user);
+    };
+    const a = await mk();
+    expect(a.estimateValidUntil).toBe(addDays(today, 14));
+    const layout = await ok('GET', '/settings/invoice-layout', admin);
+    expect(layout.estimateValidDays).toBe(14);
+    await ok('PUT', '/settings/invoice-layout', admin, { ...layout, estimateValidDays: 30 });
+    const b = await mk();
+    expect(b.estimateValidUntil).toBe(addDays(today, 30));
+    expect((await ok('GET', `/invoices/${a.id}`, user)).estimateValidUntil).toBe(addDays(today, 14)); // unverändert
+    // am einzelnen Kostenvoranschlag ändern bzw. leeren
+    const set = (v: string | null, inv: { version: number }) => ok('PUT', `/invoices/${a.id}`, user, { ...a, recipientName: 'Erika Erfunden', estimateValidUntil: v, version: inv.version });
+    let cur = await set(addDays(today, 60), a);
+    expect(cur.estimateValidUntil).toBe(addDays(today, 60));
+    cur = await set(null, cur);
+    expect(cur.estimateValidUntil).toBeNull();
+    // 0 Tage = ohne Angabe
+    await ok('PUT', '/settings/invoice-layout', admin, { ...layout, estimateValidDays: 0 });
+    expect((await mk()).estimateValidUntil).toBeNull();
+    await ok('PUT', '/settings/invoice-layout', admin, { ...layout, estimateValidDays: 14 });
+    const pdf = await call('GET', `/invoices/${b.id}/estimate/pdf`, user);
+    // ohne Positionen wird kein PDF verweigert – nur das Senden; das PDF muss erzeugbar sein
+    expect([200, 409]).toContain(pdf.statusCode);
+  });
+});

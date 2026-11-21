@@ -41,6 +41,7 @@ export function InvoiceLayoutCard() {
         <Field label="Schriftgröße"><select value={v.fontSize} onChange={(e) => setV({ ...v, fontSize: e.target.value as InvoiceLayoutDto['fontSize'] })}><option value="small">klein</option><option value="normal">normal</option><option value="large">groß</option></select></Field>
         <Field label="Satz über den Positionen" error={f.errors.intro} hint="leer = kein Satz" wide><input value={v.intro} onChange={(e) => setV({ ...v, intro: e.target.value })} maxLength={300} placeholder="Vielen Dank für Ihren Aufenthalt. Wir berechnen Ihnen:" /></Field>
         <Field label="Schlusssatz" error={f.errors.closing} hint="leer = kein Satz" wide><input value={v.closing} onChange={(e) => setV({ ...v, closing: e.target.value })} maxLength={300} placeholder="Wir freuen uns auf Ihren nächsten Besuch." /></Field>
+        <Field label="Kostenvoranschlag gültig (Tage)" error={f.errors.estimateValidDays} hint="ab dem Tag, an dem er angelegt wird; 0 = ohne Angabe. Am einzelnen Kostenvoranschlag lässt sich das Datum ändern."><input inputMode="numeric" value={String(v.estimateValidDays ?? 14)} onChange={(e) => setV({ ...v, estimateValidDays: Number(e.target.value.replace(/\D/g, '') || 0) })} /></Field>
       </div>
       <h3>Druck und Papier</h3>
       <div className="checkgrid">

@@ -1,6 +1,6 @@
 import fontkit from '@pdf-lib/fontkit';
 import { PDFDocument, degrees, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
-import type { InvoiceDto, IssuerDto } from '../../shared/billing.js';
+import { serviceLabel, type InvoiceDto, type IssuerDto } from '../../shared/billing.js';
 import QRCode from 'qrcode';
 import { asset } from './pdf.js';
 
@@ -20,9 +20,11 @@ export interface InvoiceLayout {
   table: 'lines' | 'stripes' | 'plain';
   accentHex: string; logoSize: 'small' | 'normal' | 'large';
   foldMarks: boolean; qrCode: boolean; letterhead: boolean; senderLine: boolean;
+  /** Kostenvoranschlag: Gültigkeit in Tagen ab Anlage (0 = ohne Angabe) */
+  estimateValidDays: number;
 }
 export const DEFAULT_LAYOUT: InvoiceLayout = { spacing: 'normal', fontSize: 'normal', intro: '', closing: '', style: 'classic', accent: 'black', font: 'sans', logoPos: 'right', table: 'lines',
-  accentHex: '#1c457a', logoSize: 'normal', foldMarks: false, qrCode: false, letterhead: false, senderLine: true };
+  accentHex: '#1c457a', logoSize: 'normal', foldMarks: false, qrCode: false, letterhead: false, senderLine: true, estimateValidDays: 14 };
 const ACCENTS: Record<Exclude<InvoiceLayout['accent'], 'custom'>, [number, number, number]> = {
   black: [0.1, 0.1, 0.1], blue: [0.11, 0.27, 0.48], green: [0.13, 0.36, 0.25], red: [0.5, 0.12, 0.16], gold: [0.55, 0.42, 0.16], petrol: [0.07, 0.38, 0.42],
 };
@@ -143,7 +145,8 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
   }
   let my = top;
   const meta: [string, string][] = [estimate ? ['Kostenvoranschlag-Nr.', estimate.number] : [cancel ? 'Stornobeleg-Nr.' : 'Rechnungsnummer', inv.number ?? '–'], estimate ? ['Datum', de(estimate.date)] : ['Rechnungsdatum', de(inv.issueDate)],
-    ['Leistungszeitraum', !inv.serviceFrom ? '–' : inv.serviceTo && inv.serviceTo !== inv.serviceFrom ? `${de(inv.serviceFrom)} – ${de(inv.serviceTo)}` : de(inv.serviceFrom)]];
+    [serviceLabel(inv.serviceFrom, inv.serviceTo, !!estimate), !inv.serviceFrom ? '–' : inv.serviceTo && inv.serviceTo !== inv.serviceFrom ? `${de(inv.serviceFrom)} – ${de(inv.serviceTo)}` : de(inv.serviceFrom)]];
+  if (estimate && inv.estimateValidUntil) meta.push(['Gültig bis', de(inv.estimateValidUntil)]);
   if (inv.bookingNumber) meta.push(['Buchungsnummer', inv.bookingNumber]);
   if (cancel && inv.cancelsNumber) meta.push(['Storno zu', inv.cancelsNumber]);
   for (const [k, v] of meta) { put(k, 345, my, { size: 9.5, color: grey }); put(v, R, my, { size: 9.5, right: true }); my -= 16 * f; }
@@ -154,7 +157,7 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
   if (layout.intro && !cancel) { for (const t of wrap(layout.intro, R - L, 10)) { put(t, L, y); y -= 14 * f; } y -= 10 * g; }
 
   // Positionen
-  const cols = { pos: L + 6, name: L + 34, qty: 352, unit: 428, rate: 470, total: R - 6 };
+  const cols = { pos: L + 6, name: L + 34, qty: 330, unit: 418, rate: 462, total: R - 6 };
   const lead = 13 * f, dlead = 11.5 * f, pad = 8 * g, headGrey = grey;
   const headRow = () => {
     const hh = 12 * f + pad * 1.4;
@@ -163,8 +166,8 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
     const grey = modern ? white : elegant ? acc : headGrey;
     const ty = y - hh / 2 + 12 * f - 3 * f;
     put('Pos.', cols.pos, ty, { size: 8.5, font: bold, color: grey }); put('Leistung', cols.name, ty, { size: 8.5, font: bold, color: grey });
-    put('Menge', cols.qty, ty, { size: 8.5, font: bold, color: grey, right: true }); put('Einzelpreis', cols.unit, ty, { size: 8.5, font: bold, color: grey, right: true });
-    put('USt', cols.rate, ty, { size: 8.5, font: bold, color: grey, right: true }); put('Betrag', cols.total, ty, { size: 8.5, font: bold, color: grey, right: true });
+    put('Menge', cols.qty, ty, { size: 8.5, font: bold, color: grey, right: true }); put('Einzelpreis brutto', cols.unit, ty, { size: 8.5, font: bold, color: grey, right: true });
+    put('USt', cols.rate, ty, { size: 8.5, font: bold, color: grey, right: true }); put('Gesamt brutto', cols.total, ty, { size: 8.5, font: bold, color: grey, right: true });
     y -= hh + pad;
   };
   headRow();
@@ -190,17 +193,19 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
   const payRows = !cancel && inv.paidCents !== 0 ? new Set(inv.payments.map((p) => p.method)).size + 1 : 0;
   need(inv.taxes.length * 2 * row + 34 * f + payRows * row + 30 * g);
   y -= 4 * g;
+  // alle Preise sind brutto: Netto und Umsatzsteuer werden herausgerechnet und als „enthalten“ ausgewiesen – je Steuersatz getrennt
+  const single = inv.taxes.length === 1;
   for (const t of inv.taxes) {
-    put(`Nettobetrag ${num(t.rate)} %`, sx, y, { size: 9.5, color: grey }); put(money(t.netCents), cols.total, y, { size: 9.5, color: grey, right: true });
+    put(single ? 'Nettobetrag' : `Nettobetrag zu ${num(t.rate)} %`, sx, y, { size: 9.5, color: grey }); put(money(t.netCents), cols.total, y, { size: 9.5, color: grey, right: true });
     y -= row;
-    put(`Umsatzsteuer ${num(t.rate)} %`, sx, y, { size: 9.5, color: grey }); put(money(t.taxCents), cols.total, y, { size: 9.5, color: grey, right: true });
+    put(`Enthaltene Umsatzsteuer ${num(t.rate)} %`, sx, y, { size: 9.5, color: grey }); put(money(t.taxCents), cols.total, y, { size: 9.5, color: grey, right: true });
     y -= row;
   }
   y -= 4 * f;
   if (elegant) { rule(y + 16 * f, 0.8, acc, sx - 8, R); rule(y - 8 * f, 0.8, acc, sx - 8, R); rule(y - 8 * f - 2.6, 0.8, acc, sx - 8, R); }
   else page.drawRectangle({ x: sx - 8, y: y - 8 * f, width: R - sx + 8, height: 24 * f, color: modern ? acc : band });
   const tc = modern ? white : elegant ? acc : black;
-  put('Gesamtbetrag', sx, y, { size: 11.5, font: bold, color: tc }); put(money(inv.grossCents), cols.total, y, { size: 11.5, font: bold, right: true, color: tc });
+  put('Gesamtbetrag brutto', sx, y, { size: 11.5, font: bold, color: tc }); put(money(inv.grossCents), cols.total, y, { size: 11.5, font: bold, right: true, color: tc });
   y -= 26 * f;
   if (!cancel && inv.paidCents !== 0) {
     // Zahlungen je Zahlungsart, wie sie beim Erzeugen des PDFs gebucht waren
@@ -217,7 +222,7 @@ export async function renderInvoice(inv: InvoiceDto, issuer: IssuerDto, logo: Lo
   y -= 22 * g;
   // Offener Betrag mit hinterlegter IBAN: eigener Abschnitt „Zahlung per Überweisung“ (statt nur eines Satzes im Schlusstext)
   const payBlock = !cancel && !draft && inv.openCents > 0 && !!(issuer.iban ?? '').trim();
-  const closing = estimate ? [inv.notes, 'Dies ist ein Kostenvoranschlag und keine Rechnung. Bitte überweisen Sie noch nichts – die Rechnung erhalten Sie gesondert.'].filter(Boolean).join('\n\n') : [inv.notes,
+  const closing = estimate ? [inv.notes, 'Alle Preise verstehen sich inklusive der gesetzlichen Umsatzsteuer.', inv.estimateValidUntil ? `Dieser Kostenvoranschlag ist gültig bis zum ${de(inv.estimateValidUntil)}.` : '', 'Dies ist ein Kostenvoranschlag und keine Rechnung. Bitte überweisen Sie noch nichts – die Rechnung erhalten Sie gesondert.'].filter(Boolean).join('\n\n') : [inv.notes,
     !cancel && !draft && inv.openCents > 0 && inv.dueDate && !payBlock ? `Bitte überweisen Sie den Betrag bis zum ${de(inv.dueDate)} unter Angabe der Rechnungsnummer ${inv.number}.` : '',
     !cancel && inv.openCents === 0 && inv.paidCents !== 0 ? 'Der Rechnungsbetrag wurde vollständig bezahlt. Vielen Dank!' : '',
     !cancel ? layout.closing : ''].filter(Boolean).join('\n\n');

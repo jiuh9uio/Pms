@@ -90,7 +90,7 @@ export async function renderOffer(o: OfferDto, h: HotelSettings, logo: Logo | nu
   const when = o.eventDate ? (o.eventEnd && o.eventEnd !== o.eventDate ? `${de(o.eventDate)} – ${de(o.eventEnd)}` : de(o.eventDate)) : '';
   const meta: [string, string][] = [['Angebotsnummer', o.number], ['Datum', de(today)]];
   if (o.validUntil) meta.push(['gültig bis', de(o.validUntil)]);
-  if (when) meta.push(['Termin', when]);
+  if (when) meta.push(['Geplanter Termin', when]);
   meta.push(['Personen', String(o.persons)]);
   let my = top;
   for (const [k, v] of meta) { put(k, 345, my, { size: 9.5, color: grey }); put(v, R, my, { size: 9.5, right: true }); my -= 16 * f; }
@@ -112,7 +112,7 @@ export async function renderOffer(o: OfferDto, h: HotelSettings, logo: Logo | nu
     const ty = y - hh / 2 + 12 * f - 3 * f;
     put('Pos.', cols.pos, ty, { size: 8.5, font: bold, color: c }); put('Leistung', cols.desc, ty, { size: 8.5, font: bold, color: c });
     put('Menge', cols.qty, ty, { size: 8.5, font: bold, color: c, right: true });
-    if (showPrices) { put('Einzelpreis', cols.price, ty, { size: 8.5, font: bold, color: c, right: true }); put('Gesamt', cols.total, ty, { size: 8.5, font: bold, color: c, right: true }); }
+    if (showPrices) { put('Einzelpreis brutto', cols.price, ty, { size: 8.5, font: bold, color: c, right: true }); put('Gesamt brutto', cols.total, ty, { size: 8.5, font: bold, color: c, right: true }); }
     y -= hh + pad;
   };
   need(40);
@@ -138,18 +138,20 @@ export async function renderOffer(o: OfferDto, h: HotelSettings, logo: Logo | nu
 
   // Summen
   const sx = 330, row = 14 * f;
-  need(o.taxes.length * row + 40 * f);
+  need(o.taxes.length * 2 * row + 40 * f);
   y -= 4 * g;
   for (const t of o.taxes) {
-    put(`darin ${num(t.rate)} % USt auf ${money(t.netCents)} netto`, sx, y, { size: 8.5, color: grey });
-    put(money(t.taxCents), cols.total, y, { size: 8.5, color: grey, right: true });
+    // alle Preise sind brutto – Netto und enthaltene Umsatzsteuer je Steuersatz, wie auf Rechnung und Kostenvoranschlag
+    put(o.taxes.length === 1 ? 'Nettobetrag' : `Nettobetrag zu ${num(t.rate)} %`, sx, y, { size: 9, color: grey }); put(money(t.netCents), cols.total, y, { size: 9, color: grey, right: true });
+    y -= row;
+    put(`Enthaltene Umsatzsteuer ${num(t.rate)} %`, sx, y, { size: 9, color: grey }); put(money(t.taxCents), cols.total, y, { size: 9, color: grey, right: true });
     y -= row;
   }
   y -= 4 * f;
   if (elegant) { rule(y + 16 * f, 0.8, acc, sx - 8, R); rule(y - 8 * f, 0.8, acc, sx - 8, R); rule(y - 8 * f - 2.6, 0.8, acc, sx - 8, R); }
   else page.drawRectangle({ x: sx - 8, y: y - 8 * f, width: R - sx + 8, height: 24 * f, color: modern ? acc : band });
   const tc = modern ? white : elegant ? acc : black;
-  put('Gesamtbetrag', sx, y, { size: 11.5, font: bold, color: tc }); put(money(o.totalCents), cols.total, y, { size: 11.5, font: bold, right: true, color: tc });
+  put('Gesamtbetrag brutto', sx, y, { size: 11.5, font: bold, color: tc }); put(money(o.totalCents), cols.total, y, { size: 11.5, font: bold, right: true, color: tc });
   y -= 30 * g;
   if (o.depositPercent > 0) { para(`Nach Annahme des Angebots bitten wir um eine Anzahlung von ${o.depositPercent} % (${money(Math.round((o.totalCents * o.depositPercent) / 100))}).`, 9.5); y -= 6 * g; }
 

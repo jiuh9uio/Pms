@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import {
-  INVOICE_STATUS_LABEL, PAYMENT_METHODS_BILLING, cancelInput, invoiceLineInput, invoiceUpdateInput, paymentInput, reverseInput,
+  INVOICE_STATUS_LABEL, PAYMENT_METHODS_BILLING, cancelInput, invoiceLineInput, invoiceUpdateInput, paymentInput, reverseInput, serviceLabel,
   type InvoiceDto, type InvoiceTimeline, type PaymentDto,
 } from '../../../src/shared/billing.js';
 import { formatMoney, moneyInput, parseMoney, todayBerlin, type ServiceDto } from '../../../src/shared/hotel.js';
@@ -94,7 +94,7 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
               <div className="chosen"><span>
                 {inv.recipientCompany && <><b>{inv.recipientCompany}</b><br /></>}{inv.recipientName}{inv.recipientCompany ? '' : ''}<br />
                 <small>{[inv.recipientStreet, [inv.recipientZip, inv.recipientCity].filter(Boolean).join(' '), inv.recipientCountry].filter(Boolean).join(', ')}{inv.recipientVatId && ` · USt-IdNr. ${inv.recipientVatId}`}</small>
-              </span><span className="right muted small">Datum {deDate(inv.issueDate)}<br />Leistung {deDate(inv.serviceFrom)} – {deDate(inv.serviceTo)}{inv.dueDate && inv.kind === 'invoice' && <><br />fällig {deDate(inv.dueDate)}</>}</span></div>
+              </span><span className="right muted small">Datum {deDate(inv.issueDate)}<br />{serviceLabel(inv.serviceFrom, inv.serviceTo, false)} {deDate(inv.serviceFrom)}{inv.serviceTo && inv.serviceTo !== inv.serviceFrom ? ` – ${deDate(inv.serviceTo)}` : ''}{inv.dueDate && inv.kind === 'invoice' && <><br />fällig {deDate(inv.dueDate)}</>}</span></div>
             )}
             <Lines inv={inv} />
           </div>
@@ -102,9 +102,12 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
             <h3 className="first">Beträge</h3>
             <table className="sums"><tbody>
               {inv.taxes.map((t) => (
-                <tr key={t.rate} className="vat"><td>Netto {t.rate.toLocaleString('de-DE')} % {formatMoney(t.netCents)}</td><td className="num">USt {formatMoney(t.taxCents)}</td></tr>
+                <Fragment key={t.rate}>
+                  <tr className="vat"><td>Nettobetrag{inv.taxes.length > 1 ? ` zu ${t.rate.toLocaleString('de-DE')} %` : ''}</td><td className="num">{formatMoney(t.netCents)}</td></tr>
+                  <tr className="vat"><td>Enthaltene USt {t.rate.toLocaleString('de-DE')} %</td><td className="num">{formatMoney(t.taxCents)}</td></tr>
+                </Fragment>
               ))}
-              <tr className="sum"><td>Gesamt (brutto)</td><td className="num">{formatMoney(inv.grossCents)}</td></tr>
+              <tr className="sum"><td>Gesamtbetrag brutto</td><td className="num">{formatMoney(inv.grossCents)}</td></tr>
               {inv.status !== 'draft' && inv.kind === 'invoice' && <>
                 <tr><td>Bezahlt</td><td className="num">{formatMoney(inv.paidCents)}</td></tr>
                 {!!inv.creditCents && <tr><td className="muted small" colSpan={2}>{inv.creditCents > 0 ? `davon ${formatMoney(inv.creditCents)} verrechnet aus der Anzahlung auf einer anderen Rechnung dieser Reservierung` : `${formatMoney(-inv.creditCents)} Überzahlung auf andere Rechnungen dieser Reservierung übertragen`}</td></tr>}
@@ -132,8 +135,9 @@ function Recipient({ inv }: { inv: InvoiceDto }) {
   const init = {
     recipientCompany: inv.recipientCompany, recipientName: inv.recipientName, recipientStreet: inv.recipientStreet, recipientZip: inv.recipientZip,
     recipientCity: inv.recipientCity, recipientCountry: inv.recipientCountry, recipientVatId: inv.recipientVatId,
-    serviceFrom: inv.serviceFrom ?? '', serviceTo: inv.serviceTo ?? '', notes: inv.notes,
+    serviceFrom: inv.serviceFrom ?? '', serviceTo: inv.serviceTo ?? '', notes: inv.notes, estimateValidUntil: inv.estimateValidUntil ?? '',
   };
+  const kv = !!inv.estimateNumber && inv.status === 'draft';
   const [v, setV] = useState(init);
   useEffect(() => setV(init), [inv.version]); // eslint-disable-line react-hooks/exhaustive-deps
   const dirty = JSON.stringify(v) !== JSON.stringify(init);
@@ -142,14 +146,15 @@ function Recipient({ inv }: { inv: InvoiceDto }) {
     <Field label={label} error={f.errors[k]} wide={o.wide} hint={o.hint}><input type={o.type ?? 'text'} value={v[k]} onChange={(e) => setV({ ...v, [k]: e.target.value })} /></Field>
   );
   return (
-    <form onSubmit={(e) => void f.submit({ ...v, serviceFrom: v.serviceFrom || null, serviceTo: v.serviceTo || null, version: inv.version }, e)} noValidate>
+    <form onSubmit={(e) => void f.submit({ ...v, serviceFrom: v.serviceFrom || null, serviceTo: v.serviceTo || null, estimateValidUntil: v.estimateValidUntil || null, version: inv.version }, e)} noValidate>
       <h3 className="first">Rechnungsempfänger</h3>
       <CustomerPicker onPick={(c) => setV({ ...v, recipientCompany: c.company, recipientName: c.name, recipientStreet: c.street, recipientZip: c.zip, recipientCity: c.city, recipientCountry: c.country, recipientVatId: c.vatId || v.recipientVatId })} />
       <div className="formgrid">
         {input('recipientCompany', 'Firma', { hint: 'leer bei Privatrechnung' })}{input('recipientName', 'Name / z. Hd.')}
         {input('recipientStreet', 'Straße und Hausnummer', { wide: true })}{input('recipientZip', 'PLZ')}{input('recipientCity', 'Ort')}
         {input('recipientCountry', 'Land')}{input('recipientVatId', 'USt-IdNr. des Empfängers', { hint: 'bei Firmen, falls vorhanden' })}
-        {input('serviceFrom', 'Leistung von', { type: 'date' })}{input('serviceTo', 'Leistung bis', { type: 'date' })}
+        {input('serviceFrom', kv ? 'Voraussichtl. Leistungstermin' : 'Leistungsdatum (von)', { type: 'date', hint: kv ? 'wann die Leistung voraussichtlich erbracht wird' : 'ein Tag: nur dieses Feld oder beide gleich' })}{input('serviceTo', kv ? 'bis (bei mehreren Tagen)' : 'Leistung bis', { type: 'date', hint: 'leer oder gleich = ein einzelner Tag' })}
+        {kv && input('estimateValidUntil', 'Kostenvoranschlag gültig bis', { type: 'date', hint: 'steht auf dem Kostenvoranschlag; leer = ohne Angabe' })}
         <Field label="Hinweis auf der Rechnung" wide error={f.errors.notes}><textarea rows={2} value={v.notes} onChange={(e) => setV({ ...v, notes: e.target.value })} /></Field>
       </div>
       {dirty && <div className="formactions"><Button type="submit" variant="primary" busy={f.busy}>Empfänger speichern</Button></div>}
@@ -228,7 +233,7 @@ function Lines({ inv }: { inv: InvoiceDto }) {
       {inv.lines.length === 0 && <p className="muted">Noch keine Positionen.</p>}
       {inv.lines.length > 0 && (
         <div className="tablewrap"><table className="nights lines">
-          <thead><tr><th>Leistung</th><th className="num">Menge</th><th className="num">Einzelpreis</th><th className="num">USt</th><th className="num">Betrag</th>{draft && <th />}</tr></thead>
+          <thead><tr><th>Leistung</th><th className="num">Menge</th><th className="num">Einzelpreis brutto</th><th className="num">USt</th><th className="num">Gesamt brutto</th>{draft && <th />}</tr></thead>
           <tbody>{inv.lines.map((l) => (
             <tr key={l.id}>
               <td>{l.description}{l.detail && <><br /><small>{l.detail}</small></>}</td>
