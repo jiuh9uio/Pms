@@ -38,14 +38,14 @@ export function Inbox() {
   const st = state.data;
   return (
     <>
-      <PageHeader title={current === 'vorgaenge' ? 'Vorgänge' : current === 'vorlagen' ? 'Antwortvorlagen' : 'Posteingang'} sub={st ? `${st.newCount} offen${st.lastFetchAt ? ` · zuletzt abgerufen ${fmtDateTime(st.lastFetchAt)}` : ''}${st.autoMinutes ? ` · automatisch alle ${st.autoMinutes} Min.` : ''}` : undefined}
+      <PageHeader title={current === 'vorgaenge' ? 'Vorgänge' : current === 'vorlagen' ? 'Antwortvorlagen' : 'Posteingang'} sub={st ? `${current === 'vorgaenge' ? `${Math.max(0, st.attention - st.newWithoutCase)} ${st.attention - st.newWithoutCase === 1 ? 'Vorgang wartet' : 'Vorgänge warten'} auf Sie` : current === 'vorlagen' ? 'Texte für Antworten und Hinweise' : `${st.newWithoutCase} zum Einsortieren`}${st.lastFetchAt ? ` · zuletzt abgerufen ${fmtDateTime(st.lastFetchAt)}` : ''}${st.autoMinutes ? ` · automatisch alle ${st.autoMinutes} Min.` : ''}` : undefined}
         actions={<Button variant="primary" busy={busy} disabled={!st?.ready} onClick={() => void fetchNow()}>Jetzt abrufen</Button>} />
       {st && !st.ready && <p className="notice">Der E-Mail-Empfang ist noch nicht eingerichtet. Das geht unter Verwaltung → Einstellungen → E-Mail (nur Administrator).</p>}
       {st?.lastError && <p className="notice danger">Letzter Abruf fehlgeschlagen: {st.lastError}</p>}
       <div className={current === 'vorgaenge' || current === 'vorlagen' ? 'mc-tabs-hidden' : 'mc-tabs'}>{bar}</div>
       {current === 'vorgaenge' && !!st?.newWithoutCase && <p className="notice small">{st.newWithoutCase} neue {st.newWithoutCase === 1 ? 'E-Mail gehört' : 'E-Mails gehören'} noch zu keinem Vorgang – <a href="/email?ansicht=new">im Posteingang ansehen</a>.</p>}
       {current === 'vorgaenge' ? <CasesView /> : current === 'vorlagen' ? <><SnippetsAdmin /><NextTextsAdmin /></> : <MailsView key={current} status={current} />}
-      <p className="muted small">Die Einordnung (Zimmer, Tisch, Feier, Tagung, Gutschein, allgemeine Frage, Sonstiges) und die erkannten Angaben sind Vorschläge des Programms nach festen Mustern – bitte vor dem Übernehmen mit dem Text vergleichen. Im Postfach selbst wird nichts verändert.</p>
+      {current !== 'vorgaenge' && current !== 'vorlagen' && <p className="muted small">Die Einordnung (Zimmer, Tisch, Feier, Tagung, Gutschein, allgemeine Frage, Sonstiges) und die erkannten Angaben sind Vorschläge des Programms nach festen Mustern – bitte vor dem Übernehmen mit dem Text vergleichen. Im Postfach selbst wird nichts verändert.</p>}
     </>
   );
 }
@@ -124,7 +124,8 @@ function caseSteps(c: CaseDto): { label: string; state: 'done' | 'now' | 'todo' 
   const answered = c.messages.some((m) => m.dir === 'out');
   const booking = c.kind === 'hotel' || c.kind === 'table' || !!c.latestLinkKind || !!c.bookingId;
   // abgesagt (und nichts reserviert): der Weg endet mit der Absage – „reserviert“ und „bestätigt“ gab es nie
-  const declined = !!c.declinedAt && !c.latestLinkKind && !c.bookingId;
+  // schreibt der Kunde nach der Absage noch einmal (wir sind wieder dran), gilt wieder der normale Weg
+  const declined = !!c.declinedAt && !c.latestLinkKind && !c.bookingId && (closed || c.turn !== 'ours');
   const marks = declined ? [['Anfrage', true], ['Abgesagt', true], ['Erledigt', closed]] as const : c.kind === 'order'
     ? [['Bestellung', true], ['Auftrag bestätigt', !!c.orderConfirmedAt], ['Ware da – gemeldet', !!c.orderReadyAt], ['Erledigt', closed]] as const
     : booking
@@ -163,7 +164,11 @@ function CasesView() {
   const [filters, setFilters] = useState(false);
   const list = useLoad(() => api<CaseListRow[]>('GET', `/mail-cases?status=${status}&kind=${kind}&q=${encodeURIComponent(q)}${from ? `&from=${from}` : ''}`), [status, kind, q, from, rev]);
   const open = (r: CaseListRow) => { if (r.source === 'case') setOpenId(r.id); else if (r.source === 'offer') go(`/angebote?angebot=${r.id}`); else openInvoice(r.id); };
-  const ours = (list.data ?? []).filter((r) => r.status === 'open' && r.turn === 'ours').length;
+  const ours = (list.data ?? []).filter((r) => (r.status === 'open' || r.status === 'working') && r.turn === 'ours').length;
+  const [, setParams] = useSearchParams();
+  const openRow = list.data?.find((r) => r.source === 'case' && r.id === openId);
+  // Schließen entfernt auch den Verweis aus der Adresse – sonst ginge das Fenster nach dem Neuladen wieder auf
+  const close = () => { setOpenId(null); setParams((p) => { p.delete('vorgang'); return p; }, { replace: true }); };
   return (
     <div className="msg msg-solo">
       <aside className="msg-side">
@@ -193,7 +198,7 @@ function CasesView() {
               <button key={`${r.source}-${r.id}`} type="button" className={`msg-item mk-${r.kind}${r.source === 'case' && r.id === openId ? ' on' : ''}${waiting ? ' ours' : ''}${r.status === 'done' ? ' done' : ''}`} onClick={() => open(r)}>
                 <span className={`msg-avatar k-${r.kind}`} aria-hidden>{KIND_ICON[r.kind]}</span>
                 <span className="msg-main">
-                  <span className="msg-top"><b>{WHAT[r.kind]}{r.confirmed && <span className="msg-mark yes" title="Zugesagt – Bestätigung gesendet">✓ Zusage</span>}{r.declined && <span className="msg-mark no" title="Abgesagt – Absage gesendet">✗ Absage</span>}</b><small>{shortTime(r.lastAt)}</small></span>
+                  <span className="msg-top"><b>{WHAT[r.kind]}{r.confirmed && <span className="msg-mark yes" title="Zugesagt – Bestätigung gesendet">✓ Zusage</span>}{r.declined && !waiting && <span className="msg-mark no" title="Abgesagt – Absage gesendet">✗ Absage</span>}</b><small>{shortTime(r.lastAt)}</small></span>
                   <span className="msg-sub">{r.contact || r.title} · {r.number}{r.source !== 'case' && ' ›'}</span>
                   <span className="msg-snip">{r.turn === 'theirs' && 'Sie: '}{r.snippet || r.title}</span>
                 </span>
@@ -203,7 +208,7 @@ function CasesView() {
           })}
         </div>
       </aside>
-      {openId && <Dialog title="Vorgang" size="xl" onClose={() => setOpenId(null)}><div className="msg-dlg"><CaseDetail key={openId} id={openId} onBack={() => setOpenId(null)} /></div></Dialog>}
+      {openId && <Dialog title={openRow ? `Vorgang ${openRow.number}` : 'Vorgang'} size="xl" onClose={close}><div className="msg-dlg"><CaseDetail key={openId} id={openId} onBack={close} /></div></Dialog>}
     </div>
   );
 }
@@ -215,6 +220,7 @@ function nextStep(c: CaseDto, by: NextTexts): { text: string; tone: 'warn' | 'ne
   if (c.bookingId && !c.latestInboxMailId) return { text: `E-Mail zur Reservierung ${c.bookingNumber ?? ''} aus dem Hotelbereich gesendet. Antwortet der Gast, erscheint seine Nachricht hier.`, tone: 'neutral' };
   if (c.declinedAt && !c.latestLinkKind && c.turn !== 'ours') return { text: `Absage gesendet am ${new Date(c.declinedAt).toLocaleDateString('de-DE')}. Der Vorgang kann als erledigt markiert werden.`, tone: 'neutral' };
   if (c.kind === 'order') {
+    if (!c.orderConfirmedAt) return { text: by.order, tone: 'warn' };
     if (c.turn === 'ours' && c.orderConfirmedAt) return { text: 'Der Kunde hat zur Bestellung noch einmal geschrieben – bitte lesen und antworten.', tone: 'warn' };
     if (c.orderReadyAt) return { text: `„Ware ist da“ gemeldet am ${new Date(c.orderReadyAt).toLocaleDateString('de-DE')}. Nach der Abholung als erledigt markieren.`, tone: 'ok' };
     if (c.orderConfirmedAt) return { text: `Auftrag bestätigt am ${new Date(c.orderConfirmedAt).toLocaleDateString('de-DE')}. Ware beschaffen – sobald sie da ist, unten „Ware ist da“ senden.`, tone: 'neutral' };
@@ -261,6 +267,7 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const orderNext = data.kind !== 'order' || data.status === 'done' || data.status === 'archived' ? null : !data.orderConfirmedAt ? 'confirm' : !data.orderReadyAt ? 'ready' : null;
   const stage = data.kind === 'order' && data.status !== 'done' && data.status !== 'archived' && data.turn !== 'ours' && data.orderConfirmedAt
     ? (data.orderReadyAt ? { label: 'Ware da – wartet auf Abholung', tone: 'ok' as const } : { label: 'Bestätigt – Ware wird beschafft', tone: 'accent' as const })
+    : data.kind === 'order' && !closedCase && !data.orderConfirmedAt ? { label: 'Offen – Auftrag noch nicht bestätigt', tone: 'warn' as const }
     : closedCase && data.declinedAt && !data.latestLinkKind ? { label: 'Abgesagt', tone: 'neutral' as const }
     : stageOf({ status: data.status, turn: data.turn, linked: !!data.latestLinkKind, confirmed: !!data.confirmedAt });
   const fit = snippets.filter((x) => x.active && (x.kind === data.kind || x.kind === 'all'));
@@ -271,7 +278,7 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
         <button type="button" className="iconbtn msg-back" onClick={onBack} aria-label="Zurück zur Liste">‹</button>
         <span className={`msg-avatar k-${data.kind}`} aria-hidden>{KIND_ICON[data.kind]}</span>
         <div className="msg-who">
-          <b>{WHAT[data.kind]} {(data.confirmedAt || data.orderConfirmedAt) && <span className="msg-mark yes">✓ Zusage</span>}{data.declinedAt && !data.latestLinkKind && !data.confirmedAt && <span className="msg-mark no">✗ Absage</span>} <Badge tone={stage.tone}>{stage.label}</Badge></b>
+          <b>{WHAT[data.kind]} {(data.confirmedAt || data.orderConfirmedAt) && <span className="msg-mark yes">✓ Zusage</span>}{data.declinedAt && !data.latestLinkKind && !data.confirmedAt && (closedCase || data.turn !== 'ours') && <span className="msg-mark no">✗ Absage</span>} <Badge tone={stage.tone}>{stage.label}</Badge></b>
           <small>{data.contactName ? `${data.contactName} · ` : ''}{data.contactAddr} · {data.number}</small>
         </div>
         {data.status !== 'done' && data.status !== 'archived' && <Button variant="primary" onClick={() => void act('PATCH', '', { status: 'done' }, 'Vorgang erledigt')}>Erledigt</Button>}
@@ -527,7 +534,7 @@ function MailDetail({ id, onGone, sorting = false, inCase = false }: { id: strin
         </div>
         {!inCase && data.repliedAt && <p className="muted small">Beantwortet am {fmtDateTime(data.repliedAt)}{data.repliedBy && ` von ${data.repliedBy}`}.</p>}
         {mail && <MailDialog path={`/inbox/${id}/mail?template=${mail}`} title={mail === 'confirm' ? 'Bestätigung senden' : mail === 'decline' ? 'Absage senden' : 'Antworten'} onClose={() => setMail(null)}
-          onSent={() => { if (mail !== 'reply' && data.status === 'new') void patch({ status: 'done' }); else { bump(); reload(); } }} />}
+          onSent={() => { if (!inCase && !data.caseId && mail !== 'reply' && data.status === 'new') void patch({ status: 'done' }); else { bump(); reload(); } }} />}
         {!inCase && data.caseNumber && <p className="notice small">Gehört zum Vorgang <b>{data.caseNumber}</b> (Reiter „Vorgänge“). Antworten tragen diese Nummer im Betreff.</p>}
         {!data.caseId && !data.offer && !data.invoice && <p className="muted small">Noch kein Vorgang: Mit Ihrer ersten Antwort bekommt dieser E-Mail-Wechsel automatisch eine Vorgangsnummer. <button type="button" className="linkbtn" onClick={() => void api('POST', `/inbox/${id}/case`, {}).then(() => { toast('Vorgang angelegt'); bump(); reload(); }, (e) => toast(e instanceof Error ? e.message : 'Fehler', 'error'))}>Jetzt schon Vorgang anlegen</button></p>}
         {data.invoice && <p className="notice">Gehört zum Verlauf von <button type="button" className="linkbtn" onClick={() => openInvoice(data.invoice!.id)}>{data.invoice.label}</button>.</p>}

@@ -601,4 +601,37 @@ describe('Hotelbereich, Zuständigkeit, einstellbare Hinweise', () => {
     expect(d.text.startsWith('Guten Tag Wolfgang Eschbach,')).toBe(true);
   });
 
+
+  it('Stand nach einer Antwort: „neu“ verschwindet, der Vorgang bleibt offen; nach einer Absage ist er erledigt und öffnet sich bei neuer Nachricht wieder; „Neu“ im Posteingang zeigt nur Unsortiertes', async () => {
+    validity = 'stand1';
+    box = [raw(1, 'Anna Stand <anna@kunde.example>', 'Tisch', 'Haben Sie am Freitag einen Tisch für 2?', { id: '<stand1@x.example>', date: new Date(Date.now() - 60_000).toUTCString() }),
+      raw(2, 'Bernd Neu <bernd@kunde.example>', 'Frage', 'Haben Sie Parkplätze?', { id: '<stand2@x.example>' })];
+    await fetchNow();
+    const m = (await byUid(1))!, other = (await byUid(2))!;
+    const c = await ok('POST', `/inbox/${m.id}/case`, admin, { kind: 'table' });
+    const row = async () => (await ok('GET', '/mail-cases?status=all', admin)).find((r: { id: string }) => r.id === c.id);
+    expect(await row()).toMatchObject({ unread: 1, turn: 'ours', status: 'open' });
+    // Posteingang „Neu“: die einsortierte Nachricht steht dort nicht mehr, die unsortierte schon
+    const neu = (await ok('GET', '/inbox?status=new', admin)).map((x: { id: string }) => x.id);
+    expect(neu).toContain(other.id);
+    expect(neu).not.toContain(m.id);
+    expect((await ok('GET', '/inbox?status=all', admin)).map((x: { id: string }) => x.id)).toContain(m.id);
+    // freie Antwort: nichts mehr „neu“, Vorgang offen, wir warten auf den Kunden
+    await ok('POST', `/inbox/${m.id}/mail?template=reply`, admin, { to: 'anna@kunde.example', subject: 'Re: Tisch', text: 'Um wie viel Uhr?' });
+    expect(await row()).toMatchObject({ unread: 0, turn: 'theirs', status: 'open' });
+    // Kundin antwortet: wieder 1 neu, wir sind dran
+    box.push(raw(3, 'Anna Stand <anna@kunde.example>', `Re: Tisch [${c.number}]`, 'Um 19 Uhr.', { id: '<stand3@x.example>' }));
+    await fetchNow();
+    const m3 = (await byUid(3))!;
+    expect(await row()).toMatchObject({ unread: 1, turn: 'ours', status: 'open' });
+    // Absage: erledigt, nichts mehr neu
+    const d = await ok('GET', `/inbox/${m3.id}/mail?template=decline`, admin);
+    await ok('POST', `/inbox/${m3.id}/mail?template=decline`, admin, { to: d.to, subject: d.subject, text: d.text });
+    expect(await row()).toMatchObject({ unread: 0, status: 'done', declined: true });
+    // schreibt die Kundin danach noch einmal, ist der Vorgang wieder offen
+    box.push(raw(4, 'Anna Stand <anna@kunde.example>', `Re: Tisch [${c.number}]`, 'Schade – und am Samstag?', { id: '<stand4@x.example>' }));
+    await fetchNow();
+    expect(await row()).toMatchObject({ unread: 1, turn: 'ours', status: 'open' });
+  });
+
 });

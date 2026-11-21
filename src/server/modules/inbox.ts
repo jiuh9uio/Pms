@@ -366,6 +366,8 @@ export async function listInbox(db: Exec, f: { status: InboxStatus | 'all'; kind
   const q = f.q.trim();
   const rows = await db.select().from(inboxMails).where(and(
     f.status === 'all' ? undefined : eq(inboxMails.status, f.status), f.kind === 'all' ? undefined : eq(inboxMails.kind, f.kind),
+    // „Neu“ ist der Sortierkorb: was schon zu einem Vorgang gehört, wird dort bearbeitet und steht hier nicht noch einmal
+    f.status === 'new' ? isNull(inboxMails.caseId) : undefined,
     searchFilter(q),
   )).orderBy(desc(inboxMails.receivedAt)).limit(200);
   return rows.map((r) => dto(r));
@@ -375,6 +377,7 @@ export async function inboxCounts(db: Exec, f: { status: InboxStatus | 'all'; q:
   const q = f.q.trim();
   const rows = await db.select({ kind: inboxMails.kind, n: sql<number>`count(*)::int` }).from(inboxMails).where(and(
     f.status === 'all' ? undefined : eq(inboxMails.status, f.status),
+    f.status === 'new' ? isNull(inboxMails.caseId) : undefined,
     searchFilter(q),
   )).groupBy(inboxMails.kind);
   const out = Object.fromEntries(['all', ...MAIL_KINDS].map((k) => [k, 0])) as InboxCounts;
@@ -516,6 +519,12 @@ export async function sendReply(db: Db, actor: Actor, id: string, v: { to: strin
   const stamp = template === 'confirm' ? 'confirmedAt' : template === 'order_confirm' ? 'orderConfirmedAt' : template === 'order_ready' ? 'orderReadyAt' : template === 'decline' ? 'declinedAt' : null;
   const confirmed = stamp ? { extract: { ...(r.extract as MailExtract), ...(stamp === 'confirmedAt' || stamp === 'declinedAt' ? {} : { manual: true }), [stamp]: new Date().toISOString() } as MailExtract } : {};
   await db.update(inboxMails).set({ repliedAt: new Date(), repliedBy: actor.userName, ...confirmed }).where(eq(inboxMails.id, id));
+  if (c) {
+    // wir haben geantwortet: die bisher eingegangenen Nachrichten des Vorgangs gelten als bearbeitet (sonst bliebe die Zahl „neu“ stehen)
+    await db.update(inboxMails).set({ status: 'done', handledBy: actor.userName }).where(and(eq(inboxMails.caseId, c.id), eq(inboxMails.status, 'new')));
+    // Absage: der Vorgang ist damit erledigt (er öffnet sich wieder, wenn der Kunde noch einmal schreibt); sonst bleibt er offen
+    if (template === 'decline') await db.update(mailCases).set({ status: 'done', updatedAt: new Date() }).where(eq(mailCases.id, c.id));
+  }
   await record(db, actor, { action: 'mail', entity: 'inbox', entityId: id, after: { to: v.to, subject: v.subject.slice(0, 120) } });
   } catch (e) {
     throw new AppError(500, 'sent_not_logged', `Die E-Mail wurde gesendet, konnte aber nicht im Vorgang vermerkt werden (${String((e as Error)?.message ?? e).slice(0, 120)}). Bitte NICHT erneut senden.`);

@@ -3,6 +3,19 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.145.0
+
+Durchsicht der Vorgänge – behobene Logikfehler:
+
+- **Zahl „neu“ blieb nach einer Antwort stehen.** Sobald Sie in einem Vorgang antworten, gelten die bis dahin eingegangenen Nachrichten als bearbeitet; die blaue Zahl verschwindet und erscheint erst wieder, wenn der Kunde schreibt.
+- **Nach „Bestätigung senden“ sprang der Vorgang sofort auf „Erledigt“.** Er bleibt jetzt offen mit dem grünen Hinweis „Bestätigung gesendet – bitte noch prüfen“; erledigt wird er von Hand. Nach einer **Absage** ist er weiterhin gleich erledigt.
+- **Bestellung:** Hinweis und Abzeichen passten nicht zu den Schritten („Warten auf den Kunden“, obwohl die Auftragsbestätigung fehlte). Jetzt steht dort „Auftrag noch nicht bestätigt“.
+- **Posteingang „Neu“ zeigt nur noch Unsortiertes.** Nachrichten, die schon zu einem Vorgang gehören, stehen dort nicht mehr doppelt – sie werden im Vorgang bearbeitet.
+- **Kopfzeilen:** Bei den Vorgängen steht „x Vorgänge warten auf Sie“, im Posteingang „x zum Einsortieren“ (bisher überall dieselbe Zahl „offen“).
+- **Neue Anfrage nach einer Absage:** Schreibt der Kunde danach noch einmal, zeigt der Vorgang wieder den normalen Weg statt „Abgesagt“.
+- Das Fenster zeigt die Vorgangsnummer im Titel; nach dem Schließen öffnet es sich beim Neuladen der Seite nicht mehr von selbst. Der Hinweistext zur Einordnung steht nur noch im Posteingang.
+- Keine Änderung an der Datenbank.
+
 ## 1.144.0
 
 - **Kostenvoranschlag bzw. Rechnungsentwurf aus einem Angebot (Tagung, Feier …):** Im Fenster steht jetzt, aus welchem Angebot er stammt, ob dort schon eine **Hotel- bzw. Tischreservierung** angelegt ist, und ein Knopf führt ins Angebot, um sie anzulegen. Dort stehen Termin und Personenzahl bereits.
