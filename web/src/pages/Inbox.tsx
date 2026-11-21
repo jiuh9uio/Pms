@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CASE_STATUSES, CASE_STATUS_LABEL, MAIL_KINDS, MAIL_KIND_LABEL, MAIL_KIND_SHORT, DEFAULT_NEXT_TEXTS, NEXT_TEXT_LABEL, nextTextsInput, replySnippetsInput, type NextTexts, type CaseDto, type CaseListRow, type CaseStatus, type ReplySnippet, type InboxCounts, type InboxMailDto, type InboxState, type InboxStatus } from '../../../src/shared/inbox.js';
+import { CASE_STATUSES, CASE_STATUS_LABEL, MAIL_KINDS, MAIL_KIND_LABEL, MAIL_KIND_SHORT, DEFAULT_NEXT_TEXTS, caseCreateInput, NEXT_TEXT_LABEL, nextTextsInput, replySnippetsInput, type NextTexts, type CaseDto, type CaseListRow, type CaseStatus, type ReplySnippet, type InboxCounts, type InboxMailDto, type InboxState, type InboxStatus } from '../../../src/shared/inbox.js';
 import type { MailKind } from '../../../src/shared/mailextract.js';
 import { tableReservationInput } from '../../../src/shared/restaurant.js';
 import { hasModule } from '../../../src/shared/schemas.js';
@@ -73,7 +73,7 @@ function MailsView({ status }: { status: Exclude<(typeof INBOX_TABS)[number][0],
       <div className="inboxfilter">
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Suchen in Absender, Betreff, Text" aria-label="Suchen" />
       </div>
-      <div className="inbox">
+      <div className="inbox inbox-solo">
         <div className="inboxlist">
           <LoadState error={list.error} loading={!list.data} />
           {list.data?.length === 0 && <p className="card muted">Keine Nachrichten in dieser Ansicht.</p>}
@@ -85,8 +85,8 @@ function MailsView({ status }: { status: Exclude<(typeof INBOX_TABS)[number][0],
             </button>
           ))}
         </div>
-        <div className="inboxdetail">{openId ? <MailDetail key={openId} id={openId} sorting onGone={() => setOpenId(null)} /> : <p className="card muted">Links eine Nachricht wählen.</p>}</div>
       </div>
+      {openId && <Dialog title="E-Mail einsortieren" size="xl" onClose={() => setOpenId(null)}><div className="inboxdetail"><MailDetail key={openId} id={openId} sorting onGone={() => setOpenId(null)} /></div></Dialog>}
     </>
   );
 }
@@ -162,6 +162,7 @@ function CasesView() {
   const wanted = params.get('vorgang');
   useEffect(() => { if (wanted) setOpenId(wanted); }, [wanted]);
   const [filters, setFilters] = useState(false);
+  const [creating, setCreating] = useState(false);
   const list = useLoad(() => api<CaseListRow[]>('GET', `/mail-cases?status=${status}&kind=${kind}&q=${encodeURIComponent(q)}${from ? `&from=${from}` : ''}`), [status, kind, q, from, rev]);
   const open = (r: CaseListRow) => { if (r.source === 'case') setOpenId(r.id); else if (r.source === 'offer') go(`/angebote?angebot=${r.id}`); else openInvoice(r.id); };
   const ours = (list.data ?? []).filter((r) => (r.status === 'open' || r.status === 'working') && r.turn === 'ours').length;
@@ -173,7 +174,7 @@ function CasesView() {
     <div className="msg msg-solo">
       <aside className="msg-side">
         <div className="msg-filter">
-          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Suchen: Name, Nummer, Betreff" aria-label="Vorgänge suchen" />
+          <div className="msg-searchrow"><input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Suchen: Name, Nummer, Betreff" aria-label="Vorgänge suchen" /><Button variant="primary" onClick={() => setCreating(true)} title="Für Anfragen am Telefon oder am Tresen – ohne E-Mail">+ Vorgang anlegen</Button></div>
           <div className="msg-chips">
             {([['open', 'Offen'], ['done', 'Erledigt'], ['all', 'Alle']] as const).map(([k, l]) => <button key={k} type="button" className={`kindchip${status === k ? ' on' : ''}`} aria-pressed={status === k} onClick={() => setStatus(k)}>{l}{k === 'open' && ours > 0 && <span className="n">{ours}</span>}</button>)}
             <button type="button" className={`linkbtn msg-filtertoggle${filters || kind !== 'all' || from || status === 'archived' ? ' on' : ''}`} aria-expanded={filters} onClick={() => setFilters(!filters)}>{filters ? 'Filter ausblenden' : kind !== 'all' || from || status === 'archived' ? 'Filter aktiv' : 'Filter'}</button>
@@ -208,6 +209,7 @@ function CasesView() {
           })}
         </div>
       </aside>
+      {creating && <NewCaseDialog onClose={() => setCreating(false)} onCreated={(id) => { setCreating(false); setOpenId(id); }} />}
       {openId && <Dialog title={openRow ? `Vorgang ${openRow.number}` : 'Vorgang'} size="xl" onClose={close}><div className="msg-dlg"><CaseDetail key={openId} id={openId} onBack={close} /></div></Dialog>}
     </div>
   );
@@ -279,7 +281,7 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
         <span className={`msg-avatar k-${data.kind}`} aria-hidden>{KIND_ICON[data.kind]}</span>
         <div className="msg-who">
           <b>{WHAT[data.kind]} {(data.confirmedAt || data.orderConfirmedAt) && <span className="msg-mark yes">✓ Zusage</span>}{data.declinedAt && !data.latestLinkKind && !data.confirmedAt && (closedCase || data.turn !== 'ours') && <span className="msg-mark no">✗ Absage</span>} <Badge tone={stage.tone}>{stage.label}</Badge></b>
-          <small>{data.contactName ? `${data.contactName} · ` : ''}{data.contactAddr} · {data.number}</small>
+          <small>{data.contactName ? `${data.contactName} · ` : ''}{data.contactAddr || 'keine E-Mail-Adresse'} · {data.number}</small>
         </div>
         {data.status !== 'done' && data.status !== 'archived' && <Button variant="primary" onClick={() => void act('PATCH', '', { status: 'done' }, 'Vorgang erledigt')}>Erledigt</Button>}
         <Button aria-expanded={opts} title="Name, E-Mail-Adresse, Art und Stand ändern, zusammenführen" onClick={() => setOpts(!opts)}>{opts ? 'Fertig' : 'Bearbeiten'}</Button>
@@ -325,6 +327,34 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
         intro={<p className="muted small">{reply === 'order_confirm' && 'Bitte Artikel, Menge, Preis und Termin im Text eintragen – das Programm kennt die Bestellung nicht. '}{reply === 'order_ready' && 'Bitte eintragen, wann abgeholt werden kann. '}Die Vorgangsnummer {data.number} wird beim Senden automatisch in den Betreff gesetzt.</p>} />}
       {more && !closedCase && data.latestInboxMailId && <div className="msg-more"><MailDetail key={data.latestInboxMailId} id={data.latestInboxMailId} inCase onGone={() => { bump(); reload(); }} /></div>}
     </>
+  );
+}
+
+/** Vorgang von Hand anlegen: Anfrage am Telefon oder am Tresen, ohne E-Mail */
+function NewCaseDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+  const { bump } = useData();
+  const toast = useToast();
+  const [v, setV] = useState<{ kind: MailKind | ''; name: string; email: string; phone: string; text: string }>({ kind: '', name: '', email: '', phone: '', text: '' });
+  const f = useSubmit(caseCreateInput, async (d) => {
+    const c = await api<{ id: string; number: string }>('POST', '/mail-cases', d);
+    toast(`Vorgang ${c.number} angelegt`); bump(); onCreated(c.id);
+  });
+  return (
+    <Dialog title="Vorgang anlegen" size="lg" onClose={onClose}
+      footer={<><Button onClick={onClose}>Abbrechen</Button><Button variant="primary" busy={f.busy} onClick={() => void f.submit(v)}>Vorgang anlegen</Button></>}>
+      <p className="muted small">Für Anfragen am Telefon oder am Tresen. Der Vorgang erscheint wie jeder andere in der Liste; Ihre Notiz steht als erste Nachricht im Verlauf.</p>
+      <h3>Was ist es?</h3>
+      <div className="sort-kinds" role="group" aria-label="Art des Vorgangs">{MAIL_KINDS.map((k) => (
+        <button key={k} type="button" className={`sort-tile mk-${k}${v.kind === k ? ' on' : ''}`} aria-pressed={v.kind === k} onClick={() => setV({ ...v, kind: k })}><span className="sort-ico" aria-hidden>{KIND_ICON[k]}</span><b>{MAIL_KIND_LABEL[k]}</b>{v.kind === k && <i className="rt-check" aria-hidden>✓</i>}</button>
+      ))}</div>
+      {f.errors.kind && <p className="error" role="alert">{f.errors.kind}</p>}
+      <div className="formgrid">
+        <Field label="Name des Kunden" error={f.errors.name}><input value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} maxLength={160} /></Field>
+        <Field label="Telefon" error={f.errors.phone}><input value={v.phone} onChange={(e) => setV({ ...v, phone: e.target.value })} maxLength={60} /></Field>
+        <Field label="E-Mail-Adresse" error={f.errors.email} hint="leer lassen, wenn nicht bekannt – dann lässt sich nichts per E-Mail senden, bis sie nachgetragen ist" wide><input type="email" value={v.email} onChange={(e) => setV({ ...v, email: e.target.value })} maxLength={200} /></Field>
+        <Field label="Worum geht es?" error={f.errors.text} hint="z. B. „1 Fass Pils 30 L für den 12.12., holt selbst ab“" wide><textarea rows={4} value={v.text} onChange={(e) => setV({ ...v, text: e.target.value })} maxLength={4000} /></Field>
+      </div>
+    </Dialog>
   );
 }
 

@@ -448,6 +448,8 @@ export async function replyDraft(db: Exec, id: string, template: ReplyTemplate, 
     const [c] = await db.select({ name: mailCases.contactName, addr: mailCases.contactAddr }).from(mailCases).where(eq(mailCases.id, r.caseId));
     if (c?.addr && !isRelayAddress(c.addr) && isRelayAddress(r.fromAddr)) who = { name: c.name, addr: c.addr, viaForm: true };
     // dieselbe Person wie der Kontakt des Vorgangs: der dort (ggf. berichtigte) Name gilt für die Anrede
+    // von Hand angelegter Vorgang (keine Absenderadresse): Name und – sobald eingetragen – Adresse stehen am Vorgang
+    else if (c && !r.fromAddr.trim()) who = { name: c.name, addr: c.addr, viaForm: false };
     else if (c && c.addr === r.fromAddr.trim().toLowerCase()) who = { ...who, name: c.name };
   }
   const hello = who.name ? `Guten Tag ${who.name.replace(/["']/g, '').split(',').reverse().join(' ').trim()},` : 'Guten Tag,';

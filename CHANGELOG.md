@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.146.0
+
+- **Vorgang von Hand anlegen:** Unter Vorgänge gibt es „+ Vorgang anlegen“ – für Anfragen am Telefon oder am Tresen, ohne E-Mail. Art wählen, Name, Telefon, Notiz; die E-Mail-Adresse ist freiwillig und lässt sich später über „Bearbeiten“ nachtragen. Danach funktioniert alles wie bei einer E-Mail (Auftragsbestätigung, Reservieren, Absage).
+- **Posteingang im großen Fenster:** Die Liste nimmt die ganze Breite ein; ein Klick öffnet die E-Mail zum Einsortieren in einem großen Fenster.
+- **Dunkles Design:** Die Symbolkreise in den Vorgängen waren bei fest eingestelltem dunklen Design hell – jetzt passend.
+- **Checkliste bis Version 2.0** liegt unter `docs/checkliste-version-2.md` – mit allem, was nur im Haus geprüft werden kann, und dem Ergebnis der Vorprüfung (Sicherung zurückspielen, alle Seiten als Mitarbeiter und am Handy, PDF-Layouts, viele Daten).
+- Keine Änderung am Aufbau der Datenbank.
+
 ## 1.145.0
 
 Durchsicht der Vorgänge – behobene Logikfehler:

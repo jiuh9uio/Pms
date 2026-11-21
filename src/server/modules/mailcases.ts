@@ -64,6 +64,24 @@ export async function ensureCaseForBooking(db: Db, actor: Actor, b: { id: string
     return { c: c!, created: true };
   });
 }
+/**
+ * Vorgang von Hand anlegen (Anruf, Gespräch am Tresen): Die Notiz wird wie eine eingegangene Nachricht im Verlauf geführt,
+ * damit alles Weitere (antworten, reservieren, Auftragsbestätigung, Absage) genauso funktioniert wie bei einer E-Mail.
+ */
+export async function createManualCase(db: Db, actor: Actor, v: { kind: MailKind; name: string; email: string; phone: string; text: string }): Promise<{ id: string; number: string }> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(4713)`);
+    const [m] = await tx.execute(sql`select coalesce(max(uid), 0) + 1 as n from inbox_mails where uid_validity = 'hand'`);
+    const body = [`Von Hand angelegt (Telefon / persönlich) von ${actor.userName}:`, '', v.text, ...(v.phone ? ['', `Telefon: ${v.phone}`] : [])].join('\n');
+    const ex = { kind: v.kind, dates: [], from: null, to: null, time: null, persons: null, children: null, phone: v.phone, manual: true } as unknown as MailExtract;
+    const [mail] = await tx.insert(inboxMails).values({ uidValidity: 'hand', uid: Number(m!.n), fromName: v.name, fromAddr: v.email.toLowerCase(), subject: v.text.split('\n')[0]!.slice(0, 120), receivedAt: new Date(), body, kind: v.kind, extract: ex }).returning({ id: inboxMails.id });
+    const number = await nextNumber(tx);
+    const [c] = await tx.insert(mailCases).values({ number, kind: v.kind, title: cleanTitle(v.text.split('\n')[0]!) || '(ohne Betreff)', contactName: v.name, contactAddr: v.email.toLowerCase(), createdBy: actor.userName }).returning();
+    await tx.update(inboxMails).set({ caseId: c!.id }).where(eq(inboxMails.id, mail!.id));
+    await record(tx, actor, { action: 'create', entity: 'mail_case', entityId: c!.id, after: { number, von_hand: true, kind: v.kind } });
+    return { id: c!.id, number };
+  });
+}
 /** leeren, gerade angelegten Vorgang wieder entfernen (Versand ist fehlgeschlagen) – nur wenn wirklich keine Nachricht daran hängt */
 export async function dropEmptyCase(db: Exec, caseId: string) {
   await db.execute(sql`delete from mail_cases c where c.id = ${caseId} and not exists (select 1 from inbox_mails m where m.case_id = c.id) and not exists (select 1 from mail_case_out o where o.case_id = c.id)`);

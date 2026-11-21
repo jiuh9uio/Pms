@@ -1402,3 +1402,11 @@ dialog.dialog.xl:has(.msg-dlg) { width: min(1320px, calc(100vw - 24px)); height:
 }
 
 .iv-next { margin-bottom: 16px; } .iv-next .formactions { justify-content: flex-start; align-items: center; margin-top: 4px; }
+
+/* Symbolkreise: Farben aus den Design-Tokens gemischt (stimmt in hell und dunkel) */
+.msg-avatar.k-hotel, .msg-avatar.k-meeting { --mk: #2f62c9; } .msg-avatar.k-table, .msg-avatar.k-event { --mk: #1f8a50; } .msg-avatar.k-voucher { --mk: #b57b00; } .msg-avatar.k-offer, .msg-avatar.k-estimate { --mk: #6b46c1; } .msg-avatar.k-order { --mk: #c2571a; } .msg-avatar.k-question, .msg-avatar.k-other { --mk: #7a8291; }
+.msg-avatar[class*=' k-'] { background: color-mix(in srgb, var(--mk) 22%, var(--surface)); color: color-mix(in srgb, var(--mk) 60%, var(--ink)); filter: none !important; }
+.msg-searchrow { display: flex; gap: 10px; align-items: center; } .msg-searchrow input { flex: 1; min-width: 0; } .msg-searchrow .btn { white-space: nowrap; }
+/* Posteingang: Liste über die ganze Breite, die Nachricht öffnet sich im großen Fenster */
+.inbox.inbox-solo { display: block; } .inbox-solo .inboxlist { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); max-height: none; overflow: visible; }
+dialog.dialog .inboxdetail > .card { border: 0; box-shadow: none; padding: 0; background: transparent; margin: 0; }

@@ -131,6 +131,15 @@ export interface CaseDto {
 }
 const caseDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional();
 export const caseListQuery = z.object({ status: z.enum(['open', 'done', 'archived', 'all']).default('open'), kind: z.string().max(20).default('all'), q: z.string().trim().max(80).default(''), from: caseDay, to: caseDay, assignee: z.string().trim().max(120).default('') });
+/** Vorgang von Hand anlegen (Telefon, Tresen): ohne eingegangene E-Mail */
+export const caseCreateInput = z.object({
+  kind: z.enum(MAIL_KINDS, 'Bitte die Art wählen'),
+  name: z.string().trim().min(2, 'Bitte den Namen eintragen').max(160),
+  /** leer = keine Adresse bekannt (dann lässt sich nichts per E-Mail senden, bis eine eingetragen ist) */
+  email: z.union([z.literal(''), z.email('Bitte eine gültige E-Mail-Adresse eintragen')]).default(''),
+  phone: z.string().trim().max(60).default(''),
+  text: z.string().trim().min(1, 'Bitte kurz notieren, worum es geht').max(4000),
+});
 export const caseNumberInput = z.object({ number: z.string().trim().regex(/^[Vv]-\d{4}-\d{4,6}$/, 'Bitte eine Vorgangsnummer wie V-2026-0001 eintragen') });
 export const caseUpdateInput = z.object({ kind: z.enum(MAIL_KINDS).optional(), status: z.enum(CASE_STATUSES).optional(), title: z.string().trim().max(200).optional(), assignee: z.string().trim().max(120).optional(),
   /** Kontakt nachträglich berichtigen (Name leer = unbekannt); an die Adresse gehen die Antworten bei Kontaktformular-E-Mails */

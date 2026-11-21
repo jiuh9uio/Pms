@@ -634,4 +634,40 @@ describe('Hotelbereich, Zuständigkeit, einstellbare Hinweise', () => {
     expect(await row()).toMatchObject({ unread: 1, turn: 'ours', status: 'open' });
   });
 
+
+  it('Vorgang von Hand (Telefon/Tresen): ohne E-Mail anlegen, Notiz steht im Verlauf; Adresse nachtragen, dann geht die Auftragsbestätigung dorthin und die Antwort des Kunden kommt an', async () => {
+    expect((await call('POST', '/mail-cases', admin, { kind: 'order', name: 'F', email: '', phone: '', text: '' })).statusCode).toBe(400);
+    expect((await call('POST', '/mail-cases', admin, { kind: 'order', name: 'Frieda Fass', email: 'keine', phone: '', text: 'Fass' })).statusCode).toBe(400);
+    const c = await ok('POST', '/mail-cases', mailOnly, { kind: 'order', name: 'Frieda Fass', email: '', phone: '01234 5678', text: '1 Fass Pils 30 L für den 12.12., holt selbst ab' });
+    expect(c.number).toMatch(/^V-\d{4}-\d{4}$/);
+    let dto = await ok('GET', `/mail-cases/${c.id}`, admin);
+    expect(dto).toMatchObject({ kind: 'order', status: 'open', contactName: 'Frieda Fass', contactAddr: '', turn: 'ours' });
+    expect(dto.messages).toHaveLength(1);
+    expect(dto.messages[0].text).toContain('1 Fass Pils 30 L');
+    expect(dto.messages[0].text).toContain('Von Hand angelegt');
+    expect(dto.messages[0].text).toContain('01234 5678');
+    const mailId = dto.latestInboxMailId as string;
+    // steht nicht im Sortierkorb des Posteingangs
+    expect((await ok('GET', '/inbox?status=new', admin)).map((x: { id: string }) => x.id)).not.toContain(mailId);
+    // ohne Adresse: Entwurf ohne Empfänger, mit Anrede
+    let d = await ok('GET', `/inbox/${mailId}/mail?template=order_confirm`, admin);
+    expect(d.to).toBe('');
+    expect(d.text.startsWith('Guten Tag Frieda Fass,')).toBe(true);
+    // Adresse nachtragen → Entwurf geht dorthin
+    await ok('PATCH', `/mail-cases/${c.id}`, admin, { contactName: 'Frieda Fass', contactAddr: 'frieda@kunde.example' });
+    d = await ok('GET', `/inbox/${mailId}/mail?template=order_confirm`, admin);
+    expect(d.to).toBe('frieda@kunde.example');
+    await ok('POST', `/inbox/${mailId}/mail?template=order_confirm`, admin, { to: d.to, subject: d.subject, text: d.text });
+    dto = await ok('GET', `/mail-cases/${c.id}`, admin);
+    expect(dto.orderConfirmedAt).toBeTruthy();
+    // Antwort der Kundin mit der Nummer im Betreff landet im Vorgang
+    validity = 'hand1';
+    box = [raw(1, 'Frieda Fass <frieda@kunde.example>', `Re: Auftragsbestätigung [${c.number}]`, 'Danke, passt.', { id: '<hand1@x.example>' })];
+    await fetchNow();
+    expect((await byUid(1))!.case_id).toBe(c.id);
+    // zwei von Hand angelegte Vorgänge bekommen verschiedene Nummern
+    const c2 = await ok('POST', '/mail-cases', admin, { kind: 'table', name: 'Tim Tresen', email: 'tim@kunde.example', phone: '', text: 'Tisch für 4 am Samstag' });
+    expect(c2.number).not.toBe(c.number);
+  });
+
 });

@@ -461,6 +461,7 @@ export async function buildApp({ db, cookieSecure = false, webDir, logger = fals
     api.get('/case-next-texts', email, () => mailcases.getNextTexts(db));
     api.put('/case-next-texts', { preHandler: requireAdmin }, (req) => mailcases.saveNextTexts(db, actor(req), I.nextTextsInput.parse(req.body)));
     api.get('/mail-cases', email, (req) => mailcases.listCases(db, I.caseListQuery.parse(req.query), { offers: S.hasModule(req.user!, 'hotel') || S.hasModule(req.user!, 'restaurant') }));
+    api.post('/mail-cases', email, (req) => mailcases.createManualCase(db, actor(req), I.caseCreateInput.parse(req.body)));
     api.get('/mail-cases/:id', email, (req) => mailcases.getCase(db, cid(req)));
     api.patch('/mail-cases/:id', email, (req) => mailcases.updateCase(db, actor(req), cid(req), I.caseUpdateInput.parse(req.body)));
     api.post('/mail-cases/:id/assign', email, (req) => mailcases.assignMailToCase(db, actor(req), cid(req), z.object({ inboxMailId: z.uuid() }).parse(req.body).inboxMailId));
