@@ -142,10 +142,8 @@ function CasesView() {
   const [openId, setOpenId] = useState<string | null>(params.get('vorgang'));
   const wanted = params.get('vorgang');
   useEffect(() => { if (wanted) setOpenId(wanted); }, [wanted]);
-  const [who, setWho] = useState('');
-  const { user } = useAuth();
-  const staff = useLoad(() => api<string[]>('GET', '/mail-cases/assignees')).data ?? [];
-  const list = useLoad(() => api<CaseListRow[]>('GET', `/mail-cases?status=${status}&kind=${kind}&q=${encodeURIComponent(q)}${from ? `&from=${from}` : ''}${who ? `&assignee=${encodeURIComponent(who)}` : ''}`), [status, kind, q, from, who, rev]);
+  const [filters, setFilters] = useState(false);
+  const list = useLoad(() => api<CaseListRow[]>('GET', `/mail-cases?status=${status}&kind=${kind}&q=${encodeURIComponent(q)}${from ? `&from=${from}` : ''}`), [status, kind, q, from, rev]);
   const open = (r: CaseListRow) => { if (r.source === 'case') setOpenId(r.id); else if (r.source === 'offer') go(`/angebote?angebot=${r.id}`); else openInvoice(r.id); };
   const ours = (list.data ?? []).filter((r) => r.status === 'open' && r.turn === 'ours').length;
   return (
@@ -154,17 +152,19 @@ function CasesView() {
         <div className="msg-filter">
           <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Suchen: Name, Nummer, Betreff" aria-label="Vorgänge suchen" />
           <div className="msg-chips">
-            {([['open', 'Offen'], ['done', 'Erledigt'], ['archived', 'Archiv'], ['all', 'Alle']] as const).map(([k, l]) => <button key={k} type="button" className={`kindchip${status === k ? ' on' : ''}`} aria-pressed={status === k} onClick={() => setStatus(k)}>{l}{k === 'open' && ours > 0 && <span className="n">{ours}</span>}</button>)}
+            {([['open', 'Offen'], ['done', 'Erledigt'], ['all', 'Alle']] as const).map(([k, l]) => <button key={k} type="button" className={`kindchip${status === k ? ' on' : ''}`} aria-pressed={status === k} onClick={() => setStatus(k)}>{l}{k === 'open' && ours > 0 && <span className="n">{ours}</span>}</button>)}
+            <button type="button" className={`linkbtn msg-filtertoggle${filters || kind !== 'all' || from || status === 'archived' ? ' on' : ''}`} aria-expanded={filters} onClick={() => setFilters(!filters)}>{filters ? 'Filter ausblenden' : kind !== 'all' || from || status === 'archived' ? 'Filter aktiv' : 'Filter'}</button>
+          </div>
+          {filters && <div className="msg-chips msg-extra">
             <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Kategorie">
               <option value="all">Alle Arten</option>
               {MAIL_KINDS.map((k) => <option key={k} value={k}>{MAIL_KIND_LABEL[k]}</option>)}
               <option value="offer">Angebot</option><option value="estimate">Kostenvoranschlag</option>
             </select>
-            <select value={who} onChange={(e) => setWho(e.target.value)} aria-label="Zuständig" title="Nur Vorgänge eines Mitarbeiters zeigen (Angebote und Kostenvoranschläge haben keine Zuständigkeit)">
-              <option value="">Alle Mitarbeiter</option>{staff.includes(user.name) && <option value={user.name}>Meine</option>}{staff.filter((n) => n !== user.name).map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
             <label className="msg-from" title="Nur Vorgänge mit Aktivität seit diesem Tag">seit <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Aktivität seit" /></label>
-          </div>
+            <button type="button" className={`kindchip${status === 'archived' ? ' on' : ''}`} aria-pressed={status === 'archived'} onClick={() => setStatus(status === 'archived' ? 'open' : 'archived')}>Archiv</button>
+            {(kind !== 'all' || from || status === 'archived') && <button type="button" className="linkbtn" onClick={() => { setKind('all'); setFrom(''); if (status === 'archived') setStatus('open'); }}>zurücksetzen</button>}
+          </div>}
         </div>
         <div className="msg-list">
           <LoadState error={list.error} loading={!list.data} />
@@ -176,7 +176,7 @@ function CasesView() {
                 <span className={`msg-avatar k-${r.kind}`} aria-hidden>{initials(r.contact)}</span>
                 <span className="msg-main">
                   <span className="msg-top"><b>{WHAT[r.kind]}</b><small>{shortTime(r.lastAt)}</small></span>
-                  <span className="msg-sub">{r.contact || r.title} · {r.number}{r.source !== 'case' && ' ›'}{r.assignee && <span className="msg-asg" title={`Zuständig: ${r.assignee}`}> · {r.assignee}</span>}</span>
+                  <span className="msg-sub">{r.contact || r.title} · {r.number}{r.source !== 'case' && ' ›'}</span>
                   <span className="msg-snip">{r.turn === 'theirs' && 'Sie: '}{r.snippet || r.title}</span>
                 </span>
                 {r.unread > 0 ? <span className="msg-unread" title={`${r.unread} neue ${r.unread === 1 ? 'Nachricht' : 'Nachrichten'}`} aria-label={`${r.unread} neu`}>{r.unread}</span> : r.source === 'case' && r.status === 'open' && r.confirmed && !waiting ? <span className="msg-dot ok" title="Bestätigt" aria-label="bestätigt" /> : waiting && <span className="msg-dot" title="Wir sind dran" aria-label="wir sind dran" />}
@@ -211,15 +211,13 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const [moreSet, setMore] = useState<boolean | null>(null);
   const snippets = useLoad(() => api<ReplySnippet[]>('GET', '/reply-snippets')).data ?? [];
   const texts = useLoad(() => api<NextTexts>('GET', '/case-next-texts')).data ?? DEFAULT_NEXT_TEXTS;
-  const staff = useLoad(() => api<string[]>('GET', '/mail-cases/assignees')).data ?? [];
-  const { user } = useAuth();
   const { openBooking } = useData();
+  const [opts, setOpts] = useState(false);
   if (!data) return <LoadState error={error} loading />;
   const act = async (method: 'PATCH' | 'POST', path: string, body: unknown, msg: string) => { try { await api(method, `/mail-cases/${id}${path}`, body); toast(msg); bump(); reload(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); } };
   const next = nextStep(data, texts);
   // Zimmer- und Tischanfragen: die Übernahme steht gleich offen, solange nichts angelegt ist und wir am Zug sind
   const more = moreSet ?? (data.turn === 'ours' && !data.latestLinkKind && (data.kind === 'hotel' || data.kind === 'table') && data.status !== 'done' && data.status !== 'archived');
-  const people = data.assignee && !staff.includes(data.assignee) ? [data.assignee, ...staff] : staff;
   /** Nachricht gehört nicht hierher: lösen, in einen anderen Vorgang verschieben oder als eigenen Vorgang abtrennen */
   const relocate = async (inboxMailId: string) => {
     const a = window.prompt('Diese E-Mail gehört nicht zu diesem Vorgang?\n\n• Vorgangsnummer eintippen (z. B. V-2026-0007) = dorthin verschieben\n• „neu“ = eigener, neuer Vorgang\n• leer lassen = nur aus diesem Vorgang lösen (bleibt im Posteingang)', '');
@@ -246,16 +244,16 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
           <b>{WHAT[data.kind]} <Badge tone={stage.tone}>{stage.label}</Badge></b>
           <small>{data.contactName ? `${data.contactName} · ` : ''}{data.contactAddr} · {data.number}</small>
         </div>
-        <select value={data.kind} onChange={(e) => void act('PATCH', '', { kind: e.target.value }, 'Kategorie geändert')} aria-label="Kategorie des Vorgangs">{MAIL_KINDS.map((k) => <option key={k} value={k}>{MAIL_KIND_LABEL[k]}</option>)}</select>
-        <select value={data.status} onChange={(e) => void act('PATCH', '', { status: e.target.value }, `Stand: ${CASE_STATUS_LABEL[e.target.value as CaseStatus]}`)} aria-label="Stand des Vorgangs">{CASE_STATUSES.map((k) => <option key={k} value={k}>{CASE_STATUS_LABEL[k]}</option>)}</select>
-        <select value={data.assignee} onChange={(e) => void act('PATCH', '', { assignee: e.target.value }, e.target.value ? `Zuständig: ${e.target.value}` : 'Niemand zuständig')} aria-label="Zuständiger Mitarbeiter" title="Wer kümmert sich um diesen Vorgang?">
-          <option value="">Zuständig: niemand</option>{people.map((n) => <option key={n} value={n}>Zuständig: {n}</option>)}
-        </select>
-        {data.status !== 'done' && data.status !== 'archived' && <Button onClick={() => void act('PATCH', '', { status: 'done' }, 'Vorgang erledigt')}>Erledigt</Button>}
+        {data.status !== 'done' && data.status !== 'archived' && <Button variant="primary" onClick={() => void act('PATCH', '', { status: 'done' }, 'Vorgang erledigt')}>Erledigt</Button>}
+        <button type="button" className="iconbtn" aria-label="Weitere Einstellungen zum Vorgang" aria-expanded={opts} title="Art, Stand, Zusammenführen" onClick={() => setOpts(!opts)}>⋯</button>
       </header>
+      {opts && <div className="msg-opts">
+        <label>Art <select value={data.kind} onChange={(e) => void act('PATCH', '', { kind: e.target.value }, 'Kategorie geändert')} aria-label="Kategorie des Vorgangs">{MAIL_KINDS.map((k) => <option key={k} value={k}>{MAIL_KIND_LABEL[k]}</option>)}</select></label>
+        <label>Stand <select value={data.status} onChange={(e) => void act('PATCH', '', { status: e.target.value }, `Stand: ${CASE_STATUS_LABEL[e.target.value as CaseStatus]}`)} aria-label="Stand des Vorgangs">{CASE_STATUSES.map((k) => <option key={k} value={k}>{CASE_STATUS_LABEL[k]}</option>)}</select></label>
+        <button type="button" className="linkbtn" onClick={() => void merge()}>Mit anderem Vorgang zusammenführen …</button>
+      </div>}
       <div className={`msg-next t-${next.tone}`}><span><b>Als Nächstes:</b> {next.text}</span>
         {data.bookingId && <button type="button" className="linkbtn" onClick={() => openBooking(data.bookingId!)}>Reservierung {data.bookingNumber} öffnen</button>}
-        {data.status !== 'done' && data.status !== 'archived' && data.assignee !== user.name && staff.includes(user.name) && <button type="button" className="linkbtn" onClick={() => void act('PATCH', '', { assignee: user.name, ...(data.status === 'open' ? { status: 'working' } : {}) }, 'Sie sind jetzt zuständig')}>Ich übernehme</button>}
       </div>
       {data.candidates.length > 0 && <div className="ot-cand msg-cand">
         <span className="muted small">Im Posteingang von dieser Adresse, noch keinem Vorgang zugeordnet:</span>
@@ -275,14 +273,13 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
           {fit.length > 0 && <div className="msg-sugg"><span className="muted small">Antwortvorschläge:</span>{fit.map((x) => <button key={x.id} type="button" className="chip" onClick={() => setReply(`reply&vorlage=${encodeURIComponent(x.id)}`)}>{x.title}</button>)}</div>}
           {data.latestLinkKind && !data.confirmedAt && <Button variant="primary" onClick={() => setReply('confirm')}>Bestätigung senden</Button>}
           <Button variant={data.latestLinkKind && !data.confirmedAt ? undefined : 'primary'} onClick={() => setReply('reply')}>Frei antworten</Button>
-          <Button onClick={() => setMore(!more)}>{more ? 'Weniger' : 'Mehr: übernehmen, absagen …'}</Button>
-          <button type="button" className="linkbtn msg-merge" onClick={() => void merge()}>Zusammenführen …</button>
+          <Button onClick={() => setMore(!more)}>{more ? 'Übernehmen / absagen ausblenden' : 'Übernehmen / absagen …'}</Button>
         </footer>
       )}
       {!data.latestInboxMailId && data.bookingId && <footer className="msg-foot"><span className="muted small">Weitere E-Mails an den Gast senden Sie aus der Reservierung – sie erscheinen dann hier. Antwortet der Gast, können Sie auch von hier aus antworten.</span></footer>}
       {reply && data.latestInboxMailId && <MailDialog path={`/inbox/${reply === 'confirm' && data.linkedInboxMailId ? data.linkedInboxMailId : data.latestInboxMailId}/mail?template=${reply}`} title={`${reply === 'confirm' ? 'Bestätigung senden' : 'Antworten'} – ${data.number}`} onClose={() => setReply(false)} onSent={() => { bump(); reload(); }}
         intro={<p className="muted small">Die Vorgangsnummer {data.number} wird beim Senden automatisch in den Betreff gesetzt.</p>} />}
-      {more && data.latestInboxMailId && <div className="msg-more"><MailDetail key={data.latestInboxMailId} id={data.latestInboxMailId} onGone={() => { bump(); reload(); }} /></div>}
+      {more && data.latestInboxMailId && <div className="msg-more"><MailDetail key={data.latestInboxMailId} id={data.latestInboxMailId} inCase onGone={() => { bump(); reload(); }} /></div>}
     </>
   );
 }
@@ -363,7 +360,7 @@ function NextTextsAdmin() {
 }
 
 /** sorting = Ansicht im Posteingang: Nachrichten ohne Vorgang werden hier nur einsortiert (Kategorie wählen → Vorgang); bearbeitet wird im Vorgang */
-function MailDetail({ id, onGone, sorting = false }: { id: string; onGone: () => void; sorting?: boolean }) {
+function MailDetail({ id, onGone, sorting = false, inCase = false }: { id: string; onGone: () => void; sorting?: boolean; inCase?: boolean }) {
   const go = useNavigate();
   const [pick, setPick] = useState<MailKind | null>(null);
   const [moving, setMoving] = useState(false);
@@ -453,24 +450,28 @@ function MailDetail({ id, onGone, sorting = false }: { id: string; onGone: () =>
   );
   return (
     <>
-      <section className="card">
+      <section className={inCase ? 'card msg-incase' : 'card'}>
+        {!inCase && <>
         <div className="cardhead"><div><h2>{data.subject || '(ohne Betreff)'}</h2><p className="muted">{data.fromName} &lt;{data.fromAddr}&gt; · {fmtDateTime(data.receivedAt)}</p></div>
           <div className="actions"><select value={data.kind} onChange={(e) => void patch({ kind: e.target.value })} aria-label="Art der Nachricht">{MAIL_KINDS.map((k) => <option key={k} value={k}>{MAIL_KIND_LABEL[k]}</option>)}</select></div></div>
         <pre className="mailbody">{data.body || '(kein Text – die Nachricht besteht vermutlich nur aus Bildern oder Anhängen)'}</pre>
         {!!data.extract.attachments?.length && <p className="msg-att">{data.extract.attachments.map((a, i) => <AttachmentChip key={i} a={a} />)}{data.extract.attachments.some((a) => !a.id) && <small className="muted">ohne Link (zu groß oder älter): bitte im E-Mail-Programm öffnen</small>}</p>}
+        </>}
         <div className="formactions">
+          {!inCase && <>
           {data.status !== 'done' && <Button onClick={() => status('done', 'Als erledigt markiert')}>Erledigt</Button>}
           {data.status === 'new' && <Button onClick={() => status('ignored', 'Ignoriert')}>Ignorieren</Button>}
           {data.status !== 'new' && <Button onClick={() => status('new', 'Wieder offen')}>Wieder öffnen</Button>}
           <Button onClick={() => setMail('reply')}>Antworten</Button>
           {data.linkKind && <Button variant="primary" onClick={() => setMail('confirm')}>Bestätigung senden</Button>}
+          </>}
           {!data.linkKind && ['hotel', 'table', 'event', 'meeting'].includes(data.kind) && <Button onClick={() => setMail('decline')}>Absage senden</Button>}
-          <Button variant="danger" onClick={() => void remove()}>Entfernen</Button>
+          <Button variant="danger" onClick={() => void remove()}>{inCase ? 'Letzte Nachricht entfernen' : 'Entfernen'}</Button>
         </div>
-        {data.repliedAt && <p className="muted small">Beantwortet am {fmtDateTime(data.repliedAt)}{data.repliedBy && ` von ${data.repliedBy}`}.</p>}
+        {!inCase && data.repliedAt && <p className="muted small">Beantwortet am {fmtDateTime(data.repliedAt)}{data.repliedBy && ` von ${data.repliedBy}`}.</p>}
         {mail && <MailDialog path={`/inbox/${id}/mail?template=${mail}`} title={mail === 'confirm' ? 'Bestätigung senden' : mail === 'decline' ? 'Absage senden' : 'Antworten'} onClose={() => setMail(null)}
           onSent={() => { if (mail !== 'reply' && data.status === 'new') void patch({ status: 'done' }); else { bump(); reload(); } }} />}
-        {data.caseNumber && <p className="notice small">Gehört zum Vorgang <b>{data.caseNumber}</b> (Reiter „Vorgänge“). Antworten tragen diese Nummer im Betreff.</p>}
+        {!inCase && data.caseNumber && <p className="notice small">Gehört zum Vorgang <b>{data.caseNumber}</b> (Reiter „Vorgänge“). Antworten tragen diese Nummer im Betreff.</p>}
         {!data.caseId && !data.offer && !data.invoice && <p className="muted small">Noch kein Vorgang: Mit Ihrer ersten Antwort bekommt dieser E-Mail-Wechsel automatisch eine Vorgangsnummer. <button type="button" className="linkbtn" onClick={() => void api('POST', `/inbox/${id}/case`, {}).then(() => { toast('Vorgang angelegt'); bump(); reload(); }, (e) => toast(e instanceof Error ? e.message : 'Fehler', 'error'))}>Jetzt schon Vorgang anlegen</button></p>}
         {data.invoice && <p className="notice">Gehört zum Verlauf von <button type="button" className="linkbtn" onClick={() => openInvoice(data.invoice!.id)}>{data.invoice.label}</button>.</p>}
         {data.offer && <p className="notice">Gehört zum Verlauf von <a href={`/angebote?angebot=${data.offer.id}`}>Angebot {data.offer.number}</a>.</p>}

@@ -1333,3 +1333,10 @@ a.linkcard.attention b { color: var(--warn); }
 
 .blk { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); } .blk .formactions { margin-top: 8px; }
 .blk-list { margin: 8px 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; } .blk-list summary { cursor: pointer; font-weight: 600; } .blk-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Vorgänge aufgeräumt: Filter und Einstellungen eingeklappt */
+.msg-filtertoggle { margin-left: auto; font-size: 13px; } .msg-filtertoggle.on { font-weight: 600; }
+.msg-extra { margin-top: 8px; }
+.msg-opts { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--surface-2); font-size: 14px; }
+.msg-opts label { display: flex; align-items: center; gap: 6px; } .msg-opts select { width: auto; }
+.msg-incase { border: 0; box-shadow: none; padding: 0 0 4px; background: transparent; } .msg-incase .formactions { margin-top: 0; }

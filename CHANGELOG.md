@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.129.0
+
+- **Vorgänge aufgeräumt.** Die Zuständigkeit je Mitarbeiter ist wieder entfernt (Auswahl, „Ich übernehme“, Filter und Name in der Liste).
+- Im Kopf des Vorgangs stehen nur noch Art, Stand als Abzeichen, Kunde und der Knopf **„Erledigt“**. Art ändern, Stand ändern und Zusammenführen liegen hinter **„⋯“**.
+- Die Liste zeigt nur noch Suche und „Offen / Erledigt / Alle“; Art, Datum und Archiv liegen hinter **„Filter“**.
+- „Übernehmen / absagen“ zeigt die E-Mail nicht mehr ein zweites Mal, sondern nur noch die Übernahme (Zimmer bzw. Tisch) und „Absage senden“.
+- Keine Änderung an der Datenbank; das Feld „zuständig“ bleibt ungenutzt bestehen.
+
 ## 1.128.0
 
 - **Absender ausfiltern:** Im Posteingang steht bei jeder E-Mail ohne Vorgang „Nichts für das Programm?“ mit zwei Knöpfen: **nur diese Adresse** oder **alles von dieser Domain** künftig ausfiltern. E-Mails dieses Absenders landen dann beim Abruf gleich unter „Ignoriert“; die noch offenen wandern sofort mit. Das ist keine Spam-Meldung – im Postfach wird nichts verändert oder gelöscht.
