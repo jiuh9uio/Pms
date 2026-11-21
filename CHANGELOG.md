@@ -3,6 +3,12 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.135.0
+
+- **Kostenvoranschlag: „senden“ nur noch, solange er nicht gesendet ist.** Danach steht unten kein Sende-Knopf mehr; „erneut senden“ gibt es als kleinen Link im Verlauf (mit Rückfrage) – für den Fall, dass etwas geändert wurde oder die E-Mail nicht ankam.
+- **Dunkles Design:** Die abgehakten Schritte waren bei fest eingestelltem dunklen Design weiß mit blasser Schrift – jetzt dunkelgrün und lesbar. Gleiches für den farbigen Hinweis „Als Nächstes“ in den Vorgängen.
+- Nur Darstellung – keine Änderung an Abläufen oder an der Datenbank.
+
 ## 1.134.0
 
 - **Neue Vorgangsart „Bestellung (Ware)“** – z. B. wenn jemand ein Fass Bier bestellt. Im Posteingang die Kachel „Bestellung“ wählen; der Vorgang zeigt dann die Schritte **Bestellung → Auftrag bestätigt → Ware da – gemeldet → Erledigt**.

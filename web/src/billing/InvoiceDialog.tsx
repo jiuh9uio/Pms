@@ -37,6 +37,10 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
   const [cancel, setCancel] = useState(false);
   const [mail, setMail] = useState<false | 'invoice' | 'reminder'>(false);
   const [kvMail, setKvMail] = useState(false);
+  // Kostenvoranschlag: schon gesendet? Dann steht „senden“ nicht mehr als Hauptknopf da – nur noch „erneut senden“ im Verlauf
+  const kvId = inv?.estimateNumber && inv.status === 'draft' ? inv.id : null;
+  const kvLine = useLoad(() => (kvId ? api<InvoiceTimeline>('GET', `/invoices/${kvId}/timeline`) : Promise.resolve(null)), [kvId, rev]).data;
+  const kvSent = !!kvLine?.entries.some((e) => e.dir === 'out');
   const makeEstimate = async () => {
     try { const r = await api<{ estimateNumber: string }>('POST', `/invoices/${id}/estimate`); toast(`Wird jetzt als Kostenvoranschlag ${r.estimateNumber} geführt`); bump(); }
     catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
@@ -78,7 +82,7 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
         {inv.status === 'issued' && inv.kind === 'invoice' && <Button onClick={() => setMail('invoice')}>Per E-Mail senden</Button>}
         {inv.status === 'issued' && inv.kind === 'invoice' && inv.openCents > 0 && inv.dueDate && inv.dueDate < todayBerlin() && <Button onClick={() => setMail('reminder')}>Zahlungserinnerung</Button>}
         {inv.status === 'draft' && inv.kind === 'invoice' && !inv.estimateNumber && <Button onClick={() => void makeEstimate()} title="Vergibt eine eigene Nummer (KV-Jahr-Nr.) – das PDF heißt dann „Kostenvoranschlag“ und trägt keine Rechnungsnummer">Als Kostenvoranschlag führen</Button>}
-        {inv.status === 'draft' && inv.estimateNumber && <Button onClick={() => setKvMail(true)}>Kostenvoranschlag senden</Button>}
+        {inv.status === 'draft' && inv.estimateNumber && !kvSent && <Button onClick={() => setKvMail(true)}>Kostenvoranschlag senden</Button>}
         {inv.status === 'draft' && inv.estimateNumber && <a className="btn" href={`/api/v1/invoices/${id}/estimate/pdf`} target="_blank" rel="noopener">Kostenvoranschlag (PDF)</a>}
         {!(inv.status === 'draft' && inv.estimateNumber) && <a className="btn" href={`/api/v1/invoices/${id}/pdf`} target="_blank" rel="noopener">{inv.status === 'draft' ? 'Vorschau (PDF)' : 'Drucken / PDF'}</a>}
         {inv.status !== 'draft' && <a className="btn" href={`/api/v1/invoices/${id}/pdf?download=1`}>Herunterladen</a>}
@@ -89,7 +93,7 @@ export function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void
         {inv.status === 'draft' && inv.kind === 'invoice' && <DraftSteps inv={inv} />}
         <div className="split">
           <div>
-            {inv.estimateNumber && <InvoiceThread inv={inv} />}
+            {inv.estimateNumber && <InvoiceThread inv={inv} onResend={() => setKvMail(true)} />}
             {inv.status === 'cancelled' && <p className="notice danger">Storniert durch {inv.cancelledByNumber ? <button type="button" className="linkbtn" onClick={() => openInvoice(inv.cancelledById!)}>{inv.cancelledByNumber}</button> : 'Stornobeleg'}. Grund: {inv.cancelReason}</p>}
             {inv.kind === 'cancellation' && inv.cancelsId && <p className="notice">Storniert die Rechnung <button type="button" className="linkbtn" onClick={() => openInvoice(inv.cancelsId!)}>{inv.cancelsNumber}</button>.</p>}
             {inv.status === 'draft' ? <Recipient inv={inv} /> : (
@@ -204,7 +208,7 @@ function DraftSteps({ inv }: { inv: InvoiceDto }) {
 }
 
 /** Verlauf zum Kostenvoranschlag: gesendet → Antwort des Kunden (Ja/Nein) → Rechnung; oben die Kurzinfo */
-function InvoiceThread({ inv }: { inv: InvoiceDto }) {
+function InvoiceThread({ inv, onResend }: { inv: InvoiceDto; onResend?: () => void }) {
   const { rev, bump } = useData();
   const toast = useToast();
   const { data } = useLoad(() => api<InvoiceTimeline>('GET', `/invoices/${inv.id}/timeline`), [inv.id, rev]);
@@ -224,6 +228,7 @@ function InvoiceThread({ inv }: { inv: InvoiceDto }) {
         {!draft && <span>Rechnung {inv.number} ausgestellt</span>}
         {data.code && <span className="ot-code" title="Diese Nummer steht im Betreff der E-Mail. Antwortet der Kunde darauf, wird die Antwort hier automatisch zugeordnet.">Kennzeichen {data.code}</span>}
         <button type="button" className="linkbtn" onClick={() => setOpen(!open)}>{open ? 'Verlauf ausblenden' : `Verlauf zeigen (${data.entries.length})`}</button>
+        {draft && onResend && data.entries.some((e) => e.dir === 'out') && <button type="button" className="linkbtn" title="Nur nötig, wenn Sie den Kostenvoranschlag geändert haben oder der Kunde ihn nicht bekommen hat" onClick={() => { if (window.confirm(`Der Kostenvoranschlag wurde schon an ${data.lastTo || 'den Kunden'} gesendet.\n\nNoch einmal senden? Das ist nur nötig, wenn Sie etwas geändert haben oder die E-Mail nicht angekommen ist.`)) onResend(); }}>erneut senden</button>}
       </div>
       {draft && data.answer === 'yes' && <p className="notice small">Der Kunde ist einverstanden – bitte die Antwort kurz lesen. Dann unten <b>„Rechnung daraus ausstellen“</b> und danach „Per E-Mail senden“ (die Adresse ist vorbelegt).</p>}
       {draft && data.answer === 'no' && <p className="notice warn small">Der Kunde hat abgelehnt. Sie können den Kostenvoranschlag ändern und neu senden oder ihn verwerfen.</p>}
