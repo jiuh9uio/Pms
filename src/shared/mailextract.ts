@@ -248,12 +248,15 @@ const FORM_LABELS = ['Vor- und Nachname', 'Vor- und Zuname', 'Ihr Name', 'Vornam
 const LABEL_RE = new RegExp(`(^|[\\n\\r]|\\s{2,}|[.!?]\\s)\\s*(${FORM_LABELS.map((l) => l.replace(/[-.]/g, '\\$&')).sort((a, b) => b.length - a.length).join('|')})\\s*\\*?\\s*:[ \\t]*`, 'gi');
 /** Beschriftete Felder eines Kontaktformulars („Name: …“, „E-Mail: …“) aus dem Text lesen – auch wenn alles in einer Zeile steht */
 export function formFields(body: string): Record<string, string> {
-  const text = body.slice(0, 6000);
+  // zitierter Text („> Name:“) zählt wie normaler; Baukästen schreiben den Wert oft in die Zeile unter die Beschriftung
+  const text = body.slice(0, 8000).replace(/^[ \t]*(>[ \t]?)+/gm, '');
   const hits = [...text.matchAll(LABEL_RE)].map((m) => ({ label: m[2]!.toLowerCase(), start: m.index!, end: m.index! + m[0].length }));
   const out: Record<string, string> = {};
   hits.forEach((h, i) => {
     const stop = Math.min(hits[i + 1]?.start ?? text.length, h.end + 300);
-    const value = (text.slice(h.end, stop).split(/[\n\r]/)[0] ?? '').trim();
+    const lines = text.slice(h.end, stop).split(/\r?\n|\r/).map((l) => l.trim());
+    // Wert in derselben Zeile – sonst die nächste nicht leere Zeile (höchstens eine Leerzeile dazwischen)
+    const value = lines[0] || lines.slice(1, 3).find((l) => !!l) || '';
     if (value && !(h.label in out)) out[h.label] = value;
   });
   return out;

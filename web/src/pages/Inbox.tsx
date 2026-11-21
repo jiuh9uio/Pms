@@ -9,7 +9,7 @@ import { useAuth } from '../App.tsx';
 import { useData } from '../data.tsx';
 import { deDate } from '../hotel/common.tsx';
 import { MailDialog } from '../hotel/MailDialog.tsx';
-import { Badge, Button, Field, LoadState, LongText, PageHeader, fmtDateTime, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
+import { Badge, Button, Dialog, Field, LoadState, LongText, PageHeader, fmtDateTime, useLoad, useSubmit, useTabs, useToast } from '../ui.tsx';
 
 export const INBOX_TABS = [['vorgaenge', 'Vorgänge'], ['new', 'Neu'], ['done', 'Erledigt'], ['ignored', 'Ignoriert'], ['all', 'Alle'], ['vorlagen', 'Antwortvorlagen']] as const;
 const tone = (k: MailKind) => (k === 'hotel' || k === 'meeting' ? 'accent' : k === 'table' || k === 'event' ? 'ok' : k === 'voucher' ? 'warn' : 'neutral');
@@ -165,7 +165,7 @@ function CasesView() {
   const open = (r: CaseListRow) => { if (r.source === 'case') setOpenId(r.id); else if (r.source === 'offer') go(`/angebote?angebot=${r.id}`); else openInvoice(r.id); };
   const ours = (list.data ?? []).filter((r) => r.status === 'open' && r.turn === 'ours').length;
   return (
-    <div className={`msg${openId ? ' has-open' : ''}`}>
+    <div className="msg msg-solo">
       <aside className="msg-side">
         <div className="msg-filter">
           <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Suchen: Name, Nummer, Betreff" aria-label="Vorgänge suchen" />
@@ -203,7 +203,7 @@ function CasesView() {
           })}
         </div>
       </aside>
-      <section className="msg-pane">{openId ? <CaseDetail key={openId} id={openId} onBack={() => setOpenId(null)} /> : <div className="msg-none"><p className="muted">Links einen Vorgang wählen.</p></div>}</section>
+      {openId && <Dialog title="Vorgang" size="xl" onClose={() => setOpenId(null)}><div className="msg-dlg"><CaseDetail key={openId} id={openId} onBack={() => setOpenId(null)} /></div></Dialog>}
     </div>
   );
 }
@@ -275,12 +275,13 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
           <small>{data.contactName ? `${data.contactName} · ` : ''}{data.contactAddr} · {data.number}</small>
         </div>
         {data.status !== 'done' && data.status !== 'archived' && <Button variant="primary" onClick={() => void act('PATCH', '', { status: 'done' }, 'Vorgang erledigt')}>Erledigt</Button>}
-        <button type="button" className="iconbtn" aria-label="Weitere Einstellungen zum Vorgang" aria-expanded={opts} title="Art, Stand, Zusammenführen" onClick={() => setOpts(!opts)}>⋯</button>
+        <Button aria-expanded={opts} title="Name, E-Mail-Adresse, Art und Stand ändern, zusammenführen" onClick={() => setOpts(!opts)}>{opts ? 'Fertig' : 'Bearbeiten'}</Button>
       </header>
       {opts && <div className="msg-opts">
         <label>Art <select value={data.kind} onChange={(e) => void act('PATCH', '', { kind: e.target.value }, 'Kategorie geändert')} aria-label="Kategorie des Vorgangs">{MAIL_KINDS.map((k) => <option key={k} value={k}>{MAIL_KIND_LABEL[k]}</option>)}</select></label>
         <label>Stand <select value={data.status} onChange={(e) => void act('PATCH', '', { status: e.target.value }, `Stand: ${CASE_STATUS_LABEL[e.target.value as CaseStatus]}`)} aria-label="Stand des Vorgangs">{CASE_STATUSES.map((k) => <option key={k} value={k}>{CASE_STATUS_LABEL[k]}</option>)}</select></label>
         <button type="button" className="linkbtn" onClick={() => void merge()}>Mit anderem Vorgang zusammenführen …</button>
+        <CaseContactEdit key={`${data.contactName}|${data.contactAddr}`} c={data} onSave={(v) => act('PATCH', '', v, 'Kontakt gespeichert')} />
       </div>}
       <ol className="cs-steps" aria-label="Stand des Vorgangs">{caseSteps(data).map((st, i) => (
         <li key={st.label} className={st.state} aria-current={st.state === 'now' ? 'step' : undefined}><span className="cs-num">{st.state === 'done' ? '✓' : i + 1}</span><span className="cs-label">{st.label}</span></li>
@@ -317,6 +318,22 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
         intro={<p className="muted small">{reply === 'order_confirm' && 'Bitte Artikel, Menge, Preis und Termin im Text eintragen – das Programm kennt die Bestellung nicht. '}{reply === 'order_ready' && 'Bitte eintragen, wann abgeholt werden kann. '}Die Vorgangsnummer {data.number} wird beim Senden automatisch in den Betreff gesetzt.</p>} />}
       {more && !closedCase && data.latestInboxMailId && <div className="msg-more"><MailDetail key={data.latestInboxMailId} id={data.latestInboxMailId} inCase onGone={() => { bump(); reload(); }} /></div>}
     </>
+  );
+}
+
+/** Kontakt eines Vorgangs nachträglich berichtigen: Name und E-Mail-Adresse (z. B. wenn das Programm sie aus einem Formular falsch gelesen hat) */
+function CaseContactEdit({ c, onSave }: { c: CaseDto; onSave: (v: { contactName: string; contactAddr: string }) => Promise<void> | void }) {
+  const [name, setName] = useState(c.contactName);
+  const [addr, setAddr] = useState(c.contactAddr);
+  const dirty = name.trim() !== c.contactName || addr.trim().toLowerCase() !== c.contactAddr;
+  const okAddr = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(addr.trim());
+  return (
+    <form className="msg-contact" onSubmit={(e) => { e.preventDefault(); if (dirty && okAddr) void onSave({ contactName: name.trim(), contactAddr: addr.trim() }); }}>
+      <label>Name des Kunden <input value={name} onChange={(e) => setName(e.target.value)} maxLength={160} placeholder="unbekannt" /></label>
+      <label>E-Mail-Adresse <input type="email" value={addr} onChange={(e) => setAddr(e.target.value)} maxLength={200} /></label>
+      <Button type="submit" variant="primary" disabled={!dirty || !okAddr}>Kontakt speichern</Button>
+      {!okAddr && <small className="muted">Bitte eine gültige E-Mail-Adresse eintragen.</small>}
+    </form>
   );
 }
 

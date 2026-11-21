@@ -3,7 +3,7 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import type { MailDraft } from '../../shared/hotel.js';
 import { MAIL_KINDS, type InboxCounts, type InboxMailDto, type InboxSettingsDto, type InboxState, type InboxStatus, type MailRules, DEFAULT_REPLY_SNIPPETS, type ReplySnippet, type ReplyTemplate, type WebRequestPublic, type WebRequestSettings } from '../../shared/inbox.js';
-import { extract, realContact, type MailAttachment, type MailExtract, type MailKind } from '../../shared/mailextract.js';
+import { extract, isRelayAddress, realContact, type MailAttachment, type MailExtract, type MailKind } from '../../shared/mailextract.js';
 import type { Db, Exec } from '../db/client.js';
 import { REQUEST_LABEL, siteFrom, type SiteRequest } from '../../shared/site.js';
 import { inboxAttachments, inboxMails, mailCases, restaurantTables, settings, tableReservations } from '../db/schema.js';
@@ -439,7 +439,14 @@ export async function replyDraft(db: Exec, id: string, template: ReplyTemplate, 
   const [h, isReady] = [await getHotel(db), await mailReady(db)];
   const re = /^(re|aw|antwort)\s*:/i.test(r.subject) ? r.subject : `Re: ${r.subject}`;
   // Anrede und Empfänger: der wirkliche Absender (bei Kontaktformularen aus dem Text) – nie „Guten Tag MyWebsite“ an eine no-reply-Adresse
-  const who = realContact(r.fromName, r.fromAddr, r.body);
+  let who = realContact(r.fromName, r.fromAddr, r.body);
+  // Kontaktformular: gilt der am Vorgang (ggf. von Hand berichtigte) Kontakt – die E-Mail selbst kommt ja nur von der Weiterleitung
+  if (r.caseId) {
+    const [c] = await db.select({ name: mailCases.contactName, addr: mailCases.contactAddr }).from(mailCases).where(eq(mailCases.id, r.caseId));
+    if (c?.addr && !isRelayAddress(c.addr) && isRelayAddress(r.fromAddr)) who = { name: c.name, addr: c.addr, viaForm: true };
+    // dieselbe Person wie der Kontakt des Vorgangs: der dort (ggf. berichtigte) Name gilt für die Anrede
+    else if (c && c.addr === r.fromAddr.trim().toLowerCase()) who = { ...who, name: c.name };
+  }
   const hello = who.name ? `Guten Tag ${who.name.replace(/["']/g, '').split(',').reverse().join(' ').trim()},` : 'Guten Tag,';
   const base = { to: who.addr, attachment: null, ready: isReady };
   if (snippetId) {

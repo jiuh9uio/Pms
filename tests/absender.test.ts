@@ -39,4 +39,15 @@ describe('Wer hat wirklich geschrieben?', () => {
   it('eine im Formular genannte Weiterleitungs-Adresse wird nicht als Antwortadresse genommen', () => {
     expect(realContact('MyWebsite', 'no-reply@x.example', 'Name: Erika Mustermann\nE-Mail: noreply@y.example').addr).toBe('no-reply@x.example');
   });
+
+  it('Baukasten-Format: Wert steht in der Zeile unter der Beschriftung – auch zitiert mit „>“', () => {
+    const body = ['Hallo,', '', 'Sie haben eine Formularnachricht über https://www.haus.example/kontakt/ erhalten.', '', 'Name:', 'Wolfram Eschbach', '', 'E-Mail-Adresse:', 'wolfram@kunde.example', '', 'Telefon:', '01234 56789', '',
+      'Ihre Nachricht:', 'Bitte um Reservierung für 10 Personen Mittagstisch am 26.12.2026.', 'mfg  Wolfram Eschbach', '', 'Der Besucher Ihrer Webseite hat der Klausel mit folgendem Text zugestimmt:', 'Hiermit erkläre ich mich einverstanden …'].join('\r\n');
+    expect(realContact('MyWebsite', 'no-reply@mywebsite-editor.example', body)).toEqual({ name: 'Wolfram Eschbach', addr: 'wolfram@kunde.example', viaForm: true });
+    const quoted = body.split('\r\n').map((l) => `> ${l}`).join('\n');
+    expect(realContact('MyWebsite', 'no-reply@mywebsite-editor.example', quoted)).toEqual({ name: 'Wolfram Eschbach', addr: 'wolfram@kunde.example', viaForm: true });
+    // leeres Feld: der Wert der nächsten Beschriftung wird nicht als Name genommen
+    expect(realContact('MyWebsite', 'no-reply@x.example', 'Name:\n\nE-Mail-Adresse:\nwer@kunde.example\n').name).toBe('');
+  });
+
 });

@@ -130,7 +130,9 @@ export interface CaseDto {
 const caseDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional();
 export const caseListQuery = z.object({ status: z.enum(['open', 'done', 'archived', 'all']).default('open'), kind: z.string().max(20).default('all'), q: z.string().trim().max(80).default(''), from: caseDay, to: caseDay, assignee: z.string().trim().max(120).default('') });
 export const caseNumberInput = z.object({ number: z.string().trim().regex(/^[Vv]-\d{4}-\d{4,6}$/, 'Bitte eine Vorgangsnummer wie V-2026-0001 eintragen') });
-export const caseUpdateInput = z.object({ kind: z.enum(MAIL_KINDS).optional(), status: z.enum(CASE_STATUSES).optional(), title: z.string().trim().max(200).optional(), assignee: z.string().trim().max(120).optional() });
+export const caseUpdateInput = z.object({ kind: z.enum(MAIL_KINDS).optional(), status: z.enum(CASE_STATUSES).optional(), title: z.string().trim().max(200).optional(), assignee: z.string().trim().max(120).optional(),
+  /** Kontakt nachträglich berichtigen (Name leer = unbekannt); an die Adresse gehen die Antworten bei Kontaktformular-E-Mails */
+  contactName: z.string().trim().max(160).optional(), contactAddr: z.email('Bitte eine gültige E-Mail-Adresse eintragen').max(200).optional() });
 
 // ---------- Hinweis „Als Nächstes“ im Vorgang: je Kategorie einstellbar (Vorgänge → Antwortvorlagen) ----------
 const nextText = z.string().trim().min(1, 'Bitte einen Text eintragen').max(300);

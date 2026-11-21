@@ -3,6 +3,13 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.139.0
+
+- **Vorgänge öffnen sich in einem großen Fenster.** Die Liste der Vorgänge nimmt jetzt die ganze Breite ein; ein Klick öffnet den Vorgang in einem fast bildschirmfüllenden Fenster mit Schritten, Verlauf und Antwort-Knöpfen – wie beim Kostenvoranschlag.
+- **Vorgang nachträglich bearbeiten:** Der Knopf „Bearbeiten“ im Vorgang zeigt Art, Stand und – neu – **Name und E-Mail-Adresse des Kunden**. Der berichtigte Name steht in der Anrede; bei Kontaktformular-E-Mails geht die Antwort an die berichtigte Adresse.
+- **Kontaktformular besser erkannt:** Steht der Wert in der Zeile unter der Beschriftung („Name:“ – nächste Zeile der Name), wird er jetzt gelesen; ebenso zitierter Text mit „>“.
+- Keine Änderung am Aufbau der Datenbank.
+
 ## 1.138.0
 
 - **Behoben: langer Text stand nach „ganz lesen“ doppelt da** (oben der gekürzte Anfang, darunter noch einmal alles). Jetzt wird der gekürzte Anfang durch den ganzen Text ersetzt; mit „weniger zeigen“ klappt er wieder ein. Gilt für Vorgänge sowie den Verlauf von Angeboten und Kostenvoranschlägen.

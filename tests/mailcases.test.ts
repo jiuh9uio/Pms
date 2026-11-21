@@ -580,4 +580,22 @@ describe('Hotelbereich, Zuständigkeit, einstellbare Hinweise', () => {
     expect(dto).toMatchObject({ confirmedAt: null, latestLinkKind: null });
   });
 
+
+  it('Vorgang nachträglich bearbeiten: Name und E-Mail-Adresse; bei Formular-E-Mails geht die Antwort an die berichtigte Adresse', async () => {
+    validity = 'edit1';
+    box = [raw(1, 'MyWebsite <no-reply@mywebsite-editor.example>', 'Neue Formularnachricht', 'Hallo,\r\n\r\nName:\r\nWolfram Eschbach\r\n\r\nE-Mail-Adresse:\r\nwolfram@kunde.example\r\n\r\nIhre Nachricht:\r\nBitte um Reservierung für 10 Personen.', { id: '<edit1@x.example>' })];
+    await fetchNow();
+    const m = (await byUid(1))!;
+    const c = await ok('POST', `/inbox/${m.id}/case`, admin, { kind: 'table' });
+    expect(await ok('GET', `/mail-cases/${c.id}`, admin)).toMatchObject({ contactName: 'Wolfram Eschbach', contactAddr: 'wolfram@kunde.example' });
+    expect((await call('PATCH', `/mail-cases/${c.id}`, admin, { contactAddr: 'keine-adresse' })).statusCode).toBe(400);
+    const dto = await ok('PATCH', `/mail-cases/${c.id}`, mailOnly, { contactName: 'Wolfgang Eschbach', contactAddr: 'Wolfgang@Kunde.example' });
+    expect(dto).toMatchObject({ contactName: 'Wolfgang Eschbach', contactAddr: 'wolfgang@kunde.example' });
+    // bleibt nach erneutem Öffnen so (wird nicht wieder aus dem Formular überschrieben)
+    expect(await ok('GET', `/mail-cases/${c.id}`, admin)).toMatchObject({ contactName: 'Wolfgang Eschbach', contactAddr: 'wolfgang@kunde.example' });
+    const d = await ok('GET', `/inbox/${m.id}/mail?template=reply`, admin);
+    expect(d.to).toBe('wolfgang@kunde.example');
+    expect(d.text.startsWith('Guten Tag Wolfgang Eschbach,')).toBe(true);
+  });
+
 });

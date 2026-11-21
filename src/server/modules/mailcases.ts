@@ -137,7 +137,7 @@ export async function getCase(db: Exec, id: string): Promise<CaseDto> {
   if (!c) throw notFound('Vorgang');
   const messages = await messagesOf(db, id);
   // ältere Vorgänge von Kontaktformularen: der gespeicherte Kontakt („MyWebsite“, no-reply) wird einmalig durch den aus dem Text ersetzt
-  if (!plausibleName(c.contactName) || isRelayAddress(c.contactAddr)) {
+  if (isRelayAddress(c.contactAddr) || (!plausibleName(c.contactName) && c.contactName !== '')) {
     const [first] = await db.select({ fromName: inboxMails.fromName, fromAddr: inboxMails.fromAddr, body: inboxMails.body }).from(inboxMails).where(eq(inboxMails.caseId, id)).orderBy(asc(inboxMails.receivedAt)).limit(1);
     const who = first ? realContact(first.fromName, first.fromAddr, first.body) : null;
     if (who && who.viaForm && (who.name !== c.contactName || who.addr.toLowerCase() !== c.contactAddr)) {
@@ -237,11 +237,11 @@ export async function listCases(db: Exec, f: ListFilter, mods: { offers: boolean
   return out.sort((a, b) => b.lastAt.localeCompare(a.lastAt));
 }
 
-export async function updateCase(db: Db, actor: Actor, id: string, v: { kind?: MailKind; status?: CaseStatus; title?: string; assignee?: string }) {
+export async function updateCase(db: Db, actor: Actor, id: string, v: { kind?: MailKind; status?: CaseStatus; title?: string; assignee?: string; contactName?: string; contactAddr?: string }) {
   const [before] = await db.select().from(mailCases).where(eq(mailCases.id, id));
   if (!before) throw notFound('Vorgang');
   if (v.assignee && !(await assignees(db)).includes(v.assignee)) throw conflict('Diesen Mitarbeiter gibt es nicht (mehr) oder er hat keinen Zugriff auf die Vorgänge');
-  await db.update(mailCases).set({ ...(v.assignee !== undefined ? { assignee: v.assignee } : {}), ...(v.kind ? { kind: v.kind } : {}), ...(v.status ? { status: v.status, updatedAt: new Date() } : {}), ...(v.title !== undefined ? { title: v.title || before.title } : {}) }).where(eq(mailCases.id, id));
+  await db.update(mailCases).set({ ...(v.contactName !== undefined ? { contactName: v.contactName } : {}), ...(v.contactAddr ? { contactAddr: v.contactAddr.toLowerCase() } : {}), ...(v.assignee !== undefined ? { assignee: v.assignee } : {}), ...(v.kind ? { kind: v.kind } : {}), ...(v.status ? { status: v.status, updatedAt: new Date() } : {}), ...(v.title !== undefined ? { title: v.title || before.title } : {}) }).where(eq(mailCases.id, id));
   // die Kategorie gilt für den ganzen Vorgang – so passen auch die Aktionen an der Nachricht (Zimmer übernehmen, Tisch reservieren …)
   if (v.kind) await db.update(inboxMails).set({ kind: v.kind }).where(eq(inboxMails.caseId, id));
   // „erledigt“ gilt auch für die noch offenen Nachrichten des Vorgangs
