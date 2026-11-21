@@ -499,4 +499,42 @@ describe('Hotelbereich, Zuständigkeit, einstellbare Hinweise', () => {
     expect((await call('POST', '/inbox/blocked-senders/remove', admin, { entry: 'gibtesnicht.example' })).statusCode).toBe(404);
   });
 
+
+  it('Bestellung (z. B. ein Fass): einsortieren → Auftragsbestätigung → „Ware ist da“; der Stand wird am Vorgang geführt und überlebt „Regeln neu anwenden“', async () => {
+    validity = 'order1';
+    box = [raw(1, 'Fritz Fass <fritz@kunde.example>', 'Bestellung', 'Hallo, ich möchte für den 12.12. ein Fass Pils 30 L bestellen.', { id: '<order1@kunde.example>' })];
+    await fetchNow();
+    const m = (await byUid(1))!;
+    const c = await ok('POST', `/inbox/${m.id}/case`, admin, { kind: 'order' });
+    let dto = await ok('GET', `/mail-cases/${c.id}`, admin);
+    expect(dto).toMatchObject({ kind: 'order', status: 'open', orderConfirmedAt: null, orderReadyAt: null });
+    expect((await ok('GET', '/case-next-texts', admin)).order).toContain('Auftragsbestätigung');
+    // Auftragsbestätigung: Entwurf mit Lücken für Artikel, Preis, Termin
+    const d1 = await ok('GET', `/inbox/${m.id}/mail?template=order_confirm`, admin);
+    expect(d1.subject).toMatch(/^Auftragsbestätigung/);
+    expect(d1.text).toContain('Artikel und Menge');
+    expect(d1.to).toBe('fritz@kunde.example');
+    const n = sent.length;
+    await ok('POST', `/inbox/${m.id}/mail?template=order_confirm`, admin, { to: d1.to, subject: d1.subject, text: d1.text.replace('Artikel und Menge: ', 'Artikel und Menge: 1 × Pils 30 L') });
+    expect(sent.length).toBe(n + 1);
+    expect(sent.at(-1)!.subject).toContain(`[${c.number}]`);
+    dto = await ok('GET', `/mail-cases/${c.id}`, admin);
+    expect(dto.orderConfirmedAt).toBeTruthy();
+    expect(dto.orderReadyAt).toBeNull();
+    // Regeln neu anwenden darf weder die Art noch den Stand zurücksetzen
+    await ok('POST', '/inbox/reclassify', admin, {});
+    expect((await ok('GET', `/inbox/${m.id}`, admin)).kind).toBe('order');
+    expect((await ok('GET', `/mail-cases/${c.id}`, admin)).orderConfirmedAt).toBe(dto.orderConfirmedAt);
+    // Ware ist da
+    const d2 = await ok('GET', `/inbox/${m.id}/mail?template=order_ready`, admin);
+    expect(d2.subject).toMatch(/^Ihre Bestellung ist da/);
+    await ok('POST', `/inbox/${m.id}/mail?template=order_ready`, admin, { to: d2.to, subject: d2.subject, text: d2.text });
+    dto = await ok('GET', `/mail-cases/${c.id}`, admin);
+    expect(dto.orderReadyAt).toBeTruthy();
+    expect(dto.messages.filter((x: { dir: string }) => x.dir === 'out')).toHaveLength(2);
+    expect((await call('GET', `/inbox/${m.id}/mail?template=gibtesnicht`, admin)).statusCode).toBe(400);
+    // Filter nach Art in der Liste
+    expect((await ok('GET', '/mail-cases?status=all&kind=order', admin)).map((r: { id: string }) => r.id)).toEqual([c.id]);
+  });
+
 });

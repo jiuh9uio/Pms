@@ -3,12 +3,12 @@ import type { MailAttachment, MailExtract, MailKind } from './mailextract.js';
 
 export const INBOX_STATUSES = ['new', 'done', 'ignored'] as const;
 export type InboxStatus = (typeof INBOX_STATUSES)[number];
-export const MAIL_KINDS = ['hotel', 'table', 'event', 'meeting', 'voucher', 'question', 'other'] as const;
+export const MAIL_KINDS = ['hotel', 'table', 'event', 'meeting', 'voucher', 'order', 'question', 'other'] as const;
 export const MAIL_KIND_LABEL: Record<MailKind, string> = {
-  hotel: 'Zimmer', table: 'Tisch', event: 'Feier / Veranstaltung', meeting: 'Tagung / Versammlung', voucher: 'Gutschein', question: 'Allgemeine Frage', other: 'Sonstiges',
+  hotel: 'Zimmer', table: 'Tisch', event: 'Feier / Veranstaltung', meeting: 'Tagung / Versammlung', voucher: 'Gutschein', order: 'Bestellung (Ware)', question: 'Allgemeine Frage', other: 'Sonstiges',
 };
 /** Kurzform für Abzeichen und Filter */
-export const MAIL_KIND_SHORT: Record<MailKind, string> = { hotel: 'Zimmer', table: 'Tisch', event: 'Feier', meeting: 'Tagung', voucher: 'Gutschein', question: 'Frage', other: 'Sonstiges' };
+export const MAIL_KIND_SHORT: Record<MailKind, string> = { hotel: 'Zimmer', table: 'Tisch', event: 'Feier', meeting: 'Tagung', voucher: 'Gutschein', order: 'Bestellung', question: 'Frage', other: 'Sonstiges' };
 export type InboxCounts = Record<MailKind | 'all', number>;
 
 export const inboxSettingsInput = z.object({
@@ -48,7 +48,8 @@ export const inboxUpdateInput = z.object({
 export const inboxListQuery = z.object({ status: z.enum([...INBOX_STATUSES, 'all']).default('new'), kind: z.enum([...MAIL_KINDS, 'all']).default('all'), q: z.string().max(100).default('') });
 
 // ---------- Antworten ----------
-export const REPLY_TEMPLATES = ['reply', 'confirm', 'decline'] as const;
+/** order_confirm = Auftragsbestätigung zu einer Bestellung, order_ready = „Ihre Bestellung ist da“ */
+export const REPLY_TEMPLATES = ['reply', 'confirm', 'decline', 'order_confirm', 'order_ready'] as const;
 export type ReplyTemplate = (typeof REPLY_TEMPLATES)[number];
 
 // ---------- E-Mail-Regeln (Einstellungen → Algorithmen → E-Mail) ----------
@@ -114,6 +115,8 @@ export interface CaseDto {
   linkedInboxMailId: string | null;
   /** wann die Bestätigung der Reservierung gesendet wurde */
   confirmedAt: string | null;
+  /** Bestellung: wann die Auftragsbestätigung bzw. die Nachricht „Ware ist da“ gesendet wurde */
+  orderConfirmedAt: string | null; orderReadyAt: string | null;
   candidates: { inboxMailId: string; at: string; from: string; subject: string }[];
   /** zuständiger Mitarbeiter (leer = niemand) */
   assignee: string;
@@ -128,19 +131,19 @@ export const caseUpdateInput = z.object({ kind: z.enum(MAIL_KINDS).optional(), s
 // ---------- Hinweis „Als Nächstes“ im Vorgang: je Kategorie einstellbar (Vorgänge → Antwortvorlagen) ----------
 const nextText = z.string().trim().min(1, 'Bitte einen Text eintragen').max(300);
 export const nextTextsInput = z.object({
-  hotel: nextText, table: nextText, event: nextText, meeting: nextText, voucher: nextText, question: nextText, other: nextText,
+  hotel: nextText, table: nextText, event: nextText, meeting: nextText, voucher: nextText, order: nextText.default('Bestellung: prüfen, ob lieferbar – dann die Auftragsbestätigung senden.'), question: nextText, other: nextText,
   /** Zimmer- bzw. Tischreservierung ist angelegt, die Bestätigung fehlt noch */
   bookingMade: nextText, tableMade: nextText,
 });
 export type NextTexts = z.infer<typeof nextTextsInput>;
 export const NEXT_TEXT_LABEL: Record<keyof NextTexts, string> = {
-  hotel: 'Zimmeranfrage', table: 'Tischanfrage', event: 'Feier', meeting: 'Tagung', voucher: 'Gutschein', question: 'Frage', other: 'Sonstiges',
+  hotel: 'Zimmeranfrage', table: 'Tischanfrage', event: 'Feier', meeting: 'Tagung', voucher: 'Gutschein', order: 'Bestellung', question: 'Frage', other: 'Sonstiges',
   bookingMade: 'Zimmerreservierung angelegt', tableMade: 'Tischreservierung angelegt',
 };
 export const DEFAULT_NEXT_TEXTS: NextTexts = {
   hotel: 'Zimmeranfrage: Verfügbarkeit prüfen, dann Reservierung anlegen oder antworten.', table: 'Tischanfrage: Tisch reservieren oder antworten.',
   event: 'Anfrage für eine Feier: antworten – oder im Bereich Angebote eine Absprache / ein Angebot anlegen.', meeting: 'Tagungsanfrage: antworten – oder im Bereich Angebote ein Angebot anlegen.',
-  voucher: 'Gutschein-Anfrage: antworten – der Gutschein wird im Bereich Gutscheine ausgestellt.', question: 'Frage des Kunden beantworten.', other: 'Nachricht lesen und antworten – oder als erledigt markieren.',
+  voucher: 'Gutschein-Anfrage: antworten – der Gutschein wird im Bereich Gutscheine ausgestellt.', order: 'Bestellung: prüfen, ob lieferbar – dann die Auftragsbestätigung senden.', question: 'Frage des Kunden beantworten.', other: 'Nachricht lesen und antworten – oder als erledigt markieren.',
   bookingMade: 'Die Zimmerreservierung ist angelegt – jetzt die Bestätigung senden oder antworten.', tableMade: 'Die Tischreservierung ist angelegt – jetzt die Bestätigung senden oder antworten.',
 };
 

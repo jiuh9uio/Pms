@@ -1367,3 +1367,5 @@ a.linkcard.attention b { color: var(--warn); }
 .iv-rcp > div { display: grid; gap: 1px; min-width: 0; } .iv-rcp > div:first-child { flex: 1 1 220px; } .iv-rcp small { font-size: 12px; } .iv-rcp span { font-size: 13.5px; color: var(--ink-2); }
 .iv-rcpform { padding: 14px; border: 1px solid var(--line-strong); border-radius: 10px; margin-bottom: 16px; }
 .iv-more { margin: 6px 0; } .iv-more summary { cursor: pointer; font-size: 13.5px; color: var(--accent-text); }
+
+.mk-order { --mk: #c2571a; } .msg-avatar.k-order { background: #fde3d3; color: #8a3a0c; }

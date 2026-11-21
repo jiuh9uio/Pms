@@ -643,7 +643,7 @@ export const mailLog = pgTable('mail_log', {
 export const mailCases = pgTable('mail_cases', {
   id: id(),
   number: text('number').notNull().unique(),
-  kind: text('kind', { enum: ['hotel', 'table', 'event', 'meeting', 'voucher', 'question', 'other'] }).notNull().default('other'),
+  kind: text('kind', { enum: ['hotel', 'table', 'event', 'meeting', 'voucher', 'order', 'question', 'other'] }).notNull().default('other'),
   title: text('title').notNull().default(''),
   contactName: text('contact_name').notNull().default(''),
   contactAddr: text('contact_addr').notNull().default(''),
@@ -678,7 +678,7 @@ export const inboxMails = pgTable('inbox_mails', {
   subject: text('subject').notNull().default(''),
   receivedAt: ts('received_at').notNull(),
   body: text('body').notNull().default(''),
-  kind: text('kind', { enum: ['hotel', 'table', 'event', 'meeting', 'voucher', 'question', 'other'] }).notNull(),
+  kind: text('kind', { enum: ['hotel', 'table', 'event', 'meeting', 'voucher', 'order', 'question', 'other'] }).notNull(),
   extract: jsonb('extract').notNull(),
   status: text('status', { enum: ['new', 'done', 'ignored'] }).notNull().default('new'),
   linkKind: text('link_kind', { enum: ['booking', 'table'] }),

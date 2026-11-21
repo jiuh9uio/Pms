@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.134.0
+
+- **Neue Vorgangsart „Bestellung (Ware)“** – z. B. wenn jemand ein Fass Bier bestellt. Im Posteingang die Kachel „Bestellung“ wählen; der Vorgang zeigt dann die Schritte **Bestellung → Auftrag bestätigt → Ware da – gemeldet → Erledigt**.
+- **„Auftragsbestätigung senden“**: vorbereitete E-Mail mit Lücken für Artikel, Menge, Preis und Termin (das Programm kennt die Bestellung nicht – bitte eintragen).
+- **„Ware ist da – Kunden benachrichtigen“**: vorbereitete E-Mail, sobald die Ware eingetroffen ist. Beide Texte lassen sich vor dem Senden ändern; gesendet wird nur auf Knopfdruck.
+- Der Hinweis „Als Nächstes“ für Bestellungen ist wie die anderen einstellbar (Vorgänge → Antwortvorlagen).
+- Keine Änderung an der Datenbank.
+
 ## 1.133.0
 
 - **Fenster für Kostenvoranschlag und Rechnungsentwurf übersichtlicher.** Oben zeigt eine **Schritte-Leiste**, wie weit es ist (Empfänger → Positionen → Gesendet → Kunde: Ja → Rechnung). Der **Empfänger** steht als eine Zeile mit Termin und Gültigkeit; das große Formular klappt erst über „Ändern“ auf (bei einem neuen Entwurf ohne Empfänger ist es gleich offen). Dadurch sind die **Positionen** sofort zu sehen.

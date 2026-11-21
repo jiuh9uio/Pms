@@ -3,7 +3,8 @@
  * (Datum, Uhrzeit, Personen, Telefon). Reine Mustererkennung – das Ergebnis ist ein Vorschlag,
  * den ein Mensch prüft, bevor daraus eine Reservierung wird.
  */
-export type MailKind = 'hotel' | 'table' | 'event' | 'meeting' | 'voucher' | 'question' | 'other';
+/** order = Bestellung von Ware (z. B. ein Fass Bier) – wird nicht automatisch erkannt, sondern beim Einsortieren gewählt */
+export type MailKind = 'hotel' | 'table' | 'event' | 'meeting' | 'voucher' | 'order' | 'question' | 'other';
 /** id = im Programm gespeichert und abrufbar; ohne id nur der Name (zu groß oder aus der Zeit vor dem Speichern) */
 export interface MailAttachment { name: string; size: number; type: string; id?: string }
 export interface MailExtract {
@@ -12,6 +13,8 @@ export interface MailExtract {
   attachments?: MailAttachment[];
   /** wann die Bestätigung der daraus angelegten Reservierung gesendet wurde */
   confirmedAt?: string;
+  /** Bestellung: Auftragsbestätigung gesendet / Nachricht „Ware ist da“ gesendet */
+  orderConfirmedAt?: string; orderReadyAt?: string;
   /** gefundene Tage in Reihenfolge des Textes, ohne Doppelte (ISO) */
   dates: string[];
   /** Hotel: Anreise und Abreise, wenn erkennbar */
@@ -129,7 +132,7 @@ export function findPhone(text: string): string {
 /** \b und \w verstehen in JavaScript keine Umlaute – hier eine Fassung, die „Übernachtung“, „Menü“ und „Ärzte“ richtig trennt. */
 const WCH = String.raw`[\p{L}\p{N}_]`;
 const U = (re: RegExp) => new RegExp(re.source.replace(/\\b/g, String.raw`(?:(?<!${WCH})(?=${WCH})|(?<=${WCH})(?!${WCH}))`).replace(/\\w/g, WCH), re.flags.includes('u') ? re.flags : `${re.flags}u`);
-type Scored = Exclude<MailKind, 'question' | 'other'>;
+type Scored = Exclude<MailKind, 'order' | 'question' | 'other'>;
 const W0: Record<Scored, { strong: RegExp; weak: RegExp }> = {
   hotel: {
     strong: /\b(?:doppel|einzel|dreibett|familien|mehrbett|monteur|zwei?bett)?zimmer(?:anfrage|reservierung|buchung|preis|preise)?\b|übernacht\w*|uebernacht\w*|\bnächte\b|\bnacht\b|\banreise\b|\babreise\b|\bcheck-?in\b|\bcheck-?out\b|\bunterkunft\b|ferienwohnung|zimmerkategorie|\bschlafen\b|\bschlafmöglichkeit\w*/gi,

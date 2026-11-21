@@ -453,6 +453,18 @@ export async function replyDraft(db: Exec, id: string, template: ReplyTemplate, 
     }
     throw conflict('Aus dieser Nachricht wurde noch keine Reservierung angelegt – erst übernehmen, dann bestätigen', 'not_linked');
   }
+  if (template === 'order_confirm') {
+    // Auftragsbestätigung: die bestellte Ware, Preis und Termin trägt der Mitarbeiter ein – das Programm kennt sie nicht
+    const text = [hello, '', 'vielen Dank für Ihre Bestellung. Hiermit bestätigen wir Ihnen folgenden Auftrag:', '',
+      '- Artikel und Menge: ', '- Preis (inkl. Umsatzsteuer): ', '- Voraussichtlich abholbereit / lieferbar am: ', '',
+      'Sobald die Ware bei uns eingetroffen ist, erhalten Sie von uns eine kurze Nachricht.', '', signature(h)].join('\n') + quote(r);
+    return { ...base, subject: `Auftragsbestätigung – ${h.name}`, text };
+  }
+  if (template === 'order_ready') {
+    const text = [hello, '', 'Ihre Bestellung ist bei uns eingetroffen und steht für Sie bereit.', '',
+      '- Abholung möglich: ', '', 'Bitte geben Sie uns kurz Bescheid, wann Sie kommen. Bei Fragen erreichen Sie uns jederzeit.', '', signature(h)].join('\n');
+    return { ...base, subject: `Ihre Bestellung ist da – ${h.name}`, text };
+  }
   if (template === 'decline') {
     const what = r.kind === 'table' ? 'zu dem gewünschten Zeitpunkt leider keinen Tisch mehr frei' : r.kind === 'hotel' ? 'in dem gewünschten Zeitraum leider kein Zimmer mehr frei'
       : r.kind === 'event' ? 'an dem gewünschten Termin leider keine Räumlichkeiten für Ihre Feier mehr frei' : r.kind === 'meeting' ? 'an dem gewünschten Termin leider keinen Tagungsraum mehr frei'
@@ -483,7 +495,9 @@ export async function sendReply(db: Db, actor: Actor, id: string, v: { to: strin
   if (offer) await logMailOut(db, offer.id, 'reply', actor, v.to, subject, v.text);
   if (invoice) await logInvoiceMailOut(db, invoice.id, 'reply', actor, v.to, subject, v.text);
   // Bestätigung gesendet: an der Nachricht vermerken (für den Stand „bestätigt“ im Vorgang)
-  const confirmed = template === 'confirm' ? { extract: { ...(r.extract as MailExtract), confirmedAt: new Date().toISOString() } as MailExtract } : {};
+  // Bestellung: Auftragsbestätigung bzw. „Ware ist da“ gesendet – ebenfalls an der Nachricht vermerkt (von Hand eingeordnet, damit die Regeln sie nicht neu einordnen)
+  const stamp = template === 'confirm' ? 'confirmedAt' : template === 'order_confirm' ? 'orderConfirmedAt' : template === 'order_ready' ? 'orderReadyAt' : null;
+  const confirmed = stamp ? { extract: { ...(r.extract as MailExtract), ...(stamp === 'confirmedAt' ? {} : { manual: true }), [stamp]: new Date().toISOString() } as MailExtract } : {};
   await db.update(inboxMails).set({ repliedAt: new Date(), repliedBy: actor.userName, ...confirmed }).where(eq(inboxMails.id, id));
   await record(db, actor, { action: 'mail', entity: 'inbox', entityId: id, after: { to: v.to, subject: v.subject.slice(0, 120) } });
   } catch (e) {

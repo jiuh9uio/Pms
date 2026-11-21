@@ -115,15 +115,17 @@ const AttachmentChip = ({ a }: { a: { name: string; size: number; id?: string } 
   return a.id ? <a className="msg-attlink" href={`/api/v1/inbox/attachments/${a.id}`} download={a.name}>{label}</a> : <span>{label}</span>;
 };
 /** Was es ist – steht in Liste und Kopf vorn, der Name daneben */
-const WHAT: Record<MailKind | 'offer' | 'estimate', string> = { hotel: 'Zimmeranfrage', table: 'Tischanfrage', event: 'Feier / Veranstaltung', meeting: 'Tagung', voucher: 'Gutschein', question: 'Frage', other: 'Nachricht', offer: 'Angebot', estimate: 'Kostenvoranschlag' };
+const WHAT: Record<MailKind | 'offer' | 'estimate', string> = { hotel: 'Zimmeranfrage', table: 'Tischanfrage', event: 'Feier / Veranstaltung', meeting: 'Tagung', voucher: 'Gutschein', order: 'Bestellung', question: 'Frage', other: 'Nachricht', offer: 'Angebot', estimate: 'Kostenvoranschlag' };
 /** Bildzeichen je Art – in Liste, Kopf und beim Einsortieren */
-const KIND_ICON: Record<MailKind | 'offer' | 'estimate', string> = { hotel: '🛏️', table: '🍽️', event: '🎉', meeting: '👥', voucher: '🎁', question: '❓', other: '✉️', offer: '📄', estimate: '🧾' };
+const KIND_ICON: Record<MailKind | 'offer' | 'estimate', string> = { hotel: '🛏️', table: '🍽️', event: '🎉', meeting: '👥', voucher: '🎁', order: '📦', question: '❓', other: '✉️', offer: '📄', estimate: '🧾' };
 /** Weg eines Vorgangs als Schritte (wie bei „Neue Reservierung“): was ist geschafft, was steht an */
 function caseSteps(c: CaseDto): { label: string; state: 'done' | 'now' | 'todo' }[] {
   const closed = c.status === 'done' || c.status === 'archived';
   const answered = c.messages.some((m) => m.dir === 'out');
   const booking = c.kind === 'hotel' || c.kind === 'table' || !!c.latestLinkKind || !!c.bookingId;
-  const marks = booking
+  const marks = c.kind === 'order'
+    ? [['Bestellung', true], ['Auftrag bestätigt', !!c.orderConfirmedAt], ['Ware da – gemeldet', !!c.orderReadyAt], ['Erledigt', closed]] as const
+    : booking
     ? [['Anfrage', true], [c.kind === 'table' || c.latestLinkKind === 'table' ? 'Tisch reserviert' : 'Zimmer reserviert', !!c.latestLinkKind || !!c.bookingId], ['Bestätigung gesendet', !!c.confirmedAt || (!!c.bookingId && answered)], ['Erledigt', closed]] as const
     : [['Anfrage', true], ['Beantwortet', answered], ['Erledigt', closed]] as const;
   const firstOpen = marks.findIndex(([, ok]) => !ok);
@@ -208,6 +210,11 @@ function nextStep(c: CaseDto, by: NextTexts): { text: string; tone: 'warn' | 'ne
   if (c.status === 'done' || c.status === 'archived') return { text: c.status === 'archived' ? 'Archiviert – nichts zu tun.' : 'Erledigt – nichts zu tun.', tone: 'ok' };
   const last = c.messages[c.messages.length - 1];
   if (c.bookingId && !c.latestInboxMailId) return { text: `E-Mail zur Reservierung ${c.bookingNumber ?? ''} aus dem Hotelbereich gesendet. Antwortet der Gast, erscheint seine Nachricht hier.`, tone: 'neutral' };
+  if (c.kind === 'order') {
+    if (c.turn === 'ours' && c.orderConfirmedAt) return { text: 'Der Kunde hat zur Bestellung noch einmal geschrieben – bitte lesen und antworten.', tone: 'warn' };
+    if (c.orderReadyAt) return { text: `„Ware ist da“ gemeldet am ${new Date(c.orderReadyAt).toLocaleDateString('de-DE')}. Nach der Abholung als erledigt markieren.`, tone: 'ok' };
+    if (c.orderConfirmedAt) return { text: `Auftrag bestätigt am ${new Date(c.orderConfirmedAt).toLocaleDateString('de-DE')}. Ware beschaffen – sobald sie da ist, unten „Ware ist da“ senden.`, tone: 'neutral' };
+  }
   if (c.confirmedAt && c.turn === 'theirs') return { text: `Bestätigung gesendet am ${new Date(c.confirmedAt).toLocaleDateString('de-DE')}. Bitte noch prüfen, ob in der Reservierung alles stimmt – dann als erledigt markieren.`, tone: 'ok' };
   if (c.confirmedAt && c.turn === 'ours') return { text: 'Der Kunde hat nach der Bestätigung noch einmal geschrieben – bitte lesen und antworten.', tone: 'warn' };
   if (c.turn === 'theirs') { const d = last ? daysSince(last.at) : 0; return { text: `Warten auf die Antwort des Kunden${d >= 1 ? ` – seit ${d} ${d === 1 ? 'Tag' : 'Tagen'}` : ''}.${d >= 3 ? ' Vielleicht nachfragen?' : ''}`, tone: 'neutral' }; }
@@ -245,7 +252,11 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
     if (!t?.trim()) return;
     try { await api('POST', `/mail-cases/${id}/merge`, { number: t.trim() }); toast(`Mit ${t.trim().toUpperCase()} zusammengeführt`); bump(); onBack(); } catch (e) { toast(e instanceof Error ? e.message : 'Fehler', 'error'); }
   };
-  const stage = stageOf({ status: data.status, turn: data.turn, linked: !!data.latestLinkKind, confirmed: !!data.confirmedAt });
+  // Bestellung: erst die Auftragsbestätigung, dann die Nachricht „Ware ist da“
+  const orderNext = data.kind !== 'order' || data.status === 'done' || data.status === 'archived' ? null : !data.orderConfirmedAt ? 'confirm' : !data.orderReadyAt ? 'ready' : null;
+  const stage = data.kind === 'order' && data.status !== 'done' && data.status !== 'archived' && data.turn !== 'ours' && data.orderConfirmedAt
+    ? (data.orderReadyAt ? { label: 'Ware da – wartet auf Abholung', tone: 'ok' as const } : { label: 'Bestätigt – Ware wird beschafft', tone: 'accent' as const })
+    : stageOf({ status: data.status, turn: data.turn, linked: !!data.latestLinkKind, confirmed: !!data.confirmedAt });
   const fit = snippets.filter((x) => x.active && (x.kind === data.kind || x.kind === 'all'));
   const ins = data.messages.filter((x) => x.dir === 'in').length;
   return (
@@ -288,13 +299,15 @@ function CaseDetail({ id, onBack }: { id: string; onBack: () => void }) {
         <footer className="msg-foot">
           {fit.length > 0 && <div className="msg-sugg"><span className="muted small">Antwortvorschläge:</span>{fit.map((x) => <button key={x.id} type="button" className="chip" onClick={() => setReply(`reply&vorlage=${encodeURIComponent(x.id)}`)}>{x.title}</button>)}</div>}
           {data.latestLinkKind && !data.confirmedAt && <Button variant="primary" onClick={() => setReply('confirm')}>Bestätigung senden</Button>}
-          <Button variant={data.latestLinkKind && !data.confirmedAt ? undefined : 'primary'} onClick={() => setReply('reply')}>Frei antworten</Button>
+          {orderNext === 'confirm' && <Button variant="primary" onClick={() => setReply('order_confirm')}>Auftragsbestätigung senden</Button>}
+          {orderNext === 'ready' && <Button variant="primary" onClick={() => setReply('order_ready')}>Ware ist da – Kunden benachrichtigen</Button>}
+          <Button variant={(data.latestLinkKind && !data.confirmedAt) || orderNext ? undefined : 'primary'} onClick={() => setReply('reply')}>Frei antworten</Button>
           <Button onClick={() => setMore(!more)}>{more ? 'Übernehmen / absagen ausblenden' : 'Übernehmen / absagen …'}</Button>
         </footer>
       )}
       {!data.latestInboxMailId && data.bookingId && <footer className="msg-foot"><span className="muted small">Weitere E-Mails an den Gast senden Sie aus der Reservierung – sie erscheinen dann hier. Antwortet der Gast, können Sie auch von hier aus antworten.</span></footer>}
-      {reply && data.latestInboxMailId && <MailDialog path={`/inbox/${reply === 'confirm' && data.linkedInboxMailId ? data.linkedInboxMailId : data.latestInboxMailId}/mail?template=${reply}`} title={`${reply === 'confirm' ? 'Bestätigung senden' : 'Antworten'} – ${data.number}`} onClose={() => setReply(false)} onSent={() => { bump(); reload(); }}
-        intro={<p className="muted small">Die Vorgangsnummer {data.number} wird beim Senden automatisch in den Betreff gesetzt.</p>} />}
+      {reply && data.latestInboxMailId && <MailDialog path={`/inbox/${reply === 'confirm' && data.linkedInboxMailId ? data.linkedInboxMailId : data.latestInboxMailId}/mail?template=${reply}`} title={`${reply === 'confirm' ? 'Bestätigung senden' : reply === 'order_confirm' ? 'Auftragsbestätigung senden' : reply === 'order_ready' ? 'Ware ist da – Kunden benachrichtigen' : 'Antworten'} – ${data.number}`} onClose={() => setReply(false)} onSent={() => { bump(); reload(); }}
+        intro={<p className="muted small">{reply === 'order_confirm' && 'Bitte Artikel, Menge, Preis und Termin im Text eintragen – das Programm kennt die Bestellung nicht. '}{reply === 'order_ready' && 'Bitte eintragen, wann abgeholt werden kann. '}Die Vorgangsnummer {data.number} wird beim Senden automatisch in den Betreff gesetzt.</p>} />}
       {more && data.latestInboxMailId && <div className="msg-more"><MailDetail key={data.latestInboxMailId} id={data.latestInboxMailId} inCase onGone={() => { bump(); reload(); }} /></div>}
     </>
   );
