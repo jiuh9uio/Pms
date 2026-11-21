@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gte, ilike, isNull, or, sql } from 'drizzle-orm';
 import { DEFAULT_NEXT_TEXTS, type CaseDto, type CaseListRow, type CaseMessage, type CaseStatus, type CaseTurn, type InboxStatus, type NextTexts } from '../../shared/inbox.js';
-import type { MailExtract, MailKind } from '../../shared/mailextract.js';
+import { plausibleName, isRelayAddress, realContact, type MailExtract, type MailKind } from '../../shared/mailextract.js';
 import { todayBerlin } from '../../shared/hotel.js';
 import type { Db, Exec } from '../db/client.js';
 import { bookings, inboxMails, invoiceEvents, mailCaseOut, mailCases, numberSequences, offerEvents, settings, users } from '../db/schema.js';
@@ -36,7 +36,9 @@ export async function ensureCaseForMail(db: Db, actor: Actor, inboxMailId: strin
     // aus dem Posteingang einsortiert: die gewählte Kategorie gilt für Nachricht und Vorgang
     if (kind && kind !== m.kind) { await tx.update(inboxMails).set({ kind, extract: { ...(m.extract as MailExtract), manual: true } as MailExtract }).where(eq(inboxMails.id, inboxMailId)); m.kind = kind; }
     const number = await nextNumber(tx);
-    const [c] = await tx.insert(mailCases).values({ number, kind: m.kind, title: cleanTitle(m.subject) || '(ohne Betreff)', contactName: m.fromName, contactAddr: m.fromAddr.toLowerCase(), createdBy: actor.userName }).returning();
+    // Kontakt: bei E-Mails von Kontaktformularen stehen Name und Adresse des Kunden im Text (nicht „MyWebsite <no-reply@…>“)
+    const who = realContact(m.fromName, m.fromAddr, m.body);
+    const [c] = await tx.insert(mailCases).values({ number, kind: m.kind, title: cleanTitle(m.subject) || '(ohne Betreff)', contactName: who.name, contactAddr: who.addr.toLowerCase(), createdBy: actor.userName }).returning();
     await tx.update(inboxMails).set({ caseId: c!.id }).where(eq(inboxMails.id, inboxMailId));
     await record(tx, actor, { action: 'create', entity: 'mail_case', entityId: c!.id, after: { number, subject: m.subject.slice(0, 80) } });
     return c!;
@@ -134,6 +136,15 @@ export async function getCase(db: Exec, id: string): Promise<CaseDto> {
   const [c] = await db.select().from(mailCases).where(eq(mailCases.id, id));
   if (!c) throw notFound('Vorgang');
   const messages = await messagesOf(db, id);
+  // ältere Vorgänge von Kontaktformularen: der gespeicherte Kontakt („MyWebsite“, no-reply) wird einmalig durch den aus dem Text ersetzt
+  if (!plausibleName(c.contactName) || isRelayAddress(c.contactAddr)) {
+    const [first] = await db.select({ fromName: inboxMails.fromName, fromAddr: inboxMails.fromAddr, body: inboxMails.body }).from(inboxMails).where(eq(inboxMails.caseId, id)).orderBy(asc(inboxMails.receivedAt)).limit(1);
+    const who = first ? realContact(first.fromName, first.fromAddr, first.body) : null;
+    if (who && who.viaForm && (who.name !== c.contactName || who.addr.toLowerCase() !== c.contactAddr)) {
+      c.contactName = who.name; c.contactAddr = who.addr.toLowerCase();
+      await db.update(mailCases).set({ contactName: c.contactName, contactAddr: c.contactAddr }).where(eq(mailCases.id, id)).catch(() => null);
+    }
+  }
   const latestIn = [...messages].reverse().find((m) => m.dir === 'in');
   // schon angelegt? (irgendeine Nachricht des Vorgangs wurde als Reservierung übernommen)
   const [linked] = await db.select({ k: inboxMails.linkKind, id: inboxMails.id }).from(inboxMails).where(and(eq(inboxMails.caseId, id), sql`${inboxMails.linkKind} is not null`)).limit(1);

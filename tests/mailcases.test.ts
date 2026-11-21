@@ -537,4 +537,31 @@ describe('Hotelbereich, Zuständigkeit, einstellbare Hinweise', () => {
     expect((await ok('GET', '/mail-cases?status=all&kind=order', admin)).map((r: { id: string }) => r.id)).toEqual([c.id]);
   });
 
+
+  it('Kontaktformular: Kontakt, Anrede und Antwortadresse kommen aus dem Text – nicht „MyWebsite <no-reply@…>“; Ausfiltern ist gesperrt; alter Vorgang wird berichtigt', async () => {
+    validity = 'form1';
+    const text = 'Sie haben eine Formularnachricht über https://www.haus.example/kontakt/ erhalten.\r\n\r\nName: Erika Mustermann\r\nE-Mail-Adresse: erika.form@kunde.example\r\nTelefon: 01234 56789\r\nNachricht: Haben Sie am Samstag um 19 Uhr einen Tisch für 4 Personen?';
+    box = [raw(1, 'MyWebsite <no-reply@mywebsite-editor.example>', 'Neue Formularnachricht', text, { id: '<form1@x.example>' }),
+      raw(2, 'MyWebsite <no-reply@mywebsite-editor.example>', 'Neue Formularnachricht', text.replace('Erika Mustermann', 'Max Muster').replace('erika.form', 'max.form'), { id: '<form2@x.example>' })];
+    await fetchNow();
+    const m = (await byUid(1))!, m2 = (await byUid(2))!;
+    expect(await ok('GET', `/inbox/${m.id}`, admin)).toMatchObject({ contactName: 'Erika Mustermann', contactAddr: 'erika.form@kunde.example', viaForm: true, fromName: 'MyWebsite' });
+    expect((await call('POST', `/inbox/${m.id}/block-sender`, admin, { scope: 'address' })).statusCode).toBe(409);
+    const c = await ok('POST', `/inbox/${m.id}/case`, admin, { kind: 'table' });
+    expect(await ok('GET', `/mail-cases/${c.id}`, admin)).toMatchObject({ contactName: 'Erika Mustermann', contactAddr: 'erika.form@kunde.example' });
+    const d = await ok('GET', `/inbox/${m.id}/mail?template=reply`, admin);
+    expect(d.to).toBe('erika.form@kunde.example');
+    expect(d.text.startsWith('Guten Tag Erika Mustermann,')).toBe(true);
+    await ok('POST', `/inbox/${m.id}/mail?template=reply`, admin, { to: d.to, subject: d.subject, text: d.text });
+    // die Antwort der Kundin von ihrer eigenen Adresse landet im Vorgang
+    box.push(raw(3, 'Erika Mustermann <erika.form@kunde.example>', `Re: Neue Formularnachricht [${c.number}]`, 'Ja, gern.', { id: '<form3@x.example>' }));
+    await fetchNow();
+    expect((await byUid(3))!.case_id).toBe(c.id);
+    // älterer Vorgang, der noch „MyWebsite“ als Kontakt gespeichert hat: wird beim Öffnen berichtigt
+    const c2 = await ok('POST', `/inbox/${m2.id}/case`, admin, { kind: 'table' });
+    await db.execute(sql`update mail_cases set contact_name = 'MyWebsite', contact_addr = 'no-reply@mywebsite-editor.example' where id = ${c2.id}`);
+    expect(await ok('GET', `/mail-cases/${c2.id}`, admin)).toMatchObject({ contactName: 'Max Muster', contactAddr: 'max.form@kunde.example' });
+    expect((await db.execute(sql`select contact_name from mail_cases where id = ${c2.id}`))[0]!.contact_name).toBe('Max Muster');
+  });
+
 });

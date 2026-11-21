@@ -3,6 +3,14 @@
 Der Abschnitt einer Version erscheint im Programm unter Einstellungen → Programm-Update.
 Eine neue Version wird veröffentlicht, sobald die Versionsnummer in `package.json` erhöht wird.
 
+## 1.136.0
+
+- **Absendername wird auf Plausibilität geprüft.** Namen wie „MyWebsite“, „Kontaktformular“, „info“ oder „no-reply“ werden nicht mehr als Kundenname übernommen – weder im Vorgang noch in der Anrede noch im Namensfeld der Reservierung.
+- **Kontaktformular-E-Mails werden ausgelesen:** Kommt eine E-Mail von der Weiterleitung Ihrer Internetseite (z. B. no-reply@…), liest das Programm **Name und E-Mail-Adresse des Kunden aus dem Text** („Name: …“, „E-Mail-Adresse: …“). Der Vorgang trägt dann den Kunden als Kontakt, die Antwort geht an seine Adresse statt an no-reply, und seine Rückantwort landet im selben Vorgang. Ein Hinweis zeigt, dass die Angaben aus dem Formulartext stammen.
+- Findet das Programm keinen brauchbaren Namen, bleibt das Feld leer („Name unbekannt“) – es wird nichts erfunden.
+- Bei Formular-E-Mails ist „Absender ausfiltern“ gesperrt, weil sonst alle Anfragen über das Formular verschwinden würden.
+- Bestehende Vorgänge mit „MyWebsite“ als Kontakt werden beim Öffnen berichtigt, wenn der Name im Text steht. Keine Änderung am Aufbau der Datenbank.
+
 ## 1.135.0
 
 - **Kostenvoranschlag: „senden“ nur noch, solange er nicht gesendet ist.** Danach steht unten kein Sende-Knopf mehr; „erneut senden“ gibt es als kleinen Link im Verlauf (mit Rückfrage) – für den Fall, dass etwas geändert wurde oder die E-Mail nicht ankam.

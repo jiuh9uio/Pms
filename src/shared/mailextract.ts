@@ -224,3 +224,62 @@ export function extract(subject: string, body: string, ref: string, extra?: Extr
   if ((kind === 'meeting' || kind === 'event') && dates.length) { from = dates[0]!; to = dates.find((d) => d > from!) ?? null; }
   return { kind, dates, from, to, time: kind === 'hotel' || kind === 'voucher' ? null : findTime(text), persons, children, phone: findPhone(text) };
 }
+
+// ---------- Wer hat wirklich geschrieben? (Absendername auf Plausibilität prüfen, Kontaktformulare auslesen) ----------
+/** Wörter, die kein Personen- oder Firmenname eines Kunden sind (Systeme, Postfächer, Baukästen) */
+const NO_NAME = /\b(my\s?website|website|webseite|homepage|kontakt(formular)?|formular|form(mail)?|no-?reply|do-?not-?reply|nicht\s?antworten|mailer(-daemon)?|postmaster|webmaster|admin(istrator)?|system|notification|benachrichtigung|newsletter|wordpress|jimdo|wix|ionos|strato|squarespace|shopify|typo3|joomla|info|service|support|team|kundenservice|noreply|unknown|unbekannt|anfrage|nachricht|e-?mail|mail)\b/i;
+/** Adressen, an die man nicht antworten kann bzw. die nur weiterleiten */
+const RELAY_ADDR = /^(no-?reply|noreply|do-?not-?reply|donotreply|nicht-?antworten|mailer(-daemon)?|postmaster|bounce|notification|notifications|formular|kontaktformular|form|forms|website|webmaster|wordpress|system)([+._-][a-z0-9._-]*)?@/i;
+/** Sieht das wie der Name eines Menschen oder einer Firma aus? (keine Systemwörter, keine Adresse, kein Zahlensalat) */
+export function plausibleName(name: string): boolean {
+  const n = name.replace(/["'<>]/g, '').trim();
+  if (n.length < 2 || n.length > 80) return false;
+  if (/@|https?:|www\.|\.(de|com|net|org|eu)\b/i.test(n)) return false;
+  if (!/\p{L}{2}/u.test(n)) return false;
+  if ((n.match(/\d/g) ?? []).length > 2) return false;
+  if (NO_NAME.test(n)) return false;
+  return true;
+}
+export const isRelayAddress = (addr: string) => RELAY_ADDR.test(addr.trim());
+const FORM_LABELS = ['Vor- und Nachname', 'Vor- und Zuname', 'Ihr Name', 'Vorname', 'Nachname', 'Familienname', 'Name', 'E-Mail-Adresse', 'E-Mailadresse', 'Emailadresse', 'Ihre E-Mail', 'E-Mail', 'Email', 'Mail',
+  'Telefonnummer', 'Telefon', 'Tel', 'Handy', 'Mobil', 'Rückrufnummer', 'Nachricht', 'Ihre Nachricht', 'Mitteilung', 'Betreff', 'Anrede', 'Firma', 'Unternehmen', 'Straße', 'PLZ', 'Ort', 'Datum', 'Uhrzeit', 'Personen', 'Anzahl Personen', 'Anliegen', 'Kommentar'];
+const LABEL_RE = new RegExp(`(^|[\\n\\r]|\\s{2,}|[.!?]\\s)\\s*(${FORM_LABELS.map((l) => l.replace(/[-.]/g, '\\$&')).sort((a, b) => b.length - a.length).join('|')})\\s*\\*?\\s*:[ \\t]*`, 'gi');
+/** Beschriftete Felder eines Kontaktformulars („Name: …“, „E-Mail: …“) aus dem Text lesen – auch wenn alles in einer Zeile steht */
+export function formFields(body: string): Record<string, string> {
+  const text = body.slice(0, 6000);
+  const hits = [...text.matchAll(LABEL_RE)].map((m) => ({ label: m[2]!.toLowerCase(), start: m.index!, end: m.index! + m[0].length }));
+  const out: Record<string, string> = {};
+  hits.forEach((h, i) => {
+    const stop = Math.min(hits[i + 1]?.start ?? text.length, h.end + 300);
+    const value = (text.slice(h.end, stop).split(/[\n\r]/)[0] ?? '').trim();
+    if (value && !(h.label in out)) out[h.label] = value;
+  });
+  return out;
+}
+export interface RealContact {
+  /** Name für Anrede und Reservierung; leer = kein brauchbarer Name gefunden */
+  name: string;
+  /** Adresse, an die geantwortet wird */
+  addr: string;
+  /** Name bzw. Adresse stammen aus dem Text eines Kontaktformulars, nicht aus dem Absender der E-Mail */
+  viaForm: boolean;
+}
+/**
+ * Wer hat wirklich geschrieben? Kommt die E-Mail von einem Kontaktformular oder einer „no-reply“-Adresse, stehen Name und
+ * Adresse des Kunden im Text. Ein unplausibler Absendername („MyWebsite“, „Kontaktformular“, „info“) wird nicht übernommen.
+ */
+export function realContact(fromName: string, fromAddr: string, body: string): RealContact {
+  const relay = isRelayAddress(fromAddr);
+  const nameOk = plausibleName(fromName);
+  if (!relay && nameOk) return { name: fromName.trim(), addr: fromAddr.trim(), viaForm: false };
+  const f = formFields(body);
+  const pick = (...keys: string[]) => keys.map((k) => f[k]).find((v) => !!v) ?? '';
+  const full = pick('vor- und nachname', 'vor- und zuname', 'ihr name', 'name');
+  const parts = [pick('vorname'), pick('nachname', 'familienname')].filter(Boolean).join(' ');
+  const cand = [parts, full].map((x) => x.replace(/\s+/g, ' ').trim().slice(0, 80)).find((x) => plausibleName(x)) ?? '';
+  const mail = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.exec(pick('e-mail-adresse', 'e-mailadresse', 'emailadresse', 'ihre e-mail', 'e-mail', 'email', 'mail'))?.[0] ?? '';
+  const addr = mail && !isRelayAddress(mail) ? mail : '';
+  // von einer Weiterleitungs-Adresse wird nie der Absendername genommen; sonst nur ein plausibler
+  const name = cand || (!relay && nameOk ? fromName.trim() : '');
+  return { name, addr: relay ? addr || fromAddr.trim() : fromAddr.trim(), viaForm: !!cand || (relay && !!addr) };
+}

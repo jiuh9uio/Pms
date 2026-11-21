@@ -79,7 +79,7 @@ function MailsView({ status }: { status: Exclude<(typeof INBOX_TABS)[number][0],
           {list.data?.length === 0 && <p className="card muted">Keine Nachrichten in dieser Ansicht.</p>}
           {list.data?.map((m) => (
             <button key={m.id} type="button" className={`card inboxitem${m.id === openId ? ' on' : ''}`} onClick={() => setOpenId(m.id)}>
-              <span className="top"><b>{m.fromName || m.fromAddr}</b><small>{fmtDateTime(m.receivedAt)}</small></span>
+              <span className="top"><b>{m.contactName || (m.viaForm ? m.contactAddr : '') || m.fromName || m.fromAddr}</b><small>{fmtDateTime(m.receivedAt)}</small></span>
               <span className="subject">{m.subject || '(ohne Betreff)'} <Badge tone={tone(m.kind)}>{MAIL_KIND_SHORT[m.kind]}</Badge>{m.status === 'done' && <> <Badge tone="ok">erledigt</Badge></>}{m.repliedAt && <> <Badge>beantwortet</Badge></>}</span>
               <small className="muted">{m.snippet}</small>
             </button>
@@ -404,7 +404,7 @@ function MailDetail({ id, onGone, sorting = false, inCase = false }: { id: strin
     if (!data) return;
     const x = { ...data.extract, dates: data.extract.dates ?? [] };
     setH({ from: x.from ?? x.dates[0] ?? '', to: x.to ?? '' });
-    setT({ date: x.dates[0] ?? '', time: x.time ?? '', persons: x.persons ? String(x.persons + (x.children ?? 0)) : '', name: data.fromName || data.fromAddr, phone: x.phone, note: `Per E-Mail: ${data.subject}`.slice(0, 200) });
+    setT({ date: x.dates[0] ?? '', time: x.time ?? '', persons: x.persons ? String(x.persons + (x.children ?? 0)) : '', name: data.contactName ?? (data.fromName || data.fromAddr), phone: x.phone, note: `Per E-Mail: ${data.subject}`.slice(0, 200) });
   }, [data]);
   const patch = async (body: object, msg?: string) => {
     try { await api('PATCH', `/inbox/${id}`, body); if (msg) toast(msg); bump(); reload(); }
@@ -416,10 +416,14 @@ function MailDetail({ id, onGone, sorting = false, inCase = false }: { id: strin
   });
   if (!data) return <div className="card"><LoadState error={error} loading /></div>;
   const x = { ...data.extract, dates: data.extract.dates ?? [] };
-  const who = splitName(data.fromName, data.fromAddr);
+  // der wirkliche Absender; ein unplausibler Name („MyWebsite“) wird nicht vorbelegt
+  const cAddr = data.contactAddr || data.fromAddr;
+  const who = data.contactName === '' ? { firstName: '', lastName: '' } : splitName(data.contactName ?? data.fromName, cAddr);
+  /** Kopfzeile: wirklicher Absender; bei Kontaktformularen mit Hinweis, woher die Angaben stammen */
+  const sender = <>{data.contactName || <i>Name unbekannt</i>} &lt;{cAddr}&gt; · {fmtDateTime(data.receivedAt)}{(data.viaForm || data.contactName === '') && <><br /><small>{data.viaForm ? 'Name und Adresse aus dem Text des Kontaktformulars – bitte kurz prüfen. ' : 'Der Absendername ist kein Personenname – bitte den Namen im Text suchen. '}Gesendet über: {data.fromName} &lt;{data.fromAddr}&gt;</small></>}</>;
   const hotelOk = /^\d{4}-\d\d-\d\d$/.test(h.from) && /^\d{4}-\d\d-\d\d$/.test(h.to) && h.from < h.to;
   const book = () => newBooking({
-    from: h.from, to: h.to, source: 'E-Mail', draft: { ...who, email: data.fromAddr, phone: x.phone },
+    from: h.from, to: h.to, source: 'E-Mail', draft: { ...who, email: cAddr, phone: x.phone },
     notes: `E-Mail-Anfrage vom ${fmtDateTime(data.receivedAt)}: ${data.subject}${x.persons ? ` · ${x.persons} Erw.${x.children ? ` + ${x.children} Ki.` : ''}` : ''}`.slice(0, 500),
     onCreated: (bid) => void patch({ status: 'done', linkKind: 'booking', linkId: bid }),
   });
@@ -448,7 +452,7 @@ function MailDetail({ id, onGone, sorting = false, inCase = false }: { id: strin
   // Posteingang: Nachricht ohne Vorgang nur einsortieren – oder, wenn sie schon dazugehört, dorthin wechseln
   if (sorting && !data.offer && !data.invoice) return (
     <section className="card">
-      <div className="cardhead"><div><h2>{data.subject || '(ohne Betreff)'}</h2><p className="muted">{data.fromName} &lt;{data.fromAddr}&gt; · {fmtDateTime(data.receivedAt)}</p></div></div>
+      <div className="cardhead"><div><h2>{data.subject || '(ohne Betreff)'}</h2><p className="muted">{sender}</p></div></div>
       <pre className="mailbody">{data.body || '(kein Text – die Nachricht besteht vermutlich nur aus Bildern oder Anhängen)'}</pre>
       {!!data.extract.attachments?.length && <p className="msg-att">{data.extract.attachments.map((a, i) => <AttachmentChip key={i} a={a} />)}</p>}
       {data.caseId ? <>
@@ -467,7 +471,7 @@ function MailDetail({ id, onGone, sorting = false, inCase = false }: { id: strin
         </div>
         {!pick && <p className="muted small">Erst die Art wählen, dann „In Vorgänge verschieben“.</p>}
         {data.blockedBy ? <p className="notice small">Dieser Absender wird ausgefiltert (<b>{data.blockedBy}</b>): seine E-Mails landen gleich unter „Ignoriert“. <button type="button" className="linkbtn" onClick={() => void unblock(data.blockedBy!)}>Filter aufheben</button></p>
-          : domain && <div className="blk">
+          : domain && !data.viaForm && <div className="blk">
             <b>Nichts für das Programm?</b> <span className="muted small">Absender künftig ausfiltern – seine E-Mails landen dann automatisch unter „Ignoriert“ (im Postfach bleiben sie). Das ist keine Spam-Meldung.</span>
             <div className="formactions">
               <Button onClick={() => void block('address')}>Nur {data.fromAddr.toLowerCase()} ausfiltern</Button>
@@ -481,7 +485,7 @@ function MailDetail({ id, onGone, sorting = false, inCase = false }: { id: strin
     <>
       <section className={inCase ? 'card msg-incase' : 'card'}>
         {!inCase && <>
-        <div className="cardhead"><div><h2>{data.subject || '(ohne Betreff)'}</h2><p className="muted">{data.fromName} &lt;{data.fromAddr}&gt; · {fmtDateTime(data.receivedAt)}</p></div>
+        <div className="cardhead"><div><h2>{data.subject || '(ohne Betreff)'}</h2><p className="muted">{sender}</p></div>
           <div className="actions"><select value={data.kind} onChange={(e) => void patch({ kind: e.target.value })} aria-label="Art der Nachricht">{MAIL_KINDS.map((k) => <option key={k} value={k}>{MAIL_KIND_LABEL[k]}</option>)}</select></div></div>
         <pre className="mailbody">{data.body || '(kein Text – die Nachricht besteht vermutlich nur aus Bildern oder Anhängen)'}</pre>
         {!!data.extract.attachments?.length && <p className="msg-att">{data.extract.attachments.map((a, i) => <AttachmentChip key={i} a={a} />)}{data.extract.attachments.some((a) => !a.id) && <small className="muted">ohne Link (zu groß oder älter): bitte im E-Mail-Programm öffnen</small>}</p>}
@@ -512,7 +516,7 @@ function MailDetail({ id, onGone, sorting = false, inCase = false }: { id: strin
           <h2>{data.kind === 'event' ? 'Feier / Veranstaltung' : 'Tagung / Versammlung'} – erkannte Angaben</h2>
           <p>{x.dates.length ? `Termin: ${x.dates.slice(0, 3).map(deDate).join(', ')}` : 'Kein Termin erkannt'}{x.time ? ` · ${x.time} Uhr` : ''}{x.persons ? ` · etwa ${x.persons} ${data.kind === 'meeting' ? 'Teilnehmer' : 'Gäste'}` : ''}{x.phone ? ` · Tel. ${x.phone}` : ''}</p>
           {(hasModule(user, 'hotel') || hasModule(user, 'restaurant')) && <div className="formactions">
-            <a className="btn primary" href={`/angebote?neu=1&name=${encodeURIComponent(data.fromName || '')}&email=${encodeURIComponent(data.fromAddr)}&phone=${encodeURIComponent(x.phone ?? '')}&datum=${x.dates[0] ?? ''}&personen=${x.persons ?? ''}`}>Angebot erstellen</a>
+            <a className="btn primary" href={`/angebote?neu=1&name=${encodeURIComponent(data.contactName ?? data.fromName ?? '')}&email=${encodeURIComponent(cAddr)}&phone=${encodeURIComponent(x.phone ?? '')}&datum=${x.dates[0] ?? ''}&personen=${x.persons ?? ''}`}>Angebot erstellen</a>
           </div>}
           <p className="muted small">„Angebot erstellen“ öffnet ein neues Angebot mit Name und E-Mail-Adresse aus dieser Nachricht – Vorlage, Termin und Personenzahl dort wählen. Die erkannten Angaben sind Vorschläge – bitte mit dem Text vergleichen.</p>
         </section>

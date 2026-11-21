@@ -34,6 +34,8 @@ export interface InboxMailDto {
   body?: string;
   /** Vorgang, zu dem die Nachricht gehört */
   caseId: string | null; caseNumber?: string | null;
+  /** wer wirklich geschrieben hat: bei Kontaktformularen Name und Adresse aus dem Text; Name leer = kein brauchbarer Name */
+  contactName?: string; contactAddr?: string; viaForm?: boolean;
   /** Eintrag der Liste „ausgefilterte Absender“, der auf diesen Absender passt (Adresse oder Domain) */
   blockedBy?: string | null;
   /** nur in der Einzelansicht: Angebot, zu dessen Verlauf die Nachricht gehört */

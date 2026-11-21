@@ -3,7 +3,7 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import type { MailDraft } from '../../shared/hotel.js';
 import { MAIL_KINDS, type InboxCounts, type InboxMailDto, type InboxSettingsDto, type InboxState, type InboxStatus, type MailRules, DEFAULT_REPLY_SNIPPETS, type ReplySnippet, type ReplyTemplate, type WebRequestPublic, type WebRequestSettings } from '../../shared/inbox.js';
-import { extract, type MailAttachment, type MailExtract, type MailKind } from '../../shared/mailextract.js';
+import { extract, realContact, type MailAttachment, type MailExtract, type MailKind } from '../../shared/mailextract.js';
 import type { Db, Exec } from '../db/client.js';
 import { REQUEST_LABEL, siteFrom, type SiteRequest } from '../../shared/site.js';
 import { inboxAttachments, inboxMails, mailCases, restaurantTables, settings, tableReservations } from '../db/schema.js';
@@ -91,6 +91,8 @@ export async function blockSender(db: Db, actor: Actor, id: string, scope: 'addr
   const addr = r.fromAddr.trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(addr)) throw conflict('Diese Nachricht hat keine brauchbare Absenderadresse');
   if (r.uidValidity === 'web') throw conflict('Anfragen über die Gästeseite lassen sich nicht ausfiltern');
+  // Kontaktformular: der Absender ist die Weiterleitung der eigenen Internetseite – ausfiltern würde alle Anfragen von dort verstecken
+  if (realContact(r.fromName, r.fromAddr, r.body).viaForm) throw conflict('Diese E-Mail kommt von einem Kontaktformular. Den Absender auszufiltern würde alle Anfragen über dieses Formular verstecken – das ist hier gesperrt.');
   const dom = addr.slice(addr.lastIndexOf('@') + 1);
   if (scope === 'domain' && SHARED.includes(dom)) throw conflict(`Bei ${dom} haben viele verschiedene Kunden ihre Adresse – bitte nur diese eine Adresse ausfiltern`);
   const own = (await read(db, 'inbox', DEFAULTS)).user.toLowerCase();
@@ -350,7 +352,13 @@ const dto = (r: Row, full = false): InboxMailDto => ({
   id: r.id, fromName: r.fromName, fromAddr: r.fromAddr, subject: r.subject, receivedAt: r.receivedAt.toISOString(),
   snippet: r.body.replace(/\s+/g, ' ').slice(0, 160), kind: r.kind as MailKind, status: r.status as InboxStatus, extract: r.extract as MailExtract,
   caseId: r.caseId, linkKind: r.linkKind, linkId: r.linkId, handledBy: r.handledBy, repliedAt: r.repliedAt?.toISOString() ?? null, repliedBy: r.repliedBy, ...(full ? { body: r.body } : {}),
+  ...contactOf(r),
 });
+/** wer wirklich geschrieben hat (Kontaktformular: aus dem Text) */
+function contactOf(r: { fromName: string; fromAddr: string; body: string }) {
+  const c = realContact(r.fromName, r.fromAddr, r.body);
+  return { contactName: c.name, contactAddr: c.addr, viaForm: c.viaForm };
+}
 
 /** Suche in Betreff, Absender und Text (für Liste und Zähler gleich). */
 const searchFilter = (q: string) => (q ? or(ilike(inboxMails.subject, `%${q}%`), ilike(inboxMails.fromName, `%${q}%`), ilike(inboxMails.fromAddr, `%${q}%`), ilike(inboxMails.body, `%${q}%`)) : undefined);
@@ -430,8 +438,10 @@ export async function replyDraft(db: Exec, id: string, template: ReplyTemplate, 
   if (!r) throw notFound('E-Mail');
   const [h, isReady] = [await getHotel(db), await mailReady(db)];
   const re = /^(re|aw|antwort)\s*:/i.test(r.subject) ? r.subject : `Re: ${r.subject}`;
-  const hello = r.fromName ? `Guten Tag ${r.fromName.replace(/["']/g, '').split(',').reverse().join(' ').trim()},` : 'Guten Tag,';
-  const base = { to: r.fromAddr, attachment: null, ready: isReady };
+  // Anrede und Empfänger: der wirkliche Absender (bei Kontaktformularen aus dem Text) – nie „Guten Tag MyWebsite“ an eine no-reply-Adresse
+  const who = realContact(r.fromName, r.fromAddr, r.body);
+  const hello = who.name ? `Guten Tag ${who.name.replace(/["']/g, '').split(',').reverse().join(' ').trim()},` : 'Guten Tag,';
+  const base = { to: who.addr, attachment: null, ready: isReady };
   if (snippetId) {
     const sn = (await getReplySnippets(db)).find((x) => x.id === snippetId);
     if (!sn) throw notFound('Antwortvorlage');
@@ -441,7 +451,7 @@ export async function replyDraft(db: Exec, id: string, template: ReplyTemplate, 
   if (template === 'confirm') {
     // die Bestätigung enthält Zimmer und Preise der Reservierung – nur mit Freigabe für den Bereich Hotel
     if (r.linkKind === 'booking' && !canHotel) throw new AppError(403, 'forbidden', 'Für die Bestätigung einer Zimmerreservierung fehlt die Freigabe für den Bereich „Hotel“');
-    if (r.linkKind === 'booking' && r.linkId) return { ...(await bookingMailDraft(db, r.linkId)), to: r.fromAddr };
+    if (r.linkKind === 'booking' && r.linkId) return { ...(await bookingMailDraft(db, r.linkId)), to: who.addr };
     if (r.linkKind === 'table' && r.linkId) {
       const [t] = await db.select({ t: tableReservations, table: restaurantTables.name }).from(tableReservations).leftJoin(restaurantTables, eq(restaurantTables.id, tableReservations.tableId)).where(eq(tableReservations.id, r.linkId));
       if (!t) throw conflict('Die Tischreservierung zu dieser Nachricht gibt es nicht mehr');
